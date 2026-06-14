@@ -1,0 +1,16 @@
+#pragma once
+
+#define LIB_VERSION 2
+#define SQUARE(n) ((n) * (n))
+
+#ifndef DISABLE_LOGGING
+    const bool: logging_enabled = true;
+#else
+    const bool: logging_enabled = false;
+#endif
+
+const int: HEADER_CONSTANT = 100;
+const string: LIB_NAME = "walnut-common";
+
+int: header_line = __LINE__;
+string: header_file = __FILE__;

@@ -1,0 +1,1232 @@
+#define DISABLE_LOGGING 1
+
+#include "common.wal"
+#include "common.wal"  
+
+int: a = 5;
+const int: b = 10;
+float: c = 3.14;
+string: greeting = "Hello";
+char: letter = 'A';
+bool: flag = true;
+unsigned int: gas = a + b - 2; 
+ 
+int: sum = a + b;
+float: product = a * c;
+int: difference = b - a;
+float: quotient = b / a;
+int: remainder = b % a;
+int: power = 2 ** 3;
+
+sum += 5;
+product *= 2;
+difference -= 1;
+quotient /= 2;
+
+int: x = 1;
+x++;
+++x;
+x--;
+--x;
+
+int: complex_num = (10 + 20) * 30 / (5 - 2) ** 2;
+float: mixed = (1.5 * 2 + 3.7) / (2 - 0.5);
+
+int: bits = 5 | 3;           
+int: more_bits = 12 & 5;     
+int: xor_bits = 9 ^ 5;       
+int: shift_left = 5 << 2;    
+int: shift_right = 20 >> 2;  
+
+bool: simple_test = a >= 0;
+bool: test1 = a >= 0;
+bool: test2 = a <= 10;
+bool: in_range = test1 && test2;
+bool: part1 = (a + b) * 2 > c;
+bool: part2 = !(a < b);
+bool: complex_condition = part1 || part2;
+const unsigned int: s = 3;
+float: trial = 2 - s;
+const bool: the_truth = s / 2 > trial; 
+
+if (a < b) then {
+    if (a > 0) then {
+        a = a + 1;
+    } else then {
+        a = 0;
+    }
+} else if (a > b) then {
+    a = b;
+} else then {
+    a = a * 2;
+}
+
+float: mega_calc = (a + b) * (c - a) / -(1 + 4) ** (3 % 2);
+float: avg = (mega_calc + a) / (2 + b / (1 - mega_calc));
+double: formula = 1 / -c + 2 ** (c - a / 2) / 3;
+const bool: is_valid = a < b;
+
+int: g = 5;
+int: h = (x + 2)++;
+int: r = ++3;        
+const int: u = 10;
+int: i = u - 1;        
+int: f = ++(u + 1);  
+
+long long int: big_number = 1000000;
+short int: small_number = 100;
+const float: pi = 3.14159;
+unsigned int: positive = 42;
+
+int: bit_magic = ((a & b) | (a + b << 2)) ^ (~(a | b) >> 1);
+int: more_magic = (a << 2 | b >> 1) & ~(a ^ b) | (a + b);
+
+float: mixed_calc = (a + b * 1.5) / (c - a / 2.0) + (b % 3) * 1.5;
+bool: complex_compare = (a + 1) * (b + 1) > ++c - 2;
+
+const float: computed = (a + b) * 2 - (c / 2) ** 2;
+int: nested_ops = ((5 + 3) * 2 - 4) ** 2 % 7;
+
+const unsigned long long int: y = 12;
+
+int: inc_ternary = ++x - y;
+int: post_ternary = 1 - (x ** (1 + y));
+
+const int: value_sign = (x + y - inc_ternary + post_ternary) > 0 ? 1 : -1;
+const bool: value_bool = x - y != 0 ? true : false;
+const float: value_awesome = x - y < 0 ? (x > 2 ? 3.1415926356 : 3.15) : -1;
+const float: value_terrible = x - y > 0 ? 1 : (y < 2 ? 3.2 : 2.71828);
+const float: final_value = x - y == 0 ? (x < 0 ? -1.14825 : 3.2879) : (y > 0 ? 1.15 : -1.28);
+
+for(int: i = 0; i < 10; i++) {
+    int: squared = i * i;
+}
+
+for(int: j = 0, j < 5, j++) {
+    j += 2;
+} 
+
+for(int: k = 0, k < 10; k += 2) {
+    int: doubled = k * 2;
+} 
+
+for(; i < 10; i++) {
+    i *= 2;
+} 
+
+for(int: i = 0;; i++) {
+    if (i > 100) then {
+        i /= 2;
+    } 
+} 
+
+for(int: i = 0; i < 10;)  {
+    i++;
+} 
+
+for(;;) {
+    inc_ternary++;
+} 
+
+for(int: i = 0; i < 5; i++) {
+    for(int: j = 0; j < 3; j++) {
+        int: product = i * j;
+    } 
+}
+
+for(float: f = 0.0; f < 1.0; f += 0.1) {
+    float: value = f / 2;
+    value += 1 / (1 - x) ** 2;
+} 
+
+text: myTextLiteral = `This is a text literal`;
+string: myString = "This is a string";
+char: myChar = 'a';     
+const text: textFromString = myString;
+text: textFromChar = myChar;
+string: converted_string_text = textFromString;
+
+auto: dynamic_var;
+var: another_var;
+let yet_another;
+
+auto: dynamic_int = 42;
+auto: dynamic_float = 3.14159;
+auto: dynamic_string = "Dynamic typing";
+auto: dynamic_bool = true;
+auto: dynamic_char = 'X';
+
+auto: flexible;
+flexible = 100;                 
+flexible = "Now I'm a string"; 
+flexible = true;  
+flexible = 3.14159;          
+
+const auto: magic_number = 42;
+const var: pi_value = 3.14159;
+const let new_greeting = "Hello, world!";
+
+auto: positive_only = 500;
+auto: big_number_two = 1000000;
+auto: small_number_two = 100;
+
+const double: a1 = 3.41;
+const long float: b1 = 2.7181828;
+
+auto: result = dynamic_int + a1 * b1;
+const: mixed_calc_two = dynamic_float * b1 + dynamic_int;
+const: complex_val_two = (dynamic_int ** 2 + dynamic_float) / (a1 - b1);
+
+if (flexible > 3.0) then {
+    auto: conditional = flexible * 2;
+} else then {
+    auto: conditional = "Value too small";
+}
+
+for(auto: i = 0; i < 10; i++) {
+    auto: squared = i * i;
+}
+
+for(auto: counter = 0; counter < 5; counter++) {
+    auto: result;
+
+    if (counter % 2 == 0) then {
+        result = "Even: " + counter;
+    } else then {
+        result = counter * 3.5;
+    }
+} 
+
+auto: expression_result = (a + b) * (c - a) / (1 + 4) ** (3 % 2);
+
+auto: combined = dynamic_int + dynamic_float;
+auto: concatenated = dynamic_string + " with " + dynamic_char;
+
+auto: pre_init = 2.3;
+auto: calculation = pre_init + 10;  
+pre_init = 42;                      
+
+auto: bits_two = 5;
+auto: bit_result = bits_two | 3;        
+
+auto: changing;
+changing = 100;                    
+changing = changing / 2;           
+changing = changing / 2.5;        
+changing = (changing > 20) ? true : false; 
+changing = changing ? "Yes" : "No"; 
+
+const: delayed_const = 100;
+unsigned int: random_age = 312;
+
+if (random_age > 0) then {
+    random_age += ios - rad;
+    int: z = random_age + ios ** 2 - HELL;
+    hoisted const unsigned int: HELL = 3;
+}
+
+hoisted const unsigned int: ios = 3; 
+hoist unsigned int: rad = 3;  
+
+while (rad < 10) {
+    rad++;
+    changing = (3 + rad) / (1.0 - perfection);
+    perfection += 2 * 3.1425926356789 * rad ** 2 - changing;
+}
+
+hoist unsigned long long double: perfection = 0.0;
+
+int: new_integer = 42;
+int*: ptr = &new_integer;      
+int**: ptrToPtr = &ptr; 
+
+int: value = *ptr;     
+
+int*: nextPtr = ptr + 1;  
+int*: prevPtr = nextPtr - 1; 
+
+ptr++;   
+ptr--;  
+
+ptr += 2; 
+ptr -= 1; 
+
+boolean: isEqual = (ptr == nextPtr);  
+boolean: isLess = (ptr < nextPtr);    
+
+int*: nullPtr = 0;   
+boolean: isNull = !nullPtr;  
+boolean: isNotNull = !ptr; 
+
+hoisted double: doubleDeref_hoist = (pi / doubleDeref) ** 2;
+
+int: doubleDeref = *(*ptrToPtr);  
+
+int&: numRef = new_integer;   
+numRef = 100;         
+
+int: arrayVal = *(ptr + 2); 
+
+const double*: nullPointer = nullptr;
+
+int: non_hoisted_decl;
+eulers = 2.7182828;
+
+hoisted float: eulers;
+non_hoisted_decl = 3;
+
+function func_name(const int: x = 3, const float: y = 3.45) -> float {
+    return (x + y) ** 2;
+} end function func_name
+
+function cool_func(const double: x, const float: y = 3.45) -> double {
+    return func_name() + (x - y) / 2;
+} end function cool_func
+
+function inf_param(const int...[10]: x, const double...: y) noexcept -> double const* const**& {
+    int: z = x + y;
+    return z ** 2;
+} end function inf_param
+
+const auto: l_bozo = inf_param(2, 3, 5, 6, 1, 2, 1, 8.0182) - 2;
+
+array int: arr1[5];                          
+array int: arr2[10] = {1, 2, 3, 4, 5};       
+array int: arr3[] = {1, 2, 3, 4, 5};         
+array int: arr4[...] = {10, 20, 30};         
+array float: arr5[3] = {1.5, 2.5, 3.5};      
+array string: arr6[] = {"hello", "world"};    
+const array int: const_arr[5] = {1, 2, 3, 4, 5};
+static array int: static_arr[10];
+array int: dyn_arr[] = {1, 2, 3};
+const static array float: multi_mod[3] = {1.0, 2.0, 3.0};
+array int: braced[5]{1, 2, 3, 4, 5};
+array float: braced2[]{1.5, 2.5, 3.5};
+array char: chars[]{'a', 'b', 'c'};
+array int: empty1[10];
+array int: empty2[] = {};
+array int: empty3[]{};
+array int: dyn_size[x * 2];
+array float: computed_size[arr1[0] + 5];
+array auto: auto_arr[] = {1, 2, 3};
+array auto: mixed_arr[] = {1.5, 2, 3.14};
+array int*: ptr_arr[5];                       
+array int**: double_ptr_arr[3];               
+array const int: const_elem_arr[5] = {1, 2, 3, 4, 5};
+array unsigned long long int: big_arr[3] = {1000000, 2000000, 3000000};
+int: first = arr3[0];
+arr3[1] = 42;
+arr3[x + 1] = arr3[0] * 2;
+array int: matrix[3];
+matrix[0][0] = 5;
+int: val = matrix[1];
+arr1[0]++;
+arr1[1] += 10;
+int: sum_elements = arr3[0] + arr3[1] + arr3[2];
+int: array_calc = arr1[0] * arr2[1] + arr3[2];
+bool: test = arr1[0] > arr2[1];
+array int: trailing[] = {1, 2, 3,};
+array float: more_trailing[5] = {1.0, 2.0, 3.0,};
+array int: nested[] = {{1, 2}, {3, 4}, {5, 6}};
+array int&: ref_arr[5];
+array int const*: const_ptr_arr[3];
+const array int: end_syntax[5] = {1, 2, 3, 4, 5};
+array int: expr_init[] = {x + 1, y * 2, (x + y) / 2};
+array bool: bool_arr[] = {x > 0, y < 10, x == y};
+const array int: call_results[] = {func_name(1, 2), cool_func(3, 4)};
+
+arr1[0]++;
+++arr2[1];
+arr3[2]--;
+--arr4[3];
+
+for(int: i = 0; i < 5; i++) {
+    arr1[i] = i * i;
+}
+
+for(int: j = 0; j < 10; j++) {
+    int: temp = arr2[j] + arr3[j % 5];
+}
+
+array int: ternary_arr[] = {x > 0 ? 1 : -1, y < 5 ? 10 : 20};
+hoisted array int: hoisted_arr[5] = {1, 2, 3, 4, 5};
+thread_local array int: tls_arr[10];
+volatile array int: vol_arr[5];
+extern array int: external_arr[100];
+global array int: global_arr[50];
+local array int: local_arr[10];
+array any: rand_any_array {};
+rand_any_array[2] = 3;
+rand_any_array[1] = "hello";
+bool: thingy = ::BOOL;
+
+constexpr function Parser::parse_everything(const Expression*: x, const Expression*: y) noexcept {
+    return;
+} end function Parser::parse_everything
+
+function(int, double) -> double: l_func = [&](int: x, double: y) -> double {
+    return (x / 2) ** 2 + y;
+};
+
+function(const Expression*, const Expression*) -> void: new_l_func = Parser::parse_everything;
+
+for(int: i = 0; i < 100; i++) {
+    if (i == 50) then {
+        break;
+    }
+
+    if (i % 2 == 0) then {
+        continue;
+    }
+
+    int: odd_value = i * 3;
+}
+
+int: search_target = 42;
+for(int: j = 0; j < 10; j++) {
+    for(int: k = 0; k < 10; k++) {
+        if (j * 10 + k == search_target) then {
+            break;
+        }
+    }
+}
+
+while (x < 1000) {
+    x *= 2;
+    if (x > 500) then {
+        break;
+    }
+    if (x % 3 == 0) then {
+        continue;
+    }
+    x += 1;
+}
+
+int: counter = 0;
+do {
+    counter++;
+} while(counter < 10);
+
+do {
+    x = x / 2;
+    if (x < 0) then {
+        break;
+    }
+} while(x > 1);
+
+float: precision = 1.0;
+do {
+    precision = precision / 2.0;
+} while(precision > 0.001);
+
+int: day = 3;
+int: hours = 0;
+
+switch(day) {
+    case 1:
+        hours = 8;
+        break;
+    case 2:
+        hours = 8;
+        break;
+    case 3:
+        hours = 8;
+        break;
+    case 4:
+        hours = 8;
+        break;
+    case 5:
+        hours = 8;
+        break;
+    case 6:
+        hours = 4;
+        break;
+    default:
+        hours = 0;
+        break;
+}
+
+int: mode = 2;
+string: mode_name = "unknown";
+
+switch(mode) {
+    case 0: {
+        mode_name = "off";
+        int: shutdown_code = 0;
+        break;
+    }
+    case 1: {
+        mode_name = "idle";
+        break;
+    }
+    case 2: {
+        mode_name = "active";
+        int: power = mode * 100;
+        break;
+    }
+    default: {
+        mode_name = "error";
+        break;
+    }
+}
+
+int: level = 3;
+int: permissions = 0;
+
+switch(level) {
+    case 3:
+        permissions = permissions | 4;
+        fallthrough;
+    case 2:
+        permissions = permissions | 2;
+        fallthrough;
+    case 1:
+        permissions = permissions | 1;
+        break;
+    default:
+        permissions = 0;
+        break;
+}
+
+switch(x + y * 2) {
+    case 0: {
+        int: z = 100;
+        break;
+    }
+    case 1:
+        x = x + 1;
+        break;
+    default:
+        x = 0;
+        break;
+}
+
+try {
+    float: dangerous = 1.0 / (x - y);
+} catch(int: error_code) {
+    int: recovery = 0;
+}
+
+try {
+    int: risky = arr1[999];
+    risky = risky ** 2;
+} catch(...) {
+    int: safe_value = 0;
+}
+
+namespace Math {
+    function add(int: a, int: b) explicit -> int {
+        return a + b;
+    } end function add
+
+    function multiply(int: a, int: b) noexcept -> int {
+        return a * b;
+    } end function multiply
+
+    const float: PI = 3.14159265;
+} end namespace Math
+
+namespace Geometry::Shapes {
+    function circle_area(float: radius) -> float {
+        return Math::PI * radius ** 2;
+    } end function circle_area
+} end namespace Geometry::Shapes
+
+float: area = Geometry::Shapes::circle_area(5.0);
+int: total = Math::add(10, Math::multiply(3, 4));
+
+constexpr array[3] array[] const double : matrix;
+function(const array[] int, double) -> array[] double : func;
+
+function func_name(const array[] function(double) -> double : x, double : y) -> array[] double {
+    return x(y);
+} end function func_name
+
+enum new_enum : unsigned long long integer {
+    value0 = 0,
+    value1,
+    value2,
+    value3,
+    value4
+}
+
+class new_class;
+struct new_struct;
+
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+enum Status : int {
+    Idle = 0,
+    Running = 1,
+    Paused = 2,
+    Stopped = 10
+}
+
+enum Permission : unsigned int {
+    None = 0,
+    Read = 1,
+    Write = 2,
+    Execute = 4
+}
+
+struct Point {
+    int: x = 0;
+    int: y = 0;
+
+    function manhattan() const -> int {
+        return x + y;
+    } end function manhattan
+} end struct Point
+
+struct Vec2 {
+    float: dx;
+    float: dy;
+
+    constructor() = default;
+
+    constructor(float: a, float: b) : dx(a), dy(b) {
+        continue;
+    }
+
+    function length_squared() const -> float {
+        return dx ** 2 + dy ** 2;
+    } end function length_squared
+} end struct Vec2
+
+class Rectangle {
+public:
+    constructor() = default;
+
+    constructor(float: w, float: h) : m_width(w), m_height(h) {
+        continue;
+    }
+
+    constructor(const Rectangle&: other) = delete;
+
+    destructor() = default;
+
+    function area() const -> float {
+        return m_width * m_height;
+    } end function area
+
+    function scale(float: factor) {
+        m_width = m_width * factor;
+        m_height = m_height * factor;
+    } end function scale
+
+protected:
+    function invariant() const -> bool {
+        return m_width >= 0.0 && m_height >= 0.0;
+    } end function invariant
+
+private:
+    float: m_width = 0.0;
+    float: m_height = 0.0;
+} end class Rectangle
+
+class Shape {
+public:
+    constructor() = default;
+
+    destructor() virtual = default;
+
+    function area() virtual -> float {
+        return 0.0;
+    } end function area
+
+    function name() const -> string {
+        return "shape";
+    } end function name
+} end class Shape
+
+class Circle inherits Shape {
+public:
+    constructor(float: r) : m_radius(r) {
+        continue;
+    }
+
+    function area() override -> float {
+        return 3.14159 * m_radius ** 2;
+    } end function area
+
+private:
+    float: m_radius = 0.0;
+} end class Circle
+
+class Button inherits UI::Component {
+public:
+    constructor() = default;
+
+    function render() override -> bool {
+        return true;
+    } end function render
+
+private:
+    int: m_id = 0;
+} end class Button
+
+class LinkedList {
+public:
+    struct Node {
+        int: value = 0;
+        Node*: next = nullptr;
+    } end struct Node
+
+    constructor() = default;
+
+    function push(int: value) -> int {
+        return m_size;
+    } end function push
+
+private:
+    Node*: m_head = nullptr;
+    int: m_size = 0;
+} end class LinkedList
+
+variant(int, integer): variant_0;
+variant(float, double): variant_1;
+
+#define __C_PLUS_PLUS__ 2017;
+#define MAX_USERS 100
+#define ENABLE_LOGGING true
+#define VERSION 3
+
+int: user_cap = MAX_USERS;
+bool: logging = ENABLE_LOGGING;
+
+#define SQUARE(n) ((n) * (n))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+int: squared = SQUARE(7);
+int: larger = MAX(squared, user_cap);
+
+#define STRINGIFY(x) #x
+string: label = STRINGIFY(hello_world);
+
+#define CONCAT(a, b) a ## b
+int: CONCAT(my_, value) = 42;
+
+#if VERSION >= 3 && defined(ENABLE_LOGGING)
+    bool: modern = true;
+#else
+    bool: modern = false;
+#endif
+
+#ifndef DISABLE_FEATURE
+    int: feature = 1;
+#endif
+
+#define COLOR_LIST(X) \
+    X(Red) \
+    X(Green) \
+    X(Blue)
+
+#define X(name) int: color_##name = 0;
+COLOR_LIST(X)
+#undef X
+
+#undef MAX_USERS
+
+int: this_line = __LINE__;
+string: this_file = __FILE__;
+string: this_file_path = __FILE_PATH__;
+string: this_os = __OS__;
+constexpr bool: is_windows = __IS_OS_WINDOWS__;
+constexpr bool: is_linux   = __IS_OS_LINUX__; 
+
+template <typename T>
+function identity(const T: x) -> T {
+    return x;
+} end function identity
+
+template <typename T, typename U>
+function first_of(const T: a, const U: b) -> T {
+    return a;
+} end function first_of
+
+template <typename T>
+function max_of(const T: a, const T: b) -> T {
+    return a > b ? a : b;
+} end function max_of
+
+template <int N>
+function times_n(const int: x) -> int {
+    return x * N;
+} end function times_n
+
+template <int N = 2>
+function scale_by(const int: x) -> int {
+    return x * N;
+} end function scale_by
+
+template <typename T = int>
+function default_make() -> T {
+    return 0;
+} end function default_make
+
+template <typename T = Box<int>>
+function defaulted_box() -> T {
+    return 0;
+} end function defaulted_box
+
+template <typename T, typename U = T>
+function coerce(const T: a) -> U {
+    return a;
+} end function coerce
+
+template <typename... Ts>
+function count_types() -> int {
+    return 0;
+} end function count_types
+
+template <int... Ns>
+function sum_ns() -> int {
+    return 0;
+} end function sum_ns
+
+template <typename... Args>
+function forward_all(const Args...: args) -> int {
+    return 0;
+} end function forward_all
+
+template <typename>
+function ignores_its_type() -> int {
+    return 0;
+} end function ignores_its_type
+
+template <typename T, typename U = double, int N = 4, typename... Rest>
+function kitchen_sink(const T: a, const U: b) -> T {
+    return a;
+} end function kitchen_sink
+
+template <typename T>
+function rewrap(const Box<T>: b) -> Box<T> {
+    return b;
+} end function rewrap
+
+template <typename T>
+class Box {
+public:
+    constructor() = default;
+
+    constructor(const T: v) : m_value(v) {
+        continue;
+    }
+
+    function get() const -> T {
+        return m_value;
+    } end function get
+
+    function set(const T: v) {
+        m_value = v;
+    } end function set
+
+private:
+    T: m_value;
+} end class Box
+
+template <typename T, typename U>
+struct Pair {
+    T: first;
+    U: second;
+
+    function clone() const -> Pair<T, U> {
+        return Pair<T, U>();
+    } end function clone
+} end struct Pair
+
+template <typename T, int N>
+struct FixedArray {
+    array T: data[N];
+
+    function size() const -> int {
+        return N;
+    } end function size
+} end struct FixedArray
+
+template <typename T>
+union Storage {
+    T: as_value;
+    int: as_int;
+} end union Storage
+
+template <typename T = int, int Capacity = 16>
+class Buffer {
+public:
+    constructor() = default;
+private:
+    array T: m_data[Capacity];
+    int: m_len = 0;
+} end class Buffer
+
+template <typename... Elements>
+class Tuple {
+public:
+    constructor() = default;
+} end class Tuple
+
+template <typename T>
+class List {
+public:
+    struct Node {
+        T: value;
+        Node*: next = nullptr;
+    } end struct Node
+
+    constructor() = default;
+    constructor(const List<T>&: other) = delete;
+    destructor() virtual = default;
+
+    function push(const T: v) -> int {
+        return m_size;
+    } end function push
+
+    function head_value() const -> T {
+        return m_head.value;
+    } end function head_value
+
+protected:
+    function invariant() const -> bool {
+        return m_size >= 0;
+    } end function invariant
+
+private:
+    Node*: m_head = nullptr;
+    int: m_size = 0;
+} end class List
+
+template <typename T>
+class ForwardClass;
+
+template <typename T, typename U>
+struct ForwardStruct;
+
+template <typename T>
+union ForwardUnion;
+
+template <typename T, int N>
+struct ForwardWithNonType;
+
+template <typename T>
+class TypeName {
+public:
+    function name() const -> string {
+        return "generic";
+    } end function name
+} end class TypeName
+
+template <>
+class TypeName<int> {
+public:
+    function name() const -> string {
+        return "int";
+    } end function name
+} end class TypeName
+
+template <>
+class TypeName<bool> {
+public:
+    function name() const -> string {
+        return "bool";
+    } end function name
+} end class TypeName
+
+template <typename T, typename U>
+struct Convert {
+    function go() const -> int { return 0; } end function go
+} end struct Convert
+
+template <>
+struct Convert<int, double> {
+    function go() const -> int { return 1; } end function go
+} end struct Convert
+
+template <>
+class TypeName<float>;
+
+template <typename T>
+class Holder {
+public:
+    function category() const -> int { return 0; } end function category
+} end class Holder
+
+template <typename T>
+class Holder<T*> {
+public:
+    function category() const -> int { return 1; } end function category
+} end class Holder
+
+template <typename T>
+class Holder<T&> {
+public:
+    function category() const -> int { return 2; } end function category
+} end class Holder
+
+template <typename T>
+class Holder<Box<T>> {
+public:
+    function category() const -> int { return 3; } end function category
+} end class Holder
+
+template <typename K, typename V>
+struct Dict {
+    function kind() const -> int { return 0; } end function kind
+} end struct Dict
+
+template <typename V>
+struct Dict<int, V> {
+    function kind() const -> int { return 1; } end function kind
+} end struct Dict
+
+template <typename T>
+const T: zero_value = 0;
+
+template <typename T>
+constexpr T: one_value = 1;
+
+template <int N>
+const int: seed = N;
+
+template <typename T>
+class Wrapped inherits Box<T> {
+public:
+    constructor() = default;
+} end class Wrapped
+
+template <typename T>
+class Widget inherits UI::Component<T> {
+public:
+    function render() override -> bool {
+        return true;
+    } end function render
+} end class Widget
+
+template <typename T>
+class Rooted inherits ::Global<T> {
+public:
+    constructor() = default;
+} end class Rooted
+
+identity<int>(5);
+max_of<float>(1.5, 2.5);
+times_n<3>(10);
+
+auto: a = identity<int>(5);
+auto: b = Box<int>();
+auto: c = Box<string>();
+auto: d = Pair<int, string>();
+auto: e = FixedArray<double, 8>();
+auto: f = Tuple<int, float, string, bool>();
+
+auto: g = Box<Box<int>>();
+auto: h = Pair<Box<int>, Box<float>>();
+auto: deep = Box<Pair<int, Box<string>>>();
+
+auto: buf = Buffer<char, 256>();
+auto: fa  = FixedArray<int, 10>();
+auto: cmp = select<(3 > 2)>();
+auto: shf = select<(8 >> 1)>();
+
+auto: pk = forward_all<int, float, bool>(1, 2.0, true);
+
+auto: m1 = registry.create<Widget>(1, 2);
+auto: m2 = Factory::build<int>(7);
+auto: m3 = Outer::Inner::make<double>();
+
+if (is_valid<int>()) then {
+    auto: ok = identity<int>(1);
+} else if (is_valid<float>()) then {
+    auto: alt = identity<float>(1.0);
+} else then {
+    auto: none = default_make<int>();
+}
+
+for(int: i = 0; i < limit<int>(); i++) {
+    auto: tmp = identity<int>(i);
+}
+
+for(int: j = 0, j < limit<int>(), j++) {
+    auto: tmp = times_n<2>(j);
+}
+
+for(int: k = 0; k < limit<int>(), k += 2) {
+    auto: tmp = scale_by<3>(k);
+}
+
+for(;;) {
+    auto: spin = default_make<int>();
+    break;
+}
+
+while (has_next<int>()) {
+    auto: v = identity<int>(0);
+    if (done<int>()) then {
+        break;
+    }
+}
+
+do {
+    auto: step = identity<int>(1);
+} while(again<int>());
+
+switch(rank<int>()) {
+    case 0: {
+        auto: r0 = identity<int>(0);
+        break;
+    }
+    case 1:
+        auto: r1 = identity<int>(1);
+        fallthrough;
+    case 2:
+        auto: r2 = identity<int>(2);
+        break;
+    default:
+        auto: rd = default_make<int>();
+        break;
+}
+
+try {
+    auto: risky = divide<int>(10, 0) * sizeof(int) - static_cast<double>(sizeof(double) + countof(int));
+} catch(Error<int>: err) {
+    auto: recovered = default_make<int>();
+}
+
+try {
+    auto: r = identity<float>(1.0);
+} catch(...) {
+    auto: safe = default_make<float>();
+}
+
+auto: t1 = flag<int>() ? identity<int>(1) : identity<int>(2);
+auto: t2 = (count_types<int, float>() + sum_ns<1, 2, 3>()) * times_n<2>(4);
+auto: t3 = is_valid<int>() && is_valid<float>() ? make<bool>(true) : make<bool>(false);
+
+array auto: boxes[] = { Box<int>(), Box<int>(), Box<int>() };
+array int:  ranks[] = { rank<int>(), rank<float>(), rank<bool>() };
+array auto: mixed[3] = { identity<int>(1), default_make<int>(), times_n<2>(3) };
+
+namespace Meta {
+    template <typename T>
+    function tag() -> int {
+        return 0;
+    } end function tag
+
+    template <typename T>
+    class Trait {
+    public:
+        function value() const -> int { return 0; } end function value
+    } end class Trait
+
+    template <>
+    class Trait<int> {
+    public:
+        function value() const -> int { return 1; } end function value
+    } end class Trait
+} end namespace Meta
+
+namespace Outer::Inner {
+    template <typename T, typename U>
+    function combine(const T: a, const U: b) -> int {
+        return 0;
+    } end function combine
+} end namespace Outer::Inner
+
+auto: combined = Outer::Inner::combine<int, float>(1, 2.0);
+
+template <typename T>
+if (is_valid<int>()) then {
+    auto: x = identity<int>(0);
+}
+
+template <typename T>
+for(int: i = 0; i < 3; i++) {
+    auto: x = identity<int>(i);
+}
+
+template <typename T>
+while (again<int>()) {
+    break;
+}
+
+Box<int>: int_box;
+Box<float>: float_box;
+Pair<int, string>: kv;
+FixedArray<double, 8>: samples;
+Box<Box<int>>: nested_box;
+ns::Container<int>: from_ns;
+::Global<bool>: from_global;
+Box<int>*: box_ptr;
+Box<int>&: box_ref = int_box;
+const Box<int>*: const_box_ptr;
+
+Box<int>::value_type: dm_simple;
+common_type<int, double>::Type: dm_common;
+
+Box<Box<int>>::value_type: dm_nested;
+Pair<int, Box<float>>::second_type: dm_pair;
+
+::Global<bool>::tag: dm_global;
+
+ns::Container<int>::iterator: dm_nsiter;
+
+Outer<int>::Inner<float>::result: dm_multi;
+A<int>::B<float>::C<bool>::leaf: dm_chain;
+
+Box<int>::value_type*: dm_ptr;
+Box<int>::value_type&: dm_ref = dm_simple;
+const Box<int>::value_type*: dm_cptr;
+
+Box<Box<int>::value_type>: dm_as_arg;
+Pair<Box<int>::value_type, common_type<int, float>::Type>: dm_two_args;
+
+function dm_return() -> Box<int>::value_type {
+    return 0;
+} end function dm_return
+
+function dm_param(const Container<int>::iterator: it) -> int {
+    return 0;
+} end function dm_param
+
+auto: dm_cast  = static_cast<Box<int>::value_type>(dm_simple);
+auto: dm_cast2 = static_cast<common_type<int, double>::Type>(dm_common);
+
+auto: dm_size  = sizeof(Box<int>::value_type);
+auto: dm_align = alignof(common_type<int, double>::Type);
+
+auto: dm_decl_type  = decltype(Box<int>::value_type);     
+auto: dm_decl_value = decltype(Factory<int>::create());   
+
+auto: ex_member = Factory<int>::value;
+auto: ex_call   = Factory<int>::create();
+auto: ex_nested = Outer::Inner<int>::make();
+auto: ex_chain  = Registry<int>::instance().reset();
+auto: ex_targs  = Builder<int>::with<float>(1, 2.0);   
+
+for (std::vector<double>: x in arr_) {
+    x + arr_[0];
+}
+
+export std::vector as vec_t
+export std::Array
+import std::VARIANT from "test.wal" as vari_t
+import std::UNION from "test.wal"
+
+import {
+    std::tester from "test.wal"
+    std::tester_2 from "test.wal" as tester_1
+}
+
+export {
+    std::common_type_t as common_t
+    std::container
+}
+
+template <typename T>
+constexpr bool: is_noexcept_construct = std::is_nothrow_contructible<T>::value;
+
+template <typename T>
+constexpr bool: is_nothrow_construct = std::is_nothrow_contructible_v<T>;
