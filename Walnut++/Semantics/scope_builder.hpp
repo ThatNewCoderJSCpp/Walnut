@@ -11,6 +11,7 @@
 #include "../Common/arena_allocator.hpp"
 #include "../Common/error_reporter.hpp"
 #include "semantic_error.hpp"
+#include "modifier_rules.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -33,7 +34,15 @@ public:
         m_ctx.root = make_in<Scope>(m_arena, Scope::Kind::Module, nullptr);
         m_current  = m_ctx.root;
         for (ASTNode* stmt : program->get_statements()) { build(stmt); }
+        validate_overload_sets(m_ctx.root);
         return m_ctx.root;
+    }
+
+    void build_into(nodes::ASTNode* node, Scope* parent) {
+        Scope* saved = m_current;
+        m_current = parent;
+        build(node);
+        m_current = saved;
     }
 
 private:
@@ -42,61 +51,6 @@ private:
     ErrorReporter&   m_reporter;
     Scope*           m_current = nullptr;
     std::uint64_t    m_order   = 0;  
-
-private:
-    static constexpr std::uint16_t kValidRecordMods =
-        modifiers::RawModifiers::Constexpr | modifiers::RawModifiers::Hoisted |
-        modifiers::RawModifiers::Local     | modifiers::RawModifiers::Global  |
-        modifiers::RawModifiers::Hidden    | modifiers::RawModifiers::Friend;
-
-    static constexpr std::uint16_t kValidFunctionMods =
-        modifiers::RawModifiers::Constexpr | modifiers::RawModifiers::Hoisted |
-        modifiers::RawModifiers::Inline    | modifiers::RawModifiers::Hidden  |
-        modifiers::RawModifiers::Local     | modifiers::RawModifiers::Global  |
-        modifiers::RawModifiers::Extern    | modifiers::RawModifiers::Friend  |
-        modifiers::RawModifiers::Static;
-
-    static constexpr std::uint16_t kValidVariableMods =
-        modifiers::RawModifiers::Const       | modifiers::RawModifiers::Constexpr |
-        modifiers::RawModifiers::Constinit   | modifiers::RawModifiers::Hoisted   |
-        modifiers::RawModifiers::Inline      | modifiers::RawModifiers::Static    |
-        modifiers::RawModifiers::Hidden      | modifiers::RawModifiers::Local     |
-        modifiers::RawModifiers::Global      | modifiers::RawModifiers::Extern    |
-        modifiers::RawModifiers::Immutable   | modifiers::RawModifiers::Volatile  |
-        modifiers::RawModifiers::ThreadLocal | modifiers::RawModifiers::Mutable   |
-        modifiers::RawModifiers::Friend;
-
-    static constexpr std::uint16_t kValidEnumMods =
-        modifiers::RawModifiers::Hoisted | modifiers::RawModifiers::Local |
-        modifiers::RawModifiers::Global  | modifiers::RawModifiers::Hidden | modifiers::RawModifiers::Inline;
-
-    static constexpr std::uint16_t kVisibilityGroup =
-        modifiers::RawModifiers::Global | modifiers::RawModifiers::Local |
-        modifiers::RawModifiers::Hidden;
-
-    static constexpr std::uint16_t kMutabilityGroup =
-        modifiers::RawModifiers::Const | modifiers::RawModifiers::Mutable |
-        modifiers::RawModifiers::Immutable;
-
-    static constexpr std::uint16_t kConstEvalGroup =
-        modifiers::RawModifiers::Constexpr | modifiers::RawModifiers::Constinit;
-
-    static constexpr std::uint16_t kLinkageGroup =
-        modifiers::RawModifiers::Extern | modifiers::RawModifiers::Static;
-
-    struct ConflictPair { std::uint16_t a, b; };
-
-    static constexpr ConflictPair kConflictPairs[] = {
-        { modifiers::RawModifiers::Constexpr, modifiers::RawModifiers::Mutable     },  
-        { modifiers::RawModifiers::Constexpr, modifiers::RawModifiers::Volatile    },  
-        { modifiers::RawModifiers::Constexpr, modifiers::RawModifiers::ThreadLocal },  
-        { modifiers::RawModifiers::Constexpr, modifiers::RawModifiers::Extern      }, 
-        { modifiers::RawModifiers::Constinit, modifiers::RawModifiers::Mutable     },
-        { modifiers::RawModifiers::Mutable,   modifiers::RawModifiers::Static      },  
-        { modifiers::RawModifiers::Mutable,   modifiers::RawModifiers::ThreadLocal },
-        { modifiers::RawModifiers::Mutable,   modifiers::RawModifiers::Extern      },
-        { modifiers::RawModifiers::Volatile,  modifiers::RawModifiers::Immutable   },  
-    };
 
 private:
     Scope* push_scope(Scope::Kind kind) {
@@ -198,54 +152,74 @@ private:
         }
     }
 
-    static std::string flag_list(std::uint16_t mask, std::size_t& count) {
-        std::string list;
-        count = 0;
+    static bool has_primary(const ASTNode* n) {
+        using K  = ASTNode::Kind;
+        using FQ = modifiers::FunctionQualifiers;
 
-        for (std::uint16_t bit = 1; bit; bit <<= 1) {
-            if (mask & bit) {
-                if (count) { list += ", "; }
-                list += modifiers::RawModifiers::flag_name(static_cast<modifiers::RawModifiers::Flag>(bit));
-                ++count;
+        switch (n->kind) {
+            case K::FunctionDeclaration:
+                return static_cast<const nodes::FunctionDeclaration*>(n)->qualifiers().has(FQ::Primary);
+            case K::ConstructorDeclaration:
+                return static_cast<const nodes::ConstructorDeclaration*>(n)->qualifiers().has(FQ::Primary);
+            case K::OperatorFunctionDeclaration:
+                return static_cast<const nodes::OperatorFunctionDeclaration*>(n)->qualifiers().has(FQ::Primary);
+            default:
+                return false;
+        }
+    }
+
+    void check_primary_chain(Symbol* head, std::string_view name, std::string_view decl_kind) {
+        Symbol* first_primary = nullptr;
+
+        for (Symbol* s = head; s; s = s->next_overload) {
+            if (!s->decl || !has_primary(s->decl)) { continue; }
+
+            if (!first_primary) {
+                first_primary = s;
+            } else {
+                SemanticError::overload_multiple_primary(
+                    m_reporter, s->decl->file_id, s->decl->line, name, decl_kind,
+                    first_primary->decl ? first_primary->decl->line : 0
+                );
             }
         }
 
-        return list;
+        if (!first_primary) {
+            const ASTNode* at = head->decl;
+            SemanticError::overload_missing_primary(m_reporter, at ? at->file_id : INVALID_FILE, at ? at->line : 0, name, decl_kind);
+        }
     }
 
-    void check_exclusive(const modifiers::RawModifiers& mods, std::uint16_t group, std::string_view decl_kind, const ASTNode* node) {
-        const std::uint16_t present = static_cast<std::uint16_t>(mods.flags() & group);
-        if ((present & (present - 1)) == 0) { return; }   
-        std::size_t count = 0;
-        const std::string list = flag_list(present, count);
-        SemanticError::conflicting_modifiers(m_reporter, node->file_id, node->line, decl_kind, list);
-    }
+    void validate_overload_sets(Scope* scope) {
+        if (!scope) { return; }
 
-    void check_conflicts(const modifiers::RawModifiers& mods, std::string_view decl_kind, const ASTNode* node) {
-        for (const auto& p : kConflictPairs) {
-            if (mods.has_all(static_cast<std::uint16_t>(p.a | p.b))) {
-                std::size_t count = 0;
-                const std::string list = flag_list(static_cast<std::uint16_t>(p.a | p.b), count);
-                SemanticError::conflicting_modifiers(m_reporter, node->file_id, node->line, decl_kind, list);
+        for (Symbol* head : scope->symbols) {
+            if (head->kind == SymbolKind::Function
+                && head->next_overload                      
+                && !head->is_imported
+                && head->decl
+                && head->decl->kind == ASTNode::Kind::FunctionDeclaration
+            ) {
+                check_primary_chain(head, head->name, "function");
             }
         }
+
+        for (Scope* child : scope->children) { validate_overload_sets(child); }
     }
 
-    void check_modifiers(const modifiers::RawModifiers& mods, std::uint16_t valid_mask, std::string_view decl_kind, const ASTNode* node) {
-        const std::uint16_t bad = static_cast<std::uint16_t>(mods.flags() & ~valid_mask);
+    void validate_record_specials(nodes::RecordDeclaration* rec) {
+        nodes::DestructorDeclaration* first_dtor = nullptr;
 
-        if (bad != 0) {
-            std::size_t count = 0;
-            const std::string list = flag_list(bad, count);
-            SemanticError::invalid_modifiers(m_reporter, node->file_id, node->line, decl_kind, list, count);
+        for (const auto& member : rec->get_members()) {
+            if (!member.node || member.node->kind != ASTNode::Kind::DestructorDeclaration) { continue; }
+            auto* d = static_cast<nodes::DestructorDeclaration*>(member.node);
+            if (!first_dtor) { first_dtor = d; }
+            else { SemanticError::duplicate_destructor(m_reporter, d->file_id, d->line, first_dtor->line); }
         }
 
-        check_exclusive(mods, kVisibilityGroup, decl_kind, node);
-        check_exclusive(mods, kMutabilityGroup, decl_kind, node);
-        check_exclusive(mods, kConstEvalGroup,  decl_kind, node);
-        check_exclusive(mods, kLinkageGroup,    decl_kind, node);
-
-        check_conflicts(mods, decl_kind, node);
+        if (Symbol* ctor_head = m_current->find_local("constructor"); ctor_head && ctor_head->next_overload) {
+            check_primary_chain(ctor_head, rec->get_name(), "constructor");
+        }
     }
 
     void build(ASTNode* node) {
@@ -261,7 +235,7 @@ private:
             
             case K::EnumDeclaration: {
                 auto* e = static_cast<nodes::EnumDeclaration*>(node);
-                check_modifiers(e->get_modifiers(), kValidEnumMods, "enum", e);
+                check_declaration_modifiers(e->get_modifiers(), kValidEnumMods, m_reporter, e, "enum");
                 build_enum(e);
                 break;
             }
@@ -282,21 +256,23 @@ private:
 
             case K::VariableDeclaration: {
                 auto* v = static_cast<nodes::VariableDeclaration*>(node);
-                check_modifiers(v->get_type_info().modifiers, kValidVariableMods, "variable", v);
+                check_declaration_modifiers(v->get_type_info().modifiers, kValidVariableMods, m_reporter, v, "variable");
                 build_variable(v);
                 break;
             }
 
             case K::FunctionDeclaration: {
                 auto* f = static_cast<nodes::FunctionDeclaration*>(node);
-                check_modifiers(f->get_modifiers(), kValidFunctionMods, "function", f);
+                check_declaration_modifiers(f->get_modifiers(), kValidFunctionMods, m_reporter, f, "function");
+                check_qualifier_conflicts(f->qualifiers(), m_reporter, f, "function");
+                check_cross_conflicts(f->get_modifiers(), f->qualifiers(), m_reporter, f, "function");
                 build_function(f);
                 break;
             }
 
             case K::RecordDeclaration: {
                 auto* r = static_cast<nodes::RecordDeclaration*>(node);
-                check_modifiers(r->get_modifiers(), kValidRecordMods, "record", r);
+                check_declaration_modifiers(r->get_modifiers(), kValidRecordMods, m_reporter, r, "record");
                 build_record(r);
                 break;
             }
@@ -326,11 +302,11 @@ private:
 
             case K::ForStatement: {
                 auto* s = static_cast<nodes::ForStatement*>(node);
-                push_scope(Scope::Kind::Block);
+                s->scope = push_scope(Scope::Kind::Block);   
                 build(s->var_init);
                 build(s->initializer);
-                walk_expr(s->condition);        
-                walk_expr(s->increment);        
+                walk_expr(s->condition);
+                walk_expr(s->increment);
                 build(s->body);
                 pop_scope();
                 break;
@@ -354,11 +330,11 @@ private:
 
             case K::SwitchStatement: {
                 auto* s = static_cast<nodes::SwitchStatement*>(node);
-                push_scope(Scope::Kind::Block);
+                s->scope = push_scope(Scope::Kind::Block); 
                 walk_expr(s->get_condition());
 
                 for (nodes::SwitchCase* c : s->get_cases()) {
-                    walk_expr(c->value);       
+                    walk_expr(c->value);
                     for (ASTNode* stmt : c->get_body()) { build(stmt); }
                 }
 
@@ -436,7 +412,7 @@ private:
 
             case K::ArrayDeclaration: {
                 auto* a = static_cast<nodes::ArrayDeclaration*>(node);
-                check_modifiers(a->get_array_modifiers(), kValidVariableMods, "array", a);
+                check_declaration_modifiers(a->get_array_modifiers(), kValidVariableMods, m_reporter, a, "array");
                 const bool hoisted = a->get_array_modifiers().has(modifiers::RawModifiers::Hoisted);
                 a->symbol = declare(*m_current, a->get_name(), SymbolKind::Variable, a, hoisted, decl_visibility(a));
                 a->symbol->type = &a->get_element_type();   
@@ -519,7 +495,10 @@ private:
 
     void build_operator(nodes::OperatorFunctionDeclaration* op) {
         // Operators resolve by signature later
-        // The lookup name is a shared overload bucket.
+        // The lookup name is a shared overload bucket
+        check_declaration_modifiers(op->get_modifiers(), kValidFunctionMods, m_reporter, op, "operator");
+        check_qualifier_conflicts(op->qualifiers(), m_reporter, op, "operator");
+        check_cross_conflicts(op->get_modifiers(), op->qualifiers(), m_reporter, op, "operator");
         Symbol* sym = declare(*m_current, "operator", SymbolKind::Function, op, false, decl_visibility(op));
         sym->type  = &op->get_return_type();
         op->symbol = sym;
@@ -528,9 +507,7 @@ private:
     }
 
     void build_constructor(nodes::ConstructorDeclaration* ctor) {
-        // No external lookup name (would clash with the type/members)
-        Symbol* sym = make_in<Symbol>(m_arena, std::string_view{"constructor"}, SymbolKind::Function, ctor);
-        sym->decl_order = m_order++;
+        Symbol* sym = declare(*m_current, "constructor", SymbolKind::Function, ctor, false);
         ctor->symbol = sym;
         if (!ctor->has_body()) { return; }
         build_callable_scope(sym, ctor->get_parameters(), const_cast<nodes::ASTNode*>(ctor->get_body()), &ctor->get_init_list());
@@ -573,6 +550,37 @@ private:
     }
 
     Symbol* declare_record(nodes::RecordDeclaration* rec) {
+        Symbol* existing = m_current->find_local(rec->get_name());
+
+        if (existing) {
+            if (existing->kind != SymbolKind::Type) {
+                SemanticError::redeclaration(
+                    m_reporter, 
+                    rec->file_id, 
+                    rec->line, 
+                    rec->get_name(),
+                    existing->decl ? existing->decl->file_id : INVALID_FILE,
+                    existing->decl ? existing->decl->line : 0
+                );
+
+                rec->symbol = existing;
+                return existing;
+            }
+
+            const bool existing_is_def = existing->decl && existing->decl->kind == ASTNode::Kind::RecordDeclaration && !static_cast<nodes::RecordDeclaration*>(existing->decl)->is_forward();
+
+            if (!rec->is_forward()) {
+                if (existing_is_def) {                       
+                    SemanticError::redeclaration(m_reporter, rec->file_id, rec->line, rec->get_name(), existing->decl->file_id, existing->decl->line);
+                } else {
+                    existing->decl = rec;                    
+                }
+            }
+
+            rec->symbol = existing;
+            return existing;
+        }
+
         Symbol* sym = declare(*m_current, rec->get_name(), SymbolKind::Type, rec, decl_is_hoisted(rec), decl_visibility(rec));
         rec->symbol = sym;
         return sym;
@@ -587,11 +595,14 @@ private:
             build(member.node);
         }
 
+        validate_record_specials(rec);
         pop_scope();
     }
 
     void build_record(nodes::RecordDeclaration* rec) {
         Symbol* sym = declare_record(rec);
+        if (rec->is_forward()) { return; }   
+        if (sym->inner_scope)  { return; }   
         build_record_body(rec, sym);
     }
 
@@ -600,6 +611,7 @@ private:
         en->symbol       = sym;
         Scope* es        = push_scope(Scope::Kind::Enum);
         sym->inner_scope = es;
+        es->owner_symbol = sym;
         for (nodes::EnumValue* v : en->get_values()) { v->symbol = declare(*es, v->get_name(), SymbolKind::EnumConstant, v, false); }
         pop_scope();
     }
@@ -626,6 +638,7 @@ private:
             default:                     build(decl); break;
         }
 
+        if (entity) entity->template_decl = tmpl;
         Scope* params = push_scope(Scope::Kind::Template);
         tmpl->scope = params;
 
@@ -800,17 +813,8 @@ private:
             case K::CoYieldExpression:     walk_expr(static_cast<nodes::CoYieldExpression*>(e)->operand);     break;
             case K::DeleteExpression:      walk_expr(static_cast<nodes::DeleteExpression*>(e)->operand);      break;
             case K::NoexceptExpression:    walk_expr(static_cast<nodes::NoexceptExpression*>(e)->operand);    break;
-
-            case K::RequiresExpression: build_requires(static_cast<nodes::RequiresExpression*>(e)); break;
-
-            case K::MultiSubscriptExpression: {
-                auto* m = static_cast<nodes::MultiSubscriptExpression*>(e);
-                walk_expr(m->m_array);
-                for (ASTNode* i : m->m_indices) { walk_expr(i); }
-                break;
-            }
-
-            case K::DiscardExpression: walk_expr(static_cast<nodes::DiscardExpression*>(e)->operand); break;
+            case K::RequiresExpression:    build_requires(static_cast<nodes::RequiresExpression*>(e));        break;
+            case K::DiscardExpression:     walk_expr(static_cast<nodes::DiscardExpression*>(e)->operand);     break;
 
             // Leaves: Literal, Identifier, QualifiedIdentifier.
             default: break;

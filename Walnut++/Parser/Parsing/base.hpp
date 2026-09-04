@@ -96,16 +96,16 @@ private:
 
     const tokenizing::Token& token_at(std::size_t k) { return k == 0 ? current_token() : lookahead(k); }
 
-    void advance();
-    void synchronize();
-    void expect(tokenizing::Token::Kind kind);
-    void expect(tokenizing::Token::Kind kind, const std::string& msg);
-    bool match(tokenizing::Token::Kind kind);
-    void check_nesting_depth(const tokenizing::Token& token, const std::string& construct_type) const;
+    void                     advance();
+    void                     synchronize();
+    void                     expect(tokenizing::Token::Kind kind);
+    void                     expect(tokenizing::Token::Kind kind, const std::string& msg);
+    bool                     match(tokenizing::Token::Kind kind);
+    void                     check_nesting_depth(const tokenizing::Token& token, const std::string& construct_type) const;
     const tokenizing::Token& peek();
-    bool concrete_match(tokenizing::Token::Kind kind) const noexcept;
+    bool                     concrete_match(tokenizing::Token::Kind kind) const noexcept;
     const tokenizing::Token& lookahead(std::size_t n = 1);
-    void consume_semicolons();
+    void                     consume_semicolons();
 
 private:
     void validate_identifier(const tokenizing::Token& token);
@@ -117,16 +117,15 @@ private:
     std::vector<std::string_view> parse_qualified_name(const char* what, bool* is_global = nullptr);
     std::string                   join_qualified_name(const std::vector<std::string_view>& parts);
     std::string_view              expect_string_literal(const char* what);
-    QualifiedTypeComponent        parse_qualified_type_component();
 
 private:
-    bool looks_like_user_type_declaration();
-    bool looks_like_special_member();        
-    bool looks_like_operator_function();    
-    bool looks_like_for_each();
-    bool looks_like_declaration();
-    bool fold_ahead();
-    bool looks_like_constrained_param();    
+    bool               looks_like_user_type_declaration();
+    bool               looks_like_special_member();        
+    bool               looks_like_operator_function();    
+    bool               looks_like_for_each();
+    bool               looks_like_declaration();
+    bool               fold_ahead();
+    bool               looks_like_constrained_param();    
     static inline bool is_fold_operator(tokenizing::Token::Kind k);
 
 private:
@@ -186,12 +185,12 @@ private:
     SmallVector<std::string_view, 4> parse_binding_names();
 
 private:
-    parser_types::TypeInfo  parse_type_info();
-    parser_types::TypeInfo  parse_type_only();
-    parser_types::TypeInfo  parse_return_type();
-    parser_types::TypeInfo  parse_function_pointer_type();
-    parser_types::TypeInfo  parse_array_type();
-    parser_types::TypeInfo  parse_variant_type();
+    parser_types::TypeInfo   parse_type_info();
+    parser_types::TypeInfo   parse_type_only();
+    parser_types::TypeInfo   parse_return_type();
+    parser_types::TypeInfo   parse_function_pointer_type();
+    parser_types::TypeInfo   parse_array_type();
+    parser_types::TypeInfo   parse_variant_type();
     modifiers::RawModifiers  parse_raw_modifiers();
 
 private:
@@ -201,9 +200,9 @@ private:
     nodes::ASTNode*               parse_operator_function(const modifiers::RawModifiers& mods, std::size_t line_number);
 
 private:
-    void                       parse_lambda_capture_item(nodes::LambdaCaptureList* captures);
-    nodes::LambdaCaptureList*  parse_lambda_capture_list();
-    nodes::ASTNode*            parse_lambda_expression();
+    void                                   parse_lambda_capture_item(nodes::LambdaCaptureList* captures);
+    nodes::LambdaCaptureList*              parse_lambda_capture_list();
+    nodes::ASTNode*                        parse_lambda_expression();
     nodes::RequiresExpression::Requirement parse_requirement();
 
 private:
@@ -212,23 +211,23 @@ private:
     nodes::ASTNode* parse_destructor_declaration(const modifiers::RawModifiers& mods, std::size_t line_number);
 
 private:
-    nodes::ASTNode*           parse_template_declaration();
-    nodes::ASTNode*           parse_template_value_expr();
-    nodes::TemplateParameter* parse_template_parameter();
+    nodes::ASTNode*                              parse_template_declaration();
+    nodes::ASTNode*                              parse_template_value_expr();
+    nodes::TemplateParameter*                    parse_template_parameter();
     std::vector<parser_types::TemplateArgument*> parse_template_argument_list_body();
-    parser_types::TemplateArgument* parse_alignas();
-    inline parser_types::TemplateArgument* parse_type_or_value_operand();
+    parser_types::TemplateArgument*              parse_alignas();
+    inline parser_types::TemplateArgument*       parse_type_or_value_operand();
 
-    std::size_t scan_paired(std::size_t open_off, tokenizing::Token::Kind open, tokenizing::Token::Kind close);
-    std::size_t scan_angle_close(std::size_t open_off, bool* leftover = nullptr);
-    bool        template_call_ahead();
-    bool        looks_like_type_argument(bool allow_paren_terminator = false);
-    bool        match_template_close();
-    bool        template_scope_ahead();
-    bool        template_value_ahead();
-    bool        template_ambiguous_ahead();
-    bool        is_known_template(const nodes::ASTNode* n) const;
-    void        register_template_name(std::string_view name);
+    std::size_t             scan_paired(std::size_t open_off, tokenizing::Token::Kind open, tokenizing::Token::Kind close);
+    std::size_t             scan_angle_close(std::size_t open_off, bool* leftover = nullptr);
+    bool                    template_call_ahead();
+    bool                    looks_like_type_argument(bool allow_paren_terminator = false);
+    bool                    match_template_close();
+    bool                    template_scope_ahead();
+    bool                    template_value_ahead();
+    bool                    template_ambiguous_ahead();
+    bool                    is_known_template(const nodes::ASTNode* n) const;
+    void                    register_template_name(std::string_view name);
     static std::string_view template_probe_key(const nodes::ASTNode* n);
 
 private:

@@ -70,6 +70,7 @@ struct ConstructorDeclaration : ASTNode {
     static bool classof(const ASTNode* n) { return n->kind == Kind::ConstructorDeclaration; }
 
     const FunctionParameters* get_parameters() const { return m_parameters; }
+          FunctionParameters* get_parameters()       { return m_parameters; }
     bool has_parameters() const { return m_parameters && !m_parameters->empty(); }
     const std::vector<ASTNode*>& get_init_list() const { return m_init_list; }
     bool has_init_list() const { return !m_init_list.empty(); }
@@ -103,6 +104,19 @@ struct ConstructorDeclaration : ASTNode {
         else if (is_deleted())   { os << "Body: = delete\n"; }
         else if (m_body)         { os << "Body:\n"; m_body->print(os, indent + 2); }
         else                     { os << "Body: <none>\n"; }
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        ConstructorDeclaration* c;
+
+        if (m_special == Special::None) {
+            c = make_in<ConstructorDeclaration>(a, clone_typed(m_parameters, a), clone_list(m_init_list, a), m_modifiers, m_qualifiers, clone_typed(m_body, a), line);
+        } else {
+            c = make_in<ConstructorDeclaration>(a, clone_typed(m_parameters, a), m_modifiers, m_qualifiers, m_special, line);
+        }
+
+        copy_base_to(c);
+        return c;
     }
 };
 
@@ -163,6 +177,14 @@ struct DestructorDeclaration : ASTNode {
         else if (m_body)       { os << "Body:\n"; m_body->print(os, indent + 2); }
         else                   { os << "Body: <none>\n"; }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        DestructorDeclaration* c;
+        if (m_special == Special::None) c = make_in<DestructorDeclaration>(a, m_modifiers, m_qualifiers, clone_typed(m_body, a), line);
+        else                            c = make_in<DestructorDeclaration>(a, m_modifiers, m_qualifiers, m_special, line);
+        copy_base_to(c);
+        return c;
+    }
 };
 
 struct RecordDeclaration : ASTNode {
@@ -183,6 +205,7 @@ struct RecordDeclaration : ASTNode {
     parser_types::TemplateArgument*              m_alignment = nullptr;
     modifiers::RawModifiers                      m_mods;
     semantics::Symbol* symbol = nullptr; 
+    semantics::Scope* scope = nullptr;
 
     RecordDeclaration(Form form, std::vector<std::string_view> name_parts, const modifiers::RawModifiers& mods, const parser_types::TypeInfo& inherits, bool is_declaration, std::uint32_t ln)
         : ASTNode(Kind::RecordDeclaration, ln)
@@ -204,6 +227,7 @@ struct RecordDeclaration : ASTNode {
 
     bool has_inherits() const { return m_inherits.has_type(); }
     const parser_types::TypeInfo& get_inherits() const { return m_inherits; }
+    bool is_forward() const { return m_is_declaration; }
     
     const char* form_keyword() const {
         switch (m_form) {
@@ -298,6 +322,17 @@ struct RecordDeclaration : ASTNode {
             os << "[" << access_name(m.access) << "]\n";
             print_node(m.node, os, indent + 3);
         }
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<RecordDeclaration>(a, m_form, m_name_parts, m_mods, m_inherits.clone_into(a), m_is_declaration, line);
+        copy_base_to(c);
+        c->m_is_specialization = m_is_specialization;
+        c->m_spec_args         = clone_targs(m_spec_args, a);
+        c->m_alignment         = clone_targ(m_alignment, a);
+        c->m_members.reserve(m_members.size());
+        for (const auto& m : m_members) c->m_members.push_back({ m.access, clone_child(m.node, a) });
+        return c;
     }
 };
 

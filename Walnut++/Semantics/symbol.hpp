@@ -4,9 +4,8 @@
 #include <string_view>
 #include <cstdint>
 
-#include "../Common/small_vector.hpp"   // adjust path to your SmallVector
-// Forward-decls keep this header light and avoid pulling the whole AST /
-// type subsystem in. Resolution code includes the real headers.
+#include "../Common/small_vector.hpp"  
+
 namespace walnut {
     namespace nodes        { struct ASTNode; }
     namespace parser_types { class  TypeInfo; }
@@ -61,6 +60,8 @@ struct Symbol {
     bool                          is_imported   = false;
     std::string_view              import_source;
     Symbol*                       import_target = nullptr;
+
+    nodes::TemplateDeclaration*   template_decl = nullptr;
 
     Symbol(std::string_view n, SymbolKind k, nodes::ASTNode* d) noexcept : name(n), kind(k), decl(d) {}
 };

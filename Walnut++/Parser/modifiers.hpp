@@ -216,6 +216,25 @@ public:
         mods.write_to(os);
         return os;
     }
+
+    static const char* flag_name(Flag f) noexcept {
+        switch (f) {
+            case Flag::Const:     return "const";
+            case Flag::Consteval: return "consteval";
+            case Flag::Explicit:  return "explicit";
+            case Flag::LValueRef: return "&";
+            case Flag::Noexcept:  return "noexcept";
+            case Flag::Override:  return "override";
+            case Flag::RValueRef: return "&&";
+            case Flag::Virtual:   return "virtual";
+            case Flag::Async:     return "async";
+            case Flag::Primary:   return "primary";
+            case Flag::Overload:  return "overload";
+            case Flag::Nodiscard: return "nodiscard";
+            case Flag::None:      return "none";
+        }
+        return "unknown";
+    }
 };
 
 } // namespace modifiers

@@ -2,14 +2,23 @@
 #define COMPILER_HPP
 
 #include "Parser/parser.hpp"
+
+#include "Semantics/instantiator.hpp"
+
 #include "Common/error_reporter.hpp"
 #include "Common/source_manager_lex.hpp"
 #include "Common/compiler_warning.hpp"
-#include "Preprocessor/preprocessor.hpp"
-#include "Driver/module_loader.hpp"
 #include "Common/scoped_timer.hpp"
+
+#include "Preprocessor/preprocessor.hpp"
+
+#include "Driver/module_loader.hpp"
 #include "Driver/front_pass.hpp"
 #include "Driver/linker.hpp"
+#include "Driver/resolve_pass.hpp"
+#include "Driver/define_pass.hpp"
+#include "Driver/walk_pass.hpp" 
+
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -26,6 +35,8 @@ private:
     SourceManager sources;    
     ErrorReporter reporter;
     WarningReporter warnings;
+    semantics::TypeContext types;
+    semantics::Instantiator instantiator;
 
     bool m_output_tokens = false;
     bool m_output_ast = false;
@@ -46,14 +57,19 @@ public:
         , sources(ast_arena)
         , reporter(input_file, ErrorOutput::StdErr)
         , warnings(input_file, ErrorOutput::StdErr)
+        , types(ast_arena)
+        , instantiator(ast_arena, types, reporter)
     {
         reporter.set_sources(&sources);
         warnings.set_sources(&sources);
     }
 
     const ErrorReporter& get_reporter() const noexcept { return reporter; }
+    const WarningReporter& get_warnings() const noexcept { return warnings; }
     const Arena& get_arena() const noexcept { return ast_arena; }
     const SourceManager& get_sources() const noexcept { return sources; }
+    const semantics::TypeContext& get_types() const noexcept { return types; }
+    const semantics::Instantiator& get_instantiator() const noexcept { return instantiator; }
 
 public:
     CompilerPipeline& enable_token_output() {
@@ -127,6 +143,21 @@ public:
     CompilerPipeline& define_macro(std::string name, std::string value = "1") { m_defines.emplace_back(std::move(name), std::move(value)); return *this; }
     CompilerPipeline& suppress_warnings() { warnings.set_enabled(false); return *this; }
 
+private:
+    void run_semantic_passes(const driver::FrontPass& front) {
+        if (reporter.has_errors()) return;
+        driver::ResolvePass resolver(reporter, ast_arena);
+        resolver.run(front);
+
+        if (reporter.has_errors()) return;
+        driver::DefinePass definitions(reporter, types);
+        definitions.run(front);
+
+        if (reporter.has_errors()) return;
+        driver::WalkPass walker(reporter, types, ast_arena, instantiator);
+        walker.run(front);
+    }
+
 public:
     void compile() {
         ScopedTimer _total("Total runtime", m_report_timing);
@@ -162,10 +193,6 @@ public:
         nodes::BlockStatement* ast = nullptr;
 
         try {
-        #ifdef WALNUT_DEBUG
-            auto parse_start = std::chrono::high_resolution_clock::now();
-        #endif
-
             preprocessing::Preprocessor pp(sources, reporter, warnings, ast_arena);
             for (const auto& dir : m_include_dirs) pp.add_include_dir(dir);
             for (const auto& [name, value] : m_defines) pp.define(name, value);
@@ -176,20 +203,9 @@ public:
             front.run(loader.units());
             driver::Linker linker(reporter, ast_arena);
             linker.run(front.results(), loader.file_edges());
-
-        #ifdef WALNUT_DEBUG
-            auto parse_end = std::chrono::high_resolution_clock::now();
-            using namespace std::chrono;
-            double total_ms = duration_cast<microseconds>(parse_end - parse_start).count() / 1000.0;
-            std::size_t lines = 0;
-            for (FileId i = 0; i < sources.file_count(); ++i) lines += sources.line_count(i);
-            double lines_per_sec = (total_ms > 0.0) ? (lines / (total_ms / 1000.0)) : 0.0;
-
-            std::cout << std::fixed << std::setprecision(6)
-                    << total_ms << " ms\n"
-                    << "Lines: " << lines << "\n"
-                    << "Lines/sec: " << lines_per_sec << "\n";
-        #endif
+            run_semantic_passes(front);
+            driver::WalkPass walker(reporter, types, ast_arena, instantiator);
+            walker.run(front);
         } catch (...) {}
 
     #ifdef WALNUT_DEBUG

@@ -69,6 +69,7 @@ private:
     const SourceManager* m_sources = nullptr; 
     FileId m_current_file = 0;                
     PathStyle m_path_style = PathStyle::Absolute;
+    std::vector<std::vector<CompilerError>> m_traps;
 
 public:
     explicit ErrorReporter(std::string source_file = "<unknown>", ErrorOutput mode = ErrorOutput::Silent) : m_file(std::move(source_file)), m_mode(mode) {}
@@ -82,7 +83,8 @@ public:
     PathStyle path_style() const noexcept { return m_path_style; }
 
     void report(ErrorPhase phase, FileId file_id, std::size_t line, std::string message) {
-        m_errors.push_back({ std::move(message), m_file, line, phase, file_id });
+        std::vector<CompilerError>& dst = m_traps.empty() ? m_errors : m_traps.back();
+        dst.push_back({ std::move(message), m_file, line, phase, file_id });
     }
 
     void report(ErrorPhase phase, std::size_t line, std::string message) {
@@ -123,6 +125,21 @@ public:
         return {};
     }
 
+    void push_trap() { m_traps.emplace_back(); }
+
+    bool pop_trap(bool commit) {
+        std::vector<CompilerError> t = std::move(m_traps.back());
+        m_traps.pop_back();
+        const bool captured = !t.empty();
+
+        if (commit) {
+            std::vector<CompilerError>& dst = m_traps.empty() ? m_errors : m_traps.back();
+            for (CompilerError& e : t) { dst.push_back(std::move(e)); }
+        }
+
+        return captured;
+    }
+
 private:
     std::string display_name(const CompilerError& e) const {
         std::string p = display_path(e.file_id);
@@ -150,6 +167,22 @@ private:
 
         write_to_stream(out);
     }
+};
+
+class DiagnosticTrap {
+public:
+    explicit DiagnosticTrap(ErrorReporter& r) : m_r(r) { m_r.push_trap(); }
+    ~DiagnosticTrap() { if (!m_done) { m_r.pop_trap(false); } }   
+
+    bool commit()  { m_done = true; return m_r.pop_trap(true);  }
+    bool discard() { m_done = true; return m_r.pop_trap(false); }
+
+    DiagnosticTrap(const DiagnosticTrap&) = delete;
+    DiagnosticTrap& operator=(const DiagnosticTrap&) = delete;
+
+private:
+    ErrorReporter& m_r;
+    bool m_done = false;
 };
 
 } // namespace walnut

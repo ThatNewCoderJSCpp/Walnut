@@ -26,7 +26,6 @@ inline void print_node(const ASTNode* node, std::ostream& os, std::size_t indent
         case ASTNode::Kind::TernaryExpression:           node_cast_unchecked<TernaryExpression>(node)->print(os, indent);           break;
         case ASTNode::Kind::CallExpression:              node_cast_unchecked<CallExpression>(node)->print(os, indent);              break;
         case ASTNode::Kind::SubscriptExpression:         node_cast_unchecked<SubscriptExpression>(node)->print(os, indent);         break;
-        case ASTNode::Kind::MultiSubscriptExpression:    node_cast_unchecked<MultiSubscriptExpression>(node)->print(os, indent);    break;
         case ASTNode::Kind::BraceInitializerList:        node_cast_unchecked<BraceInitializerList>(node)->print(os, indent);        break;
         case ASTNode::Kind::ExpressionStatement:         node_cast_unchecked<ExpressionStatement>(node)->print(os, indent);         break;
         case ASTNode::Kind::VariableDeclaration:         node_cast_unchecked<VariableDeclaration>(node)->print(os, indent);         break;

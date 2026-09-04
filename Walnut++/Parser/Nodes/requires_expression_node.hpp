@@ -70,6 +70,24 @@ struct RequiresExpression : ASTNode {
             os << "<none>\n";
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<RequiresExpression>(a, clone_typed(m_parameters, a), line);
+        copy_base_to(c);
+        c->m_requirements.reserve(m_requirements.size());
+
+        for (const auto& r : m_requirements) {
+            Requirement nr;
+            nr.form                = r.form;
+            nr.expr                = clone_child(r.expr, a);
+            nr.type                = r.type.clone_into(a);
+            nr.has_type_constraint = r.has_type_constraint;
+            nr.is_noexcept         = r.is_noexcept;
+            c->m_requirements.push_back(std::move(nr));
+        }
+        
+        return c;
+    }
 };
 
 } // namespace nodes

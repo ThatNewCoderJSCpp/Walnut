@@ -236,6 +236,24 @@ public:
         return make_and_report(reporter, token, ss.str());
     }
 
+    static ParserError invalid_operator_overload(
+        ErrorReporter& reporter,
+        const tokenizing::Token& token,
+        const std::vector<tokenizing::Token::Kind>& op_tokens
+    ) {
+        std::string spelling;
+
+        for (std::size_t i = 0; i < op_tokens.size(); ++i) {
+            if (i) spelling += ' ';
+            spelling += tokenizing::Token::name_fast(op_tokens[i]);
+        }
+        
+        std::stringstream ss;
+        ss << build_error_header(token, "Operator");
+        ss << "'" << spelling << "' is not an overloadable operator";
+        return make_and_report(reporter, token, ss.str());
+    }
+
     ParserError(const std::string& message) : std::runtime_error(message) {}
     ParserError(const std::size_t line, const std::string& message) : std::runtime_error("Error on line " + std::to_string(line) + ": " + message) {}
     static constexpr std::size_t MAX_NESTING_DEPTH = std::numeric_limits<std::size_t>::max() - 1;

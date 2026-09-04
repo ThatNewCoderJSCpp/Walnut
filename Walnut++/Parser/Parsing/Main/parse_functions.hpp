@@ -601,6 +601,16 @@ nodes::ASTNode* Parser::parse_operator_function(
         }
     }
 
+    nodes::OverloadableOperator op_kind = nodes::OverloadableOperator::None;
+
+    if (!is_conversion) {
+        op_kind = nodes::classify_overloadable_operator(op_tokens);
+
+        if (op_kind == nodes::OverloadableOperator::None) {
+            throw ParserError::invalid_operator_overload(reporter, current_token(), op_tokens);
+        }
+    }
+
     expect(K::FunctionKeyword, "Expected 'function' after the operator specifier");
     nodes::FunctionParameters*   parameters = parse_function_parameters();
     modifiers::FunctionQualifiers quals     = parse_function_qualifiers();
@@ -628,10 +638,14 @@ nodes::ASTNode* Parser::parse_operator_function(
     }
 
     if (form == nodes::OperatorFunctionDeclaration::Form::Conversion) {
-        return make<nodes::OperatorFunctionDeclaration>(conversion_type, return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);
+        auto* node = make<nodes::OperatorFunctionDeclaration>(conversion_type, return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);
+        node->overload = nodes::OverloadableOperator::Conversion;   
+        return node;
     }
 
-    return make<nodes::OperatorFunctionDeclaration>(std::move(op_tokens), return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);
+    auto* node = make<nodes::OperatorFunctionDeclaration>(std::move(op_tokens), return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);
+    node->overload = op_kind;
+    return node;
 }
 
 bool Parser::template_value_ahead() {

@@ -2,6 +2,7 @@
 #define WALNUT_FUNCTION_NODES_HPP
 
 #include "expression_nodes.hpp"
+#include "operator_kind.hpp"
 
 namespace walnut {
 namespace nodes {
@@ -64,6 +65,12 @@ struct FunctionParameter : ASTNode {
             os << "Default" << (m_is_init_in_decl ? " (in declaration)" : "") << ":\n";
             print_node(m_initializer, os, indent + 2);
         }
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<FunctionParameter>(a, m_name, m_type.clone_into(a), clone_child(m_initializer, a), m_is_init_in_decl, m_variadic_length);
+        copy_base_to(c);
+        return c;
     }
 };
 
@@ -173,6 +180,8 @@ struct FunctionParameters : ASTNode {
             os << "<none>\n";
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<FunctionParameters>(a); copy_base_to(c); c->m_params = clone_typed_list(m_params, a); return c; }
 };
 
 struct FunctionDeclaration : ASTNode {
@@ -300,6 +309,20 @@ struct FunctionDeclaration : ASTNode {
             os << "<none>\n";
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<FunctionDeclaration>(
+            a, m_name_parts, 
+            m_is_global_qualified, 
+            m_return_type.clone_into(a),        
+            m_modifiers, m_qualifiers, line,
+            clone_typed(m_parameters, a), 
+            clone_child(m_body, a)
+        );
+
+        copy_base_to(c);
+        return c;
+    }
 };
 
 struct ReturnStatement : ASTNode {
@@ -310,6 +333,7 @@ struct ReturnStatement : ASTNode {
     static bool classof(const ASTNode* n) { return n->kind == Kind::ReturnStatement; }
 
     const ASTNode* get_value() const { return m_value; }
+    ASTNode* get_value() { return m_value; }
     bool has_value() const { return m_value != nullptr; }
     std::uint32_t get_line() const { return line; }
 
@@ -326,6 +350,8 @@ struct ReturnStatement : ASTNode {
             os << "<void>\n";
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<ReturnStatement>(a, clone_child(m_value, a), line); copy_base_to(c); return c; }
 };
 
 struct LambdaCaptureItem {
@@ -390,6 +416,14 @@ struct LambdaCaptureList : ASTNode {
 
         os << "]\n";
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<LambdaCaptureList>(a);
+        copy_base_to(c);
+        c->m_captures.reserve(m_captures.size());
+        for (const auto& it : m_captures) c->m_captures.push_back(LambdaCaptureItem(it.mode, it.name, clone_child(it.init, a)));
+        return c;
+    }
 };
 
 struct LambdaExpression : ASTNode {
@@ -448,13 +482,29 @@ struct LambdaExpression : ASTNode {
             os << "<none>\n";
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<LambdaExpression>(
+            a, 
+            clone_typed(m_captures, a), 
+            clone_typed(m_parameters, a),
+            m_return_type.clone_into(a), 
+            m_quals, 
+            clone_child(m_body, a), 
+            line
+        );
+
+        copy_base_to(c);
+        return c;
+    }
 };
 
 struct OperatorFunctionDeclaration : ASTNode {
     enum class Form : std::uint8_t { Symbol, Conversion };
 
     Form                                  form;
-    std::vector<tokenizing::Token::Kind>  op_tokens;        
+    std::vector<tokenizing::Token::Kind>  op_tokens;
+    OverloadableOperator                  overload = OverloadableOperator::None;        
     parser_types::TypeInfo                conversion_type;  
 
     parser_types::TypeInfo                m_return_type;
@@ -510,11 +560,13 @@ struct OperatorFunctionDeclaration : ASTNode {
     const parser_types::TypeInfo& get_conversion_type() const { return conversion_type; }
     const parser_types::TypeInfo& get_return_type() const { return m_return_type; }
     const FunctionParameters* get_parameters() const { return m_parameters; }
+          FunctionParameters* get_parameters()       { return m_parameters; }
     bool has_parameters() const { return m_parameters && !m_parameters->empty(); }
     const ASTNode* get_body() const { return m_body; }
     bool has_body() const { return m_body != nullptr; }
     modifiers::FunctionQualifiers qualifiers() const { return m_qualifiers; }
     const modifiers::RawModifiers& get_modifiers() const { return m_modifiers; }
+    OverloadableOperator get_overload() const { return overload; }
 
     void print(std::ostream& os, std::size_t indent) const {
         print_indent(os, indent);
@@ -524,14 +576,7 @@ struct OperatorFunctionDeclaration : ASTNode {
         if (form == Form::Conversion) {
             os << "Conversion to: " << conversion_type << "\n";
         } else {
-            os << "Operator: ";
-
-            for (std::size_t i = 0; i < op_tokens.size(); ++i) {
-                if (i) os << ' ';
-                os << tokenizing::Token::name_fast(op_tokens[i]);
-            }
-            
-            os << "\n";
+            os << "Operator: " << overloadable_operator_name(overload) << "\n";
         }
 
         print_indent(os, indent + 1);
@@ -543,6 +588,37 @@ struct OperatorFunctionDeclaration : ASTNode {
         os << "Body:\n";
         if (m_body) { print_node(m_body, os, indent + 2); }
         else        { print_indent(os, indent + 2); os << "<none>\n"; }
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        OperatorFunctionDeclaration* c;
+
+        if (form == Form::Conversion) {
+            c = make_in<OperatorFunctionDeclaration>(
+                a, conversion_type.clone_into(a), 
+                m_return_type.clone_into(a),
+                m_modifiers, 
+                m_qualifiers, 
+                line, 
+                clone_typed(m_parameters, a), 
+                clone_child(m_body, a)
+            );
+        } else {
+            c = make_in<OperatorFunctionDeclaration>(
+                a, 
+                op_tokens, 
+                m_return_type.clone_into(a),
+                m_modifiers, 
+                m_qualifiers, 
+                line, 
+                clone_typed(m_parameters, a), 
+                clone_child(m_body, a)
+            );
+        }
+
+        copy_base_to(c);
+        c->overload = overload;
+        return c;
     }
 };
 

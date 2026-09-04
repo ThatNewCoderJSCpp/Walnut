@@ -21,6 +21,8 @@ struct Literal : ASTNode {
         print_indent(os, indent);
         os << "Literal(" << tokenizing::Token::name_fast(token_kind) << "): " << value << "\n";
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<Literal>(a, value, token_kind, line); copy_base_to(c); return c; }
 };
 
 struct Identifier : ASTNode {
@@ -37,6 +39,8 @@ struct Identifier : ASTNode {
         print_indent(os, indent);
         os << "Identifier: " << name << "\n";
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<Identifier>(a, name, line); copy_base_to(c); return c; }
 };
 
 struct QualifiedIdentifier : ASTNode {
@@ -64,12 +68,15 @@ struct QualifiedIdentifier : ASTNode {
         }
         os << "\n";
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<QualifiedIdentifier>(a, line, m_is_global); copy_base_to(c); c->m_parts = m_parts; return c; }
 };
 
 struct BinaryExpression : ASTNode {
     ASTNode* left;
     tokenizing::Token::Kind op;
     ASTNode* right;
+    semantics::Symbol* resolved = nullptr;
 
     BinaryExpression(ASTNode* l, tokenizing::Token::Kind o, ASTNode* r, std::uint32_t ln) : ASTNode(Kind::BinaryExpression, ln), left(l), op(o), right(r) {}
 
@@ -86,12 +93,15 @@ struct BinaryExpression : ASTNode {
         print_node(left, os, indent + 1);
         print_node(right, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<BinaryExpression>(a, clone_child(left, a), op, clone_child(right, a), line); copy_base_to(c); return c; }
 };
 
 struct UnaryExpression : ASTNode {
     ASTNode* operand;
     tokenizing::Token::Kind op;
     bool prefix;
+    semantics::Symbol* resolved = nullptr;
 
     UnaryExpression(ASTNode* expr, tokenizing::Token::Kind o, bool is_prefix, std::uint32_t ln) : ASTNode(Kind::UnaryExpression, ln), operand(expr), op(o), prefix(is_prefix) {}
 
@@ -106,10 +116,13 @@ struct UnaryExpression : ASTNode {
         os << "UnaryExpression(" << tokenizing::Token::name_fast(op) << ", " << (prefix ? "prefix" : "postfix") << ")\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<UnaryExpression>(a, clone_child(operand, a), op, prefix, line); copy_base_to(c); return c; }
 };
 
 struct DereferenceExpression : ASTNode {
     ASTNode* operand;
+    semantics::Symbol* resolved = nullptr;
 
     DereferenceExpression(ASTNode* expr, std::uint32_t ln) : ASTNode(Kind::DereferenceExpression, ln), operand(expr) {}
 
@@ -122,6 +135,8 @@ struct DereferenceExpression : ASTNode {
         os << "DereferenceExpression\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<DereferenceExpression>(a, clone_child(operand, a), line); copy_base_to(c); return c; }
 };
 
 struct ReferenceExpression : ASTNode {
@@ -138,6 +153,8 @@ struct ReferenceExpression : ASTNode {
         os << "ReferenceExpression\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<ReferenceExpression>(a, clone_child(operand, a), line); copy_base_to(c); return c; }
 };
 
 struct BitwiseNotExpression : ASTNode {
@@ -154,6 +171,8 @@ struct BitwiseNotExpression : ASTNode {
         os << "BitwiseNotExpression\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<BitwiseNotExpression>(a, clone_child(operand, a), line); copy_base_to(c); return c; }
 };
 
 struct TernaryExpression : ASTNode {
@@ -182,12 +201,15 @@ struct TernaryExpression : ASTNode {
         os << "False Branch:\n";
         print_node(false_branch, os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<TernaryExpression>(a, clone_child(condition, a), clone_child(true_branch, a), clone_child(false_branch, a), line); copy_base_to(c); return c; }
 };
 
 struct CallExpression : ASTNode {
     ASTNode* m_callee;
     std::vector<ASTNode*> m_arguments;
     std::vector<parser_types::TemplateArgument*> m_template_args;
+    semantics::Symbol* resolved = nullptr;
 
     CallExpression(ASTNode* callee, std::uint32_t ln = 0) : ASTNode(Kind::CallExpression, ln), m_callee(callee) {}
 
@@ -241,11 +263,20 @@ struct CallExpression : ASTNode {
             }
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<CallExpression>(a, clone_child(m_callee, a), line);
+        copy_base_to(c);
+        c->m_arguments     = clone_list(m_arguments, a);
+        c->m_template_args = clone_targs(m_template_args, a);
+        return c;
+    }
 };
 
 struct SubscriptExpression : ASTNode {
     ASTNode* m_array;
     ASTNode* m_index;
+    semantics::Symbol* resolved = nullptr;
 
     SubscriptExpression(ASTNode* array, ASTNode* index, std::uint32_t ln) : ASTNode(Kind::SubscriptExpression, ln), m_array(array), m_index(index) {}
 
@@ -264,33 +295,8 @@ struct SubscriptExpression : ASTNode {
         os << "Index:\n";
         print_node(m_index, os, indent + 2);
     }
-};
 
-struct MultiSubscriptExpression : ASTNode {
-    ASTNode* m_array;
-    std::vector<ASTNode*> m_indices;
-
-    MultiSubscriptExpression(ASTNode* array, std::uint32_t ln) : ASTNode(Kind::MultiSubscriptExpression, ln), m_array(array) {}
-
-    static bool classof(const ASTNode* n) { return n->kind == Kind::MultiSubscriptExpression; }
-
-    void add_index(ASTNode* index) { m_indices.push_back(index); }
-    const ASTNode* get_array() const { return m_array; }
-    const std::vector<ASTNode*>& get_indices() const { return m_indices; }
-    std::size_t dimension() const { return m_indices.size(); }
-
-    void print(std::ostream& os, std::size_t indent) const {
-        print_indent(os, indent);
-        os << "MultiSubscriptExpression (" << m_indices.size() << " dimensions)\n";
-        print_indent(os, indent + 1);
-        os << "Array:\n";
-        print_node(m_array, os, indent + 2);
-        for (std::size_t i = 0; i < m_indices.size(); ++i) {
-            print_indent(os, indent + 1);
-            os << "Index [" << i << "]:\n";
-            print_node(m_indices[i], os, indent + 2);
-        }
-    }
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<SubscriptExpression>(a, clone_child(m_array, a), clone_child(m_index, a), line); copy_base_to(c); return c; }
 };
 
 struct BraceInitializerList : ASTNode {
@@ -324,6 +330,8 @@ struct BraceInitializerList : ASTNode {
             os << "<empty>\n";
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<BraceInitializerList>(a, line); copy_base_to(c); c->m_elements = clone_list(m_elements, a); return c; }
 };
 
 struct MemberAccessExpression : ASTNode {
@@ -359,6 +367,8 @@ struct MemberAccessExpression : ASTNode {
         print_indent(os, indent + 1);
         os << "Member: " << m_member << "\n";
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<MemberAccessExpression>(a, clone_child(m_object, a), m_member, m_op, line); copy_base_to(c); return c; }
 };
 
 struct CastExpression : ASTNode {
@@ -367,6 +377,7 @@ struct CastExpression : ASTNode {
     CastKind                        cast_kind;
     parser_types::TypeInfo          target;   
     ASTNode*                        operand;
+    semantics::Symbol*              conversion = nullptr;
 
     CastExpression(CastKind ck, const parser_types::TypeInfo& tgt, ASTNode* op, std::uint32_t ln = 0) : ASTNode(Kind::CastExpression, ln), cast_kind(ck), target(tgt), operand(op) {}
 
@@ -375,6 +386,9 @@ struct CastExpression : ASTNode {
     CastKind get_cast_kind() const { return cast_kind; }
     const parser_types::TypeInfo& get_target() const { return target; }
     const ASTNode* get_operand() const { return operand; }
+    semantics::Symbol* get_conversion() const { return conversion; }
+
+    void set_conversion(semantics::Symbol* conv) { conversion = conv; }
 
     const char* cast_name() const {
         switch (cast_kind) {
@@ -396,6 +410,8 @@ struct CastExpression : ASTNode {
         os << "Operand:\n";
         print_node(operand, os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<CastExpression>(a, cast_kind, target.clone_into(a), clone_child(operand, a), line); copy_base_to(c); return c; }
 };
 
 struct TemplateInstantiation : ASTNode {
@@ -432,6 +448,8 @@ struct TemplateInstantiation : ASTNode {
             }
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<TemplateInstantiation>(a, clone_child(m_template, a), clone_targs(m_args, a), line); copy_base_to(c); return c; }
 };
 
 struct TypeQueryExpression : ASTNode {
@@ -473,6 +491,8 @@ struct TypeQueryExpression : ASTNode {
             os << "Operand: <none>\n";
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<TypeQueryExpression>(a, op, clone_targ(operand, a), line); copy_base_to(c); return c; }
 };
 
 struct NewExpression : ASTNode {
@@ -480,6 +500,8 @@ struct NewExpression : ASTNode {
     std::vector<ASTNode*>  args;        
     ASTNode*               array_size;  
     bool                   is_array;
+    semantics::Symbol*     ctor  = nullptr;
+    semantics::Symbol*     alloc = nullptr;
 
     NewExpression(const parser_types::TypeInfo& t, std::vector<ASTNode*> a, ASTNode* size, bool arr, std::uint32_t ln = 0) : ASTNode(Kind::NewExpression, ln), type(t), args(std::move(a)),array_size(size), is_array(arr) {}
 
@@ -512,11 +534,14 @@ struct NewExpression : ASTNode {
             }
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<NewExpression>(a, type.clone_into(a), clone_list(args, a), clone_child(array_size, a), is_array, line); copy_base_to(c); return c; }
 };
 
 struct DeleteExpression : ASTNode {
     ASTNode* operand;
     bool     is_array;
+    semantics::Symbol* dealloc  = nullptr;
 
     DeleteExpression(ASTNode* operand_, bool arr, std::uint32_t ln = 0) : ASTNode(Kind::DeleteExpression, ln), operand(operand_), is_array(arr) {}
 
@@ -527,6 +552,8 @@ struct DeleteExpression : ASTNode {
         os << "DeleteExpression" << (is_array ? "[]" : "") << "\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<DeleteExpression>(a, clone_child(operand, a), is_array, line); copy_base_to(c); return c; }
 };
 
 struct NoexceptExpression : ASTNode {
@@ -541,6 +568,8 @@ struct NoexceptExpression : ASTNode {
         os << "NoexceptExpression\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<NoexceptExpression>(a, clone_child(operand, a), line); copy_base_to(c); return c; }
 };
 
 struct FoldExpression : ASTNode {
@@ -563,6 +592,8 @@ struct FoldExpression : ASTNode {
         print_indent(os, indent + 1); os << "...\n";
         if (rhs) { print_indent(os, indent + 1); os << "Right:\n"; print_node(rhs, os, indent + 2); }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<FoldExpression>(a, form, op, clone_child(lhs, a), clone_child(rhs, a), line); copy_base_to(c); return c; }
 };
 
 struct AwaitExpression : ASTNode {
@@ -579,6 +610,8 @@ struct AwaitExpression : ASTNode {
         os << "AwaitExpression\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<AwaitExpression>(a, clone_child(operand, a), line); copy_base_to(c); return c; }
 };
 
 struct CoYieldExpression : ASTNode {
@@ -595,6 +628,8 @@ struct CoYieldExpression : ASTNode {
         os << "CoYieldExpression\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<CoYieldExpression>(a, clone_child(operand, a), line); copy_base_to(c); return c; }
 };
 
 struct BraceConstructExpression : ASTNode {
@@ -619,6 +654,8 @@ struct BraceConstructExpression : ASTNode {
         os << "Initializer:\n";
         print_node(m_init, os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<BraceConstructExpression>(a, clone_child(m_callee, a), clone_typed(m_init, a), line); copy_base_to(c); return c; }
 };
 
 struct DiscardExpression : ASTNode {
@@ -647,6 +684,8 @@ struct DiscardExpression : ASTNode {
         os << "DiscardExpression (" << discard_name() << ")\n";
         print_node(operand, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<DiscardExpression>(a, kind_, clone_child(operand, a), line); copy_base_to(c); return c; }
 };
 
 } // namespace nodes

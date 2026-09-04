@@ -20,6 +20,8 @@ struct ExpressionStatement : ASTNode {
         os << "ExpressionStatement\n";
         print_node(expr, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<ExpressionStatement>(a, clone_child(expr, a)); copy_base_to(c); return c; }
 };
 
 struct VariableDeclaration : ASTNode {
@@ -76,6 +78,14 @@ struct VariableDeclaration : ASTNode {
             print_node(m_initializer, os, indent + 2);
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        VariableDeclaration* c;
+        if (is_structured_binding()) c = make_in<VariableDeclaration>(a, m_type_info.clone_into(a), m_bindings, clone_child(m_initializer, a), line);
+        else                         c = make_in<VariableDeclaration>(a, m_type_info.clone_into(a), m_name,     clone_child(m_initializer, a), line);
+        copy_base_to(c);
+        return c;
+    }
 };
 
 struct BlockStatement : ASTNode {
@@ -94,6 +104,8 @@ struct BlockStatement : ASTNode {
         os << "Block\n";
         for (const auto& stmt : statements) { print_node(stmt, os, indent + 1); }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<BlockStatement>(a); copy_base_to(c); c->statements = clone_list(statements, a); return c; }
 };
 
 struct IfBranch : ASTNode {
@@ -117,6 +129,8 @@ struct IfBranch : ASTNode {
         os << "Body:\n";
         print_node(body, os, indent + 1);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<IfBranch>(a, clone_child(condition, a), clone_child(body, a)); copy_base_to(c); return c; }
 };
 
 struct IfStatement : ASTNode {
@@ -147,6 +161,14 @@ struct IfStatement : ASTNode {
             os << "Else Branch:\n";
             print_node(else_branch, os, indent + 2);
         }
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<IfStatement>(a);
+        copy_base_to(c);
+        c->branches    = clone_typed_list(branches, a);
+        c->else_branch = clone_child(else_branch, a);
+        return c;
     }
 };
 
@@ -200,6 +222,8 @@ struct NamespaceDeclaration : ASTNode {
             m_body->print(os, indent + 2);
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<NamespaceDeclaration>(a, m_name_parts, clone_typed(m_body, a), line); copy_base_to(c); return c; }
 };
 
 struct ForStatement : ASTNode {
@@ -208,6 +232,7 @@ struct ForStatement : ASTNode {
     ASTNode* increment = nullptr;
     ASTNode* body = nullptr;
     ASTNode* var_init = nullptr;
+    semantics::Scope* scope = nullptr;
     bool has_var_init;
 
     ForStatement(ASTNode* init, ASTNode* cond, ASTNode* inc, ASTNode* b)
@@ -227,6 +252,9 @@ struct ForStatement : ASTNode {
     const ASTNode* get_condition() const { return condition; }
     const ASTNode* get_increment() const { return increment; }
     const ASTNode* get_body() const { return body; }
+    const semantics::Scope* get_scope() const { return scope; }
+    semantics::Scope* get_scope() { return scope; }
+    void set_scope(semantics::Scope* s) { scope = s; }
     bool has_variable_initializer() const { return has_var_init; }
 
     void print(std::ostream& os, std::size_t indent) const {
@@ -267,6 +295,14 @@ struct ForStatement : ASTNode {
         print_indent(os, indent + 1);
         os << "Body:\n";
         print_node(body, os, indent + 2);
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        ForStatement* c;
+        if (has_var_init) c = make_in<ForStatement>(a, clone_child(var_init, a), nullptr, clone_child(condition, a), clone_child(increment, a), clone_child(body, a));
+        else              c = make_in<ForStatement>(a, clone_child(initializer, a), clone_child(condition, a), clone_child(increment, a), clone_child(body, a));
+        copy_base_to(c);
+        return c;
     }
 };
 
@@ -325,6 +361,14 @@ struct ForEachStatement : ASTNode {
         os << "Body:\n";
         print_node(m_body, os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        ForEachStatement* c;
+        if (is_structured_binding()) c = make_in<ForEachStatement>(a, m_element_type.clone_into(a), m_modifiers, m_bindings, clone_child(m_container, a), clone_child(m_body, a), line);
+        else                         c = make_in<ForEachStatement>(a, m_element_type.clone_into(a), m_modifiers, m_var_name, clone_child(m_container, a), clone_child(m_body, a), line);
+        copy_base_to(c);
+        return c;
+    }
 };
 
 struct WhileStatement : ASTNode {
@@ -348,6 +392,8 @@ struct WhileStatement : ASTNode {
         os << "Body:\n";
         print_node(body, os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<WhileStatement>(a, clone_child(body, a), clone_child(condition, a)); copy_base_to(c); return c; }
 };
 
 struct ArrayDeclaration : ASTNode {
@@ -440,6 +486,22 @@ struct ArrayDeclaration : ASTNode {
             m_initializer->print(os, indent + 2);
         } 
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<ArrayDeclaration>(
+            a, m_name, 
+            m_element_type.clone_into(a), 
+            m_array_modifiers, 
+            line,
+            m_dimension, 
+            clone_child(m_dimension_expr, a), 
+            clone_typed(m_initializer, a)
+        );
+        
+        copy_base_to(c);
+        c->m_alignment = clone_targ(m_alignment, a);
+        return c;
+    }
 };
 
 struct SingleStatement : ASTNode {
@@ -465,6 +527,8 @@ struct SingleStatement : ASTNode {
         print_indent(os, indent);
         os << "SingleStatement (" << variant_name() << ")\n";
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<SingleStatement>(a, variant, line); copy_base_to(c); return c; }
 };
 
 struct DoWhileStatement : ASTNode {
@@ -488,6 +552,8 @@ struct DoWhileStatement : ASTNode {
         os << "Condition:\n";
         print_node(condition, os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<DoWhileStatement>(a, clone_child(body, a), clone_child(condition, a), line); copy_base_to(c); return c; }
 };
 
 struct SwitchCase : ASTNode {
@@ -524,11 +590,20 @@ struct SwitchCase : ASTNode {
         print_indent(os, indent + 1);
         os << "Fallthrough: " << (has_fallthrough ? "true" : "false") << "\n";
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<SwitchCase>(a, clone_child(value, a), line);
+        copy_base_to(c);
+        c->body = clone_list(body, a);
+        c->has_fallthrough = has_fallthrough;
+        return c;
+    }
 };
 
 struct SwitchStatement : ASTNode {
     ASTNode* condition;
     std::vector<SwitchCase*> cases;
+    semantics::Scope* scope = nullptr;
 
     SwitchStatement(ASTNode* cond, std::uint32_t ln = 0) : ASTNode(Kind::SwitchStatement, ln), condition(cond) {}
 
@@ -537,7 +612,9 @@ struct SwitchStatement : ASTNode {
     const ASTNode* get_condition() const { return condition; }
     ASTNode* get_condition() { return condition; }
     const std::vector<SwitchCase*>& get_cases() const { return cases; }
-
+    const semantics::Scope* get_scope() const { return scope; }
+    semantics::Scope* get_scope() { return scope; }
+    void set_scope(semantics::Scope* s) { scope = s; }
     void add_case(SwitchCase* c) { cases.push_back(c); }
 
     void print(std::ostream& os, std::size_t indent) const {
@@ -547,6 +624,13 @@ struct SwitchStatement : ASTNode {
         os << "Condition:\n";
         print_node(condition, os, indent + 2);
         for (const auto& c : cases) { c->print(os, indent + 1); }
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<SwitchStatement>(a, clone_child(condition, a), line);
+        copy_base_to(c);
+        c->cases = clone_typed_list(cases, a);
+        return c;
     }
 };
 
@@ -597,6 +681,12 @@ struct TryCatchStatement : ASTNode {
 
         catch_body->print(os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<TryCatchStatement>(a, clone_typed(try_body, a), catch_name, catch_type.clone_into(a), has_typed_catch, clone_typed(catch_body, a), line);
+        copy_base_to(c);
+        return c;
+    }
 };
 
 struct EnumValue : ASTNode {
@@ -627,6 +717,8 @@ struct EnumValue : ASTNode {
             print_node(initializer, os, indent + 2);
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<EnumValue>(a, name, clone_child(initializer, a), line); copy_base_to(c); return c; }
 };
 
 struct EnumDeclaration : ASTNode {
@@ -695,6 +787,16 @@ struct EnumDeclaration : ASTNode {
             for (auto* v : values) { v->print(os, indent + 2); }
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        EnumDeclaration* c;
+        if (has_underlying_type) c = make_in<EnumDeclaration>(a, name, underlying_type.clone_into(a), line);
+        else                     c = make_in<EnumDeclaration>(a, name, line);
+        copy_base_to(c);
+        c->m_modifiers = m_modifiers;
+        c->values      = clone_typed_list(values, a);
+        return c;
+    }
 };
 
 struct UsingDeclaration : ASTNode {
@@ -757,6 +859,19 @@ struct UsingDeclaration : ASTNode {
                 break;
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        UsingDeclaration* c;
+
+        switch (variant) {
+            case Variant::Alias:   c = make_in<UsingDeclaration>(a, name, clone_child(aliased_expr, a), line); break;
+            case Variant::Typedef: c = make_in<UsingDeclaration>(a, name, aliased_type.clone_into(a), line);   break;
+            default:               c = make_in<UsingDeclaration>(a, target_parts, line);                       break;
+        }
+
+        copy_base_to(c);
+        return c;
+    }
 };
 
 struct TemplateParameter : ASTNode {
@@ -813,6 +928,21 @@ struct TemplateParameter : ASTNode {
             os << "<none>\n";
         }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<TemplateParameter>(a, line);
+        copy_base_to(c);
+        c->m_form             = m_form;
+        c->m_name             = m_name;
+        c->m_is_pack          = m_is_pack;
+        c->m_type             = m_type.clone_into(a);
+        c->m_default_type     = m_default_type.clone_into(a);
+        c->m_has_default_type = m_has_default_type;
+        c->m_default_value    = clone_child(m_default_value, a);
+        c->m_is_constrained   = m_is_constrained;
+        c->m_constraint       = m_constraint.clone_into(a);
+        return c;
+    }
 };
 
 struct TemplateDeclaration : ASTNode {
@@ -861,6 +991,16 @@ struct TemplateDeclaration : ASTNode {
         print_indent(os, indent + 1);
         os << "Declaration:\n";
         print_node(m_declaration, os, indent + 2);
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<TemplateDeclaration>(a, line);
+        copy_base_to(c);
+        c->m_params           = clone_typed_list(m_params, a);
+        c->m_declaration      = clone_child(m_declaration, a);
+        c->m_is_empty_template = m_is_empty_template;
+        c->m_requires_clause  = clone_child(m_requires_clause, a);
+        return c;
     }
 };
 
@@ -952,6 +1092,14 @@ struct ImportExportDeclaration : ASTNode {
         os << (is_import() ? "ImportDeclaration" : "ExportDeclaration") << (is_block ? " (block)" : "") << "\n";
         for (const auto& it : items) { for (const auto& it : items) { print_import_export_item(os, it, indent + 1); }}
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<ImportExportDeclaration>(a, direction, is_block, line);
+        copy_base_to(c);
+        c->items.reserve(items.size());
+        for (const auto& it : items) { ImportExportItem ni = it; ni.decl = clone_child(it.decl, a); c->items.push_back(std::move(ni)); }
+        return c;
+    }
 };
 
 struct ModuleDeclaration : ASTNode {
@@ -976,6 +1124,14 @@ struct ModuleDeclaration : ASTNode {
         os << "\n";
         for (const auto& it : items) { print_import_export_item(os, it, indent + 2); }
     }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<ModuleDeclaration>(a, name, line);
+        copy_base_to(c);
+        c->items.reserve(items.size());
+        for (const auto& it : items) { ImportExportItem ni = it; ni.decl = clone_child(it.decl, a); c->items.push_back(std::move(ni)); }
+        return c;
+    }
 };
 
 struct CoReturnStatement : ASTNode {
@@ -995,6 +1151,8 @@ struct CoReturnStatement : ASTNode {
         if (m_value) { print_node(m_value, os, indent + 1); }
         else { print_indent(os, indent + 1); os << "<void>\n"; }
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<CoReturnStatement>(a, clone_child(m_value, a), line); copy_base_to(c); return c; }
 };
 
 struct ConceptDeclaration : ASTNode {
@@ -1018,6 +1176,8 @@ struct ConceptDeclaration : ASTNode {
         os << "Constraint:\n";
         print_node(constraint, os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<ConceptDeclaration>(a, name, clone_child(constraint, a), line); copy_base_to(c); return c; }
 };
 
 struct StaticAssertDeclaration : ASTNode {
@@ -1040,6 +1200,8 @@ struct StaticAssertDeclaration : ASTNode {
         os << "Constraint:\n";
         print_node(constraint, os, indent + 2);
     }
+
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<StaticAssertDeclaration>(a, message, clone_child(constraint, a), line); copy_base_to(c); return c; }
 };
 
 } // namespace nodes

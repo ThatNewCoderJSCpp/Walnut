@@ -20,6 +20,7 @@ struct Scope {
 
     Kind   kind;
     Scope* parent = nullptr;
+    Symbol* owner_symbol = nullptr;
     nodes::ASTNode* node = nullptr; // for lambdas
 
     SmallVector<Symbol*, 8> symbols;

@@ -4,6 +4,7 @@
 #include "typename.hpp"
 #include "type_qualifiers.hpp"
 #include "../modifiers.hpp"
+#include "../../Semantics/type.hpp"
 
 namespace walnut {
 
@@ -21,7 +22,8 @@ public:
     IndirectionList indirection; 
     std::vector<TemplateArgument*> template_args;   
     TemplateArgument* alignment = nullptr;   
-    semantics::Symbol* resolved = nullptr;       
+    semantics::Symbol* resolved = nullptr;  
+    semantics::Type* canonical = nullptr;    
 
 public:
     TypeInfo() = default;
