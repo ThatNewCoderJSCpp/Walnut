@@ -1,0 +1,17 @@
+template <typename T>
+struct Box {
+    using Elem = T;
+    using Pair = array[2] T;
+    T: v;
+} end struct Box
+namespace N {
+    struct S { using W = short int; } end struct S
+} end namespace N
+function main() -> int {
+    using L = long long int;
+    println(sizeof(Box<int>::Elem), sizeof(Box<double>::Pair), sizeof(N::S::W), sizeof(L), alignof(Box<int>::Elem));
+    Box<short int>::Elem: e = 5;
+    println(e, sizeof(e));
+    return 0;
+}
+end function main

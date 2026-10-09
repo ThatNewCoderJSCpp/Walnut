@@ -77,6 +77,7 @@ struct BinaryExpression : ASTNode {
     tokenizing::Token::Kind op;
     ASTNode* right;
     semantics::Symbol* resolved = nullptr;
+    bool negate_result = false;
 
     BinaryExpression(ASTNode* l, tokenizing::Token::Kind o, ASTNode* r, std::uint32_t ln) : ASTNode(Kind::BinaryExpression, ln), left(l), op(o), right(r) {}
 
@@ -159,6 +160,7 @@ struct ReferenceExpression : ASTNode {
 
 struct BitwiseNotExpression : ASTNode {
     ASTNode* operand;
+    semantics::Symbol* resolved = nullptr;
 
     BitwiseNotExpression(ASTNode* expr, std::uint32_t ln = 0) : ASTNode(Kind::BitwiseNotExpression, ln), operand(expr) {}
 
@@ -210,6 +212,7 @@ struct CallExpression : ASTNode {
     std::vector<ASTNode*> m_arguments;
     std::vector<parser_types::TemplateArgument*> m_template_args;
     semantics::Symbol* resolved = nullptr;
+    ASTNode* closure_spec = nullptr;
 
     CallExpression(ASTNode* callee, std::uint32_t ln = 0) : ASTNode(Kind::CallExpression, ln), m_callee(callee) {}
 
@@ -458,6 +461,8 @@ struct TypeQueryExpression : ASTNode {
 
     Op                              op;
     parser_types::TemplateArgument* operand;  
+    semantics::Type*                queried = nullptr;
+    long long                       pack_count = -1;
 
     TypeQueryExpression(Op o, parser_types::TemplateArgument* operand_, std::uint32_t ln = 0) : ASTNode(Kind::TypeQuery, ln), op(o), operand(operand_) {}
 
@@ -583,6 +588,14 @@ struct FoldExpression : ASTNode {
     tokenizing::Token::Kind op;
     ASTNode*                lhs;   
     ASTNode*                rhs;   
+    ASTNode*                lowered  = nullptr;
+    ASTNode*                sequence = nullptr;
+    ASTNode*                first    = nullptr;
+    ASTNode*                step     = nullptr;
+    ASTNode*                init     = nullptr;
+    semantics::Symbol*      element  = nullptr;
+    semantics::Symbol*      accumulator = nullptr;
+    bool                    right_to_left = false;
 
     FoldExpression(Form f, tokenizing::Token::Kind o, ASTNode* l, ASTNode* r, std::uint32_t ln = 0) : ASTNode(Kind::FoldExpression, ln), form(f), op(o), lhs(l), rhs(r) {}
 
@@ -639,6 +652,7 @@ struct CoYieldExpression : ASTNode {
 struct BraceConstructExpression : ASTNode {
     ASTNode*              m_callee;
     BraceInitializerList* m_init;
+    semantics::Symbol*    ctor = nullptr;
 
     BraceConstructExpression(ASTNode* callee, BraceInitializerList* init, std::uint32_t ln = 0)
         : ASTNode(Kind::BraceConstructExpression, ln), m_callee(callee), m_init(init) {}

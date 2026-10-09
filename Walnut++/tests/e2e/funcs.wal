@@ -1,0 +1,20 @@
+function area(int: w, int: h = 2) -> int { return w * h; } end function area
+function pick(int: x) -> string { return "int"; } end function pick
+function pick(string: x) -> string { return "string"; } end function pick
+function pick(float: x) -> string { return "float"; } end function pick
+constexpr function cube(int: x) -> int { return x * x * x; } end function cube
+function fib(int: n) -> long int { if (n < 2) then { return n; } return fib(n - 1) + fib(n - 2); } end function fib
+function swap(int&: a, int&: b) -> void { int: t = a; a = b; b = t; } end function swap
+function main() -> int {
+    println(area(5), area(5, 3));
+    println(pick(1), pick("s"), pick(1.5));
+    int: k = 4;
+    println(cube(k), cube(3));
+    println(fib(30));
+    int: x = 1;
+    int: y = 2;
+    swap(x, y);
+    println(x, y);
+    return 0;
+}
+end function main

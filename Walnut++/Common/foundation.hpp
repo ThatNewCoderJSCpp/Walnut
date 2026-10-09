@@ -12,11 +12,11 @@ using WideInt   = mp::int2048;
 using WideUInt  = mp::uint2048;
 using WideFloat = mp::float2048;
 
-inline constexpr unsigned int kMaxDeclaredIntBits   = 1024;
-inline constexpr unsigned int kMaxDeclaredFloatBits = 1024;
+inline constexpr unsigned int kMaxDeclaredIntBits   = 2048;
+inline constexpr unsigned int kMaxDeclaredFloatBits = 2048;
 
 inline constexpr unsigned int bit_width_of_rank(int rank) {
-    return (rank < -2 || rank > 5) ? 0u : (8u << (rank + 2));
+    return (rank < -2 || rank > 6) ? 0u : (8u << (rank + 2));
 }
 
 inline WideFloat wf_parse(const std::string& s, bool& ok) {
@@ -44,7 +44,7 @@ inline bool wf_trunc_to_int(const WideFloat& f, WideInt& out) {
     return true;
 }
 
-#define WALNUT_FLOAT_WIDTHS(X) X(32) X(64) X(128) X(256) X(512) X(1024)
+#define WALNUT_FLOAT_WIDTHS(X) X(32) X(64) X(128) X(256) X(512) X(1024) X(2048)
 
 inline bool wf_round_to_width(const WideFloat& v, unsigned bits, WideFloat& out) {
     switch (bits) {

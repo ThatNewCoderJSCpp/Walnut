@@ -1,0 +1,12 @@
+function check(int: v) -> int {
+    if (v < 0) then { throw "negative"; }
+    return v;
+}
+end function check
+try {
+    println(check(4));
+    println(check(-1));
+} catch (string: msg) {
+    println("error:", msg);
+}
+println(check(-2));

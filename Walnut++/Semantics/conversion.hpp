@@ -3,6 +3,7 @@
 
 #include <optional>
 #include "type_impl.hpp"
+#include "scope.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -114,11 +115,96 @@ inline ConversionRank rank_user_defined(
     return best;
 }
 
+inline bool cv_at_least(const CV& have, const CV& want) {
+    return (!have.is_const || want.is_const) && (!have.is_volatile || want.is_volatile) && (!have.is_immutable || want.is_immutable);
+}
+
+inline ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx);
+
+inline Scope* record_scope_of(Type* t, TypeContext& ctx) {
+    t = ctx.strip_cv(t);
+    if (!t || !t->is_record()) return nullptr;
+    auto* rt = static_cast<RecordType*>(t);
+    if (rt->is_instantiation() && ctx.record_scope_hook) return ctx.record_scope_hook(rt);
+    return rt->decl() ? rt->decl()->inner_scope : nullptr;
+}
+
+inline bool scope_derives_from(const Scope* s, const Scope* base, int depth = 0) {
+    if (!s || !base || depth > 64) return false;
+    for (Scope* b : s->bases) if (b == base || scope_derives_from(b, base, depth + 1)) return true;
+    return false;
+}
+
+inline bool is_derived_record(Type* derived, Type* base, TypeContext& ctx) {
+    Scope* d = record_scope_of(derived, ctx);
+    Scope* b = record_scope_of(base, ctx);
+    return d && b && d != b && scope_derives_from(d, b);
+}
+
+inline bool unsized_array_accepts(Type* src, Type* dst, TypeContext& ctx) {
+    src = ctx.strip_cv(src);
+    dst = ctx.strip_cv(dst);
+    if (!src || !dst || !src->is_array() || !dst->is_array()) return false;
+    auto* sa = static_cast<ArrayType*>(src);
+    auto* da = static_cast<ArrayType*>(dst);
+    if (da->extent()) return false;
+    return ctx.strip_cv(sa->element()) == ctx.strip_cv(da->element());
+}
+
+inline ConversionRank rank_reference_binding(Type* src, ReferenceType* dst, TypeContext& ctx) {
+    Type* referent = dst->referent();
+    if (referent->is_error()) return ConversionRank::Exact;
+    const bool same = ctx.strip_cv(src) == ctx.strip_cv(referent);
+
+    if (!same && is_derived_record(src, referent, ctx)) return cv_at_least(src->cv(), referent->cv()) ? ConversionRank::Conversion : ConversionRank::None;
+
+    if (!same && unsized_array_accepts(src, referent, ctx)) return ConversionRank::Conversion;
+
+    if (dst->ref_qual() == RefQual::LValue && !referent->cv().is_const) {
+        return (same && cv_at_least(src->cv(), referent->cv())) ? ConversionRank::Exact : ConversionRank::None;
+    }
+
+    if (same) return cv_at_least(src->cv(), referent->cv()) ? ConversionRank::Exact : ConversionRank::None;
+    return rank_conversion(ctx.strip_cv(src), ctx.strip_cv(referent), ctx);
+}
+
 inline ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx) {
     if (!src || !dst) return ConversionRank::None;
-    if (src->is_error() || dst->is_error()) return ConversionRank::Exact;  
+    if (src->is_error() || dst->is_error()) return ConversionRank::Exact;
     if (src == dst) return ConversionRank::Exact;
+    if (src->is_reference()) return rank_conversion(static_cast<ReferenceType*>(src)->referent(), dst, ctx);
+    if (dst->is_reference()) return rank_reference_binding(src, static_cast<ReferenceType*>(dst), ctx);
+    if (ctx.strip_cv(src) == ctx.strip_cv(dst)) return ConversionRank::Exact;
     if (src->is_null() && dst->is_pointer()) return ConversionRank::Conversion;  
+
+    if (dst->is_builtin() && static_cast<BuiltinType*>(dst)->is_dynamic()) {
+        Type* sv = ctx.strip_cv(src);
+        if (sv->is_builtin() && !static_cast<BuiltinType*>(sv)->is_void()) return ConversionRank::Conversion;
+    }
+
+    if (src->is_builtin() && static_cast<BuiltinType*>(src)->is_dynamic()) {
+        Type* dv = ctx.strip_cv(dst);
+        if (dv->is_builtin() && !static_cast<BuiltinType*>(dv)->is_void()) return ConversionRank::UserDefined;
+    }
+
+    if (src->is_pointer() && dst->is_pointer()) {
+        Type* sp = static_cast<PointerType*>(src)->pointee();
+        Type* dp = static_cast<PointerType*>(dst)->pointee();
+        if (ctx.strip_cv(sp) == ctx.strip_cv(dp)) return cv_at_least(sp->cv(), dp->cv()) ? ConversionRank::Conversion : ConversionRank::None;
+        if (is_derived_record(sp, dp, ctx) && cv_at_least(sp->cv(), dp->cv())) return ConversionRank::Conversion;
+    }
+
+    if (is_derived_record(src, dst, ctx)) return ConversionRank::Conversion;
+    if (unsized_array_accepts(src, dst, ctx)) return ConversionRank::Conversion;
+
+    if (src->is_function() && dst->is_function()) {
+        auto* sf = static_cast<FunctionType*>(src);
+        auto* df = static_cast<FunctionType*>(dst);
+        if (sf->ret() == df->ret() && sf->params() == df->params()) return ConversionRank::Conversion;
+    }
+
+    if (dst->is_function() && ctx.strip_cv(src)->is_record() && ctx.callable_hook && ctx.callable_hook(ctx.strip_cv(src), dst)) return ConversionRank::UserDefined;
+    if (dst->is_function() && src->kind() == TypeKind::Closure && ctx.closure_hook && ctx.closure_hook(src, dst)) return ConversionRank::UserDefined;
     ConversionRank r = rank_builtin(src, dst);
     if (r != ConversionRank::None) return r;
     return rank_user_defined(src, dst, ctx);
@@ -134,7 +220,20 @@ inline bool is_static_castable(Type* src, Type* dst, TypeContext& ctx) {
         if (numeric_profile(sb) && numeric_profile(db)) return true;
         if (base_cast_mode(sb->base(), db->base()) == CastMode::Explicit) return true;
     }
-    
+
+    using BK = parser_types::PrimitiveType::BaseKind;
+    Type* s = ctx.strip_cv(src);
+    Type* d = ctx.strip_cv(dst);
+    if (s->is_enum() && d->is_builtin() && static_cast<BuiltinType*>(d)->base() == BK::Int) return true;
+    if (d->is_enum() && s->is_builtin() && static_cast<BuiltinType*>(s)->base() == BK::Int) return true;
+    if (s->is_enum() && d->is_enum()) return true;
+
+    if (s->is_pointer() && d->is_pointer()) {
+        Type* sp = static_cast<PointerType*>(s)->pointee();
+        Type* dp = static_cast<PointerType*>(d)->pointee();
+        if (is_derived_record(dp, sp, ctx) && cv_at_least(sp->cv(), dp->cv())) return true;
+    }
+
     return false;
 }
 

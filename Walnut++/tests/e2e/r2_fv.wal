@@ -1,0 +1,4 @@
+struct P { int: x; } end struct P
+template <typename T> struct B { T: v; } end struct B
+array P: ps[2] = { P{ 1 }, P{ 2 } };
+for (const P*: q = &ps[0]; q != nullptr; q = nullptr) { println(1); }

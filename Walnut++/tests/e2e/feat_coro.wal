@@ -1,0 +1,50 @@
+function count_to(int: n) -> generator<int> {
+    for (int: i = 1; i <= n; i++) { co_yield i; }
+}
+end function count_to
+function evens() -> generator<int> {
+    int: k = 0;
+    while (true) { co_yield k; k += 2; }
+}
+end function evens
+function words() -> generator<string> {
+    co_yield "alpha";
+    co_yield "beta";
+    return;
+}
+end function words
+function squares(generator<int>: src) -> generator<long int> {
+    for (int: v in src) { co_yield v * v; }
+}
+end function squares
+function fetch(int: x) async -> int {
+    println("fetching", x);
+    return x * 10;
+}
+end function fetch
+function combine() async -> int {
+    task<int>: a = fetch(1);
+    task<int>: b = fetch(2);
+    int: total = await b + await a;
+    return total;
+}
+end function combine
+function boom() async -> void { throw "async failure"; } end function boom
+function main() -> int {
+    for (int: v in count_to(3)) { print(v, " "); }
+    println();
+    for (int: e in evens()) { if (e > 6) then { break; } print(e, " "); }
+    println();
+    for (string: w in words()) { println(w); }
+    generator<long int>: sq = squares(count_to(4));
+    for (long int: s in sq) { print(s, " "); }
+    println();
+    task<int>: t = combine();
+    println("before await");
+    println(await t, await t);
+    try { await boom(); } catch (string: m) { println("caught", m); }
+    auto: lazy = [](int: n) async -> int { return n + 1; };
+    println(await lazy(41));
+    return 0;
+}
+end function main

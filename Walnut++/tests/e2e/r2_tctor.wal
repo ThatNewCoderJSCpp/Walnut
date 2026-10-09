@@ -1,0 +1,3 @@
+template <typename T>
+function zero() -> T { T: z = T(); return z; } end function zero
+println(zero<int>(), zero<string>() == "");

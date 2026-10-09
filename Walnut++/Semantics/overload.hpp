@@ -93,6 +93,60 @@ inline CandidateMatch match_arguments(const std::vector<ParamShape>& params, con
     return m;
 }
 
+inline bool assign_arguments(const std::vector<ParamShape>& params, const std::vector<Type*>& args, TypeContext& ctx, std::vector<std::size_t>& takes) {
+    const std::size_t n = args.size(), pm = params.size();
+    struct Cell { bool ok = false; std::vector<ConversionRank> ranks; std::vector<std::size_t> takes; };
+    std::vector<Cell> prev(n + 1), cur(n + 1);
+    prev[0].ok = true;
+
+    auto relax = [](Cell& dst, const Cell& src, std::vector<ConversionRank> cand, std::size_t took) {
+        if (dst.ok && !lex_better(cand, dst.ranks)) return;
+        dst.ok = true;
+        dst.ranks = std::move(cand);
+        dst.takes = src.takes;
+        dst.takes.push_back(took);
+    };
+
+    for (std::size_t i = 0; i < pm; ++i) {
+        const ParamShape& P = params[i];
+        for (Cell& c : cur) c = Cell{};
+
+        for (std::size_t a = 0; a <= n; ++a) {
+            if (!prev[a].ok) continue;
+
+            if (!P.is_pack) {
+                if (a < n) {
+                    ConversionRank r = args[a] ? rank_conversion(args[a], P.element, ctx) : ConversionRank::Conversion;
+                    if (r != ConversionRank::None) {
+                        std::vector<ConversionRank> v = prev[a].ranks;
+                        v.push_back(r);
+                        relax(cur[a + 1], prev[a], std::move(v), 1);
+                    }
+                }
+                if (P.has_default) relax(cur[a], prev[a], prev[a].ranks, 0);
+                continue;
+            }
+
+            relax(cur[a], prev[a], prev[a].ranks, 0);
+            std::vector<ConversionRank> acc = prev[a].ranks;
+            const std::size_t max_take = P.unbounded ? (n - a) : std::min<std::size_t>(P.cap, n - a);
+
+            for (std::size_t t = 1; t <= max_take; ++t) {
+                ConversionRank r = args[a + t - 1] ? rank_conversion(args[a + t - 1], P.element, ctx) : ConversionRank::Conversion;
+                if (r == ConversionRank::None) break;
+                acc.push_back(r);
+                relax(cur[a + t], prev[a], acc, t);
+            }
+        }
+
+        prev.swap(cur);
+    }
+
+    if (!prev[n].ok) return false;
+    takes = std::move(prev[n].takes);
+    return true;
+}
+
 inline bool better_candidate(const CandidateMatch& A, const CandidateMatch& B) {
     bool strictly = false;
     const std::size_t n = A.ranks.size();

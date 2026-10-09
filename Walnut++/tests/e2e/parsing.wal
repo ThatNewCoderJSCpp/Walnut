@@ -1,0 +1,12 @@
+string: line = input();
+long int: n = parse_int(line);
+float: f = parse_float(input());
+println(n * 2, f + 0.5, to_string(n) + "!", to_string(3.5), to_string('x'), to_string(true));
+int: total = 0;
+string: more = input();
+while (more != "end") {
+    total += static_cast<int>(parse_int(more));
+    more = input();
+}
+println("total", total);
+try { parse_int("12abc"); } catch (...) { println("bad number"); }

@@ -34,6 +34,13 @@ modifiers::RawModifiers Parser::parse_raw_modifiers() {
                 advance();
                 break;
                 
+            case tokenizing::Token::Kind::FriendKeyword:
+                if (raw.has(modifiers::RawModifiers::Friend)) throw ParserError::duplicate_type_modifiers(reporter, current_token());
+                raw.add(modifiers::RawModifiers::Friend);
+                raw.add_token(kind);
+                advance();
+                break;
+
             case tokenizing::Token::Kind::HoistKeyword:
                 if (raw.has(modifiers::RawModifiers::Hoisted)) throw ParserError::duplicate_type_modifiers(reporter, current_token());
                 raw.add(modifiers::RawModifiers::Hoisted);

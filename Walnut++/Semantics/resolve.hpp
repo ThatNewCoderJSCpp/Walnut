@@ -18,6 +18,7 @@ inline bool visible_at(const Symbol* sym, const nodes::ASTNode* use) {
     if (sym->owner && (sym->owner->kind == Scope::Kind::Record || sym->owner->kind == Scope::Kind::Enum)) { return true; }
     const nodes::ASTNode* decl = sym->decl;
     if (!decl) { return true; }
+    if (decl->kind == nodes::ASTNode::Kind::TryCatchStatement || decl->kind == nodes::ASTNode::Kind::ForEachStatement) { return true; }
     if (decl->file_id != use->file_id) { return true; }
     if (decl->order != 0 && use->order != 0) { return decl->order <= use->order; }
     return decl->line <= use->line;
@@ -46,22 +47,31 @@ inline Symbol* descend(Scope* start, const std::vector<std::string_view>& parts,
     Scope* cur = start;
 
     for (std::size_t i = first; i + 1 < parts.size(); ++i) {
-        Symbol* s = cur->find_local(parts[i]);
+        Symbol* s = cur->kind == Scope::Kind::Record ? cur->find_member(parts[i]) : cur->find_local(parts[i]);
         if (!s || !s->inner_scope || !scope_carrier(s->kind)) { return nullptr; }
         cur = s->inner_scope;
     }
 
-    return cur->find_local(parts.back());
+    return cur->kind == Scope::Kind::Record ? cur->find_member(parts.back()) : cur->find_local(parts.back());
 }
 
 inline Symbol* resolve_lexical_visible(Scope* from, std::string_view name, const nodes::ASTNode* use) {
     for (Scope* s = from; s; s = s->parent) {
-        Symbol* sym = s->find_local(name);
+        Symbol* sym = s->kind == Scope::Kind::Record ? s->find_member(name) : s->find_local(name);
         if (!sym) { continue; }
         if (visible_at(sym, use)) { return sym; }
 
         if (sym->inner_scope) {
             for (Scope* p = from; p; p = p->parent) { if (p == sym->inner_scope) { return sym; }}
+        }
+    }
+
+    for (Scope* s = from; s; s = s->parent) {
+        for (nodes::ASTNode* d : s->using_directives) {
+            if (!d || d->kind != nodes::ASTNode::Kind::UsingDeclaration) { continue; }
+            Symbol* ns = static_cast<nodes::UsingDeclaration*>(d)->symbol;
+            if (!ns || !ns->inner_scope) { continue; }
+            if (Symbol* sym = ns->inner_scope->find_local(name)) { return sym; }
         }
     }
 

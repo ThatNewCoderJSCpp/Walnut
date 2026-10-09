@@ -21,12 +21,15 @@ nodes::ASTNode* Parser::parse_if_statement() {
     expect(K::IfKeyword);
 
     auto parse_clause = [&](nodes::IfStatement* stmt) {
+        const bool is_constexpr = match(K::ConstexprKeyword);
         expect(K::LeftParen, "Expected '(<condition>)' for if statement");
         const std::size_t cline = current_token().line();
         nodes::ASTNode* cond = looks_like_declaration() ? parse_variable_declaration({}, cline, false) : parse_expression();
         expect(K::RightParen, "Expected ')' to end the if condition)");
         expect(K::ThenKeyword, "Expected 'then' to indicated if body");
-        stmt->add_branch(make<nodes::IfBranch>(cond, parse_block()));
+        nodes::IfBranch* branch = make<nodes::IfBranch>(cond, parse_block());
+        branch->is_constexpr = is_constexpr;
+        stmt->add_branch(branch);
     };
 
     nodes::IfStatement* if_statement = make<nodes::IfStatement>();

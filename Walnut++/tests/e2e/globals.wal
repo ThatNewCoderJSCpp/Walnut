@@ -1,0 +1,25 @@
+struct Config {
+    string: name;
+    int: level;
+    constructor(string: n, int: l) : name(n), level(l) { println("config", n); }
+} end struct Config
+array int: primes[5] = { 2, 3, 5, 7, 11 };
+Config: cfg = Config("main", 3);
+function counter() -> int {
+    static int: calls = 0;
+    calls += 1;
+    return calls;
+} end function counter
+println("start");
+int: total = 0;
+for (int: p in primes) { total += p; }
+println(total, cfg.name, cfg.level);
+counter();
+counter();
+println(counter());
+long double: third = 1.0 / 3.0;
+float: f = 2.0 ** 0.5;
+println(f > 1.414 && f < 1.415, third > 0.333);
+long long integer: huge = 1;
+for (int: i = 0; i < 200; i++) { huge = huge * 10; }
+println(huge / 1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000);

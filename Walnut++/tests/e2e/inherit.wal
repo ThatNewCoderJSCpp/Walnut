@@ -1,0 +1,23 @@
+class Animal {
+ public:
+    string: name;
+    constructor(string: n) : name(n) { println("animal", n); }
+    destructor() virtual { println("bye", name); }
+    function speak() const virtual -> string { return "..."; } end function speak
+    function intro() const -> string { return name + " says " + speak(); } end function intro
+} end class Animal
+class Dog extends Animal {
+ public:
+    constructor(string: n) : Animal(n) { println("dog"); }
+    function speak() const override -> string { return "woof"; } end function speak
+} end class Dog
+function main() -> int {
+    Animal*: a = new Dog("rex");
+    println(a->intro());
+    delete a;
+    Dog: d = Dog("fido");
+    Animal&: r = d;
+    println(r.speak());
+    return 0;
+}
+end function main

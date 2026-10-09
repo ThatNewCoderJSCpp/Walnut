@@ -36,7 +36,7 @@ namespace tokenizing {
     X(LogicOr, false, "") X(LogicAnd, false, "") \
     X(SingleRightArrow, false, "") X(SingleLeftArrow, false, "") X(DoubleRightArrow, false, "") \
     X(Ellipsis, false, "") X(Character, false, "") X(TextLiteral, false, "") \
-    X(DoubleColon, false, "") X(DoubleColonEqual, false, "") X(DoubleSemicolon, false, "") \
+    X(DoubleColon, false, "") X(DoubleSemicolon, false, "") \
     X(DoubleLessThan, false, "") X(DoubleGreaterThan, false, "") \
     X(CaretEqual, false, "") X(ColonEqual, false, "") X(PipeEqual, false, "") X(AmpersandEqual, false, "") \
     X(ShiftLeftEqual, false, "") X(ShiftRightEqual, false, "") \
@@ -70,7 +70,7 @@ namespace tokenizing {
     X(DownKeyword, true, "down") \
     X(DestructorKeyword, true, "destructor") \
     X(DynamicKeyword, true, "dynamic") \
-    X(DynamicCastKeyword, true, "dyanmic_cast") \
+    X(DynamicCastKeyword, true, "dynamic_cast") \
     X(DiscardConstKeyword, true, "discard_const") \
     X(DiscardNodiscardKeyword, true, "discard_nodiscard", "discard_no_discard") \
     X(ElseKeyword, true, "else") \
@@ -111,7 +111,6 @@ namespace tokenizing {
     X(OverrideKeyword, true, "override") \
     X(OverloadKeyword, true, "overload") \
     X(PrivateKeyword, true, "private") \
-    X(PrimaryKeyword, true, "primary") \
     X(PublicKeyword, true, "public") \
     X(ProtectedKeyword, true, "protected") \
     X(RepeatKeyword, true, "repeat") \

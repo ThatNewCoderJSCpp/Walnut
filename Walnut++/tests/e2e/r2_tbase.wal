@@ -1,0 +1,13 @@
+template <typename T>
+class Base {
+ public:
+    T: v;
+} end class Base
+template <typename T>
+class Derived extends Base<T> {
+ public:
+    function get() const -> T { return this->v; } end function get
+} end class Derived
+Derived<int>: d;
+d.v = 4;
+println(d.get());

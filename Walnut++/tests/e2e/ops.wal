@@ -1,0 +1,15 @@
+struct V2 {
+    int: x;
+    int: y;
+    constructor(int: a, int: b) : x(a), y(b) { int: z = 0; }
+    operator(+) function (const V2&: o) const -> V2 { return V2(x + o.x, y + o.y); }
+    operator(==) function (const V2&: o) const -> bool { return x == o.x && y == o.y; }
+} end struct V2
+function main() -> int {
+    V2: a = V2(1, 2);
+    V2: b = V2(10, 20);
+    V2: c = a + b;
+    println(c.x, c.y, c == V2(11, 22));
+    return 0;
+}
+end function main

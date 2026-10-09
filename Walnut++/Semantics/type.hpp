@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <ostream>
 #include <unordered_set>
+#include <functional>
 
 #include "../Parser/Types/typename.hpp"  
 #include "../Common/arena_allocator.hpp"
@@ -21,6 +22,8 @@ namespace parser_types { class  TypeInfo; }
 namespace semantics {
 
 class UserConversionTable;
+struct Scope;
+class RecordType;
 class SubstEnv;
 
 enum class TypeKind : std::uint8_t {
@@ -36,7 +39,9 @@ enum class TypeKind : std::uint8_t {
     Dependent,
     PackExpansion,
     Null,       
-    Error 
+    Error,
+    Closure,
+    Coroutine
 };
 
 struct CV {
@@ -112,8 +117,8 @@ inline int builtin_width(
     const int r = length_rank(l);
 
     switch (base) {
-        case BK::Float: return r + (long_form ? 3 : 2);   
-        case BK::Int:   return r + (long_form ? 3 : 0);   
+        case BK::Float: return r + (long_form ? 4 : 2);   
+        case BK::Int:   return r + (long_form ? 4 : 0);   
         case BK::Char:  return -2;                        
         case BK::Bool:  return -2;
         default:        return 0;
@@ -146,12 +151,12 @@ inline std::string canonical_spelling(parser_types::PrimitiveType::BaseKind base
     switch (base) {
         case BK::Int:
             if (w >= -2 && w <= 2) return std::string(length_prefix(w))     + "int";
-            if (w >=  1 && w <= 5) return std::string(length_prefix(w - 3)) + "integer";
+            if (w >=  3 && w <= 6) return std::string(length_prefix(w - 4)) + "integer";
             return "int<?>";
 
         case BK::Float:
             if (w >=  0 && w <= 4) return std::string(length_prefix(w - 2)) + "float";
-            if (w >=  1 && w <= 5) return std::string(length_prefix(w - 3)) + "double";
+            if (w >=  5 && w <= 6) return std::string(length_prefix(w - 4)) + "double";
             return "float<?>";
 
         case BK::Bool:    return "bool";
@@ -217,31 +222,58 @@ private:
 
 class ArrayType : public Type {
 public:
-    ArrayType(Type* element, std::optional<std::size_t> extent, CV cv) : Type(TypeKind::Array, cv), m_element(element), m_extent(extent) {}
+    ArrayType(Type* element, std::optional<std::size_t> extent, CV cv, Symbol* extent_param = nullptr) : Type(TypeKind::Array, cv), m_element(element), m_extent(extent), m_extent_param(extent_param) {}
     Type* element() const { return m_element; }
     std::optional<std::size_t> extent() const { return m_extent; }
+    Symbol* extent_param() const { return m_extent_param; }
 
-    void write_to(std::ostream& os) const override {
-        os << "array[";
-        if (m_extent) os << *m_extent;
-        os << "] ";
-        m_element->write_to(os);
-    }
+    void write_to(std::ostream& os) const override;
 private:
     Type*                      m_element;
     std::optional<std::size_t> m_extent;
+    Symbol*                    m_extent_param;
 };
+
+struct TemplateArg {
+    Type*            type    = nullptr;
+    const WideInt*   value   = nullptr;
+    const WideFloat* fvalue  = nullptr;
+    bool             is_type = true;
+    Symbol*          param   = nullptr;
+    nodes::ASTNode*  expr    = nullptr;
+
+    static TemplateArg of_type(Type* t)              { TemplateArg a; a.type = t; return a; }
+    static TemplateArg of_int(const WideInt* v)      { TemplateArg a; a.is_type = false; a.value = v; return a; }
+    static TemplateArg of_float(const WideFloat* v)  { TemplateArg a; a.is_type = false; a.fvalue = v; return a; }
+
+    static TemplateArg dependent(Symbol* p, nodes::ASTNode* e) {
+        TemplateArg a; a.is_type = false; a.param = p; a.expr = e; return a;
+    }
+
+    bool is_value()           const { return !is_type && (value || fvalue); }
+    bool is_dependent_value() const { return !is_type && !value && !fvalue && (param || expr); }
+
+    bool operator==(const TemplateArg& o) const {
+        if (is_type != o.is_type || type != o.type || value != o.value || fvalue != o.fvalue) return false;
+        if (param || o.param) return param == o.param;
+        return expr == o.expr;
+    }
+
+    bool operator!=(const TemplateArg& o) const { return !(*this == o); }
+};
+
+using TemplateArgs = std::vector<TemplateArg>;
 
 class RecordType : public Type {
 public:
-    RecordType(Symbol* decl, std::vector<Type*> args, CV cv) : Type(TypeKind::Record, cv), m_decl(decl), m_args(std::move(args)) {}
-    Symbol*        decl() const { return m_decl; }
-    const std::vector<Type*>& args() const { return m_args; }
+    RecordType(Symbol* decl, TemplateArgs args, CV cv) : Type(TypeKind::Record, cv), m_decl(decl), m_args(std::move(args)) {}
+    Symbol*             decl() const { return m_decl; }
+    const TemplateArgs& args() const { return m_args; }
     bool is_instantiation() const { return !m_args.empty(); }
     void write_to(std::ostream& os) const override;  
 private:
-    Symbol* m_decl;
-    std::vector<Type*> m_args;
+    Symbol*      m_decl;
+    TemplateArgs m_args;
 };
 
 class EnumType : public Type {
@@ -335,6 +367,33 @@ public:
     void write_to(std::ostream& os) const override { os << "<error-type>"; }
 };
 
+class ClosureType : public Type {
+public:
+    explicit ClosureType(nodes::ASTNode* lambda) : Type(TypeKind::Closure), m_lambda(lambda) {}
+    nodes::ASTNode* lambda() const { return m_lambda; }
+    void write_to(std::ostream& os) const override { os << "generic lambda"; }
+private:
+    nodes::ASTNode* m_lambda;
+};
+
+class CoroutineType : public Type {
+public:
+    CoroutineType(Type* value, bool is_generator, CV cv) : Type(TypeKind::Coroutine, cv), m_value(value), m_is_generator(is_generator) {}
+    Type* value() const { return m_value; }
+    bool is_generator() const { return m_is_generator; }
+    bool is_task() const { return !m_is_generator; }
+
+    void write_to(std::ostream& os) const override {
+        write_cv(os);
+        os << (m_is_generator ? "generator<" : "task<");
+        if (m_value) m_value->write_to(os); else os << "?";
+        os << ">";
+    }
+private:
+    Type* m_value;
+    bool  m_is_generator;
+};
+
 class PackExpansionType : public Type {
 public:
     explicit PackExpansionType(Type* pattern) : Type(TypeKind::PackExpansion), m_pattern(pattern) { m_dependent = true; }
@@ -393,7 +452,10 @@ public:
     Type* pointer(Type* pointee, CV cv = {});
     Type* reference(Type* referent, RefQual rq, CV cv = {});
     Type* array(Type* element, std::optional<std::size_t> extent, CV cv = {});
-    Type* record(Symbol* decl, std::vector<Type*> args, CV cv = {});
+    Type* dependent_array(Type* element, Symbol* extent_param, CV cv = {});
+    Type* closure(nodes::ASTNode* lambda);
+    Type* coroutine(Type* value, bool is_generator, CV cv = {});
+    Type* record(Symbol* decl, TemplateArgs args, CV cv = {});
     Type* enum_(Symbol* decl, CV cv = {});
     Type* function(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept);
     Type* variant(std::vector<Type*> alternatives);
@@ -409,6 +471,20 @@ public:
     void pop_subst()                     { m_subst.pop_back(); }
     const SubstEnv* active_subst() const { return m_subst.empty() ? nullptr : m_subst.back(); }
     const std::vector<const SubstEnv*>& subst_stack() const { return m_subst; }
+    std::vector<const SubstEnv*> suspend_subst() { std::vector<const SubstEnv*> saved; saved.swap(m_subst); return saved; }
+    void resume_subst(std::vector<const SubstEnv*> saved) { m_subst = std::move(saved); }
+
+    std::function<bool(nodes::ASTNode*, TemplateArg&)> value_arg_hook;
+    std::function<bool(nodes::ASTNode*, TemplateArg&)> value_eval_hook;
+    std::function<int(Symbol*, TemplateArg&)>          value_symbol_hook;
+    std::function<Scope*(RecordType*)>                 record_scope_hook;
+    std::function<Type*(Symbol*)>                      instance_type_hook;
+    std::function<Symbol*(Symbol*)>                    instance_primary_hook;
+    std::function<Type*(Symbol*)>                      default_instance_hook;
+    std::function<Symbol*(nodes::ASTNode*)>            extent_param_hook;
+    std::function<Type*(Type*, std::string_view)>      member_type_hook;
+    std::function<Symbol*(Type*, Type*)>               callable_hook;
+    std::function<bool(Type*, Type*)>                  closure_hook;
 
 private:
     Arena& m_arena;
@@ -418,6 +494,7 @@ private:
     Type* m_null = nullptr; 
     Type* m_error = nullptr;
     std::vector<const SubstEnv*> m_subst; 
+    std::size_t m_dim_evals = 0;
 
     struct BuiltinKey {
         std::uint8_t base, length, is_unsigned, cv;
@@ -435,7 +512,7 @@ private:
     };
 
     struct RecordKey {
-        Symbol* decl; std::vector<Type*> args; std::uint8_t cv;
+        Symbol* decl; TemplateArgs args; std::uint8_t cv;
         bool operator==(const RecordKey& o) const { return decl == o.decl && cv == o.cv && args == o.args; }
     };
 
@@ -466,7 +543,13 @@ private:
 
         std::size_t operator()(const RecordKey& k) const {
             std::size_t h = std::hash<void*>{}(k.decl); h = mix(h, k.cv);
-            for (Type* a : k.args) h = mix(h, std::hash<void*>{}(a)); return h;
+            for (const TemplateArg& a : k.args) {
+                h = mix(h, std::hash<const void*>{}(a.type));
+                h = mix(h, std::hash<const void*>{}(a.value));
+                h = mix(h, std::hash<const void*>{}(a.fvalue));
+                h = mix(h, a.param ? std::hash<const void*>{}(a.param) : std::hash<const void*>{}(a.expr));
+            }
+            return h;
         }
 
         std::size_t operator()(const FuncKey& k) const {

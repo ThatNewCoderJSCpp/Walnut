@@ -143,8 +143,8 @@ struct FunctionQualifiers {
         Consteval = 1 << 7,
         Nodiscard = 1 << 8,
         Async     = 1 << 9,
-        Primary   = 1 << 10,
-        Overload  = 1 << 11
+        Overload  = 1 << 10,
+        Mutable   = 1 << 11
     };
 
 private:
@@ -200,8 +200,8 @@ public:
             { Flag::RValueRef, "&& "        },
             { Flag::Virtual,   "virtual "   },
             { Flag::Async,     "async "     },
-            { Flag::Primary,   "primary "   },
-            { Flag::Overload,  "overload "  }
+            { Flag::Overload,  "overload "  },
+            { Flag::Mutable,   "mutable "   }
         };
 
         for (auto&& entry : table) { if (has(entry.flag)) { os << entry.text; }}
@@ -228,8 +228,8 @@ public:
             case Flag::RValueRef: return "&&";
             case Flag::Virtual:   return "virtual";
             case Flag::Async:     return "async";
-            case Flag::Primary:   return "primary";
             case Flag::Overload:  return "overload";
+            case Flag::Mutable:   return "mutable";
             case Flag::Nodiscard: return "nodiscard";
             case Flag::None:      return "none";
         }

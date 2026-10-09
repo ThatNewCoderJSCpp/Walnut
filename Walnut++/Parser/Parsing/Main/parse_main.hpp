@@ -279,7 +279,7 @@ parser_types::TypeInfo Parser::parse_type_only() {
             }
         }
 
-        struct Comp { std::string_view name; std::vector<parser_types::TemplateArgument*> args; };
+        struct Comp { std::string_view name; std::vector<parser_types::TemplateArgument*> args; bool angled = false; };
         std::vector<Comp> comps;
         bool dependent_member = false;   
 
@@ -295,6 +295,7 @@ parser_types::TypeInfo Parser::parse_type_only() {
 
             if (concrete_match(K::LessThan)) {
                 advance();
+                c.angled = true;
                 c.args = parse_template_argument_list_body();   
             }
 
@@ -323,6 +324,7 @@ parser_types::TypeInfo Parser::parse_type_only() {
             parts.reserve(comps.size());
             for (auto& c : comps) { parts.push_back(c.name); }
             info.type = (parts.size() == 1 && !is_global) ? make<parser_types::UserDefinedType>(parts[0]) : make<parser_types::UserDefinedType>(std::move(parts), is_global);
+            info.has_angle_args = comps.back().angled;
             if (!comps.back().args.empty()) { info.template_args = std::move(comps.back().args); }
         }
     } else if (is_unsigned || length != parser_types::LengthModifier::None) {

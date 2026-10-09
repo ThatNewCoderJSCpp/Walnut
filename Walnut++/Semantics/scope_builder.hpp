@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "scope.hpp"
+#include "prelude.hpp"
 #include "symbol.hpp"
 
 #include "../Parser/nodes.hpp"
@@ -31,10 +32,9 @@ public:
     explicit ScopeBuilder(AnalysisContext& ctx) noexcept : m_ctx(ctx), m_arena(ctx.arena), m_reporter(ctx.reporter) {}
 
     Scope* build(nodes::BlockStatement* program) {
-        m_ctx.root = make_in<Scope>(m_arena, Scope::Kind::Module, nullptr);
+        m_ctx.root = make_in<Scope>(m_arena, Scope::Kind::Module, prelude_scope());
         m_current  = m_ctx.root;
         for (ASTNode* stmt : program->get_statements()) { build(stmt); }
-        validate_overload_sets(m_ctx.root);
         return m_ctx.root;
     }
 
@@ -45,15 +45,12 @@ public:
         m_current = saved;
     }
 
-    void set_enforce_primary(bool enable) { m_enforce_prim = enable; }
-
 private:
     AnalysisContext& m_ctx;
     Arena&           m_arena;
     ErrorReporter&   m_reporter;
-    Scope*           m_current      = nullptr;
-    std::uint64_t    m_order        = 0;  
-    bool             m_enforce_prim = false;
+    Scope*           m_current = nullptr;
+    std::uint64_t    m_order   = 0;  
 
 private:
     Scope* push_scope(Scope::Kind kind) {
@@ -141,6 +138,23 @@ private:
         return Visibility::Global;
     }
 
+    static Symbol* member_symbol(nodes::ASTNode* n) {
+        using K = nodes::ASTNode::Kind;
+        if (!n) { return nullptr; }
+
+        switch (n->kind) {
+            case K::VariableDeclaration:         return static_cast<nodes::VariableDeclaration*>(n)->symbol;
+            case K::ArrayDeclaration:            return static_cast<nodes::ArrayDeclaration*>(n)->symbol;
+            case K::FunctionDeclaration:         return static_cast<nodes::FunctionDeclaration*>(n)->symbol;
+            case K::OperatorFunctionDeclaration: return static_cast<nodes::OperatorFunctionDeclaration*>(n)->symbol;
+            case K::ConstructorDeclaration:      return static_cast<nodes::ConstructorDeclaration*>(n)->symbol;
+            case K::RecordDeclaration:           return static_cast<nodes::RecordDeclaration*>(n)->symbol;
+            case K::EnumDeclaration:             return static_cast<nodes::EnumDeclaration*>(n)->symbol;
+            case K::TemplateDeclaration:         return member_symbol(static_cast<nodes::TemplateDeclaration*>(n)->m_declaration);
+            default:                             return nullptr;
+        }
+    }
+
     static bool is_friend_decl(const nodes::ASTNode* n) {
         using K = nodes::ASTNode::Kind;
         using modifiers::RawModifiers;
@@ -155,61 +169,6 @@ private:
         }
     }
 
-    static bool has_primary(const ASTNode* n) {
-        using K  = ASTNode::Kind;
-        using FQ = modifiers::FunctionQualifiers;
-
-        switch (n->kind) {
-            case K::FunctionDeclaration:
-                return static_cast<const nodes::FunctionDeclaration*>(n)->qualifiers().has(FQ::Primary);
-            case K::ConstructorDeclaration:
-                return static_cast<const nodes::ConstructorDeclaration*>(n)->qualifiers().has(FQ::Primary);
-            case K::OperatorFunctionDeclaration:
-                return static_cast<const nodes::OperatorFunctionDeclaration*>(n)->qualifiers().has(FQ::Primary);
-            default:
-                return false;
-        }
-    }
-
-    void check_primary_chain(Symbol* head, std::string_view name, std::string_view decl_kind) {
-        Symbol* first_primary = nullptr;
-
-        for (Symbol* s = head; s; s = s->next_overload) {
-            if (!s->decl || !has_primary(s->decl)) { continue; }
-
-            if (!first_primary) {
-                first_primary = s;
-            } else {
-                SemanticError::overload_multiple_primary(
-                    m_reporter, s->decl->file_id, s->decl->line, name, decl_kind,
-                    first_primary->decl ? first_primary->decl->line : 0
-                );
-            }
-        }
-
-        if (!first_primary && m_enforce_prim) {
-            const ASTNode* at = head->decl;
-            SemanticError::overload_missing_primary(m_reporter, at ? at->file_id : INVALID_FILE, at ? at->line : 0, name, decl_kind);
-        }
-    }
-
-    void validate_overload_sets(Scope* scope) {
-        if (!scope) { return; }
-
-        for (Symbol* head : scope->symbols) {
-            if (head->kind == SymbolKind::Function
-                && head->next_overload                      
-                && !head->is_imported
-                && head->decl
-                && head->decl->kind == ASTNode::Kind::FunctionDeclaration
-            ) {
-                check_primary_chain(head, head->name, "function");
-            }
-        }
-
-        for (Scope* child : scope->children) { validate_overload_sets(child); }
-    }
-
     void validate_record_specials(nodes::RecordDeclaration* rec) {
         nodes::DestructorDeclaration* first_dtor = nullptr;
 
@@ -218,10 +177,6 @@ private:
             auto* d = static_cast<nodes::DestructorDeclaration*>(member.node);
             if (!first_dtor) { first_dtor = d; }
             else { SemanticError::duplicate_destructor(m_reporter, d->file_id, d->line, first_dtor->line); }
-        }
-
-        if (Symbol* ctor_head = m_current->find_local("constructor"); ctor_head && ctor_head->next_overload) {
-            check_primary_chain(ctor_head, rec->get_name(), "constructor");
         }
     }
 
@@ -321,9 +276,11 @@ private:
                 push_scope(Scope::Kind::Block);
 
                 if (s->is_structured_binding()) {
-                    for (std::string_view b : s->get_bindings()) { declare(*m_current, b, SymbolKind::Variable, s, false); }
+                    s->binding_symbols.clear();
+                    for (std::string_view b : s->get_bindings()) { s->binding_symbols.push_back(declare(*m_current, b, SymbolKind::Variable, s, false)); }
                 } else if (!s->get_variable_name().empty()) {
                     s->symbol = declare(*m_current, s->get_variable_name(), SymbolKind::Variable, s, false);
+                    if (s->symbol) s->symbol->type = &s->m_element_type;
                 }
 
                 build(static_cast<ASTNode*>(s->get_body()));
@@ -347,17 +304,20 @@ private:
 
             case K::TryCatchStatement: {
                 auto* s = static_cast<nodes::TryCatchStatement*>(node);
-                build(static_cast<nodes::BlockStatement*>(s->get_try_body()));
-                // The catch parameter belongs to the catch body's scope
-                push_scope(Scope::Kind::Block);
-                if (s->is_typed_catch() && !s->get_catch_name().empty()) { declare(*m_current, s->get_catch_name(), SymbolKind::Variable, s, false); }
-                
-                if (nodes::BlockStatement* cb = s->get_catch_body()) { 
-                    cb->scope = m_current;  
-                    for (ASTNode* stmt : static_cast<nodes::BlockStatement*>(cb)->get_statements()) { build(stmt); }
+                build(static_cast<ASTNode*>(s->get_try_body()));
+
+                for (nodes::TryCatchStatement* h = s; h; h = h->next_handler) {
+                    push_scope(Scope::Kind::Block);
+                    if (h->is_typed_catch() && !h->get_catch_name().empty()) { if (Symbol* cs = declare(*m_current, h->get_catch_name(), SymbolKind::Variable, h, false)) cs->type = &h->catch_type; }
+
+                    if (nodes::BlockStatement* cb = h->get_catch_body()) {
+                        cb->scope = m_current;
+                        for (ASTNode* stmt : static_cast<nodes::BlockStatement*>(cb)->get_statements()) { build(stmt); }
+                    }
+
+                    pop_scope();
                 }
-                
-                pop_scope();
+
                 break;
             }
 
@@ -366,6 +326,7 @@ private:
 
                 if (u->is_alias() || u->is_typedef()) {
                     u->symbol = declare(*m_current, u->name, SymbolKind::TypeAlias, u, false);
+                    if (u->symbol && u->is_typedef()) u->symbol->type = &u->aliased_type;
                 } else if (u->is_directive()) {
                     m_current->using_directives.push_back(u);
                 } else if (u->is_namespace_alias()) {
@@ -437,6 +398,7 @@ private:
         const Visibility vis = decl_visibility(var);
 
         if (var->is_structured_binding()) {
+            var->binding_symbols.clear();
             for (std::string_view name : var->get_bindings()) {
                 var->binding_symbols.push_back(declare(*m_current, name, SymbolKind::Variable, var, hoisted, vis));
             }
@@ -594,10 +556,14 @@ private:
     void build_record_body(nodes::RecordDeclaration* rec, Symbol* sym) {
         Scope* rs        = push_scope(Scope::Kind::Record);
         sym->inner_scope = rs;
+        rs->owner_symbol = sym;
+        rs->node         = rec;
+        rec->scope       = rs;
 
         for (const auto& member : rec->get_members()) {
             if (is_friend_decl(member.node)) { continue; }
             build(member.node);
+            if (Symbol* ms = member_symbol(member.node)) { ms->member_access = static_cast<std::uint8_t>(member.access); }
         }
 
         validate_record_specials(rec);
@@ -759,6 +725,13 @@ private:
         switch (decl ? decl->kind : K::Literal) {
             case K::RecordDeclaration:   entity = declare_record  (static_cast<nodes::RecordDeclaration*>(decl));   deferred_body = true; break;
             case K::FunctionDeclaration: entity = declare_function(static_cast<nodes::FunctionDeclaration*>(decl)); deferred_body = true; break;
+            case K::ConceptDeclaration: {
+                auto* c = static_cast<nodes::ConceptDeclaration*>(decl);
+                c->symbol = declare(*m_current, c->get_name(), SymbolKind::Concept, c, false);
+                entity = c->symbol;
+                deferred_body = true;
+                break;
+            }
             default:                     build(decl); break;
         }
 
@@ -780,6 +753,7 @@ private:
             switch (decl->kind) {
                 case K::RecordDeclaration:   build_record_body  (static_cast<nodes::RecordDeclaration*>(decl),   entity); break;
                 case K::FunctionDeclaration: build_function_body(static_cast<nodes::FunctionDeclaration*>(decl), entity); break;
+                case K::ConceptDeclaration:  walk_expr(static_cast<nodes::ConceptDeclaration*>(decl)->constraint); break;
                 default: break;
             }
         }

@@ -31,6 +31,8 @@ struct VariableDeclaration : ASTNode {
     ASTNode* m_initializer;
     semantics::Symbol* symbol = nullptr; 
     SmallVector<semantics::Symbol*, 4> binding_symbols;
+    semantics::Type* binding_source = nullptr;
+    bool binding_by_ref = false;
 
     VariableDeclaration(const parser_types::TypeInfo& type_info, std::string_view name, ASTNode* init = nullptr, std::uint32_t ln = 0)
         : ASTNode(Kind::VariableDeclaration, ln), m_type_info(type_info), m_name(name), m_initializer(init) {}
@@ -111,6 +113,8 @@ struct BlockStatement : ASTNode {
 struct IfBranch : ASTNode {
     ASTNode* condition;
     ASTNode* body;
+    bool     is_constexpr   = false;
+    int      constant_value = -1;
 
     IfBranch(ASTNode* cond, ASTNode* b) : ASTNode(Kind::IfBranch), condition(cond), body(b) {}
 
@@ -121,7 +125,7 @@ struct IfBranch : ASTNode {
 
     void print(std::ostream& os, std::size_t indent) const {
         print_indent(os, indent);
-        os << "If Branch\n";
+        os << (is_constexpr ? "If Constexpr Branch\n" : "If Branch\n");
         print_indent(os, indent);
         os << "Condition:\n";
         print_node(condition, os, indent + 1);
@@ -130,7 +134,7 @@ struct IfBranch : ASTNode {
         print_node(body, os, indent + 1);
     }
 
-    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<IfBranch>(a, clone_child(condition, a), clone_child(body, a)); copy_base_to(c); return c; }
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<IfBranch>(a, clone_child(condition, a), clone_child(body, a)); copy_base_to(c); c->is_constexpr = is_constexpr; return c; }
 };
 
 struct IfStatement : ASTNode {
@@ -314,6 +318,9 @@ struct ForEachStatement : ASTNode {
     ASTNode*                m_container;
     ASTNode*                m_body;
     semantics::Symbol* symbol = nullptr; 
+    SmallVector<semantics::Symbol*, 4> binding_symbols;
+    semantics::Type* binding_source = nullptr;
+    bool binding_by_ref = false;
 
     ForEachStatement(const parser_types::TypeInfo& element_type, const modifiers::RawModifiers& mods, std::string_view var_name, ASTNode* container, ASTNode* body, std::uint32_t ln = 0)
         : ASTNode(Kind::ForEachStatement, ln), m_element_type(element_type), m_modifiers(mods)
@@ -640,6 +647,7 @@ struct TryCatchStatement : ASTNode {
     parser_types::TypeInfo catch_type;  
     bool has_typed_catch;                
     BlockStatement* catch_body;
+    TryCatchStatement* next_handler = nullptr;
 
     TryCatchStatement(
         BlockStatement* tb,
@@ -669,7 +677,7 @@ struct TryCatchStatement : ASTNode {
         os << "TryCatchStatement\n";
         print_indent(os, indent + 1);
         os << "Try Body:\n";
-        try_body->print(os, indent + 2);
+        if (try_body) try_body->print(os, indent + 2);
         print_indent(os, indent + 1);
         os << "Catch";
 
@@ -680,11 +688,13 @@ struct TryCatchStatement : ASTNode {
         }
 
         catch_body->print(os, indent + 2);
+        if (next_handler) next_handler->print(os, indent);
     }
 
     ASTNode* clone_into(Arena& a) const override {
-        auto* c = make_in<TryCatchStatement>(a, clone_typed(try_body, a), catch_name, catch_type.clone_into(a), has_typed_catch, clone_typed(catch_body, a), line);
+        auto* c = make_in<TryCatchStatement>(a, try_body ? clone_typed(try_body, a) : nullptr, catch_name, catch_type.clone_into(a), has_typed_catch, clone_typed(catch_body, a), line);
         copy_base_to(c);
+        if (next_handler) c->next_handler = static_cast<TryCatchStatement*>(next_handler->clone_into(a));
         return c;
     }
 };

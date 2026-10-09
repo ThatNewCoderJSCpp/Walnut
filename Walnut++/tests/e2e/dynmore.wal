@@ -1,0 +1,15 @@
+var: x = 10;
+var: y = x / 4;
+println(x, y, x == 10, x > 3.5);
+x = "now text";
+println(x + "!");
+var: z = true;
+if (z) then { println("truthy"); }
+var: w = 'q';
+println(w);
+try {
+    var: bad = x * 2;
+    println(bad);
+} catch (...) {
+    println("caught dynamic error");
+}

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <string_view>
+#include <unordered_set>
 
 #include "scope.hpp"
 #include "symbol.hpp"
@@ -29,16 +30,74 @@ public:
         for (nodes::ASTNode* s : program->get_statements()) { build(s); }
     }
 
+    void resolve_into(nodes::ASTNode* node, Scope* scope) {
+        if (!node || !scope) { return; }
+        Scope* saved_root    = m_root;
+        Scope* saved_current = m_current;
+        Scope* top = scope;
+        while (top->parent) { top = top->parent; }
+        m_root    = top;
+        m_current = scope;
+        const bool saved_quiet = m_quiet;
+        m_quiet = true;
+        build(node);
+        m_quiet   = saved_quiet;
+        m_root    = saved_root;
+        m_current = saved_current;
+    }
+
 private:
     AnalysisContext& m_ctx;
     Arena&           m_arena;
     ErrorReporter&   m_reporter;
     Scope*           m_root    = nullptr;
     Scope*           m_current = nullptr;
+    bool             m_quiet   = false;
 
 private:
     static parser_types::TypeInfo& mut(const parser_types::TypeInfo& t) { return const_cast<parser_types::TypeInfo&>(t); }
     static nodes::ASTNode*         mn(const nodes::ASTNode* n)          { return const_cast<nodes::ASTNode*>(n); }
+
+    struct Declaring {
+        nodes::VariableDeclaration* var;
+        std::size_t                 lambda_depth;
+    };
+
+    std::vector<Declaring>                 m_declaring;
+    std::vector<nodes::LambdaExpression*>  m_lambdas;
+    std::unordered_set<const Symbol*>      m_self_reported;
+
+    Symbol* declaring_symbol(std::string_view name) const {
+        if (m_declaring.empty()) return nullptr;
+        const Declaring& d = m_declaring.back();
+        if (d.lambda_depth != m_lambdas.size() || !d.var->symbol || d.var->get_name() != name) return nullptr;
+        return d.var->symbol;
+    }
+
+    static bool is_auto_declared(const nodes::VariableDeclaration* v) {
+        const auto& ti = v->get_type_info();
+        return ti.type && ti.type->is_primitive() && static_cast<parser_types::PrimitiveType*>(ti.type)->base_kind() == parser_types::PrimitiveType::BaseKind::Auto;
+    }
+
+    Symbol* self_capture(std::string_view name) const {
+        using M = nodes::LambdaCaptureItem::Mode;
+
+        for (auto it = m_declaring.rbegin(); it != m_declaring.rend(); ++it) {
+            if (!it->var->symbol || it->var->get_name() != name) continue;
+            if (it->lambda_depth >= m_lambdas.size()) return nullptr;
+            nodes::LambdaExpression* l = m_lambdas[it->lambda_depth];
+            if (!l->m_captures) return nullptr;
+
+            for (const auto& c : l->m_captures->m_captures) {
+                if (c.mode == M::ByReference && c.name == name) return it->var->symbol;
+                if (c.mode == M::AllByReference) return it->var->symbol;
+            }
+
+            return nullptr;
+        }
+
+        return nullptr;
+    }
 
     static Symbol* chase(Symbol* s) {
         while (s && s->is_imported && s->import_target) { s = s->import_target; }
@@ -81,10 +140,10 @@ private:
     Scope* inner_of(Symbol* s) const { return s ? s->inner_scope : nullptr; }
 
     void error_unresolved(const nodes::ASTNode* use, std::string_view name) {
-        if (use) { SemanticError::unresolved_name(m_reporter, use->file_id, use->line, name); }
+        if (use && !m_quiet) { SemanticError::unresolved_name(m_reporter, use->file_id, use->line, name); }
     }
 
-    void resolve_type(parser_types::TypeInfo& info, const nodes::ASTNode* use) {
+    void resolve_type(parser_types::TypeInfo& info, const nodes::ASTNode* use, bool allow_value = false) {
         if (info.type && info.type->is_user_defined()) {
             auto* ud = static_cast<parser_types::UserDefinedType*>(info.type);
             Symbol* s = resolve_name(m_current, m_root, ud->parts(), ud->is_global(), use);
@@ -92,22 +151,84 @@ private:
             if (s) {
                 Symbol* c = chase(s);
                 info.resolved = c;
-                if (c && !is_type_symbol(c->kind)) {
+                const bool value_ok = allow_value && c && (c->kind == SymbolKind::Variable || c->kind == SymbolKind::Parameter || c->kind == SymbolKind::EnumConstant);
+                if (c && !is_type_symbol(c->kind) && !value_ok) {
                     error_unresolved(use, join(ud->parts(), ud->is_global()));
                 }
-            } else {
+            } else if (!(ud->parts().size() == 1 && !ud->is_global() && info.template_args.size() == 1 && (ud->name() == "generator" || ud->name() == "task"))) {
                 error_unresolved(use, join(ud->parts(), ud->is_global()));
             }
         }
         
+        if (info.type && info.type->is_qualified()) resolve_qualified(info, use);
+
+        if (info.type && info.type->is_array()) {
+            auto* at = static_cast<parser_types::ArrayType*>(info.type);
+            resolve_type(at->element_type(), use);
+            if (at->dimension_expr()) walk_expr(const_cast<nodes::ASTNode*>(at->dimension_expr()));
+        }
+
+        if (info.type && info.type->is_function_pointer()) {
+            auto* fp = static_cast<parser_types::FunctionPointerType*>(info.type);
+            for (const parser_types::TypeInfo& pt : fp->param_types()) { resolve_type(const_cast<parser_types::TypeInfo&>(pt), use); }
+            resolve_type(const_cast<parser_types::TypeInfo&>(fp->return_type()), use);
+        }
+
         for (parser_types::TemplateArgument* a : info.template_args) { resolve_targ(a, use); }
         if (info.alignment) { resolve_targ(info.alignment, use); }
     }
 
+    void resolve_qualified(parser_types::TypeInfo& info, const nodes::ASTNode* use) {
+        auto* qt = static_cast<parser_types::QualifiedType*>(info.type);
+        const auto& comps = qt->components();
+        std::vector<std::string_view> names;
+        std::size_t last_args = comps.size();
+
+        for (std::size_t i = 0; i < comps.size(); ++i) {
+            names.push_back(comps[i].name);
+            if (comps[i].has_args()) last_args = i;
+            for (parser_types::TemplateArgument* a : comps[i].args) resolve_targ(a, use);
+        }
+
+        if (last_args == comps.size()) {
+            Symbol* s = resolve_name(m_current, m_root, names, qt->is_global(), use);
+            if (s && is_type_symbol(chase(s)->kind)) info.resolved = chase(s);
+            else error_unresolved(use, join(names, qt->is_global()));
+            return;
+        }
+
+        std::vector<std::string_view> head(names.begin(), names.begin() + static_cast<std::ptrdiff_t>(last_args + 1));
+        Symbol* s = resolve_name(m_current, m_root, head, qt->is_global(), use);
+        Symbol* c = s ? chase(s) : nullptr;
+
+        if (!c || c->kind != SymbolKind::Type || last_args + 2 != comps.size()) {
+            error_unresolved(use, join(names, qt->is_global()));
+            return;
+        }
+
+        parser_types::TypeInfo prefix;
+        prefix.template_args = comps[last_args].args;
+        prefix.has_angle_args = true;
+        prefix.resolved = c;
+        qt->set_prefix(prefix);
+    }
+
     void resolve_targ(parser_types::TemplateArgument* a, const nodes::ASTNode* use) {
         if (!a) { return; }
-        if (a->is_type()) { resolve_type(a->type, use); }
+        if (a->is_type()) { resolve_type(a->type, use, !a->is_pack && a->type.indirection.empty() && a->type.template_args.empty()); }
         else              { walk_expr(a->value); }
+    }
+
+    void resolve_spec_args(nodes::ASTNode* decl) {
+        if (!decl) { return; }
+
+        if (decl->kind == nodes::ASTNode::Kind::RecordDeclaration) {
+            auto* r = static_cast<nodes::RecordDeclaration*>(decl);
+            if (r->is_specialization()) { resolve_targs(const_cast<std::vector<parser_types::TemplateArgument*>&>(r->get_spec_args()), r); }
+        } else if (decl->kind == nodes::ASTNode::Kind::FunctionDeclaration) {
+            auto* f = static_cast<nodes::FunctionDeclaration*>(decl);
+            if (f->is_specialization()) { resolve_targs(const_cast<std::vector<parser_types::TemplateArgument*>&>(f->get_spec_args()), f); }
+        }
     }
 
     void resolve_targs(std::vector<parser_types::TemplateArgument*>& args, const nodes::ASTNode* use) {
@@ -124,6 +245,13 @@ private:
 
             case K::Identifier: {
                 auto* id = static_cast<nodes::Identifier*>(e);
+                if (Symbol* self = self_capture(id->name)) {
+                    id->resolved = self;
+                    if (!m_quiet && self->decl && self->decl->kind == K::VariableDeclaration && is_auto_declared(static_cast<nodes::VariableDeclaration*>(self->decl)) && m_self_reported.insert(self).second) {
+                        SemanticError::emit(m_reporter, id->file_id, id->line, "Capture", "'" + std::string(id->name) + "' is used inside its own initializer, so it needs an explicit function type instead of 'auto'");
+                    }
+                    break;
+                }
                 Symbol* s = resolve_lexical_visible(m_current, id->name, id);
                 if (s) { id->resolved = chase(s); }
                 else   { error_unresolved(id, id->name); }
@@ -294,7 +422,11 @@ private:
                         if (c.init) { walk_expr(c.init); }
 
                         if ((c.mode == M::ByValue || c.mode == M::ByReference) && !c.name.empty()) {
-                            if (Symbol* s = resolve_lexical_visible(m_current, c.name, l)) {
+                            if (Symbol* self = declaring_symbol(c.name)) {
+                                c.resolved = self;
+                                if (c.mode == M::ByValue && !m_quiet) SemanticError::emit(m_reporter, l->file_id, l->line, "Capture", "a lambda can only capture the variable it initializes by reference ('&" + std::string(c.name) + "')");
+                                else if (is_auto_declared(m_declaring.back().var) && !m_quiet && m_self_reported.insert(self).second) SemanticError::emit(m_reporter, l->file_id, l->line, "Capture", "'" + std::string(c.name) + "' captures itself, so it needs an explicit function type instead of 'auto'");
+                            } else if (Symbol* s = resolve_lexical_visible(m_current, c.name, l)) {
                                 c.resolved = chase(s);
                             } else {
                                 error_unresolved(l, c.name);
@@ -305,6 +437,8 @@ private:
 
                 Scope* saved = m_current;
                 if (l->scope) { m_current = l->scope; }   
+                m_lambdas.push_back(l);
+                struct PopLambda { std::vector<nodes::LambdaExpression*>& v; ~PopLambda() { v.pop_back(); } } pop_lambda{ m_lambdas };
                 resolve_type(l->get_return_type(), l);
 
                 if (auto* params = l->get_parameters()) {
@@ -349,7 +483,9 @@ private:
             case K::VariableDeclaration: {
                 auto* v = static_cast<nodes::VariableDeclaration*>(node);
                 resolve_type(mut(v->get_type_info()), v);
+                m_declaring.push_back(Declaring{ v, m_lambdas.size() });
                 walk_expr(v->m_initializer);
+                m_declaring.pop_back();
                 break;
             }
 
@@ -433,8 +569,11 @@ private:
             case K::TryCatchStatement: {
                 auto* s = static_cast<nodes::TryCatchStatement*>(node);
                 build(s->get_try_body());
-                if (s->is_typed_catch()) { resolve_type(s->catch_type, s); }
-                build(s->get_catch_body());  
+
+                for (nodes::TryCatchStatement* h = s; h; h = h->next_handler) {
+                    if (h->is_typed_catch()) { resolve_type(h->catch_type, h); }
+                    build(h->get_catch_body());
+                }
                 break;
             }
 
@@ -485,7 +624,10 @@ private:
                 auto* rec = static_cast<nodes::RecordDeclaration*>(node);
                 
                 if (rec->has_inherits()) {
+                    Scope* outer = m_current;
+                    if (Scope* rs = inner_of(rec->symbol); rs && rs->parent) { m_current = rs->parent; }
                     resolve_type(const_cast<parser_types::TypeInfo&>(rec->get_inherits()), rec);
+                    m_current = outer;
                     link_base(rec);
                 }
 
@@ -551,6 +693,14 @@ private:
                 }
 
                 walk_expr(t->m_requires_clause);
+                resolve_spec_args(t->m_declaration);
+
+                if (t->m_declaration && t->m_declaration->kind == K::ConceptDeclaration) {
+                    walk_expr(static_cast<nodes::ConceptDeclaration*>(t->m_declaration)->constraint);
+                    m_current = saved;
+                    break;
+                }
+
                 m_current = saved;
                 build(t->m_declaration);
                 break;
@@ -572,15 +722,20 @@ private:
                         Symbol* c = chase(target);
 
                         if (!c || c->kind != SymbolKind::Namespace) {
-                            SemanticError::not_a_namespace(m_reporter, u->file_id, u->line, u->target_name());
+                            if (!m_quiet) SemanticError::not_a_namespace(m_reporter, u->file_id, u->line, u->target_name());
                         } else if (u->symbol) {
                             u->symbol->inner_scope   = c->inner_scope;
                             u->symbol->import_target = c;
                         }
                     }
                 } else if (u->is_directive()) {                       // using namespace a::b;
-                    if (!resolve_name(m_current, m_root, u->target_parts, u->target_global, u)) {
+                    Symbol* target = resolve_name(m_current, m_root, u->target_parts, u->target_global, u);
+                    if (!target) {
                         error_unresolved(u, u->target_name());
+                    } else if (Symbol* c = chase(target); c && c->kind == SymbolKind::Namespace) {
+                        u->symbol = c;
+                    } else if (!m_quiet) {
+                        SemanticError::not_a_namespace(m_reporter, u->file_id, u->line, u->target_name());
                     }
                 }
 

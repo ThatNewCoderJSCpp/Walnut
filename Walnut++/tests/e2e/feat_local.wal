@@ -1,0 +1,9 @@
+function main() -> int {
+    struct Tmp { int: a; function twice() const -> int { return a * 2; } end function twice } end struct Tmp
+    enum Color { Red, Green }
+    Tmp: t = Tmp{21};
+    Color: c = Color::Green;
+    println(t.twice(), c == Color::Green);
+    return 0;
+}
+end function main

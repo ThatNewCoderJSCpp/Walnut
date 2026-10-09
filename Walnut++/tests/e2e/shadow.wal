@@ -1,0 +1,10 @@
+namespace geo {
+    function twice(int: x) -> int { return x * 2; } end function twice
+    namespace deep {
+        function twice(int: x) -> int { return x * 4; } end function twice
+    }
+    end namespace deep
+}
+end namespace geo
+function twice(int: x) -> int { return x * 3; } end function twice
+println(geo::twice(1), twice(1), geo::deep::twice(1));

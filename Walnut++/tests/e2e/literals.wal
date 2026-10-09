@@ -1,0 +1,8 @@
+float: a = 1.5e3;
+double: b = 2.5E-2;
+short float: c = 1e2;
+long int: big = 9000000000;
+println(a, b, c, big, 0.5 * 4e1);
+short short float: q = 0.25;
+short short float: r = 1.5e1;
+println(q, r);

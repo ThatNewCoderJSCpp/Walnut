@@ -64,7 +64,8 @@ nodes::FunctionParameters* Parser::parse_function_parameters() {
     
     if (params->has_duplicate_names()) {
         auto [first_idx, second_idx] = params->find_duplicate_indices();
-        throw ParserError(current_token().line(), "Duplicate parameter name: '" + std::string((*params)[first_idx]->get_name()) + "'");
+        (void)second_idx;
+        throw ParserError::invalid_expression(reporter, current_token(), "Duplicate parameter name: '" + std::string((*params)[first_idx]->get_name()) + "'");
     }
     
     return params;
@@ -112,6 +113,12 @@ modifiers::FunctionQualifiers Parser::parse_function_qualifiers() {
                 } else {
                     quals.add(modifiers::FunctionQualifiers::Noexcept);
                 }
+                break;
+
+            case tokenizing::Token::Kind::MutableKeyword:
+                if (quals.has(modifiers::FunctionQualifiers::Mutable)) throw ParserError::duplicate_function_qualifiers(reporter, current_token());
+                quals.add(modifiers::FunctionQualifiers::Mutable);
+                advance();
                 break;
 
             case tokenizing::Token::Kind::OverrideKeyword:
@@ -172,12 +179,6 @@ modifiers::FunctionQualifiers Parser::parse_function_qualifiers() {
             case tokenizing::Token::Kind::AsyncKeyword:
                 if (quals.has(modifiers::FunctionQualifiers::Async)) { throw ParserError::duplicate_function_qualifiers(reporter, current_token()); }
                 quals.add(modifiers::FunctionQualifiers::Async);
-                advance();
-                break;
-
-            case tokenizing::Token::Kind::PrimaryKeyword:
-                if (quals.has(modifiers::FunctionQualifiers::Primary)) throw ParserError::duplicate_function_qualifiers(reporter, current_token());
-                quals.add(modifiers::FunctionQualifiers::Primary);
                 advance();
                 break;
 

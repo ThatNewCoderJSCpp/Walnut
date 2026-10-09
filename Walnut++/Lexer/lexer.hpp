@@ -268,10 +268,6 @@ Token Lexer::next() noexcept {
             get<false>();
             if (peek() == ':') {
                 get<false>();
-                if (peek() == '=') {
-                    get<false>();
-                    return Token(Token::Kind::DoubleColonEqual, m_beg - 3, 3, m_line_number);
-                } 
                 return Token(Token::Kind::DoubleColon, m_beg - 2, 2, m_line_number);
             } else if (peek() == '=') {
                 get<false>();
@@ -373,6 +369,22 @@ Token Lexer::identifier() noexcept {
 
 Token Lexer::number() noexcept {
     const char* start = m_beg;
+
+    if (m_beg[0] == '0' && (m_beg[1] == 'x' || m_beg[1] == 'X')) {
+        const char h = m_beg[2];
+        if ((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f') || (h >= 'A' && h <= 'F')) {
+            get<false>(); get<false>();
+            while ((peek() >= '0' && peek() <= '9') || (peek() >= 'a' && peek() <= 'f') || (peek() >= 'A' && peek() <= 'F')) { get<false>(); }
+            return Token(Token::Kind::Integer, start, m_beg, m_line_number);
+        }
+    }
+
+    if (m_beg[0] == '0' && (m_beg[1] == 'b' || m_beg[1] == 'B') && (m_beg[2] == '0' || m_beg[2] == '1')) {
+        get<false>(); get<false>();
+        while (peek() == '0' || peek() == '1') { get<false>(); }
+        return Token(Token::Kind::Integer, start, m_beg, m_line_number);
+    }
+
     get<false>(); 
     bool is_float = false; 
     while (is_digit(peek())) { get<false>(); } 
@@ -380,6 +392,13 @@ Token Lexer::number() noexcept {
     if (peek() == '.') {
         is_float = true; 
         get<false>(); 
+        while (is_digit(peek())) { get<false>(); }
+    }
+
+    if ((peek() == 'e' || peek() == 'E') && (is_digit(m_beg[1]) || ((m_beg[1] == '+' || m_beg[1] == '-') && is_digit(m_beg[2])))) {
+        is_float = true;
+        get<false>();
+        if (peek() == '+' || peek() == '-') get<false>();
         while (is_digit(peek())) { get<false>(); }
     }
 

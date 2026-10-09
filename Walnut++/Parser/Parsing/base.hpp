@@ -126,6 +126,7 @@ private:
     bool               looks_like_for_each();
     bool               looks_like_declaration();
     bool               fold_ahead();
+    nodes::ASTNode*    parse_call_argument();
     bool               looks_like_constrained_param();    
     static inline bool is_fold_operator(tokenizing::Token::Kind k);
     static inline bool is_indirection_token(tokenizing::Token::Kind k);

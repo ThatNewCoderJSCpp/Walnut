@@ -1,0 +1,13 @@
+function main() -> int {
+    var: d = 3;
+    var: e = 2.5;
+    println(d + e, d * d);
+    d = "text";
+    println(d);
+    int: back = 7;
+    var: f = back;
+    int: again = f;
+    println(again + 1);
+    return 0;
+}
+end function main

@@ -1,0 +1,5 @@
+template <int N>
+struct F { static constexpr int: value = F<N - 1>::value + 1; } end struct F
+template <>
+struct F<0> { static constexpr int: value = 0; } end struct F
+println(F<2>::value);

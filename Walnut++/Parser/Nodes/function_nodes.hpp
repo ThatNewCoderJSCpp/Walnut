@@ -16,6 +16,8 @@ struct FunctionParameter : ASTNode {
     std::size_t m_variadic_length;
     bool m_is_init_in_decl;
     semantics::Symbol* symbol = nullptr; 
+    std::vector<semantics::Symbol*> pack_symbols;
+    bool expanded_pack = false;
 
     FunctionParameter(
         std::string_view name,
@@ -471,6 +473,10 @@ struct LambdaExpression : ASTNode {
     modifiers::FunctionQualifiers m_quals;
     ASTNode* m_body;
     semantics::Scope* scope = nullptr;
+    LambdaExpression* generic_origin = nullptr;
+    std::vector<LambdaExpression*> specializations;
+    std::vector<std::vector<semantics::Type*>> spec_keys;
+    std::vector<bool> spec_failed;
 
     LambdaExpression(
         LambdaCaptureList* captures,

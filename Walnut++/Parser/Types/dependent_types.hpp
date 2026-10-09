@@ -173,9 +173,16 @@ public:
 private:
     std::vector<Component> m_components;
     bool m_is_global = false;
+    TypeInfo m_prefix;
+    bool m_has_prefix = false;
 
 public:
     explicit QualifiedType(bool is_global = false) : m_is_global(is_global) {}
+
+    void set_prefix(const TypeInfo& prefix) { m_prefix = prefix; m_has_prefix = true; }
+    bool has_prefix() const { return m_has_prefix; }
+    const TypeInfo& prefix() const { return m_prefix; }
+    TypeInfo& prefix() { return m_prefix; }
 
     Kind kind() const override { return Kind::Qualified; }
 
@@ -210,6 +217,7 @@ public:
             copy->add_component(c.name, std::move(cargs));
         }
 
+        if (m_has_prefix) copy->set_prefix(m_prefix.clone_into(arena));
         return copy;
     }
 

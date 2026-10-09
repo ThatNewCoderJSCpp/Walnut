@@ -1,0 +1,39 @@
+class Base {
+ public:
+    int: code;
+    constructor(int: c) : code(c) { int: z = 0; }
+    destructor() virtual = default;
+    function what() const virtual -> string { return "base"; } end function what
+} end class Base
+class Derived extends Base {
+ public:
+    constructor(int: c) : Base(c) { int: z = 0; }
+    function what() const override -> string { return "derived"; } end function what
+} end class Derived
+function main() -> int {
+    array int: data[4] = { 5, 6, 7, 8 };
+    int*: p = &data[0];
+    p += 2;
+    println(*p);
+    p -= 1;
+    println(*p, *(p + 2));
+    ++p;
+    println(*p);
+    try {
+        throw Derived(42);
+    } catch (const Base&: e) {
+        println(e.what(), e.code);
+    }
+    try {
+        try {
+            throw 7;
+        } catch (int: n) {
+            println("inner", n);
+            throw n + 1;
+        }
+    } catch (int: m) {
+        println("outer", m);
+    }
+    return 0;
+}
+end function main

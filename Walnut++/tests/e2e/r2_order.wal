@@ -1,0 +1,12 @@
+int: x = 1;
+function bump() -> int { x += 10; return x; } end function bump
+println(x, bump());
+function pair(int: a, int: b) -> int { return a * 100 + b; } end function pair
+println(pair(x, bump()));
+struct S { int: v; function add() -> int { v += 1; return v; } end function add } end struct S
+S: s = S{ 1 };
+println(s.v, s.add());
+string: t = "a";
+function app() -> string { t += "b"; return t; } end function app
+println(t, app());
+println(x + bump());

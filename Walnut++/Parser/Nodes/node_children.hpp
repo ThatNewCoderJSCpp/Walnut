@@ -198,7 +198,8 @@ void for_each_child(ASTNode* n, Fn&& fn) {
 
         case K::TryCatchStatement: {
             auto* t = static_cast<TryCatchStatement*>(n);
-            yield(t->try_body); yield(t->catch_body);
+            yield(t->try_body);
+            for (TryCatchStatement* h = t; h; h = h->next_handler) yield(h->catch_body);
             break;
         }
 

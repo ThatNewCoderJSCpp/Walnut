@@ -1,0 +1,11 @@
+function sq(int: x) -> int { return x * x; } end function sq
+function apply(function(int) -> int: f, int: v) -> int { return f(v); } end function apply
+function(int, float) -> float: mix = [&](int: x, float: y) -> float { return y * 2.0; };
+function main() -> int {
+    println(apply(sq, 7));
+    int: k = 3;
+    println(apply([k](int: v) -> int { return v + k; }, 10));
+    println(mix(1, 1.25));
+    return 0;
+}
+end function main

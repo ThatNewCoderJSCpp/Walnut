@@ -1,0 +1,7 @@
+function main() -> int {
+ char: u = 'a';
+ u = 'é';
+ println(u, '日', 'é' > 'z');
+ return 0;
+}
+end function main

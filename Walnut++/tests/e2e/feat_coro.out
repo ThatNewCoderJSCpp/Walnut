@@ -1,0 +1,11 @@
+1  2  3  
+0  2  4  6  
+alpha
+beta
+1  4  9  16  
+before await
+fetching 2
+fetching 1
+30 30
+caught async failure
+42

@@ -1,0 +1,24 @@
+function classify(int: n) -> string {
+    if (n < 0) then { return "neg"; } else if (n == 0) then { return "zero"; } else then { return "pos"; }
+} end function classify
+function main() -> int {
+    println(classify(-4), classify(0), classify(9));
+    int: total = 0;
+    for (int: i = 0; i < 10; i++) {
+        if (i % 2 == 0) then { continue; }
+        total += i;
+    }
+    println(total);
+    int: n = 0;
+    while (true) {
+        n += 1;
+        if (n * n > 50) then { break; }
+    }
+    println(n);
+    int: d = 3;
+    do { d -= 1; } while (d > 0);
+    println(d);
+    if (2 ** 3 == 8) then { println("folded"); } else then { println("never"); }
+    return 0;
+}
+end function main

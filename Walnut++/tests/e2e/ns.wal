@@ -1,0 +1,22 @@
+namespace geo {
+    constexpr int: dims = 3;
+    function twice(int: x) -> int { return x * 2; } end function twice
+    struct P { int: v; } end struct P
+}
+end namespace geo
+struct Tally {
+    static int: made;
+    int: id;
+    constructor() : id(0) { made += 1; id = made; }
+    static function total() -> int { return made; } end function total
+} end struct Tally
+function main() -> int {
+    println(geo::twice(geo::dims));
+    geo::P: p = geo::P{ 4 };
+    println(p.v);
+    Tally: a;
+    Tally: b;
+    println(b.id, Tally::total());
+    return 0;
+}
+end function main

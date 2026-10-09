@@ -7,6 +7,7 @@
 #include "../Semantics/type_impl.hpp"
 #include "../Semantics/type_walker.hpp"
 #include "../Semantics/instantiator.hpp"
+#include "../Semantics/name_resolver.hpp"
 
 namespace walnut {
 namespace driver {
@@ -19,10 +20,14 @@ public:
         , m_types(types)
         , m_ctx(arena, reporter)      
         , m_scopes(m_ctx)
+        , m_resolver(m_ctx)
         , m_inst(inst)
     {
         m_inst.build_scopes = [this](nodes::ASTNode* n, semantics::Scope* parent) {
             m_scopes.build_into(n, parent);
+        };
+        m_inst.resolve_names = [this](nodes::ASTNode* n, semantics::Scope* scope) {
+            m_resolver.resolve_into(n, scope);
         };
     }
 
@@ -36,6 +41,7 @@ public:
             ScopedFile _w(m_warnings, unit->file);
             semantics::TypeWalker walker(m_types, m_reporter, m_warnings, unit->root, &m_inst, &throws);
             walker.run(unit->ast);
+            walker.type_pending_instances();
         }
 
         semantics::check_noexcept_contracts(throws, m_types, m_reporter);
@@ -47,6 +53,7 @@ private:
     semantics::TypeContext&    m_types;
     semantics::AnalysisContext m_ctx;      
     semantics::ScopeBuilder    m_scopes;
+    semantics::NameResolver    m_resolver;
     semantics::Instantiator&   m_inst;
 };
 

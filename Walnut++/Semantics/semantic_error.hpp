@@ -104,27 +104,6 @@ public:
         return make_and_report(reporter, file_id, line, ss.str());
     }
 
-    static SemanticError overload_missing_primary(
-        ErrorReporter& reporter, FileId file_id, std::size_t line,
-        std::string_view name, std::string_view decl_kind
-    ) {
-        std::stringstream ss;
-        ss << build_error_header(line, "Overload");
-        ss << "overloaded " << decl_kind << " '" << name << "' must mark exactly one declaration 'primary'";
-        return make_and_report(reporter, file_id, line, ss.str());
-    }
-
-    static SemanticError overload_multiple_primary(
-        ErrorReporter& reporter, FileId file_id, std::size_t line,
-        std::string_view name, std::string_view decl_kind, std::size_t first_line
-    ) {
-        std::stringstream ss;
-        ss << build_error_header(line, "Overload");
-        ss << "overloaded " << decl_kind << " '" << name << "' marks more than one 'primary'";
-        if (first_line != 0) { ss << " (first on line " << first_line << ")"; }
-        return make_and_report(reporter, file_id, line, ss.str());
-    }
-
     static SemanticError duplicate_destructor(
         ErrorReporter& reporter, FileId file_id, std::size_t line, std::size_t first_line
     ) {
@@ -227,6 +206,53 @@ public:
         return make_and_report(reporter, file_id, line, ss.str());
     }
 
+    static SemanticError inaccessible_member(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view member, bool is_private, std::string_view record
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Access")
+           << "'" << member << "' is a " << (is_private ? "private" : "protected") << " member of '" << record << "'";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError constraints_not_satisfied(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name, const std::string& what
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Constraint")
+           << "constraints not satisfied for '" << name << "'";
+        if (!what.empty()) ss << ": " << what << " is not satisfied";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError bad_binary_operands(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view op, const std::string& lhs, const std::string& rhs
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Type")
+           << "operator '" << op << "' cannot be applied to operands of type '" << lhs << "' and '" << rhs << "'";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError bad_reference_binding(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, const std::string& ref, bool to_rvalue
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Type");
+        if (to_rvalue) ss << "cannot bind non-const lvalue reference of type '" << ref << "' to an rvalue";
+        else           ss << "cannot bind rvalue reference of type '" << ref << "' to an lvalue";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError constant_needs_initializer(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view keyword, std::string_view name
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Constant")
+           << keyword << " variable '" << name << "' requires an initializer";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
     static SemanticError auto_needs_initializer(
         ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name
     ) {
@@ -324,15 +350,6 @@ public:
         std::stringstream ss;
         ss << build_error_header(line, "Coroutine")
            << "'" << keyword << "' may only appear inside a function body";
-        return make_and_report(reporter, file_id, line, ss.str());
-    }
-
-    static SemanticError coroutine_mixed_return(
-        ErrorReporter& reporter, FileId file_id, std::size_t line
-    ) {
-        std::stringstream ss;
-        ss << build_error_header(line, "Coroutine")
-           << "a coroutine cannot use a value-returning 'return'; use 'co_return'";
         return make_and_report(reporter, file_id, line, ss.str());
     }
 
@@ -609,6 +626,14 @@ public:
     ) {
         std::stringstream ss;
         ss << build_error_header(line, "Import") << why;
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError emit(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, const std::string& kind, const std::string& message
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, kind) << message;
         return make_and_report(reporter, file_id, line, ss.str());
     }
 

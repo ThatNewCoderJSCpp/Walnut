@@ -32,9 +32,10 @@ private:
         std::vector<Type*>          params;
         bool                        is_const = false;
         int                         ref_qual = 0;   // 0 none / 1 '&' / 2 '&&'
+        Type*                       conversion = nullptr;
 
         bool operator==(const SigKey& o) const {
-            return op == o.op && is_const == o.is_const && ref_qual == o.ref_qual && params == o.params;
+            return op == o.op && is_const == o.is_const && ref_qual == o.ref_qual && params == o.params && conversion == o.conversion;
         }
     };
 
@@ -76,6 +77,11 @@ private:
         if (ps) {
             k.params.reserve(ps->size());
             for (const nodes::FunctionParameter* p : ps->m_params) k.params.push_back(m_types.canonicalize(p->get_type()));
+        }
+
+        if (s->decl && s->decl->kind == K::OperatorFunctionDeclaration) {
+            auto* od = static_cast<const nodes::OperatorFunctionDeclaration*>(s->decl);
+            if (od->is_conversion()) k.conversion = m_types.strip_cv(m_types.canonicalize(od->get_conversion_type()));
         }
 
         if (const modifiers::FunctionQualifiers* q = quals_of(s->decl)) {

@@ -1,0 +1,4 @@
+array int: ps[2] = { 1, 2 };
+int: s = 0;
+for (int*: q = &ps[0]; q != &ps[0] + 2; ++q) { s += *q; }
+println(s);

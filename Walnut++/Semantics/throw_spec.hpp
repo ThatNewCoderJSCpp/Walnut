@@ -154,6 +154,7 @@ public:
                 info.merge(of_expr(c->get_callee()));
                 Symbol* callee = c->resolved;
                 if (!callee) { info.unknown = true; return info; }
+                if (callee->intrinsic) return info;
                 if (declared_noexcept(callee)) return info;
                 info.merge(of_function_body(callee));
                 return info;
@@ -224,19 +225,21 @@ public:
                 auto* t = static_cast<nodes::TryCatchStatement*>(s);
                 ThrowInfo body = of_stmt(t->get_try_body());
 
-                if (!t->is_typed_catch()) {
-                    body = ThrowInfo{};                    
-                } else {
-                    Type* ct = m_types.strip_cv(m_types.canonicalize(
-                                   const_cast<parser_types::TypeInfo&>(t->get_catch_type())));
-                    ThrowInfo rest;
-                    rest.unknown = body.unknown;           
-                    for (Type* th : body.thrown) if (!caught_by(th, ct)) rest.thrown.push_back(th);
-                    body = std::move(rest);
+                for (nodes::TryCatchStatement* h = t; h; h = h->next_handler) {
+                    if (!h->is_typed_catch()) {
+                        body = ThrowInfo{};
+                    } else {
+                        Type* ct = m_types.strip_cv(m_types.canonicalize(const_cast<parser_types::TypeInfo&>(h->get_catch_type())));
+                        if (ct && ct->is_reference()) ct = m_types.strip_cv(static_cast<ReferenceType*>(ct)->referent());
+                        ThrowInfo rest;
+                        rest.unknown = body.unknown;
+                        for (Type* th : body.thrown) if (!caught_by(th, ct)) rest.thrown.push_back(th);
+                        body = std::move(rest);
+                    }
                 }
 
                 info.merge(body);
-                info.merge(of_stmt(t->get_catch_body()));  
+                for (nodes::TryCatchStatement* h = t; h; h = h->next_handler) info.merge(of_stmt(h->get_catch_body()));
                 return info;
             }
 

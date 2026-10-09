@@ -1,0 +1,6 @@
+println('a' + "b", "b" + 'a');
+var: c = 'a';
+var: s = "b";
+try { println(s + c); } catch (...) { println("err1"); }
+try { println(c + s); } catch (...) { println("err2"); }
+println(c == "a");

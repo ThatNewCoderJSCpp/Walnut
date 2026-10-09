@@ -1,0 +1,6 @@
+config main
+start
+28 main 3
+3
+true true
+100000

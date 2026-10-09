@@ -36,6 +36,7 @@ enum class Visibility : std::uint8_t {
 };
 
 struct Scope; 
+class Type;
 
 struct Symbol {
     std::string_view              name;
@@ -56,12 +57,15 @@ struct Symbol {
 
     std::uint64_t                 decl_order  = 0;    
     bool                          is_hoisted  = false;
+    std::uint8_t                  member_access = 0;
+    std::uint8_t                  intrinsic     = 0;
 
     bool                          is_imported   = false;
     std::string_view              import_source;
     Symbol*                       import_target = nullptr;
 
     nodes::TemplateDeclaration*   template_decl = nullptr;
+    Type*                         bound_type    = nullptr;
 
     SmallVector<nodes::TemplateDeclaration*, 2> specializations;
 

@@ -139,6 +139,7 @@ public:
 private:
     std::string display_name(const CompilerError& e) const {
         std::string p = display_path(e.file_id);
+        if (p.empty()) p = display_path(m_current_file);
         return p.empty() ? "<unknown>" : p;
     }
 

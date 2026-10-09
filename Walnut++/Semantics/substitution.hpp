@@ -39,7 +39,7 @@ struct SubstEnv {
         return it == packs.end() ? nullptr : &it->second;
     }
 
-    bool empty() const { return types.empty() && values.empty() && packs.empty(); }
+    bool empty() const { return types.empty() && values.empty() && fvalues.empty() && packs.empty(); }
 };
 
 inline CV cv_union(CV a, CV b) {
@@ -55,6 +55,26 @@ inline Type* strip_ref(Type* t) {
 }
 
 inline Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx);
+
+inline bool deduce(Type* param, Type* arg, SubstEnv& env, TypeContext& ctx);
+
+inline bool deduce_template_arg(const TemplateArg& p, const TemplateArg& a, SubstEnv& env, TypeContext& ctx) {
+    if (p.is_type != a.is_type) return false;
+    if (p.is_type) return deduce(p.type, a.type, env, ctx);
+    if (p.is_value()) return p.value == a.value && p.fvalue == a.fvalue;
+    if (!a.is_value()) return p == a;
+    if (!p.param) return true;
+
+    if (a.value) {
+        if (const WideInt* prior = env.lookup_value(p.param); prior && prior != a.value) return false;
+        env.values[p.param] = a.value;
+        return true;
+    }
+
+    if (const WideFloat* prior = env.lookup_fvalue(p.param); prior && prior != a.fvalue) return false;
+    env.fvalues[p.param] = a.fvalue;
+    return true;
+}
 
 inline bool deduce(Type* param, Type* arg, SubstEnv& env, TypeContext& ctx) {
     if (!param) return false;
@@ -84,6 +104,14 @@ inline bool deduce(Type* param, Type* arg, SubstEnv& env, TypeContext& ctx) {
             auto* pa = static_cast<ArrayType*>(param);
             auto* aa = static_cast<ArrayType*>(a);
             if (pa->extent() && aa->extent() && *pa->extent() != *aa->extent()) return false;
+
+            if (Symbol* p = pa->extent_param()) {
+                if (!aa->extent()) return false;
+                const WideInt* v = ctx.consts().from(static_cast<long long>(*aa->extent()));
+                if (const WideInt* prior = env.lookup_value(p); prior && prior != v) return false;
+                env.values[p] = v;
+            }
+
             return deduce(pa->element(), aa->element(), env, ctx);
         }
 
@@ -94,7 +122,7 @@ inline bool deduce(Type* param, Type* arg, SubstEnv& env, TypeContext& ctx) {
             auto* ar = static_cast<RecordType*>(a);
             if (pr->decl() != ar->decl()) return false;
             if (pr->args().size() != ar->args().size()) return false;
-            for (std::size_t i = 0; i < pr->args().size(); ++i) if (!deduce(pr->args()[i], ar->args()[i], env, ctx)) return false;
+            for (std::size_t i = 0; i < pr->args().size(); ++i) if (!deduce_template_arg(pr->args()[i], ar->args()[i], env, ctx)) return false;
             return true;
         }
 
@@ -108,6 +136,15 @@ inline bool deduce(Type* param, Type* arg, SubstEnv& env, TypeContext& ctx) {
             if (!deduce(pf->ret(), af->ret(), env, ctx)) return false;
             for (std::size_t i = 0; i < pf->params().size(); ++i) if (!deduce(pf->params()[i], af->params()[i], env, ctx)) return false;
             return true;
+        }
+
+        case TypeKind::Coroutine: {
+            Type* a = ctx.strip_cv(strip_ref(arg));
+            if (!a || a->kind() != TypeKind::Coroutine) return false;
+            auto* pc = static_cast<CoroutineType*>(param);
+            auto* ac = static_cast<CoroutineType*>(a);
+            if (pc->is_generator() != ac->is_generator()) return false;
+            return deduce(pc->value(), ac->value(), env, ctx);
         }
 
         case TypeKind::Variant:      
@@ -125,7 +162,7 @@ inline bool contains_error(Type* t) {
         case TypeKind::Reference: return contains_error(static_cast<ReferenceType*>(t)->referent());
         case TypeKind::Array:     return contains_error(static_cast<ArrayType*>(t)->element());
         case TypeKind::Record:
-            for (Type* a : static_cast<RecordType*>(t)->args()) if (contains_error(a)) return true;
+            for (const TemplateArg& a : static_cast<RecordType*>(t)->args()) if (a.is_type && contains_error(a.type)) return true;
             return false;
         case TypeKind::Function: {
             auto* f = static_cast<FunctionType*>(t);
@@ -159,7 +196,7 @@ inline void collect_pack_params(Type* t, std::vector<Symbol*>& out) {
         case TypeKind::Pointer:   collect_pack_params(static_cast<PointerType*>(t)->pointee(), out);   return;
         case TypeKind::Reference: collect_pack_params(static_cast<ReferenceType*>(t)->referent(), out); return;
         case TypeKind::Array:     collect_pack_params(static_cast<ArrayType*>(t)->element(), out);      return;
-        case TypeKind::Record:    for (Type* a : static_cast<RecordType*>(t)->args())          collect_pack_params(a, out); return;
+        case TypeKind::Record:    for (const TemplateArg& a : static_cast<RecordType*>(t)->args()) if (a.is_type) collect_pack_params(a.type, out); return;
         case TypeKind::Variant:   for (Type* a : static_cast<VariantType*>(t)->alternatives()) collect_pack_params(a, out); return;
 
         case TypeKind::Function: {
@@ -231,6 +268,22 @@ inline bool expand_into(Type* elem, const SubstEnv& env, TypeContext& ctx, std::
     return true;
 }
 
+inline bool subst_value_arg(const TemplateArg& a, const SubstEnv& env, TypeContext& ctx, TemplateArg& out) {
+    if (a.param) {
+        if (const WideInt*   v = env.lookup_value(a.param))  { out = TemplateArg::of_int(v);   return true; }
+        if (const WideFloat* f = env.lookup_fvalue(a.param)) { out = TemplateArg::of_float(f); return true; }
+        if (!a.expr) { out = a; return true; }
+    }
+
+    if (!a.expr || !ctx.value_eval_hook) { out = a; return true; }
+    ctx.push_subst(&env);
+    TemplateArg v;
+    const bool ok = ctx.value_eval_hook(a.expr, v);
+    ctx.pop_subst();
+    out = ok ? v : a;
+    return true;
+}
+
 inline Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
     if (!t || !t->is_dependent() || env.empty()) return t;
 
@@ -254,13 +307,37 @@ inline Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
 
         case TypeKind::Array: {
             auto* a = static_cast<ArrayType*>(t);
-            return ctx.array(subst(a->element(), env, ctx), a->extent(), t->cv());
+            Type* el = subst(a->element(), env, ctx);
+
+            if (Symbol* p = a->extent_param()) {
+                const WideInt* v = env.lookup_value(p);
+                if (!v) return ctx.dependent_array(el, p, t->cv());
+                if (v->is_negative()) return ctx.error_();
+                return ctx.array(el, static_cast<std::size_t>(v->get_lowest_bits()), t->cv());
+            }
+
+            return ctx.array(el, a->extent(), t->cv());
         }
 
         case TypeKind::Record: {
             auto* r = static_cast<RecordType*>(t);
-            std::vector<Type*> args;
-            for (Type* a : r->args()) if (!expand_into(a, env, ctx, args)) return ctx.error_();
+            TemplateArgs args;
+            args.reserve(r->args().size());
+
+            for (const TemplateArg& a : r->args()) {
+                if (a.is_type) {
+                    std::vector<Type*> expanded;
+                    if (!expand_into(a.type, env, ctx, expanded)) return ctx.error_();
+                    for (Type* e : expanded) args.push_back(TemplateArg::of_type(e));
+                } else if (a.is_dependent_value()) {
+                    TemplateArg v;
+                    if (!subst_value_arg(a, env, ctx, v)) return ctx.error_();
+                    args.push_back(v);
+                } else {
+                    args.push_back(a);
+                }
+            }
+
             return ctx.record(r->decl(), std::move(args), t->cv());
         }
 
@@ -290,6 +367,10 @@ inline Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
 
             Type* s = ctx.strip_cv(base);
 
+            if (s && s->is_record() && ctx.member_type_hook) {
+                if (Type* m = ctx.member_type_hook(s, d->name())) return m;
+            }
+
             if (s && s->is_record()) {
                 Symbol* rec = static_cast<RecordType*>(s)->decl();
 
@@ -312,6 +393,11 @@ inline Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
 
         case TypeKind::PackExpansion:
             return ctx.pack_expansion(subst(static_cast<PackExpansionType*>(t)->pattern(), env, ctx));
+
+        case TypeKind::Coroutine: {
+            auto* c = static_cast<CoroutineType*>(t);
+            return ctx.coroutine(subst(c->value(), env, ctx), c->is_generator(), t->cv());
+        }
 
         default: return t;
     }

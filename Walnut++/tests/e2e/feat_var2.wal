@@ -1,0 +1,19 @@
+template <typename T>
+function biggest(T: first, T...: rest) -> T {
+    T: best = first;
+    for (T: x in rest) { if (x > best) then { best = x; } }
+    return best;
+}
+end function biggest
+struct Bag {
+    int: total = 0;
+    constructor(int...: xs) { for (int: x in xs) { total += x; } }
+    function add(int...: xs) -> int { for (int: x in xs) { total += x; } return countof(xs); } end function add
+} end struct Bag
+function main() -> int {
+    println(biggest(3, 9, 2), biggest(1.5), biggest("b", "a", "c"));
+    Bag: b = Bag(1, 2, 3);
+    println(b.total, b.add(4, 5), b.total);
+    return 0;
+}
+end function main

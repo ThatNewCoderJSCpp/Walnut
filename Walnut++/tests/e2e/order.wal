@@ -1,0 +1,18 @@
+int: counter = 100;
+function next_id() -> int { counter += 1; return counter; } end function next_id
+function pair(int: a, int: b) -> int { return a * 10 + b; } end function pair
+struct C {
+    int: n;
+    function run(int: k) -> int { n += k; return n; } end function run
+} end struct C
+println(next_id(), next_id(), next_id());
+int: v = 0;
+function bump() -> int { v += 1; return v; } end function bump
+println(pair(bump(), bump()));
+C: c = C{ 0 };
+println(c.run(3), c.run(2));
+println(bump() - bump(), bump() < bump());
+string: log = "";
+function tag(string: s) -> string { log += s; return s; } end function tag
+string: joined = tag("a") + tag("b");
+println(joined, log);

@@ -1,0 +1,25 @@
+function main() -> int {
+    short short int: a = 100;
+    a = a + a;
+    println(a);
+    unsigned short short int: u = 250;
+    u += 10;
+    println(u);
+    short int: s = 32767;
+    s++;
+    println(s);
+    long int: l = 9223372036854775807;
+    println(l);
+    integer: big = 2;
+    big = big ** 500;
+    println(big > 0);
+    short short float: f = 0.5;
+    double: d = 1.0;
+    println(f, d / 8.0);
+    int: n = -17;
+    println(n / 5, n % 5, n >> 1, n << 2);
+    unsigned int: m = 1;
+    println(m << 31);
+    return 0;
+}
+end function main

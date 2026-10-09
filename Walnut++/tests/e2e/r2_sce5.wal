@@ -1,0 +1,3 @@
+struct A { static int: x = 1; static int: z = 2; } end struct A
+struct B { static int: y = A::x + A::z; } end struct B
+println(B::y);

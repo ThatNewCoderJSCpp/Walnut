@@ -1,0 +1,12 @@
+function main() -> int {
+    int: a = 1;
+    int*: pa = &a;
+    int**: ppa = &pa;
+    **ppa = 99;
+    println(a, **ppa, +a, 2 ** 3, 2 * *pa);
+    short float: h = 0.5;
+    float: d = 0.1;
+    println(h, d, h + d);
+    return 0;
+}
+end function main

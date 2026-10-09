@@ -1,0 +1,10 @@
+function main(array string: args) -> int {
+    println("count", countof(args));
+    for (string: a in args) { println(a); }
+    array int: fixed[4];
+    string: s = "héllo";
+    println(countof(fixed), countof(s), sizeof(int), sizeof(long int), sizeof(fixed));
+    for (int: i = 0; i < countof(args); i++) { println(i, args[i]); }
+    return 3;
+}
+end function main

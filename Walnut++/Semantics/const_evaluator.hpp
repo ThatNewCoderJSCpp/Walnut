@@ -10,6 +10,8 @@
 #include "../Parser/nodes.hpp"
 
 #include <unordered_set>
+#include <functional>
+#include <vector>
 
 namespace walnut {
 namespace semantics {
@@ -27,6 +29,9 @@ struct ConstValue {
         Domain,           
         ShiftWidth,  
         Threw,     
+        StepLimit,
+        NoReturn,
+        BadCall,
 
         Precision,         
         Wrapped          
@@ -57,6 +62,9 @@ inline const char* fail_message(ConstValue::Fail f) {
         case ConstValue::Fail::Precision:     return "result is subnormal; precision lost";
         case ConstValue::Fail::Wrapped:       return "unsigned arithmetic wrapped";
                 case ConstValue::Fail::Threw: return "constant evaluation threw an exception";
+        case ConstValue::Fail::StepLimit:     return "constant evaluation exceeded its step limit (possible infinite loop or recursion)";
+        case ConstValue::Fail::NoReturn:      return "constexpr function finished without returning a value";
+        case ConstValue::Fail::BadCall:       return "wrong number of arguments in constant function call";
         default:                              return "not a constant expression";
     }
 }
@@ -65,12 +73,39 @@ class ConstEvaluator {
 public:
     explicit ConstEvaluator(TypeContext& types) : m_types(types) {}
 
+    std::function<const SubstEnv*(Symbol*)> env_of;
+    std::function<int(nodes::TemplateInstantiation*)> concept_value;
+
     ConstValue eval(nodes::ASTNode* e) {
         if (!e || m_depth > kMaxDepth) return {};
         ++m_depth;
         ConstValue v = eval_impl(e);
         --m_depth;
         return v;
+    }
+
+    ConstValue value_of(Symbol* s) { return eval_symbol(s); }
+
+    static bool is_constant_type(Type* t) {
+        using BK = parser_types::PrimitiveType::BaseKind;
+        if (!t || !t->is_builtin()) return false;
+        switch (static_cast<BuiltinType*>(t)->base()) {
+            case BK::Int: case BK::Float: case BK::Char: case BK::Bool: return true;
+            default: return false;
+        }
+    }
+
+    ConstValue coerce(const ConstValue& v, Type* dst) {
+        using BK = parser_types::PrimitiveType::BaseKind;
+        if (!v.ok() || !dst) return v;
+        dst = m_types.strip_cv(dst);
+        if (!is_constant_type(dst)) return v;
+        auto* b = static_cast<BuiltinType*>(dst);
+        ConstValue out = convert_to(v, b);
+        if (out.ok() || out.is_error()) return out;
+        if (v.is_int() && (b->base() == BK::Int || b->base() == BK::Char)) return ConstValue::error(ConstValue::Fail::Overflow);
+        if (v.is_float() && (b->base() == BK::Int || b->base() == BK::Char)) return ConstValue::error(ConstValue::Fail::Overflow);
+        return out;
     }
 
     static bool truthy(const ConstValue& v, bool& ok) {
@@ -101,6 +136,121 @@ public:
         return true;
     }
 
+    long long size_of_type(Type* t) {
+        long long size = 0, align = 0;
+        return layout_of(t, size, align) ? size : 0;
+    }
+
+    long long align_of_type(Type* t) {
+        long long size = 0, align = 0;
+        return layout_of(t, size, align) ? align : 0;
+    }
+
+    bool layout_of(Type* t, long long& size, long long& align, int depth = 0) {
+        using BK = parser_types::PrimitiveType::BaseKind;
+        t = m_types.strip_cv(t);
+        if (!t || depth > 64) return false;
+        if (t->is_pointer() || t->is_enum()) { size = 8; align = 8; return true; }
+
+        if (t->is_builtin()) {
+            auto* b = static_cast<BuiltinType*>(t);
+            switch (b->base()) {
+                case BK::Int:
+                case BK::Float: size = static_cast<long long>(bit_width_of_rank(b->width()) / 8); break;
+                case BK::Bool:  size = 1; break;
+                case BK::Char:  size = 4; break;
+                default:        return false;
+            }
+            align = size < 8 ? size : 8;
+            return true;
+        }
+
+        if (t->is_array()) {
+            auto* a = static_cast<ArrayType*>(t);
+            if (!a->extent()) return false;
+            long long es = 0, ea = 0;
+            if (!layout_of(a->element(), es, ea, depth + 1)) return false;
+            size = es * static_cast<long long>(*a->extent());
+            align = ea;
+            return true;
+        }
+
+        if (t->is_record()) return record_layout(static_cast<RecordType*>(t), size, align, depth);
+        return false;
+    }
+
+    bool record_layout(RecordType* rt, long long& size, long long& align, int depth) {
+        Symbol* owner = rt->decl();
+        if (rt->is_instantiation() && m_types.record_scope_hook) {
+            Scope* sc = m_types.record_scope_hook(rt);
+            if (!sc || !sc->owner_symbol) return false;
+            owner = sc->owner_symbol;
+        }
+        if (!owner || !owner->decl || owner->decl->kind != K::RecordDeclaration) return false;
+        auto* rd = static_cast<nodes::RecordDeclaration*>(owner->decl);
+        const SubstEnv* env = env_of ? env_of(owner) : nullptr;
+        if (env) m_types.push_subst(env);
+        struct Pop { TypeContext& t; bool on; ~Pop() { if (on) t.pop_subst(); } } pop{ m_types, env != nullptr };
+        long long offset = 0;
+        align = 1;
+        bool has_vptr = false;
+
+        if (rd->m_inherits.type) {
+            long long bs = 0, ba = 0;
+            if (!layout_of(m_types.canonicalize(rd->m_inherits), bs, ba, depth + 1)) return false;
+            offset = bs;
+            align = ba;
+        }
+
+        using FQ = modifiers::FunctionQualifiers;
+        using RM = modifiers::RawModifiers;
+
+        for (const auto& member : rd->get_members()) {
+            nodes::ASTNode* n = member.node;
+            if (!n) continue;
+            if (n->kind == K::FunctionDeclaration && static_cast<nodes::FunctionDeclaration*>(n)->qualifiers().has_any(FQ::Virtual | FQ::Override)) has_vptr = true;
+            if (n->kind == K::OperatorFunctionDeclaration && static_cast<nodes::OperatorFunctionDeclaration*>(n)->qualifiers().has_any(FQ::Virtual | FQ::Override)) has_vptr = true;
+            if (n->kind == K::DestructorDeclaration && static_cast<nodes::DestructorDeclaration*>(n)->m_qualifiers.has(FQ::Virtual)) has_vptr = true;
+        }
+
+        if (has_vptr && !rd->m_inherits.type) { offset = 8; align = 8; }
+
+        for (const auto& member : rd->get_members()) {
+            nodes::ASTNode* n = member.node;
+            if (!n) continue;
+            Type* ft = nullptr;
+
+            if (n->kind == K::VariableDeclaration) {
+                auto* v = static_cast<nodes::VariableDeclaration*>(n);
+                if (v->get_type_info().modifiers.has(RM::Static)) continue;
+                ft = m_types.canonicalize(v->get_type_info());
+            } else if (n->kind == K::ArrayDeclaration) {
+                auto* a = static_cast<nodes::ArrayDeclaration*>(n);
+                if (a->get_array_modifiers().has(RM::Static)) continue;
+                Type* el = m_types.canonicalize(a->m_element_type);
+                std::optional<std::size_t> extent = a->m_dimension;
+                if (!extent && a->m_initializer && !a->m_dimension_expr) extent = a->m_initializer->m_elements.size();
+                if (!extent) return false;
+                ft = m_types.array(el, extent, CV{});
+            } else {
+                continue;
+            }
+
+            long long fs = 0, fa = 0;
+            if (!ft || ft->is_reference() || !layout_of(ft, fs, fa, depth + 1)) return false;
+            offset = (offset + fa - 1) / fa * fa + fs;
+            if (fa > align) align = fa;
+        }
+
+        size = (offset + align - 1) / align * align;
+        if (size == 0) size = 1;
+        return true;
+    }
+
+    static bool char_fits(const WideInt& v) {
+        return !v.is_undefined() && !v.is_negative() && ConstTable::fits(v, 21, false) && !(WideInt(std::uint64_t(0x10FFFF)) < v);
+    }
+
     ConstValue narrow(ConstValue v, nodes::ASTNode* site) {
         using BK = parser_types::PrimitiveType::BaseKind;
         if (!v.ok() || !site) return v;
@@ -108,6 +258,10 @@ public:
         if (!t || !t->is_builtin()) return v;
         auto* b = static_cast<BuiltinType*>(t);
         const unsigned w = bit_width_of_rank(b->width());
+
+        if (v.is_int() && b->base() == BK::Char) {
+            return char_fits(*v.i) ? v : ConstValue::error(ConstValue::Fail::Overflow);
+        }
 
         if (v.is_int() && (b->base() == BK::Int || b->base() == BK::Char)) {
             if (!b->is_unsigned()) {
@@ -217,6 +371,36 @@ private:
     ConstValue eval_impl(nodes::ASTNode* e) {
         switch (e->kind) {
             case K::Literal:             return eval_literal(static_cast<nodes::Literal*>(e));
+
+            case K::TypeQuery: {
+                auto* q = static_cast<nodes::TypeQueryExpression*>(e);
+                using QOp = nodes::TypeQueryExpression::Op;
+                if (q->pack_count >= 0) return make_int(WideInt(std::uint64_t(q->pack_count)));
+                Type* t = q->queried ? m_types.strip_cv(m_types.apply_subst(q->queried)) : nullptr;
+                if (!t || t->is_dependent()) return {};
+
+                if (q->op == QOp::Countof) {
+                    if (t->is_array() && static_cast<ArrayType*>(t)->extent()) return make_int(WideInt(std::uint64_t(*static_cast<ArrayType*>(t)->extent())));
+                    return {};
+                }
+
+                long long bytes = 0, alignment = 0;
+                if (!layout_of(t, bytes, alignment)) return {};
+                if (q->op == QOp::Sizeof) return make_int(WideInt(std::uint64_t(bytes)));
+                if (q->op == QOp::Alignof) return make_int(WideInt(std::uint64_t(alignment)));
+                return {};
+            }
+
+            case K::FoldExpression: {
+                auto* f = static_cast<nodes::FoldExpression*>(e);
+                return f->lowered ? eval(f->lowered) : ConstValue{};
+            }
+
+            case K::TemplateInstantiation: {
+                if (!concept_value) return {};
+                const int r = concept_value(static_cast<nodes::TemplateInstantiation*>(e));
+                return r < 0 ? ConstValue{} : make_bool(r == 1);
+            }
             case K::Identifier:          return eval_symbol(static_cast<nodes::Identifier*>(e)->resolved);
             case K::QualifiedIdentifier: return eval_symbol(static_cast<nodes::QualifiedIdentifier*>(e)->resolved);
 
@@ -225,8 +409,11 @@ private:
                 return m->resolved ? eval_symbol(m->resolved) : ConstValue{};
             }
 
+            case K::CallExpression: return eval_call(static_cast<nodes::CallExpression*>(e));
+
             case K::UnaryExpression: {
                 auto* u = static_cast<nodes::UnaryExpression*>(e);
+                if (u->op == TK::DoublePlus || u->op == TK::DoubleMinus) return m_frames.empty() ? ConstValue{} : eval_incdec(u);
                 ConstValue v = eval(u->operand);
                 if (!v.ok()) return {};
 
@@ -291,7 +478,7 @@ private:
         switch (lit->get_kind()) {
             case TK::Integer: {
                 std::string s(lit->value);
-                if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) return make_int(m_types.consts().parse(s, 16));
+                if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) return make_int(m_types.consts().parse(s.substr(2), 16));
                 if (s.size() > 2 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) return make_int(m_types.consts().parse(s.substr(2), 2));
                 return make_int(m_types.consts().parse(s, 10));
             }
@@ -315,6 +502,11 @@ private:
     ConstValue eval_symbol(Symbol* s) {
         if (!s) return {};
 
+        if (!m_frames.empty()) {
+            auto& locals = m_frames.back().locals;
+            if (auto it = locals.find(s); it != locals.end()) return it->second.value;
+        }
+
         switch (s->kind) {
             case SymbolKind::TemplateParam: {
                 const auto& stack = m_types.subst_stack();
@@ -334,13 +526,307 @@ private:
                 const auto& mods = vd->get_type_info().modifiers;
                 if (!mods.has(RM::Constexpr) && !mods.has(RM::Const)) return {};
                 if (!vd->has_initializer()) return {};
+                const SubstEnv* env = env_of ? env_of(s) : nullptr;
+                const bool cacheable = env != nullptr || m_types.subst_stack().empty();
+                if (cacheable) if (auto it = m_symbol_cache.find(s); it != m_symbol_cache.end()) return it->second;
                 if (!m_visiting.insert(s).second) return {};          
-                ConstValue v = eval(vd->m_initializer);
+                if (env) m_types.push_subst(env);
+                ConstValue v = coerce(eval(vd->m_initializer), m_types.canonicalize(vd->get_type_info()));
+                if (env) m_types.pop_subst();
                 m_visiting.erase(s);
+                if (cacheable && v.ok()) m_symbol_cache.emplace(s, v);
                 return v;
             }
 
             default: return {};
+        }
+    }
+
+    struct Local {
+        ConstValue value;
+        Type*      type = nullptr;
+    };
+
+    struct Frame {
+        std::unordered_map<const Symbol*, Local> locals;
+        ConstValue                               result;
+    };
+
+    enum class Flow : std::uint8_t { Normal, Return, Break, Continue, Fail };
+
+    std::vector<Frame> m_frames;
+    std::unordered_map<const Symbol*, ConstValue> m_symbol_cache;
+    ConstValue         m_failure;
+    std::size_t        m_steps = 0;
+    static constexpr std::size_t kMaxSteps = 1000000;
+    static constexpr std::size_t kMaxCallDepth = 256;
+
+    static TK compound_base(TK op) {
+        switch (op) {
+            case TK::PlusEqual:           return TK::Plus;
+            case TK::MinusEqual:          return TK::Minus;
+            case TK::AsteriskEqual:       return TK::Asterisk;
+            case TK::SlashEqual:          return TK::Slash;
+            case TK::PercentEqual:        return TK::Percent;
+            case TK::DoubleAsteriskEqual: return TK::DoubleAsterisk;
+            case TK::AmpersandEqual:      return TK::Ampersand;
+            case TK::PipeEqual:           return TK::Pipe;
+            case TK::CaretEqual:          return TK::Caret;
+            case TK::ShiftLeftEqual:      return TK::DoubleLessThan;
+            case TK::ShiftRightEqual:     return TK::DoubleGreaterThan;
+            default:                      return op;
+        }
+    }
+
+    static bool is_constexpr_function(const nodes::FunctionDeclaration* fd) {
+        return fd->get_modifiers().has(modifiers::RawModifiers::Constexpr)
+            || fd->qualifiers().has(modifiers::FunctionQualifiers::Consteval);
+    }
+
+    Local* local_of(nodes::ASTNode* target) {
+        if (m_frames.empty() || !target) return nullptr;
+        Symbol* s = nullptr;
+        if      (target->kind == K::Identifier)          s = static_cast<nodes::Identifier*>(target)->resolved;
+        else if (target->kind == K::QualifiedIdentifier) s = static_cast<nodes::QualifiedIdentifier*>(target)->resolved;
+        if (!s) return nullptr;
+        auto& locals = m_frames.back().locals;
+        auto it = locals.find(s);
+        return it == locals.end() ? nullptr : &it->second;
+    }
+
+    ConstValue store(Local& slot, ConstValue v) {
+        if (!v.ok()) return v;
+        ConstValue fitted = slot.type ? coerce(v, slot.type) : v;
+        if (fitted.ok()) slot.value = fitted;
+        return fitted;
+    }
+
+    ConstValue eval_assign(nodes::BinaryExpression* b) {
+        Local* slot = local_of(b->left);
+        if (!slot) return {};
+        ConstValue r = eval(b->right);
+        if (!r.ok()) return r;
+        if (b->op == TK::Equal) return store(*slot, r);
+        if (!slot->value.ok()) return {};
+        return store(*slot, apply_binary(compound_base(b->op), slot->value, r, b));
+    }
+
+    ConstValue eval_incdec(nodes::UnaryExpression* u) {
+        Local* slot = local_of(u->operand);
+        if (!slot || !slot->value.ok()) return {};
+        ConstValue before = slot->value;
+        ConstValue one;
+        if      (before.is_int())   one = make_int(WideInt(std::uint64_t(1)));
+        else if (before.is_float()) one = make_float(WideFloat(1));
+        else return {};
+        nodes::BinaryExpression site(u->operand, u->op == TK::DoublePlus ? TK::Plus : TK::Minus, u->operand, u->line);
+        site.expr_type = u->operand->expr_type;
+        ConstValue after = store(*slot, apply_binary(site.op, before, one, &site));
+        if (!after.ok()) return after;
+        return u->is_prefix() ? after : before;
+    }
+
+    ConstValue eval_call(nodes::CallExpression* c) {
+        Symbol* fn = c->resolved;
+        if (!fn || fn->kind != SymbolKind::Function || !fn->decl || fn->decl->kind != K::FunctionDeclaration) return {};
+        auto* fd = static_cast<nodes::FunctionDeclaration*>(fn->decl);
+        if (!is_constexpr_function(fd) || !fd->has_body()) return {};
+        if (m_frames.size() >= kMaxCallDepth) return ConstValue::error(ConstValue::Fail::StepLimit);
+
+        const nodes::FunctionParameters* ps = fd->get_parameters();
+        const std::size_t nparams = ps ? ps->m_params.size() : 0;
+        if (c->m_arguments.size() > nparams) return ConstValue::error(ConstValue::Fail::BadCall);
+
+        std::vector<ConstValue> args;
+        args.reserve(nparams);
+
+        for (std::size_t i = 0; i < nparams; ++i) {
+            nodes::FunctionParameter* p = ps->m_params[i];
+            if (p->is_variadic()) return {};
+            nodes::ASTNode* src = i < c->m_arguments.size() ? c->m_arguments[i] : const_cast<nodes::ASTNode*>(p->get_initializer());
+            if (!src) return ConstValue::error(ConstValue::Fail::BadCall);
+            ConstValue v = eval(src);
+            if (!v.ok()) return v;
+            args.push_back(v);
+        }
+
+        const SubstEnv* env = env_of ? env_of(fn) : nullptr;
+        if (env) m_types.push_subst(env);
+        Frame frame;
+
+        for (std::size_t i = 0; i < nparams; ++i) {
+            nodes::FunctionParameter* p = ps->m_params[i];
+            Local slot;
+            slot.type = m_types.canonicalize(p->get_type());
+            if (slot.type && slot.type->is_reference()) slot.type = static_cast<ReferenceType*>(slot.type)->referent();
+            slot.value = coerce(args[i], slot.type);
+            if (!slot.value.ok()) { if (env) m_types.pop_subst(); return slot.value.is_error() ? slot.value : ConstValue{}; }
+            if (p->symbol) frame.locals[p->symbol] = slot;
+        }
+
+        Type* ret = m_types.canonicalize(fd->get_return_type());
+        m_frames.push_back(std::move(frame));
+        const Flow flow = exec(fd->get_body());
+        ConstValue result = m_frames.back().result;
+        m_frames.pop_back();
+        if (env) m_types.pop_subst();
+
+        if (flow == Flow::Fail)   return m_failure;
+        if (flow != Flow::Return) return ConstValue::error(ConstValue::Fail::NoReturn);
+        if (ret && ret->is_reference()) ret = static_cast<ReferenceType*>(ret)->referent();
+        return coerce(result, ret);
+    }
+
+    Flow fail(ConstValue v) {
+        m_failure = v.is_error() ? v : ConstValue{};
+        return Flow::Fail;
+    }
+
+    bool test(nodes::ASTNode* cond, bool& taken) {
+        ConstValue v = eval(cond);
+        bool ok = false;
+        taken = truthy(v, ok);
+        if (!ok) { m_failure = v.is_error() ? v : ConstValue{}; return false; }
+        return true;
+    }
+
+    Flow exec_loop_body(nodes::ASTNode* body, bool& stop) {
+        stop = false;
+        const Flow f = exec(body);
+        if (f == Flow::Return || f == Flow::Fail) { stop = true; return f; }
+        if (f == Flow::Break) stop = true;
+        return Flow::Normal;
+    }
+
+    Flow exec(nodes::ASTNode* s) {
+        if (!s) return Flow::Normal;
+        if (++m_steps > kMaxSteps) return fail(ConstValue::error(ConstValue::Fail::StepLimit));
+
+        switch (s->kind) {
+            case K::BlockStatement:
+                for (nodes::ASTNode* st : static_cast<nodes::BlockStatement*>(s)->statements) {
+                    const Flow f = exec(st);
+                    if (f != Flow::Normal) return f;
+                }
+                return Flow::Normal;
+
+            case K::ExpressionStatement: {
+                ConstValue v = eval(static_cast<nodes::ExpressionStatement*>(s)->expr);
+                return v.ok() ? Flow::Normal : fail(v);
+            }
+
+            case K::VariableDeclaration: {
+                auto* vd = static_cast<nodes::VariableDeclaration*>(s);
+                if (!vd->symbol || !vd->m_bindings.empty()) return fail({});
+                Local slot;
+                slot.type = m_types.canonicalize(vd->get_type_info());
+                if (vd->m_initializer) {
+                    ConstValue v = eval(vd->m_initializer);
+                    if (!v.ok()) return fail(v);
+                    slot.value = coerce(v, slot.type);
+                    if (!slot.value.ok()) return fail(slot.value);
+                }
+                m_frames.back().locals[vd->symbol] = slot;
+                return Flow::Normal;
+            }
+
+            case K::ReturnStatement: {
+                auto* r = static_cast<nodes::ReturnStatement*>(s);
+                if (!r->has_value()) return fail({});
+                ConstValue v = eval(r->get_value());
+                if (!v.ok()) return fail(v);
+                m_frames.back().result = v;
+                return Flow::Return;
+            }
+
+            case K::IfStatement: {
+                auto* is = static_cast<nodes::IfStatement*>(s);
+
+                for (nodes::IfBranch* br : is->branches) {
+                    bool taken = false;
+
+                    if (br->condition && br->condition->kind == K::VariableDeclaration) {
+                        const Flow f = exec(br->condition);
+                        if (f != Flow::Normal) return f;
+                        auto* vd = static_cast<nodes::VariableDeclaration*>(br->condition);
+                        ConstValue v = eval_symbol(vd->symbol);
+                        bool ok = false;
+                        taken = truthy(v, ok);
+                        if (!ok) return fail(v);
+                    } else if (!test(br->condition, taken)) {
+                        return Flow::Fail;
+                    }
+
+                    if (taken) return exec(br->body);
+                }
+
+                return exec(is->else_branch);
+            }
+
+            case K::WhileStatement: {
+                auto* w = static_cast<nodes::WhileStatement*>(s);
+
+                for (;;) {
+                    bool taken = false, stop = false;
+                    if (!test(w->condition, taken)) return Flow::Fail;
+                    if (!taken) return Flow::Normal;
+                    const Flow f = exec_loop_body(w->body, stop);
+                    if (stop) return f == Flow::Normal ? Flow::Normal : f;
+                    if (++m_steps > kMaxSteps) return fail(ConstValue::error(ConstValue::Fail::StepLimit));
+                }
+            }
+
+            case K::DoWhileStatement: {
+                auto* w = static_cast<nodes::DoWhileStatement*>(s);
+
+                for (;;) {
+                    bool taken = false, stop = false;
+                    const Flow f = exec_loop_body(w->body, stop);
+                    if (stop) return f == Flow::Normal ? Flow::Normal : f;
+                    if (!test(w->condition, taken)) return Flow::Fail;
+                    if (!taken) return Flow::Normal;
+                    if (++m_steps > kMaxSteps) return fail(ConstValue::error(ConstValue::Fail::StepLimit));
+                }
+            }
+
+            case K::ForStatement: {
+                auto* fs = static_cast<nodes::ForStatement*>(s);
+
+                if (fs->has_var_init) {
+                    const Flow f = exec(fs->var_init);
+                    if (f != Flow::Normal) return f;
+                } else if (fs->initializer) {
+                    ConstValue v = eval(fs->initializer);
+                    if (!v.ok()) return fail(v);
+                }
+
+                for (;;) {
+                    bool taken = true, stop = false;
+                    if (fs->condition && !test(fs->condition, taken)) return Flow::Fail;
+                    if (!taken) return Flow::Normal;
+                    const Flow f = exec_loop_body(fs->body, stop);
+                    if (stop) return f == Flow::Normal ? Flow::Normal : f;
+
+                    if (fs->increment) {
+                        ConstValue v = eval(fs->increment);
+                        if (!v.ok()) return fail(v);
+                    }
+
+                    if (++m_steps > kMaxSteps) return fail(ConstValue::error(ConstValue::Fail::StepLimit));
+                }
+            }
+
+            case K::SingleStatement: {
+                using V = nodes::SingleStatement::Variant;
+                switch (static_cast<nodes::SingleStatement*>(s)->variant) {
+                    case V::Break:    return Flow::Break;
+                    case V::Continue: return Flow::Continue;
+                    default:          return fail({});
+                }
+            }
+
+            case K::StaticAssertDeclaration: return Flow::Normal;
+            default:                          return fail({});
         }
     }
 
@@ -365,7 +851,7 @@ private:
     }
 
     ConstValue eval_binary(nodes::BinaryExpression* b) {
-        if (is_assignment_op(b->op)) return {};          // never a constant expression
+        if (is_assignment_op(b->op)) return m_frames.empty() ? ConstValue{} : eval_assign(b);
 
         if (b->op == TK::LogicAnd || b->op == TK::LogicOr) {
             ConstValue l = eval(b->left);
@@ -380,6 +866,12 @@ private:
 
         ConstValue l = eval(b->left), r = eval(b->right);
         if (!l.ok()) return l;                         
+        if (!r.ok()) return r;
+        return apply_binary(b->op, l, r, b);
+    }
+
+    ConstValue apply_binary(TK op, ConstValue l, ConstValue r, nodes::BinaryExpression* b) {
+        if (!l.ok()) return l;
         if (!r.ok()) return r;
 
         if (l.is_float() || r.is_float()) {
@@ -398,16 +890,16 @@ private:
             }
 
             if (!l.is_float() || !r.is_float()) return {};
-            ConstValue v = narrow(eval_float_op(b->op, *l.f, *r.f), b);
+            ConstValue v = narrow(eval_float_op(op, *l.f, *r.f), b);
             if (v.ok() && lossy && v.fail == ConstValue::Fail::NotConstant) v.fail = ConstValue::Fail::Precision;
             return v;
         }
 
-        if (l.is_int() && r.is_int()) return narrow(eval_int_op(b->op, *l.i, *r.i, shape_for(b)), b);
+        if (l.is_int() && r.is_int()) return narrow(eval_int_op(op, *l.i, *r.i, shape_for(b)), b);
 
         if (l.is_bool() && r.is_bool()) {
-            if (b->op == TK::LogicEqual) return make_bool(l.b == r.b);
-            if (b->op == TK::NotEqual)   return make_bool(l.b != r.b);
+            if (op == TK::LogicEqual) return make_bool(l.b == r.b);
+            if (op == TK::NotEqual)   return make_bool(l.b != r.b);
         }
 
         return {};
@@ -586,6 +1078,7 @@ private:
                 else if (v.is_bool())  w = WideInt(std::uint64_t(v.b ? 1 : 0));
                 else return {};
                 
+                if (dst->base() == BK::Char) return char_fits(w) ? make_int(w) : ConstValue{};
                 if (!ConstTable::fits(w, bit_width_of_rank(dst->width()), !dst->is_unsigned())) return {};
                 return make_int(w);
             }

@@ -26,7 +26,7 @@ nodes::ASTNode* Parser::parse_for_loop() {
     if (current_token().kind() == tokenizing::Token::Kind::Semicolon || current_token().kind() == tokenizing::Token::Kind::Comma) {
         advance();
     } else {
-        if (is_declaration_token(current_token()) || is_variable_modifier(current_token().kind())) {
+        if (is_declaration_token(current_token()) || is_variable_modifier(current_token().kind()) || looks_like_declaration()) {
             std::size_t line = current_token().line();
             modifiers::RawModifiers mods = parse_raw_modifiers();
             initializer_stmt = parse_variable_declaration(mods, line);
@@ -41,7 +41,7 @@ nodes::ASTNode* Parser::parse_for_loop() {
             nodes::ASTNode* body = parse_statement();
 
             if (has_var_init) {
-                return make<nodes::ForStatement>(initializer_stmt, nullptr, increment, body);
+                return make<nodes::ForStatement>(initializer_stmt, nullptr, static_cast<nodes::ASTNode*>(nullptr), increment, body);
             } else {
                 return make<nodes::ForStatement>(initializer_expr, nullptr, increment, body);
             }

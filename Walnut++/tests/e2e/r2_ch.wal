@@ -1,0 +1,4 @@
+string: s = "日本";
+for (char: c in s) { println(c); }
+char: x = s[0];
+println(x);

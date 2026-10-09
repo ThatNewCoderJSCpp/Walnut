@@ -24,6 +24,7 @@ public:
     TemplateArgument* alignment = nullptr;   
     semantics::Symbol* resolved = nullptr;  
     semantics::Type* canonical = nullptr;    
+    bool has_angle_args = false;
 
 public:
     TypeInfo() = default;
@@ -107,6 +108,8 @@ inline TypeInfo TypeInfo::clone_into(Arena& arena) const {
     copy.type = type ? type->clone_into(arena) : nullptr;
     copy.modifiers = modifiers;
     copy.indirection = indirection;
+    copy.resolved = resolved;
+    copy.has_angle_args = has_angle_args;
     copy.template_args.reserve(template_args.size());
 
     for (const TemplateArgument* a : template_args) {

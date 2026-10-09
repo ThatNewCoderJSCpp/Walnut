@@ -1,0 +1,12 @@
+import {
+    mathlib::gcd from "lib/mathlib.wal" as gcd
+    mathlib::Frac from "lib/mathlib.wal"
+}
+function main() -> int {
+    println(gcd(84, 36));
+    mathlib::Frac: f = mathlib::Frac(84, 36);
+    mathlib::Frac: r = f.reduced();
+    println(r.n, r.d);
+    return 0;
+}
+end function main

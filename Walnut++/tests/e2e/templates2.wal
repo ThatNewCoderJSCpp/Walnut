@@ -1,0 +1,18 @@
+template <typename T>
+struct S {
+    static int: n;
+    static function k() -> int { return 41; } end function k
+} end struct S
+template <typename T = int, int N = 3>
+struct D { function size() const -> int { return N; } end function size } end struct D
+template <typename T>
+struct Box {
+    T: v;
+    template <typename U>
+    function id(U: u) const -> U { return u; } end function id
+} end struct Box
+println(S<int>::k(), S<int>::n);
+D<>: a;
+println(a.size());
+Box<int>: b;
+println(b.id(5));

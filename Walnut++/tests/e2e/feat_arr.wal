@@ -1,0 +1,37 @@
+function make(int: n) -> array[] int {
+    array int: out[n];
+    for (int: i = 0; i < n; i++) { out[i] = i * i; }
+    return out;
+}
+end function make
+function three() -> array[3] int {
+    array[3] int: t = {7, 8, 9};
+    return t;
+}
+end function three
+template <int N>
+function total(array[N] int: a) -> int {
+    int: s = 0;
+    for (int: i = 0; i < N; i++) { s += a[i]; }
+    return s;
+}
+end function total
+struct Outer {
+    using Inner = array[4] long int;
+} end struct Outer
+function main() -> int {
+    array int: a[] = make(4);
+    println(countof(a), a[3]);
+    array int: b[] = a;
+    b[0] = 100;
+    println(a[0], b[0]);
+    array int: c[3] = three();
+    println(c[0], c[2]);
+    array[3] int: d = three();
+    println(total(d), total(c));
+    array[] int: e = make(3);
+    println(countof(e));
+    println(sizeof(Outer::Inner));
+    return 0;
+}
+end function main

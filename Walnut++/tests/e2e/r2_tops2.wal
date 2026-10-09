@@ -1,0 +1,7 @@
+template <typename T>
+struct W {
+    T: v;
+    operator([]) function (int: i) const -> T { return v; }
+} end struct W
+W<int>: a = W<int>{ 7 };
+println(a[0]);

@@ -190,6 +190,21 @@ nodes::ASTNode* Parser::parse_array_declaration(const modifiers::RawModifiers& a
 
     if (match(tokenizing::Token::Kind::Equal)) {
         has_equals = true;
+
+        if (!concrete_match(tokenizing::Token::Kind::LeftCurly)) {
+            nodes::ASTNode* source = parse_expression();
+
+            if (!concrete_match(tokenizing::Token::Kind::Semicolon) && !concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
+                throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::Semicolon, "Array declaration must end with a semicolon");
+            }
+
+            consume_semicolons();
+            parser_types::TypeInfo info;
+            info.type = make<parser_types::ArrayType>(element_type, dimension, dimension_expr);
+            info.modifiers = array_mods;
+            return make<nodes::VariableDeclaration>(info, array_name, source, static_cast<std::uint32_t>(line_number));
+        }
+
         initializer = parse_brace_initializer_list();
     } else if (concrete_match(tokenizing::Token::Kind::LeftCurly)) {
         initializer = parse_brace_initializer_list();

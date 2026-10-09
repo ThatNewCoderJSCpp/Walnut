@@ -1,0 +1,3 @@
+struct Opt { int: v; operator(bool) function () const { return v > 0; } } end struct Opt
+Opt: a = Opt{ 3 };
+println(a && true);

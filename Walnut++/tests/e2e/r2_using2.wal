@@ -1,0 +1,11 @@
+namespace a {
+    int: w = 4;
+    function f() -> int { return 5; } end function f
+}
+end namespace a
+function main() -> int {
+    using namespace a;
+    println(w, f());
+    return 0;
+}
+end function main

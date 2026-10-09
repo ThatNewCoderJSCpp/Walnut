@@ -1,0 +1,12 @@
+class A {
+ public:
+    static int: count;
+    function f() const virtual -> int { return 1; } end function f
+} end class A
+class B extends A { } end class B
+class C extends B {
+ public:
+    function f() const override -> int { return B::f() + 10; } end function f
+} end class C
+C: c;
+println(c.f(), C::count);

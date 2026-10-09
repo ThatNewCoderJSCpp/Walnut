@@ -1,0 +1,7 @@
+struct S {
+    int: v;
+    function get() const -> int { return v; } end function get
+    function set(int: x) -> void { v = x; } end function set
+} end struct S
+const S: s = S{ 3 };
+println(s.get());

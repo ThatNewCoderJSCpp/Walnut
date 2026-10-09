@@ -1,0 +1,20 @@
+function make(int: n) -> array[] int {
+    array int: out[n];
+    for (int: i = 0; i < n; i++) { out[i] = i * i; }
+    return out;
+}
+end function make
+function three() -> array[3] int {
+    array[3] int: t = {7, 8, 9};
+    return t;
+}
+end function three
+function main() -> int {
+    array[3] int: d = three();
+    array[] int: e = make(3);
+    array[] int: f = d;
+    array[3] int: g = d;
+    println(countof(e), e[2], d[1], countof(f), g[2]);
+    return 0;
+}
+end function main

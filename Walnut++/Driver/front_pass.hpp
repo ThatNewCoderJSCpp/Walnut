@@ -51,13 +51,9 @@ public:
         return it == m_results.end() ? nullptr : &it->second;
     }
 
-    void enforce_primary_constructor(bool enable) { m_enforce_prim = enable; }
-
 private:
     ErrorReporter& m_reporter;
     Arena&         m_arena;
-
-    bool m_enforce_prim = false;
 
     std::unordered_map<FileId, UnitFrontResult> m_results;
     std::vector<FileId>                         m_order;
@@ -67,7 +63,6 @@ private:
         ScopedFile _f(m_reporter, unit.file);
         semantics::AnalysisContext ctx(m_arena, m_reporter);
         semantics::ScopeBuilder builder(ctx);
-        if (m_enforce_prim) { builder.set_enforce_primary(true); }
         semantics::Scope* root = builder.build(unit.ast);
         semantics::ImportResolver resolver(ctx);
         resolver.run(unit.ast);

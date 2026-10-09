@@ -12,6 +12,8 @@
 #include "const_evaluator.hpp"
 #include "../Parser/nodes.hpp"
 
+#include <deque>
+
 #include <functional>
 #include <unordered_map>
 #include <vector>
@@ -21,16 +23,7 @@ namespace semantics {
 
 class Instantiator {
 public:
-    struct Arg {
-        Type*            type    = nullptr;
-        const WideInt*   value   = nullptr;   
-        const WideFloat* fvalue  = nullptr;   
-        bool             is_type = true;
-
-        bool operator==(const Arg& o) const {
-            return is_type == o.is_type && type == o.type && value == o.value && fvalue == o.fvalue;
-        }
-    };
+    using Arg = TemplateArg;
 
     struct Instantiation {
         nodes::TemplateDeclaration* source = nullptr;
@@ -68,9 +61,43 @@ public:
 
 public:
     Instantiator(Arena& arena, TypeContext& types, ErrorReporter& reporter, WarningReporter& warnings)
-        : m_arena(arena), m_types(types), m_reporter(reporter), m_warnings(warnings), m_eval(types) {}
+        : m_arena(arena), m_types(types), m_reporter(reporter), m_warnings(warnings), m_eval(types)
+    {
+        m_types.value_arg_hook  = [this](nodes::ASTNode* e, TemplateArg& out) { return classify_value_arg(e, out); };
+        m_types.value_eval_hook = [this](nodes::ASTNode* e, TemplateArg& out) { return eval_value_arg(e, out); };
+        m_types.value_symbol_hook = [this](Symbol* s, TemplateArg& out) { return classify_value_symbol(s, out); };
+        m_types.member_type_hook = [this](Type* rec, std::string_view name) -> Type* { return member_type(rec, name); };
+        m_types.callable_hook = [this](Type* rec, Type* sig) -> Symbol* { return call_operator_for(rec, sig); };
+        m_types.extent_param_hook = [](nodes::ASTNode* e) -> Symbol* {
+            if (!e || e->kind != nodes::ASTNode::Kind::Identifier) return nullptr;
+            Symbol* s = static_cast<nodes::Identifier*>(e)->resolved;
+            return is_value_param(s) ? s : nullptr;
+        };
+        m_types.instance_primary_hook = [this](Symbol* s) -> Symbol* { return primary_of_instance(s); };
+        m_types.default_instance_hook = [this](Symbol* s) -> Type* {
+            Instantiation* I = instantiate_impl(s, {}, nullptr, false);
+            return (I && I->type) ? I->type : nullptr;
+        };
+        m_types.instance_type_hook = [this](Symbol* s) -> Type* {
+            Instantiation* I = owning(s);
+            return (I && I->sym == s && I->type && I->type->is_record()) ? I->type : nullptr;
+        };
+        m_types.record_scope_hook = [this](RecordType* rt) -> Scope* {
+            Instantiation* I = for_record(rt, nullptr);
+            return (I && I->sym) ? I->sym->inner_scope : nullptr;
+        };
+    }
+
+    Instantiator(const Instantiator&) = delete;
+    Instantiator& operator=(const Instantiator&) = delete;
 
     std::function<void(nodes::ASTNode*, Scope*)> build_scopes;
+    Arena& arena() { return m_arena; }
+    std::string_view keep_name(std::string name) { m_pack_names.push_back(std::move(name)); return m_pack_names.back(); }
+    std::size_t kept_names() const { return m_pack_names.size(); }
+    std::function<void(nodes::ASTNode*, Scope*)> resolve_names;
+    std::function<bool(nodes::TemplateDeclaration*, const SubstEnv&, nodes::ASTNode*, bool)> check_constraints;
+    std::size_t constraint_failures = 0;
 
     Instantiation* instantiate(Symbol* generic, std::vector<Arg> args, nodes::ASTNode* site) {
         return instantiate_impl(generic, std::move(args), site, false);
@@ -83,7 +110,12 @@ public:
         if (!rt || !rt->is_instantiation()) return nullptr;
         std::vector<Arg> args;
         args.reserve(rt->args().size());
-        for (Type* t : rt->args()) { Arg a; a.type = t; args.push_back(a); }
+
+        for (const TemplateArg& a : rt->args()) {
+            if (a.is_dependent_value()) return nullptr;
+            args.push_back(a);
+        }
+
         return instantiate_impl(rt->decl(), std::move(args), site, false);
     }
 
@@ -117,7 +149,14 @@ public:
 
         auto* fd = static_cast<nodes::FunctionDeclaration*>(tmpl->m_declaration);
 
+        struct SuspendGuard {
+            TypeContext& t; std::vector<const SubstEnv*> saved;
+            explicit SuspendGuard(TypeContext& tc) : t(tc), saved(tc.suspend_subst()) {}
+            ~SuspendGuard() { t.resume_subst(std::move(saved)); }
+        };
+
         if (const nodes::FunctionParameters* ps = fd->get_parameters()) {
+            SuspendGuard suspend(m_types);
             std::size_t nfix_fn = ps->size();
             Type* last_pattern = nullptr;
             std::vector<Symbol*> last_pks;
@@ -159,7 +198,10 @@ public:
         for (const parser_types::TemplateArgument* w : written) {
             Arg a;
 
-            if (w && w->is_type()) {
+            if (w && w->is_type() && !w->is_pack && is_value_symbol(w->type.resolved)
+                && w->type.indirection.empty() && w->type.template_args.empty()) {
+                if (!const_to_arg(m_eval.value_of(w->type.resolved), a)) { ok = false; continue; }
+            } else if (w && w->is_type()) {
                 Type* t = m_types.canonicalize(w->type);
                 a.type = w->is_pack ? m_types.pack_expansion(t) : t;
             } else if (w && w->is_value()) {
@@ -205,8 +247,18 @@ private:
         }
     };
 
+    Symbol* primary_of_instance(Symbol* s) const {
+        Instantiation* I = owning(s);
+        if (!I || I->sym != s || !I->source || !I->source->m_declaration) return s;
+        nodes::ASTNode* d = I->source->m_declaration;
+        if (d->kind == nodes::ASTNode::Kind::RecordDeclaration) { if (Symbol* p = static_cast<nodes::RecordDeclaration*>(d)->symbol) return p; }
+        if (d->kind == nodes::ASTNode::Kind::FunctionDeclaration) { if (Symbol* p = static_cast<nodes::FunctionDeclaration*>(d)->symbol) return p; }
+        return s;
+    }
+
     Instantiation* instantiate_impl(Symbol* generic, std::vector<Arg> args, nodes::ASTNode* site, bool quiet) {
         using K = nodes::ASTNode::Kind;
+        if (generic && !generic->template_decl) generic = primary_of_instance(generic);
         nodes::TemplateDeclaration* tmpl = generic ? generic->template_decl : nullptr;
 
         if (!tmpl) {
@@ -261,19 +313,31 @@ private:
             }
         }
 
+        if (Instantiation* outer = owning(generic); outer && outer != I) {
+            for (const auto& kv : outer->env.types)   I->env.types.emplace(kv.first, kv.second);
+            for (const auto& kv : outer->env.values)  I->env.values.emplace(kv.first, kv.second);
+            for (const auto& kv : outer->env.fvalues) I->env.fvalues.emplace(kv.first, kv.second);
+            for (const auto& kv : outer->env.packs)   I->env.packs.emplace(kv.first, kv.second);
+        }
+
+        if (check_constraints && !check_constraints(chosen, I->env, site, quiet)) {
+            m_memo.erase(Key{ generic, I->args });
+            ++constraint_failures;
+            return nullptr;
+        }
+
         ++m_depth;
         I->decl = chosen->m_declaration ? chosen->m_declaration->clone_into(m_arena) : nullptr;
-        Scope* parent = chosen->scope ? chosen->scope->parent : nullptr;
+        Scope* parent = chosen->scope;
         I->scope = make_in<Scope>(m_arena, Scope::Kind::Template, parent);
         if (I->decl && build_scopes) build_scopes(I->decl, I->scope);
+        if (I->decl && resolve_names) resolve_names(I->decl, I->scope);
         I->sym = entity_symbol(I->decl);
         m_scope_owner.emplace(I->scope, I);
         if (I->sym && I->sym->inner_scope) m_scope_owner.emplace(I->sym->inner_scope, I);
 
         if (I->decl && I->decl->kind == K::RecordDeclaration) {
-            std::vector<Type*> targs;
-            for (const Arg& a : args) if (a.is_type) targs.push_back(a.type);
-            I->type = m_types.record(generic, std::move(targs), CV{});
+            I->type = m_types.record(generic, TemplateArgs(args.begin(), args.end()), CV{});
         } else if (I->decl && I->decl->kind == K::FunctionDeclaration) {
             auto* fd = static_cast<nodes::FunctionDeclaration*>(I->decl);
             DiagnosticTrap trap(m_reporter);
@@ -310,8 +374,20 @@ private:
 
             for (std::size_t i = 0; i < fixed && ok; ++i) {
                 const parser_types::TemplateArgument* w = (*written)[i];
-                if (!w || !w->is_type() || !args[i].is_type) { ok = false; break; }
-                ok = deduce(m_types.canonicalize(w->type), args[i].type, env, m_types);
+                if (!w) { ok = false; break; }
+
+                if (w->is_type() && !(args[i].is_type == false && is_value_symbol(w->type.resolved))) {
+                    if (!args[i].is_type) { ok = false; break; }
+                    ok = deduce(m_types.canonicalize(w->type), args[i].type, env, m_types);
+                } else if (w->is_type()) {
+                    TemplateArg pattern;
+                    if (classify_value_symbol(w->type.resolved, pattern) <= 0) { ok = false; break; }
+                    ok = deduce_template_arg(pattern, args[i], env, m_types);
+                } else {
+                    TemplateArg pattern;
+                    if (!w->value || !classify_value_arg(w->value, pattern)) { ok = false; break; }
+                    ok = deduce_template_arg(pattern, args[i], env, m_types);
+                }
             }
 
             if (ok && tpack) {
@@ -333,6 +409,7 @@ private:
             }
 
             if (!ok || !bindings_complete(st, env)) continue;
+            if (!pattern_matches(*written, fixed, args, env)) continue;
 
             if (st->params().empty()) {          // full specialization / exact match
                 full.tmpl = st;
@@ -362,7 +439,7 @@ private:
         if (const nodes::FunctionParameters* ps = fd->get_parameters()) {
             I->fn_shapes.reserve(ps->size());
 
-            for (const nodes::FunctionParameter* p : ps->m_params) {
+            for (nodes::FunctionParameter* p : ps->m_params) {
                 Type* et = m_types.canonicalize(p->get_type());
                 std::vector<Symbol*> pks;
                 collect_pack_params(et, pks);
@@ -373,12 +450,19 @@ private:
                 if (p->is_variadic() && bound) {
                     std::vector<Type*> elems;
                     if (!expand_into(m_types.pack_expansion(et), I->env, m_types, elems)) elems.assign(1, m_types.error_());
+                    p->expanded_pack = true;
+                    p->pack_symbols.clear();
 
                     for (Type* t : elems) {
                         ParamShape s{};
                         s.element = t;
                         I->fn_shapes.push_back(s);
                         param_types.push_back(t);
+                        m_pack_names.push_back(std::string(p->get_name()) + "#" + std::to_string(p->pack_symbols.size()));
+                        auto* es = make_in<Symbol>(m_arena, std::string_view(m_pack_names.back()), SymbolKind::Parameter, p);
+                        es->owner = p->symbol ? p->symbol->owner : nullptr;
+                        es->bound_type = t;
+                        p->pack_symbols.push_back(es);
                     }
                 } else {
                     I->fn_shapes.push_back(shape_of(p, m_types));
@@ -419,8 +503,137 @@ private:
         return true;
     }
 
+    static Symbol* template_param_of(nodes::ASTNode* e) {
+        if (!e) return nullptr;
+        Symbol* s = nullptr;
+        if      (e->kind == nodes::ASTNode::Kind::Identifier)          s = static_cast<nodes::Identifier*>(e)->resolved;
+        else if (e->kind == nodes::ASTNode::Kind::QualifiedIdentifier) s = static_cast<nodes::QualifiedIdentifier*>(e)->resolved;
+        return (s && s->kind == SymbolKind::TemplateParam) ? s : nullptr;
+    }
+
+    static bool refers_to_template_param(nodes::ASTNode* e) {
+        using NK = nodes::ASTNode::Kind;
+        if (!e) return false;
+        if (template_param_of(e)) return true;
+
+        switch (e->kind) {
+            case NK::UnaryExpression:      return refers_to_template_param(static_cast<nodes::UnaryExpression*>(e)->operand);
+            case NK::BitwiseNotExpression: return refers_to_template_param(static_cast<nodes::BitwiseNotExpression*>(e)->operand);
+            case NK::CastExpression:       return refers_to_template_param(static_cast<nodes::CastExpression*>(e)->operand);
+
+            case NK::BinaryExpression: {
+                auto* b = static_cast<nodes::BinaryExpression*>(e);
+                return refers_to_template_param(b->left) || refers_to_template_param(b->right);
+            }
+
+            case NK::TernaryExpression: {
+                auto* t = static_cast<nodes::TernaryExpression*>(e);
+                return refers_to_template_param(t->condition) || refers_to_template_param(t->true_branch) || refers_to_template_param(t->false_branch);
+            }
+
+            default: return false;
+        }
+    }
+
+    bool classify_value_arg(nodes::ASTNode* e, TemplateArg& out) {
+        if (Symbol* p = template_param_of(e)) { out = TemplateArg::dependent(p, e); return true; }
+        if (refers_to_template_param(e))      { out = TemplateArg::dependent(nullptr, e); return true; }
+        return eval_value_arg(e, out);
+    }
+
+    Symbol* call_operator_for(Type* rec, Type* sig) {
+        rec = m_types.strip_cv(rec);
+        if (!rec || !rec->is_record() || !sig || !sig->is_function()) return nullptr;
+        auto* rt = static_cast<RecordType*>(rec);
+        auto* ft = static_cast<FunctionType*>(sig);
+        Instantiation* I = rt->is_instantiation() ? for_record(rt, nullptr) : nullptr;
+        Symbol* owner = I ? I->sym : rt->decl();
+        Scope* sc = owner ? owner->inner_scope : nullptr;
+        if (!sc) return nullptr;
+        if (m_call_probe.count(rec)) return nullptr;
+        m_call_probe.insert(rec);
+        struct Done { std::unordered_set<Type*>& s; Type* t; ~Done() { s.erase(t); } } done{ m_call_probe, rec };
+
+        for (Symbol* o = sc->find_member("operator"); o; o = o->next_overload) {
+            if (!o->decl || o->decl->kind != nodes::ASTNode::Kind::OperatorFunctionDeclaration) continue;
+            auto* od = static_cast<nodes::OperatorFunctionDeclaration*>(o->decl);
+            if (od->get_overload() != nodes::OverloadableOperator::Call || od->is_conversion()) continue;
+            const nodes::FunctionParameters* ps = od->get_parameters();
+            const std::size_t np = ps ? ps->m_params.size() : 0;
+            if (np != ft->params().size()) continue;
+            Instantiation* oi = owning(o);
+            if (oi) m_types.push_subst(&oi->env);
+            bool ok = true;
+
+            for (std::size_t i = 0; i < np && ok; ++i) {
+                if (ps->m_params[i]->is_variadic()) { ok = false; break; }
+                ok = rank_conversion(ft->params()[i], m_types.canonicalize(ps->m_params[i]->get_type()), m_types) != ConversionRank::None;
+            }
+
+            Type* ret = m_types.canonicalize(od->get_return_type());
+            if (oi) m_types.pop_subst();
+            Type* want = ft->ret();
+            const bool void_want = want && want->is_builtin() && static_cast<BuiltinType*>(want)->is_void();
+            if (ok && !void_want) ok = ret && rank_conversion(ret, want, m_types) != ConversionRank::None;
+            if (ok) return o;
+        }
+
+        return nullptr;
+    }
+
+    std::unordered_set<Type*> m_call_probe;
+
+    Type* member_type(Type* rec, std::string_view name) {
+        rec = m_types.strip_cv(rec);
+        if (!rec || !rec->is_record()) return nullptr;
+        auto* rt = static_cast<RecordType*>(rec);
+        Instantiation* I = rt->is_instantiation() ? for_record(rt, nullptr) : nullptr;
+        Symbol* owner = I ? I->sym : rt->decl();
+        Scope* sc = owner ? owner->inner_scope : nullptr;
+        Symbol* m = sc ? sc->find_member(name) : nullptr;
+        if (!m) return nullptr;
+
+        switch (m->kind) {
+            case SymbolKind::TypeAlias: {
+                if (!m->type) return nullptr;
+                if (I) m_types.push_subst(&I->env);
+                Type* t = m_types.canonicalize(*m->type);
+                if (I) m_types.pop_subst();
+                return t;
+            }
+            case SymbolKind::Type:
+                if (m->template_decl) return nullptr;
+                if (m_types.instance_type_hook) if (Type* t = m_types.instance_type_hook(m)) return t;
+                return m_types.record(m, {}, CV{});
+            case SymbolKind::Enum:
+                return m_types.enum_(m, CV{});
+            default:
+                return nullptr;
+        }
+    }
+
+    std::deque<std::string> m_pack_names;
+
+    static bool is_value_param(Symbol* s) {
+        if (!s || s->kind != SymbolKind::TemplateParam || !s->decl || s->decl->kind != nodes::ASTNode::Kind::TemplateParameter) return false;
+        return static_cast<nodes::TemplateParameter*>(s->decl)->is_non_type_param();
+    }
+
+    static bool is_value_symbol(Symbol* s) {
+        return s && (is_value_param(s) || s->kind == SymbolKind::Variable || s->kind == SymbolKind::EnumConstant);
+    }
+
+    int classify_value_symbol(Symbol* s, TemplateArg& out) {
+        if (!is_value_symbol(s)) return 0;
+        if (is_value_param(s)) { out = TemplateArg::dependent(s, nullptr); return 1; }
+        return const_to_arg(m_eval.value_of(s), out) ? 1 : -1;
+    }
+
     bool eval_value_arg(nodes::ASTNode* e, Arg& a) {
-        ConstValue v = m_eval.eval(e);
+        return const_to_arg(m_eval.eval(e), a);
+    }
+
+    bool const_to_arg(const ConstValue& v, Arg& a) {
         switch (v.kind) {
             case ConstValue::Kind::Int:   a.is_type = false; a.value  = v.i; return true;
             case ConstValue::Kind::Float: a.is_type = false; a.fvalue = v.f; return true;
@@ -572,12 +785,6 @@ private:
             }
         }
 
-        if (tmpl->m_declaration && tmpl->m_declaration->kind == nodes::ASTNode::Kind::RecordDeclaration) {
-            for (const Arg& a : args) {
-                if (!a.is_type) { if (!quiet) unsupported(site, "non-type arguments on record templates"); return false; }
-            }
-        }
-
         return true;
     }
 
@@ -623,9 +830,16 @@ private:
             return true;
         }
 
-        if (!w->is_value()) return false;
         Arg a;
-        if (!eval_value_arg(w->value, a)) return false;
+
+        if (w->is_type()) {
+            if (w->is_pack || !is_value_symbol(w->type.resolved) || !w->type.indirection.empty() || !w->type.template_args.empty()) return false;
+            if (!const_to_arg(m_eval.value_of(w->type.resolved), a)) return false;
+        } else {
+            if (!w->is_value()) return false;
+            if (!eval_value_arg(w->value, a)) return false;
+        }
+
         if (!coerce_value_arg(p, a).ok()) return false;
         if (a.value)  env.values [p->symbol] = a.value;
         if (a.fvalue) env.fvalues[p->symbol] = a.fvalue;
@@ -680,12 +894,40 @@ private:
         return last;
     }
 
+    bool pattern_matches(const std::vector<parser_types::TemplateArgument*>& written, std::size_t fixed, const std::vector<Arg>& args, const SubstEnv& env) {
+        for (std::size_t i = 0; i < fixed && i < args.size(); ++i) {
+            const parser_types::TemplateArgument* w = written[i];
+            if (!w) return false;
+            TemplateArg pattern;
+
+            if (w->is_type() && !is_value_symbol(w->type.resolved)) {
+                pattern = TemplateArg::of_type(m_types.canonicalize(w->type));
+            } else if (w->is_type()) {
+                if (classify_value_symbol(w->type.resolved, pattern) <= 0) return false;
+            } else if (!w->value || !classify_value_arg(w->value, pattern)) {
+                return false;
+            }
+
+            if (pattern.is_type) {
+                if (subst(pattern.type, env, m_types) != args[i].type) return false;
+                continue;
+            }
+
+            TemplateArg resolved;
+            if (pattern.is_dependent_value()) { subst_value_arg(pattern, env, m_types, resolved); }
+            else                              { resolved = pattern; }
+            if (resolved.is_dependent_value() || resolved.value != args[i].value || resolved.fvalue != args[i].fvalue) return false;
+        }
+
+        return true;
+    }
+
     bool bindings_complete(nodes::TemplateDeclaration* st, const SubstEnv& env) {
         for (nodes::TemplateParameter* p : st->params()) {
             if (!p->symbol) return false;
             if (p->m_is_pack)            { if (!env.lookup_pack(p->symbol)) return false; }
             else if (p->is_type_param()) { if (!env.lookup_type(p->symbol)) return false; }
-            else                         { return false; }   // non-type params
+            else if (!env.lookup_value(p->symbol) && !env.lookup_fvalue(p->symbol)) { return false; }
         }
         return true;
     }

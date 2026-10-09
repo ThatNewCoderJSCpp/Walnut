@@ -60,7 +60,6 @@ inline constexpr ExclusiveGroup kFuncExclusive[] = {
     { FQ::Virtual   | FQ::Consteval },
     { FQ::Override  | FQ::Consteval },   
     { FQ::Consteval | FQ::Async     },
-    { FQ::Primary   | FQ::Overload  },
 };
 
 inline constexpr std::array<RequiresRule, 0> kFuncRequires{};
@@ -125,6 +124,8 @@ inline void check_modifier_conflicts(const RM& m, ErrorReporter& r, const nodes:
 }
 
 inline void check_qualifier_conflicts(const FQ& q, ErrorReporter& r, const nodes::ASTNode* site, std::string_view kind) {
+    if (q.has(FQ::Mutable)) SemanticError::modifier_rule_violation(r, site->file_id, site->line, kind, "only lambdas can be 'mutable'");
+
     for (const auto& g : kFuncExclusive) {
         if (count_bits(q.flags() & g.mask) > 1) { 
             SemanticError::conflicting_modifiers(

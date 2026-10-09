@@ -47,7 +47,16 @@ private:
     std::vector<std::string> m_include_dirs{ "include" };
     std::vector<std::pair<std::string, std::string>> m_defines;
 
-    bool m_require_primary_constructor = false;
+public:
+    struct AnalyzedUnit {
+        FileId                 file = INVALID_FILE;
+        nodes::BlockStatement* ast  = nullptr;
+        semantics::Scope*      root = nullptr;
+    };
+
+private:
+    std::vector<AnalyzedUnit> m_units;
+    FileId                    m_main_file = INVALID_FILE;
 
 public:
     explicit CompilerPipeline(
@@ -70,9 +79,14 @@ public:
     const WarningReporter& get_warnings() const noexcept { return warnings; }
     const Arena& get_arena() const noexcept { return ast_arena; }
     const SourceManager& get_sources() const noexcept { return sources; }
+    const std::vector<AnalyzedUnit>& analyzed_units() const noexcept { return m_units; }
+    FileId main_file() const noexcept { return m_main_file; }
+    semantics::TypeContext& mutable_types() noexcept { return types; }
+    semantics::Instantiator& mutable_instantiator() noexcept { return instantiator; }
+    ErrorReporter& error_reporter() noexcept { return reporter; }
+    WarningReporter& warning_reporter() noexcept { return warnings; }
     const semantics::TypeContext& get_types() const noexcept { return types; }
     const semantics::Instantiator& get_instantiator() const noexcept { return instantiator; }
-    bool get_require_primary_constructor() const noexcept { return m_require_primary_constructor; }
 
 public:
     CompilerPipeline& enable_token_output() {
@@ -146,24 +160,26 @@ public:
     CompilerPipeline& define_macro(std::string name, std::string value = "1") { m_defines.emplace_back(std::move(name), std::move(value)); return *this; }
     CompilerPipeline& suppress_warnings() { warnings.set_enabled(false); return *this; }
 
-    CompilerPipeline& require_primary_constructor(bool enable = true) {
-        m_require_primary_constructor = enable;
-        return *this;
+private:
+    bool front_end_failed() const {
+        return reporter.count(ErrorPhase::Lexer) || reporter.count(ErrorPhase::Parser)
+            || reporter.count(ErrorPhase::Preprocessor) || reporter.count(ErrorPhase::Loader);
     }
 
-private:
     void run_semantic_passes(const driver::FrontPass& front) {
-        if (reporter.has_errors()) return;
+        if (front_end_failed()) return;
         driver::ResolvePass resolver(reporter, ast_arena);
         resolver.run(front);
 
-        if (reporter.has_errors()) return;
         driver::DefinePass definitions(reporter, types);
         definitions.run(front);
 
-        if (reporter.has_errors()) return;
         driver::WalkPass walker(reporter, warnings, types, ast_arena, instantiator);
         walker.run(front);
+    }
+
+    void report_internal_error(const std::string& what) {
+        reporter.report(ErrorPhase::Semantic, INVALID_FILE, 0, "Internal compiler error: " + what);
     }
 
 public:
@@ -208,12 +224,21 @@ public:
             loader.load(*main_id);
             if (const driver::ParsedUnit* root = loader.unit(*main_id)) { ast = root->ast; }
             driver::FrontPass front(reporter, ast_arena);
-            if (m_require_primary_constructor) { front.enforce_primary_constructor(true); }
             front.run(loader.units());
+            m_units.clear();
+            m_main_file = *main_id;
+            for (FileId id : front.order()) {
+                if (const driver::UnitFrontResult* r = front.result(id)) m_units.push_back(AnalyzedUnit{ r->file, r->ast, r->root });
+            }
             driver::Linker linker(reporter, ast_arena, loader.source_manager());
             linker.run(front.results(), loader.file_edges());
             run_semantic_passes(front);
-        } catch (...) {}
+        } catch (const parsing::ParserError&) {
+        } catch (const std::exception& e) {
+            report_internal_error(e.what());
+        } catch (...) {
+            report_internal_error("unknown exception");
+        }
 
     #ifdef WALNUT_DEBUG
         if (ast && m_output_ast) {

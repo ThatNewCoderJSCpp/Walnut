@@ -1,0 +1,8 @@
+function once() -> generator<int> { co_yield 1; } end function once
+function main() -> int {
+    generator<int>: g = once();
+    for (int: x in g) { println(x); }
+    try { for (int: x in g) { println(x); } } catch (...) { println("second pass rejected"); }
+    return 0;
+}
+end function main

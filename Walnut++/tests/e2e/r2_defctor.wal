@@ -1,0 +1,6 @@
+struct S {
+    int: v;
+    constructor(int: x = 7) : v(x) { int: z = 0; }
+} end struct S
+S: s;
+println(s.v);

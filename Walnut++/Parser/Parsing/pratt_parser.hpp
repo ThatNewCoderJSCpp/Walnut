@@ -117,6 +117,13 @@ inline bool is_constructible_callee(const nodes::ASTNode* n) {
     }
 }
 
+inline nodes::ASTNode* Parser::parse_call_argument() {
+    const std::size_t line = current_token().line();
+    nodes::ASTNode* arg = parse_expression_pratt(to_int(Precedence::None));
+    if (match(tokenizing::Token::Kind::Ellipsis)) return make<nodes::UnaryExpression>(arg, tokenizing::Token::Kind::Ellipsis, false, line);
+    return arg;
+}
+
 inline bool Parser::is_fold_operator(tokenizing::Token::Kind k) {
     using K = tokenizing::Token::Kind;
     switch (k) {
@@ -226,6 +233,16 @@ inline nodes::ASTNode* Parser::parse_prefix() {
             advance();
             nodes::ASTNode* expr = parse_expression_pratt(to_int(Precedence::Unary));
             return make<nodes::DereferenceExpression>(expr, line);
+        }
+        case tokenizing::Token::Kind::DoubleAsterisk: {
+            advance();
+            nodes::ASTNode* expr = parse_expression_pratt(to_int(Precedence::Unary));
+            return make<nodes::DereferenceExpression>(make<nodes::DereferenceExpression>(expr, line), line);
+        }
+        case tokenizing::Token::Kind::Plus: {
+            advance();
+            nodes::ASTNode* expr = parse_expression_pratt(to_int(Precedence::Unary));
+            return make<nodes::UnaryExpression>(expr, tokenizing::Token::Kind::Plus, true, line);
         }
         case tokenizing::Token::Kind::Ampersand: {
             advance();
@@ -364,8 +381,8 @@ inline nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Tok
             call->set_template_args(std::move(targs));
 
             if (!concrete_match(tokenizing::Token::Kind::RightParen)) {
-                call->add_argument(parse_expression_pratt(to_int(Precedence::None)));
-                while (match(tokenizing::Token::Kind::Comma)) { call->add_argument(parse_expression_pratt(to_int(Precedence::None))); }
+                call->add_argument(parse_call_argument());
+                while (match(tokenizing::Token::Kind::Comma)) { call->add_argument(parse_call_argument()); }
             }
 
             if (!match(tokenizing::Token::Kind::RightParen)) {
@@ -419,10 +436,10 @@ inline nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Tok
         auto call = make<nodes::CallExpression>(left, line);
 
         if (!concrete_match(tokenizing::Token::Kind::RightParen)) {
-            call->add_argument(parse_expression_pratt(to_int(Precedence::None)));
+            call->add_argument(parse_call_argument());
 
             while (match(tokenizing::Token::Kind::Comma)) {
-                call->add_argument(parse_expression_pratt(to_int(Precedence::None)));
+                call->add_argument(parse_call_argument());
             }
         }
 

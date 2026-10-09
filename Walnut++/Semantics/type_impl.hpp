@@ -7,6 +7,7 @@
 #include "symbol.hpp"
 #include "../Parser/Types/type_info.hpp"
 #include "../Parser/Types/typename.hpp"
+#include "../Parser/Types/dependent_types.hpp"
 
 #include <algorithm>
 
@@ -19,7 +20,17 @@ void RecordType::write_to(std::ostream& os) const {
 
     if (!m_args.empty()) {
         os << '<';
-        for (std::size_t i = 0; i < m_args.size(); ++i) { if (i) os << ", "; m_args[i]->write_to(os); }
+
+        for (std::size_t i = 0; i < m_args.size(); ++i) {
+            if (i) os << ", ";
+            const TemplateArg& a = m_args[i];
+            if      (a.is_type && a.type) a.type->write_to(os);
+            else if (a.value)             os << *a.value;
+            else if (a.fvalue)            os << *a.fvalue;
+            else if (a.param)             os << a.param->name;
+            else                          os << "<expr>";
+        }
+
         os << '>';
     }
 }
@@ -79,6 +90,40 @@ Type* TypeContext::array(Type* element, std::optional<std::size_t> extent, CV cv
     return t;
 }
 
+Type* TypeContext::dependent_array(Type* element, Symbol* extent_param, CV cv) {
+    UnaryKey key{ TypeKind::Array, element, std::uint8_t(cv.bits() | 0x80u), static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(extent_param)), true };
+    if (auto it = m_unary.find(key); it != m_unary.end()) return it->second;
+    Type* t = make_in<ArrayType>(m_arena, element, std::nullopt, cv, extent_param);
+    mark_dependent(t, true);
+    m_unary.emplace(key, t);
+    return t;
+}
+
+Type* TypeContext::closure(nodes::ASTNode* lambda) {
+    UnaryKey key{ TypeKind::Closure, reinterpret_cast<Type*>(lambda), 0, 0, false };
+    if (auto it = m_unary.find(key); it != m_unary.end()) return it->second;
+    Type* t = make_in<ClosureType>(m_arena, lambda);
+    m_unary.emplace(key, t);
+    return t;
+}
+
+Type* TypeContext::coroutine(Type* value, bool is_generator, CV cv) {
+    UnaryKey key{ TypeKind::Coroutine, value, std::uint8_t(cv.bits() | (is_generator ? 0x40u : 0u)), 0, false };
+    if (auto it = m_unary.find(key); it != m_unary.end()) return it->second;
+    Type* t = make_in<CoroutineType>(m_arena, value, is_generator, cv);
+    mark_dependent(t, value && value->is_dependent());
+    m_unary.emplace(key, t);
+    return t;
+}
+
+void ArrayType::write_to(std::ostream& os) const {
+    os << "array[";
+    if (m_extent) os << *m_extent;
+    else if (m_extent_param) os << m_extent_param->name;
+    os << "] ";
+    m_element->write_to(os);
+}
+
 Type* TypeContext::enum_(Symbol* decl, CV cv) {
     UnaryKey key{ TypeKind::Enum, reinterpret_cast<Type*>(decl), cv.bits(), 0, false };
     if (auto it = m_unary.find(key); it != m_unary.end()) return it->second;
@@ -87,11 +132,17 @@ Type* TypeContext::enum_(Symbol* decl, CV cv) {
     return t;
 }
 
-Type* TypeContext::record(Symbol* decl, std::vector<Type*> args, CV cv) {
+Type* TypeContext::record(Symbol* decl, TemplateArgs args, CV cv) {
     RecordKey key{ decl, args, cv.bits() };
     if (auto it = m_records.find(key); it != m_records.end()) return it->second;
     Type* t = make_in<RecordType>(m_arena, decl, std::move(args), cv);
-    mark_dependent(t, any_dependent(static_cast<RecordType*>(t)->args()));
+    bool dep = false;
+
+    for (const TemplateArg& a : static_cast<RecordType*>(t)->args()) {
+        if (a.is_dependent_value() || (a.is_type && a.type && a.type->is_dependent())) { dep = true; break; }
+    }
+
+    mark_dependent(t, dep);
     m_records.emplace(std::move(key), t);
     return t;
 }
@@ -156,6 +207,7 @@ Type* TypeContext::with_cv(Type* base, CV cv) {
 
         case TypeKind::Array: {
             auto* a = static_cast<ArrayType*>(base);
+            if (a->extent_param()) return dependent_array(a->element(), a->extent_param(), cv);
             return array(a->element(), a->extent(), cv);
         }
 
@@ -166,6 +218,7 @@ Type* TypeContext::with_cv(Type* base, CV cv) {
 
         case TypeKind::Enum: return enum_(static_cast<EnumType*>(base)->decl(), cv);
         case TypeKind::TypeParam: return type_param(static_cast<TypeParamType*>(base)->param(), cv);
+        case TypeKind::Coroutine: return coroutine(static_cast<CoroutineType*>(base)->value(), static_cast<CoroutineType*>(base)->is_generator(), cv);
             
         default:
             return base;
@@ -174,7 +227,8 @@ Type* TypeContext::with_cv(Type* base, CV cv) {
 
 Type* TypeContext::apply_subst(Type* t) {
     if (!t || !t->is_dependent() || m_subst.empty()) return t;
-    for (auto it = m_subst.rbegin(); it != m_subst.rend(); ++it) t = subst(t, **it, *this);
+    const std::vector<const SubstEnv*> stack = m_subst;
+    for (auto it = stack.rbegin(); it != stack.rend(); ++it) t = subst(t, **it, *this);
     return t;
 }
 
@@ -213,11 +267,29 @@ Symbol* strip_aliases(Symbol* s) {
 
 Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
     if (info.canonical) return apply_subst(info.canonical);  
+    const std::size_t dims_before = m_dim_evals;
     const CV base_cv = cv_from_modifiers(info.modifiers);
     Type* base = nullptr;
-    Symbol* sym = strip_aliases(info.resolved);
+    Symbol* sym = info.resolved;
+    while (sym && sym->is_imported && sym->import_target) sym = sym->import_target;
 
-    if (sym) {
+    if (sym && sym->kind == SymbolKind::TypeAlias && sym->type && sym->type != &info) {
+        Type* target = canonicalize(*sym->type);
+        if (target) {
+            CV merged = target->cv();
+            merged.is_const = merged.is_const || base_cv.is_const;
+            merged.is_volatile = merged.is_volatile || base_cv.is_volatile;
+            base = target->is_reference() ? target : with_cv(target, merged);
+        } else {
+            base = error_();
+        }
+        sym = nullptr;
+    } else {
+        sym = strip_aliases(info.resolved);
+    }
+
+    if (base) {
+    } else if (sym) {
         switch (sym->kind) {
             case SymbolKind::Enum:
                 base = enum_(sym, base_cv);
@@ -227,23 +299,94 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
                 break;
             case SymbolKind::Type:
             default: {
-                std::vector<Type*> args;
+                TemplateArgs args;
                 args.reserve(info.template_args.size());
+                bool bad_value = false;
 
                 for (const parser_types::TemplateArgument* a : info.template_args) {
-                    if (a && a->is_type()) {
+                    if (!a) continue;
+
+                    if (a->is_type()) {
+                        if (value_symbol_hook && !a->is_pack && a->type.indirection.empty() && a->type.template_args.empty()) {
+                            TemplateArg v;
+                            const int r = value_symbol_hook(a->type.resolved, v);
+                            if (r < 0) { bad_value = true; break; }
+                            if (r > 0) { args.push_back(v); continue; }
+                        }
+
                         Type* t = canonicalize(a->type);
-                        args.push_back(a->is_pack ? pack_expansion(t) : t);
+                        args.push_back(TemplateArg::of_type(a->is_pack ? pack_expansion(t) : t));
+                    } else if (a->is_value()) {
+                        TemplateArg v;
+                        if (!a->value || !value_arg_hook || !value_arg_hook(a->value, v)) { bad_value = true; break; }
+                        args.push_back(v);
                     }
                 }
 
-                base = record(sym, std::move(args), base_cv);
+                if (!bad_value && args.empty() && info.has_angle_args && sym->template_decl && default_instance_hook) {
+                    if (Type* inst = default_instance_hook(sym)) { base = with_cv(inst, base_cv); break; }
+                }
+
+                if (!bad_value && args.empty() && instance_type_hook) {
+                    if (Type* inst = instance_type_hook(sym)) { base = with_cv(inst, base_cv); break; }
+                }
+
+                if (!bad_value && !args.empty() && !sym->template_decl && instance_primary_hook) sym = instance_primary_hook(sym);
+                base = bad_value ? error_() : record(sym, std::move(args), base_cv);
                 break;
             }
         }
+    } else if (info.type && info.type->is_qualified() && static_cast<parser_types::QualifiedType*>(info.type)->has_prefix()) {
+        auto* qt = static_cast<parser_types::QualifiedType*>(info.type);
+        Type* prefix = canonicalize(qt->prefix());
+        Type* target = nullptr;
+        if (prefix && prefix->is_dependent()) target = dependent_name(strip_cv(prefix), qt->name());
+        else if (prefix && strip_cv(prefix)->is_record() && member_type_hook) target = member_type_hook(strip_cv(prefix), qt->name());
+
+        if (!target) {
+            base = error_();
+        } else {
+            CV merged = target->cv();
+            merged.is_const = merged.is_const || base_cv.is_const;
+            merged.is_volatile = merged.is_volatile || base_cv.is_volatile;
+            base = target->is_reference() ? target : with_cv(target, merged);
+        }
+    } else if (!sym && info.type && info.type->is_user_defined() && info.template_args.size() == 1 && info.template_args[0] && info.template_args[0]->is_type()
+               && static_cast<parser_types::UserDefinedType*>(info.type)->parts().size() == 1
+               && (static_cast<parser_types::UserDefinedType*>(info.type)->name() == "generator" || static_cast<parser_types::UserDefinedType*>(info.type)->name() == "task")) {
+        Type* value = canonicalize(info.template_args[0]->type);
+        base = coroutine(value, static_cast<parser_types::UserDefinedType*>(info.type)->name() == "generator", base_cv);
     } else if (info.type && info.type->is_primitive()) {
         auto* p = static_cast<parser_types::PrimitiveType*>(info.type);
         base = builtin(p->base_kind(), p->length_modifier(), p->is_unsigned(), p->used_long_form(), base_cv);
+    } else if (info.type && info.type->is_array()) {
+        auto* at = static_cast<parser_types::ArrayType*>(info.type);
+        Type* el = canonicalize(at->element_type());
+        std::optional<std::size_t> extent = at->dimension();
+
+        Symbol* extent_param = nullptr;
+
+        if (!extent && at->dimension_expr() && value_eval_hook) {
+            ++m_dim_evals;
+            TemplateArg v;
+            if (value_eval_hook(const_cast<nodes::ASTNode*>(at->dimension_expr()), v) && v.value && !v.value->is_negative()) extent = static_cast<std::size_t>(v.value->get_lowest_bits());
+            else if (extent_param_hook) extent_param = extent_param_hook(const_cast<nodes::ASTNode*>(at->dimension_expr()));
+        }
+
+        if (extent_param && !(el && el->is_reference())) {
+            base = dependent_array(el, extent_param, base_cv);
+        } else if (el && el->is_reference()) {
+            auto* r = static_cast<ReferenceType*>(el);
+            base = reference(array(r->referent(), extent, CV{}), r->ref_qual(), base_cv);
+        } else {
+            base = array(el, extent, base_cv);
+        }
+    } else if (info.type && info.type->is_function_pointer()) {
+        auto* fp = static_cast<parser_types::FunctionPointerType*>(info.type);
+        std::vector<Type*> params;
+        params.reserve(fp->param_count());
+        for (const parser_types::TypeInfo& pt : fp->param_types()) params.push_back(canonicalize(pt));
+        base = function(canonicalize(fp->return_type()), std::move(params), false, RefQual::None, false);
     } else {
         base = dynamic_();   
     }
@@ -260,7 +403,7 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
         }
     }
 
-    const_cast<parser_types::TypeInfo&>(info).canonical = result;    
+    if (m_dim_evals == dims_before) const_cast<parser_types::TypeInfo&>(info).canonical = result;    
     return apply_subst(result);   
 }
 

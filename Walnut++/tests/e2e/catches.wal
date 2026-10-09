@@ -1,0 +1,28 @@
+struct NotFound { string: what; } end struct NotFound
+struct Bad { int: code; } end struct Bad
+function probe(int: k) -> int {
+    if (k == 1) then { throw NotFound{ "key" }; }
+    if (k == 2) then { throw Bad{ 42 }; }
+    if (k == 3) then { throw "text"; }
+    if (k == 4) then { int: z = 0; return 10 / z; }
+    return k;
+}
+end function probe
+function main() -> int {
+    for (int: k = 0; k <= 4; k++) {
+        try {
+            println("ok", probe(k));
+        } catch (const NotFound&: e) {
+            println("not found", e.what);
+        } catch (Bad: b) {
+            println("bad", b.code);
+            try { throw 7; } catch (int: n) { println("nested", n); }
+        } catch (string: s) {
+            println("string", s);
+        } catch (...) {
+            println("other");
+        }
+    }
+    return 0;
+}
+end function main
