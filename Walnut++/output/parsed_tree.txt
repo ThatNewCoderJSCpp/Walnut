@@ -1540,7 +1540,7 @@ Block
         Name: inf_param
         Returns: double const * const **&
         Modifiers: <none>
-        Qualifiers: Noexcept 
+        Qualifiers: noexcept 
         Parameters (2)
             [0]:
                 Parameter: x
@@ -2383,7 +2383,7 @@ Block
         Name: Parser::parse_everything
         Returns: dynamic
         Modifiers: constexpr 
-        Qualifiers: Noexcept 
+        Qualifiers: noexcept 
         Parameters (2)
             [0]:
                 Parameter: x
@@ -2924,7 +2924,7 @@ Block
                     Name: multiply
                     Returns: int
                     Modifiers: <none>
-                    Qualifiers: Noexcept 
+                    Qualifiers: noexcept 
                     Parameters (2)
                         [0]:
                             Parameter: a
@@ -3361,14 +3361,14 @@ Modifiers: <none>
             [public]
                 DestructorDeclaration
                     Modifiers: <none> 
-                    Qualifiers: Virtual 
+                    Qualifiers: virtual 
                     Body: = default
             [public]
                 FunctionDeclaration
                     Name: area
                     Returns: float
                     Modifiers: <none>
-                    Qualifiers: Virtual 
+                    Qualifiers: virtual 
                     Parameters (0)
                         <none>
                     Body:
@@ -3418,7 +3418,7 @@ Modifiers: <none>
                     Name: area
                     Returns: float
                     Modifiers: <none>
-                    Qualifiers: Override 
+                    Qualifiers: override 
                     Parameters (0)
                         <none>
                     Body:
@@ -3455,7 +3455,7 @@ Modifiers: <none>
                     Name: render
                     Returns: bool
                     Modifiers: <none>
-                    Qualifiers: Override 
+                    Qualifiers: override 
                     Parameters (0)
                         <none>
                     Body:
@@ -3616,22 +3616,22 @@ Modifiers: <none>
         Name: this_file_path
         Type: string
         Initializer:
-            Literal(String): D:\Walnut\Walnut++\input.wal
+            Literal(String): /run/media/christiandavis/Development/Walnut/Walnut++/input.wal
     VariableDeclaration
         Name: this_os
         Type: string
         Initializer:
-            Literal(String): Windows
+            Literal(String): Linux
     VariableDeclaration
         Name: is_windows
         Type: constexpr  bool
         Initializer:
-            Literal(True): true
+            Literal(False): false
     VariableDeclaration
         Name: is_linux
         Type: constexpr  bool
         Initializer:
-            Literal(False): false
+            Literal(True): true
     TemplateDeclaration
         Parameters:
             TemplateParameter (type)
@@ -4276,7 +4276,7 @@ Modifiers: <none>
                     [public]
                         DestructorDeclaration
                             Modifiers: <none> 
-                            Qualifiers: Virtual 
+                            Qualifiers: virtual 
                             Body: = default
                     [public]
                         FunctionDeclaration
@@ -4796,7 +4796,7 @@ Modifiers: <none>
                             Name: render
                             Returns: bool
                             Modifiers: <none>
-                            Qualifiers: Override 
+                            Qualifiers: override 
                             Parameters (0)
                                 <none>
                             Body:
@@ -6028,44 +6028,19 @@ Modifiers: <none>
         Type: auto
         Initializer:
             TypeQueryExpression (sizeof)
-                Operand:
-                    MemberAccessExpression (::)
-                        Object:
-                            TemplateInstantiation
-                                Template:
-                                    Identifier: Box
-                                Args (1):
-                                    [0]: int
-                        Member: value_type
+                Type: Box<int>::value_type
     VariableDeclaration
         Name: dm_align
         Type: auto
         Initializer:
             TypeQueryExpression (alignof)
-                Operand:
-                    MemberAccessExpression (::)
-                        Object:
-                            TemplateInstantiation
-                                Template:
-                                    Identifier: common_type
-                                Args (2):
-                                    [0]: int
-                                    [1]: double
-                        Member: Type
+                Type: common_type<int, double>::Type
     VariableDeclaration
         Name: dm_decl_type
         Type: auto
         Initializer:
             TypeQueryExpression (decltype)
-                Operand:
-                    MemberAccessExpression (::)
-                        Object:
-                            TemplateInstantiation
-                                Template:
-                                    Identifier: Box
-                                Args (1):
-                                    [0]: int
-                        Member: value_type
+                Type: Box<int>::value_type
     VariableDeclaration
         Name: dm_decl_value
         Type: auto
@@ -6267,3 +6242,585 @@ Modifiers: <none>
                             QualifiedIdentifier: std::is_nothrow_contructible_v
                         Args (1):
                             [0]: T
+    FunctionDeclaration
+        Name: blend
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: primary 
+        Parameters (2)
+            [0]:
+                Parameter: a
+                    Type: int
+            [1]:
+                Parameter: b
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        BinaryExpression(Plus)
+                            Identifier: a
+                            Identifier: b
+    FunctionDeclaration
+        Name: blend
+        Returns: float
+        Modifiers: <none>
+        Qualifiers: overload 
+        Parameters (2)
+            [0]:
+                Parameter: a
+                    Type: float
+            [1]:
+                Parameter: b
+                    Type: float
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        BinaryExpression(Plus)
+                            Identifier: a
+                            Identifier: b
+    FunctionDeclaration
+        Name: blend
+        Returns: string
+        Modifiers: <none>
+        Qualifiers: overload 
+        Parameters (2)
+            [0]:
+                Parameter: a
+                    Type: const  string
+            [1]:
+                Parameter: b
+                    Type: const  string
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        BinaryExpression(Plus)
+                            Identifier: a
+                            Identifier: b
+    FunctionDeclaration
+        Name: blend
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: overload 
+        Parameters (1)
+            [0]:
+                Parameter: a
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        Identifier: a
+    FunctionDeclaration
+        Name: probe
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: primary 
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        Identifier: x
+    FunctionDeclaration
+        Name: probe
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: const overload 
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        BinaryExpression(Plus)
+                            Identifier: x
+                            Literal(Integer): 1
+    FunctionDeclaration
+        Name: twin
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: primary 
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        Identifier: x
+    FunctionDeclaration
+        Name: twin
+        Returns: float
+        Modifiers: <none>
+        Qualifiers: <none>
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: float
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        Identifier: x
+    FunctionDeclaration
+        Name: orphan
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: overload 
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        Identifier: x
+    FunctionDeclaration
+        Name: orphan
+        Returns: float
+        Modifiers: <none>
+        Qualifiers: overload 
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: float
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        Identifier: x
+    FunctionDeclaration
+        Name: clone_me
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: <none>
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        Identifier: x
+    FunctionDeclaration
+        Name: clone_me
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: <none>
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        BinaryExpression(Asterisk)
+                            Identifier: x
+                            Literal(Integer): 2
+    FunctionDeclaration
+        Name: confused
+        Returns: int
+        Modifiers: <none>
+        Qualifiers: primary 
+        Parameters (1)
+            [0]:
+                Parameter: x
+                    Type: int
+        Body:
+            Block
+                ReturnStatement
+                    Value:
+                        Identifier: x
+    TemplateDeclaration
+        Parameters:
+            TemplateParameter (type)
+                typename
+                Name: T
+                Default: <none>
+        Requires: <none>
+        Declaration:
+            FunctionDeclaration
+                Name: describe
+                Returns: string
+                Modifiers: <none>
+                Qualifiers: primary 
+                Parameters (1)
+                    [0]:
+                        Parameter: x
+                            Type: const  T
+                Body:
+                    Block
+                        ReturnStatement
+                            Value:
+                                Literal(String): generic
+    TemplateDeclaration (template <>)
+        Parameters: <empty>
+        Requires: <none>
+        Declaration:
+            FunctionDeclaration
+                Name: describe                Specialization Args (1):
+                    [0]: int
+
+                Returns: string
+                Modifiers: <none>
+                Qualifiers: <none>
+                Parameters (1)
+                    [0]:
+                        Parameter: x
+                            Type: const  int
+                Body:
+                    Block
+                        ReturnStatement
+                            Value:
+                                Literal(String): int
+    TemplateDeclaration (template <>)
+        Parameters: <empty>
+        Requires: <none>
+        Declaration:
+            FunctionDeclaration
+                Name: describe                Specialization Args (1):
+                    [0]: bool
+
+                Returns: string
+                Modifiers: <none>
+                Qualifiers: <none>
+                Parameters (1)
+                    [0]:
+                        Parameter: x
+                            Type: const  bool
+                Body:
+                    Block
+                        ReturnStatement
+                            Value:
+                                Literal(String): bool
+    VariableDeclaration
+        Name: d_generic
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    Identifier: describe
+                Template Args (1):
+                    [0]: float
+                Arguments (1):
+                    [0]:
+                        Literal(Float): 1.5
+    VariableDeclaration
+        Name: d_int
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    Identifier: describe
+                Template Args (1):
+                    [0]: int
+                Arguments (1):
+                    [0]:
+                        Literal(Integer): 7
+    VariableDeclaration
+        Name: d_bool
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    Identifier: describe
+                Template Args (1):
+                    [0]: bool
+                Arguments (1):
+                    [0]:
+                        Literal(True): true
+    TemplateDeclaration
+        Parameters:
+            TemplateParameter (type)
+                typename
+                Name: T
+                Default: <none>
+        Requires: <none>
+        Declaration:
+            FunctionDeclaration
+                Name: describe                Specialization Args (1):
+                    [0]: T*
+
+                Returns: string
+                Modifiers: <none>
+                Qualifiers: <none>
+                Parameters (1)
+                    [0]:
+                        Parameter: x
+                            Type: const  T*
+                Body:
+                    Block
+                        ReturnStatement
+                            Value:
+                                Literal(String): pointer
+    TemplateDeclaration (template <>)
+        Parameters: <empty>
+        Requires: <none>
+        Declaration:
+            FunctionDeclaration
+                Name: describe
+                Returns: string
+                Modifiers: <none>
+                Qualifiers: <none>
+                Parameters (1)
+                    [0]:
+                        Parameter: x
+                            Type: const  double
+                Body:
+                    Block
+                        ReturnStatement
+                            Value:
+                                Literal(String): double
+    TemplateDeclaration (template <>)
+        Parameters: <empty>
+        Requires: <none>
+        Declaration:
+            FunctionDeclaration
+                Name: never_a_template                Specialization Args (1):
+                    [0]: int
+
+                Returns: int
+                Modifiers: <none>
+                Qualifiers: <none>
+                Parameters (1)
+                    [0]:
+                        Parameter: x
+                            Type: const  int
+                Body:
+                    Block
+                        ReturnStatement
+                            Value:
+                                Identifier: x
+    TemplateDeclaration (template <>)
+        Parameters: <empty>
+        Requires: <none>
+        Declaration:
+            FunctionDeclaration
+                Name: describe                Specialization Args (2):
+                    [0]: int
+                    [1]: float
+
+                Returns: string
+                Modifiers: <none>
+                Qualifiers: <none>
+                Parameters (1)
+                    [0]:
+                        Parameter: x
+                            Type: const  int
+                Body:
+                    Block
+                        ReturnStatement
+                            Value:
+                                Literal(String): two
+    TemplateDeclaration
+        Parameters:
+            TemplateParameter (type)
+                typename
+                Name: U
+                Default: int
+        Requires: <none>
+        Declaration:
+            RecordDeclaration (class, specialization)
+                Name: Holder
+Modifiers: <none> 
+                Specialization Args (1):
+                    [0]: U&&
+                Alignas: <none>
+                Inherits: <none>
+                Members:
+                    [public]
+                        FunctionDeclaration
+                            Name: category
+                            Returns: int
+                            Modifiers: <none>
+                            Qualifiers: const 
+                            Parameters (0)
+                                <none>
+                            Body:
+                                Block
+                                    ReturnStatement
+                                        Value:
+                                            Literal(Integer): 4
+    TemplateDeclaration (template <>)
+        Parameters: <empty>
+        Requires: <none>
+        Declaration:
+            RecordDeclaration (class, specialization)
+                Name: TypeName
+Modifiers: <none> 
+                Specialization Args (1):
+                    [0]: int
+                Alignas: <none>
+                Inherits: <none>
+                Members:
+                    [public]
+                        FunctionDeclaration
+                            Name: name
+                            Returns: string
+                            Modifiers: <none>
+                            Qualifiers: const 
+                            Parameters (0)
+                                <none>
+                            Body:
+                                Block
+                                    ReturnStatement
+                                        Value:
+                                            Literal(String): int again
+    VariableDeclaration
+        Name: h_plain
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    MemberAccessExpression (.)
+                        Object:
+                            CallExpression
+                                Callee:
+                                    Identifier: Holder
+                                Template Args (1):
+                                    [0]: int
+                                Arguments (0):
+                                    <none>
+                        Member: category
+                Arguments (0):
+                    <none>
+    VariableDeclaration
+        Name: h_ptr
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    MemberAccessExpression (.)
+                        Object:
+                            CallExpression
+                                Callee:
+                                    Identifier: Holder
+                                Template Args (1):
+                                    [0]: int*
+                                Arguments (0):
+                                    <none>
+                        Member: category
+                Arguments (0):
+                    <none>
+    VariableDeclaration
+        Name: h_ref
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    MemberAccessExpression (.)
+                        Object:
+                            CallExpression
+                                Callee:
+                                    Identifier: Holder
+                                Template Args (1):
+                                    [0]: int&
+                                Arguments (0):
+                                    <none>
+                        Member: category
+                Arguments (0):
+                    <none>
+    VariableDeclaration
+        Name: h_box
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    MemberAccessExpression (.)
+                        Object:
+                            CallExpression
+                                Callee:
+                                    Identifier: Holder
+                                Template Args (1):
+                                    [0]: Box<int>
+                                Arguments (0):
+                                    <none>
+                        Member: category
+                Arguments (0):
+                    <none>
+    VariableDeclaration
+        Name: d_kv
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    MemberAccessExpression (.)
+                        Object:
+                            CallExpression
+                                Callee:
+                                    Identifier: Dict
+                                Template Args (2):
+                                    [0]: float
+                                    [1]: int
+                                Arguments (0):
+                                    <none>
+                        Member: kind
+                Arguments (0):
+                    <none>
+    VariableDeclaration
+        Name: d_int
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    MemberAccessExpression (.)
+                        Object:
+                            CallExpression
+                                Callee:
+                                    Identifier: Dict
+                                Template Args (2):
+                                    [0]: int
+                                    [1]: float
+                                Arguments (0):
+                                    <none>
+                        Member: kind
+                Arguments (0):
+                    <none>
+    VariableDeclaration
+        Name: t_int
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    MemberAccessExpression (.)
+                        Object:
+                            CallExpression
+                                Callee:
+                                    Identifier: TypeName
+                                Template Args (1):
+                                    [0]: int
+                                Arguments (0):
+                                    <none>
+                        Member: name
+                Arguments (0):
+                    <none>
+    VariableDeclaration
+        Name: t_gen
+        Type: auto
+        Initializer:
+            CallExpression
+                Callee:
+                    MemberAccessExpression (.)
+                        Object:
+                            CallExpression
+                                Callee:
+                                    Identifier: TypeName
+                                Template Args (1):
+                                    [0]: double
+                                Arguments (0):
+                                    <none>
+                        Member: name
+                Arguments (0):
+                    <none>

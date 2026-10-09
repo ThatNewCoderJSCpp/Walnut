@@ -157,11 +157,15 @@ public:
         return make_and_report(reporter, token, ss.str());
     }
 
-    static ParserError invalid_escape_sequence(ErrorReporter& reporter, const tokenizing::Token& token, const std::string& sequence) {
+    static ParserError invalid_escape_sequence(
+        ErrorReporter& reporter, const tokenizing::Token& token,
+        const std::string& why, std::size_t offset = 0
+    ) {
         std::stringstream ss;
-        ss << build_error_header(token, "String");
-        ss << "Invalid escape sequence '\\" << sequence << "'";
-        ss << "\nValid escape sequences are: \\n, \\t, \\r, \\\", \\\', \\\\";
+        ss << build_error_header(token, "String") << why;
+        if (offset) ss << " (at offset " << offset << " in the literal)";
+        ss << "\nSupported escapes: \\n \\t \\r \\a \\b \\f \\v \\0 \\\\ \\' \\\" \\?"
+              ", \\xNN, \\uXXXX, \\UXXXXXXXX, \\u{XXXXX}";
         return make_and_report(reporter, token, ss.str());
     }
 

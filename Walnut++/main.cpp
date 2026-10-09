@@ -9,9 +9,12 @@ int main() {
     try {
         const std::string& input_file = "input.wal";
         walnut::CompilerPipeline compiler(input_file);
-        compiler.report_to_stderr();
+        compiler.report_silent();
+        compiler.report_to_file();
+        compiler.warn_silent();
+        compiler.warn_to_file();
         compiler.enable_ast_output();
-        // compiler.report_timing();
+        compiler.report_timing();
         compiler.compile();
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

@@ -47,6 +47,8 @@ private:
     std::vector<std::string> m_include_dirs{ "include" };
     std::vector<std::pair<std::string, std::string>> m_defines;
 
+    bool m_require_primary_constructor = false;
+
 public:
     explicit CompilerPipeline(
         std::string input,
@@ -55,10 +57,10 @@ public:
         : input_file(std::move(input))
         , ast_arena(arena_block_size)
         , sources(ast_arena)
-        , reporter(input_file, ErrorOutput::StdErr)
-        , warnings(input_file, ErrorOutput::StdErr)
+        , reporter(ErrorOutput::StdErr)
+        , warnings(ErrorOutput::StdErr)
         , types(ast_arena)
-        , instantiator(ast_arena, types, reporter)
+        , instantiator(ast_arena, types, reporter, warnings)
     {
         reporter.set_sources(&sources);
         warnings.set_sources(&sources);
@@ -70,6 +72,7 @@ public:
     const SourceManager& get_sources() const noexcept { return sources; }
     const semantics::TypeContext& get_types() const noexcept { return types; }
     const semantics::Instantiator& get_instantiator() const noexcept { return instantiator; }
+    bool get_require_primary_constructor() const noexcept { return m_require_primary_constructor; }
 
 public:
     CompilerPipeline& enable_token_output() {
@@ -143,6 +146,11 @@ public:
     CompilerPipeline& define_macro(std::string name, std::string value = "1") { m_defines.emplace_back(std::move(name), std::move(value)); return *this; }
     CompilerPipeline& suppress_warnings() { warnings.set_enabled(false); return *this; }
 
+    CompilerPipeline& require_primary_constructor(bool enable = true) {
+        m_require_primary_constructor = enable;
+        return *this;
+    }
+
 private:
     void run_semantic_passes(const driver::FrontPass& front) {
         if (reporter.has_errors()) return;
@@ -154,7 +162,7 @@ private:
         definitions.run(front);
 
         if (reporter.has_errors()) return;
-        driver::WalkPass walker(reporter, types, ast_arena, instantiator);
+        driver::WalkPass walker(reporter, warnings, types, ast_arena, instantiator);
         walker.run(front);
     }
 
@@ -165,7 +173,7 @@ public:
         auto main_id = sources.load(input_file);
 
         if (!main_id) {
-            reporter.report(ErrorPhase::Lexer, 0, "Could not open input file: " + input_file);
+            reporter.report(ErrorPhase::Lexer, INVALID_FILE, "Could not open input file: " + input_file);
             reporter.flush();
             throw std::runtime_error("Could not open input file: " + input_file);
         }
@@ -200,12 +208,11 @@ public:
             loader.load(*main_id);
             if (const driver::ParsedUnit* root = loader.unit(*main_id)) { ast = root->ast; }
             driver::FrontPass front(reporter, ast_arena);
+            if (m_require_primary_constructor) { front.enforce_primary_constructor(true); }
             front.run(loader.units());
-            driver::Linker linker(reporter, ast_arena);
+            driver::Linker linker(reporter, ast_arena, loader.source_manager());
             linker.run(front.results(), loader.file_edges());
             run_semantic_passes(front);
-            driver::WalkPass walker(reporter, types, ast_arena, instantiator);
-            walker.run(front);
         } catch (...) {}
 
     #ifdef WALNUT_DEBUG

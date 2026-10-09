@@ -54,91 +54,7 @@ inline Type* strip_ref(Type* t) {
     return (t && t->is_reference()) ? static_cast<ReferenceType*>(t)->referent() : t;
 }
 
-inline Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
-    if (!t || !t->is_dependent() || env.empty()) return t;
-
-    switch (t->kind()) {
-        case TypeKind::TypeParam: {
-            auto* p = static_cast<TypeParamType*>(t);
-            Type* bound = env.lookup_type(p->param());
-            if (!bound) return t;                                       
-            return ctx.with_cv(bound, cv_union(bound->cv(), t->cv()));  
-        }
-
-        case TypeKind::Pointer: {
-            auto* p = static_cast<PointerType*>(t);
-            return ctx.pointer(subst(p->pointee(), env, ctx), t->cv());
-        }
-
-        case TypeKind::Reference: {
-            auto* r = static_cast<ReferenceType*>(t);
-            return ctx.reference(subst(r->referent(), env, ctx), r->ref_qual(), t->cv());
-        }
-
-        case TypeKind::Array: {
-            auto* a = static_cast<ArrayType*>(t);
-            return ctx.array(subst(a->element(), env, ctx), a->extent(), t->cv());
-        }
-
-        case TypeKind::Record: {
-            auto* r = static_cast<RecordType*>(t);
-            std::vector<Type*> args;
-            for (Type* a : r->args()) if (!expand_into(a, env, ctx, args)) return ctx.error_();
-            return ctx.record(r->decl(), std::move(args), t->cv());
-        }
-
-        case TypeKind::Function: {
-            auto* f = static_cast<FunctionType*>(t);
-            std::vector<Type*> params;
-            params.reserve(f->params().size());
-            for (Type* p : f->params()) params.push_back(subst(p, env, ctx));
-            return ctx.function(subst(f->ret(), env, ctx), std::move(params), f->is_const(), f->ref_qual(), f->is_noexcept());
-        }
-
-        case TypeKind::Variant: {
-            auto* v = static_cast<VariantType*>(t);
-            std::vector<Type*> alts;
-            alts.reserve(v->alternatives().size());
-            for (Type* a : v->alternatives()) alts.push_back(subst(a, env, ctx));
-            return ctx.variant(std::move(alts));    
-        }
-
-        case TypeKind::Dependent: {
-            auto* d = static_cast<DependentType*>(t);
-            Type* base = subst(d->base(), env, ctx);
-
-            if (base->is_dependent()) {
-                return (base == d->base()) ? t : ctx.dependent_name(base, d->name());
-            }
-
-            Type* s = ctx.strip_cv(base);
-
-            if (s && s->is_record()) {
-                Symbol* rec = static_cast<RecordType*>(s)->decl();
-
-                if (rec && rec->inner_scope) {
-                    if (Symbol* m = rec->inner_scope->find_member(d->name())) {
-                        switch (m->kind) {
-                            case SymbolKind::TypeAlias:
-                                if (m->type) return subst(ctx.canonicalize(*m->type), env, ctx);
-                                break;
-                            case SymbolKind::Type: return ctx.record(m, {}, CV{});
-                            case SymbolKind::Enum: return ctx.enum_(m, CV{});
-                            default: break;
-                        }
-                    }
-                }
-            }
-
-            return ctx.error_();   
-        }
-
-        case TypeKind::PackExpansion:
-            return ctx.pack_expansion(subst(static_cast<PackExpansionType*>(t)->pattern(), env, ctx));
-
-        default: return t;
-    }
-}
+inline Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx);
 
 inline bool deduce(Type* param, Type* arg, SubstEnv& env, TypeContext& ctx) {
     if (!param) return false;
@@ -259,6 +175,34 @@ inline void collect_pack_params(Type* t, std::vector<Symbol*>& out) {
     }
 }
 
+inline bool deduce_pack(Type* pattern, const std::vector<Type*>& rest, SubstEnv& env, TypeContext& ctx) {
+    std::vector<Symbol*> pks;
+    collect_pack_params(pattern, pks);
+    if (pks.size() != 1) return false;
+    Symbol* P = pks[0];
+    std::vector<Type*> elems;
+    elems.reserve(rest.size());
+
+    for (Type* a : rest) {
+        SubstEnv probe;
+        probe.types = env.types;                         
+        if (!deduce(pattern, a, probe, ctx)) return false;
+        Type* got = probe.lookup_type(P);
+        if (!got) return false;                         
+        elems.push_back(got);
+
+        for (auto& kv : probe.types) {                  
+            if (kv.first == P) continue;
+            if (Type* prior = env.lookup_type(kv.first); prior && prior != kv.second) return false;
+            env.types[kv.first] = kv.second;
+        }
+    }
+
+    if (const std::vector<Type*>* prior = env.lookup_pack(P); prior && *prior != elems) return false;
+    env.packs[P] = std::move(elems);
+    return true;
+}
+
 inline bool expand_into(Type* elem, const SubstEnv& env, TypeContext& ctx, std::vector<Type*>& out) {
     if (!elem || elem->kind() != TypeKind::PackExpansion) {
         out.push_back(subst(elem, env, ctx));
@@ -287,32 +231,90 @@ inline bool expand_into(Type* elem, const SubstEnv& env, TypeContext& ctx, std::
     return true;
 }
 
-inline bool deduce_pack(Type* pattern, const std::vector<Type*>& rest, SubstEnv& env, TypeContext& ctx) {
-    std::vector<Symbol*> pks;
-    collect_pack_params(pattern, pks);
-    if (pks.size() != 1) return false;
-    Symbol* P = pks[0];
-    std::vector<Type*> elems;
-    elems.reserve(rest.size());
+inline Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
+    if (!t || !t->is_dependent() || env.empty()) return t;
 
-    for (Type* a : rest) {
-        SubstEnv probe;
-        probe.types = env.types;                         
-        if (!deduce(pattern, a, probe, ctx)) return false;
-        Type* got = probe.lookup_type(P);
-        if (!got) return false;                         
-        elems.push_back(got);
-
-        for (auto& kv : probe.types) {                  
-            if (kv.first == P) continue;
-            if (Type* prior = env.lookup_type(kv.first); prior && prior != kv.second) return false;
-            env.types[kv.first] = kv.second;
+    switch (t->kind()) {
+        case TypeKind::TypeParam: {
+            auto* p = static_cast<TypeParamType*>(t);
+            Type* bound = env.lookup_type(p->param());
+            if (!bound) return t;                                       
+            return ctx.with_cv(bound, cv_union(bound->cv(), t->cv()));  
         }
-    }
 
-    if (const std::vector<Type*>* prior = env.lookup_pack(P); prior && *prior != elems) return false;
-    env.packs[P] = std::move(elems);
-    return true;
+        case TypeKind::Pointer: {
+            auto* p = static_cast<PointerType*>(t);
+            return ctx.pointer(subst(p->pointee(), env, ctx), t->cv());
+        }
+
+        case TypeKind::Reference: {
+            auto* r = static_cast<ReferenceType*>(t);
+            return ctx.reference(subst(r->referent(), env, ctx), r->ref_qual(), t->cv());
+        }
+
+        case TypeKind::Array: {
+            auto* a = static_cast<ArrayType*>(t);
+            return ctx.array(subst(a->element(), env, ctx), a->extent(), t->cv());
+        }
+
+        case TypeKind::Record: {
+            auto* r = static_cast<RecordType*>(t);
+            std::vector<Type*> args;
+            for (Type* a : r->args()) if (!expand_into(a, env, ctx, args)) return ctx.error_();
+            return ctx.record(r->decl(), std::move(args), t->cv());
+        }
+
+        case TypeKind::Function: {
+            auto* f = static_cast<FunctionType*>(t);
+            std::vector<Type*> params;
+            params.reserve(f->params().size());
+            for (Type* p : f->params()) params.push_back(subst(p, env, ctx));
+            return ctx.function(subst(f->ret(), env, ctx), std::move(params), f->is_const(), f->ref_qual(), f->is_noexcept());
+        }
+
+        case TypeKind::Variant: {
+            auto* v = static_cast<VariantType*>(t);
+            std::vector<Type*> alts;
+            alts.reserve(v->alternatives().size());
+            for (Type* a : v->alternatives()) alts.push_back(subst(a, env, ctx));
+            return ctx.variant(std::move(alts));    
+        }
+
+        case TypeKind::Dependent: {
+            auto* d = static_cast<DependentType*>(t);
+            Type* base = subst(d->base(), env, ctx);
+
+            if (base->is_dependent()) {
+                return (base == d->base()) ? t : ctx.dependent_name(base, d->name());
+            }
+
+            Type* s = ctx.strip_cv(base);
+
+            if (s && s->is_record()) {
+                Symbol* rec = static_cast<RecordType*>(s)->decl();
+
+                if (rec && rec->inner_scope) {
+                    if (Symbol* m = rec->inner_scope->find_member(d->name())) {
+                        switch (m->kind) {
+                            case SymbolKind::TypeAlias:
+                                if (m->type) return subst(ctx.canonicalize(*m->type), env, ctx);
+                                break;
+                            case SymbolKind::Type: return ctx.record(m, {}, CV{});
+                            case SymbolKind::Enum: return ctx.enum_(m, CV{});
+                            default: break;
+                        }
+                    }
+                }
+            }
+
+            return ctx.error_();   
+        }
+
+        case TypeKind::PackExpansion:
+            return ctx.pack_expansion(subst(static_cast<PackExpansionType*>(t)->pattern(), env, ctx));
+
+        default: return t;
+    }
 }
 
 } // namespace semantics

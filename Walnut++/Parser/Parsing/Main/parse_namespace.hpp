@@ -23,6 +23,55 @@ nodes::ASTNode* Parser::parse_namespace_declaration() {
     name_parts.push_back(current_token().lexeme());
     advance();
 
+    if (match(tokenizing::Token::Kind::Equal)) {
+        const bool target_global = match(tokenizing::Token::Kind::DoubleColon);
+
+        if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+            throw ParserError::unexpected_token(
+                reporter,
+                current_token(),
+                {tokenizing::Token::Kind::Identifier},
+                "Expected a namespace name after '=' in a namespace alias"
+            );
+        }
+
+        std::vector<std::string_view> target_parts;
+        target_parts.push_back(current_token().lexeme());
+        advance();
+
+        while (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
+            advance();
+
+            if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+                throw ParserError::unexpected_token(
+                    reporter,
+                    current_token(),
+                    {tokenizing::Token::Kind::Identifier},
+                    "Expected identifier after '::' in namespace alias target"
+                );
+            }
+
+            target_parts.push_back(current_token().lexeme());
+            advance();
+        }
+
+        if (!match(tokenizing::Token::Kind::Semicolon)) {
+            throw ParserError::missing_token(
+                reporter,
+                current_token(),
+                tokenizing::Token::Kind::Semicolon,
+                "Expected ';' after namespace alias"
+            );
+        }
+
+        return make<nodes::UsingDeclaration>(
+            name_parts.front(),
+            std::move(target_parts),
+            target_global,
+            static_cast<std::uint32_t>(line_number)
+        );
+    }
+
     while (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
         advance(); // consume ::
 

@@ -37,6 +37,7 @@ public:
 public:
     void add_pointer(bool is_const = false) { indirection.add_pointer(is_const); }
     void add_reference(bool is_const = false) { indirection.add_reference(is_const); }
+    void add_rvalue_reference(bool is_const = false) { indirection.add_rvalue_reference(is_const); }
     bool has_type() const { return type != nullptr; }
     bool has_modifiers() const { return modifiers.is_modified(); }
     bool has_indirection() const { return !indirection.empty(); }

@@ -1,0 +1,52 @@
+#ifndef TEST_INCLUDE_HEADER_WALNUT
+#define TEST_INCLUDE_HEADER_WALNUT
+
+constexpr unsigned long long int: line = __LINE__;
+
+namespace std {
+    variant(int, float, bool): VARIANT;
+
+    union UNION {
+        int:   as_int;
+        float: as_float;
+    } end union UNION
+
+    function tester(int: x) -> int {
+        return x * 2;
+    } end function tester
+
+    function tester_2(const double: x) -> double {
+        return x / 2.0;
+    } end function tester_2
+
+    template <typename T>
+    class vector {
+    public:
+        constructor() = default;
+        function size() const -> int { return m_len; } end function size
+    private:
+        int: m_len = 0;
+    } end class vector
+
+    template <typename T, typename U>
+    struct common_type_t {
+        function rank() const -> int { return 0; } end function rank
+    } end struct common_type_t
+
+    class container {
+    public:
+        constructor() = default;
+    } end class container
+} end namespace std
+
+export {
+    std::VARIANT
+    std::UNION
+    std::tester
+    std::tester_2
+    std::vector
+    std::common_type_t
+    std::container
+}
+
+#endif TEST_INCLUDE_HEADER_WALNUT

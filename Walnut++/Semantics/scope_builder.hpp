@@ -45,12 +45,15 @@ public:
         m_current = saved;
     }
 
+    void set_enforce_primary(bool enable) { m_enforce_prim = enable; }
+
 private:
     AnalysisContext& m_ctx;
     Arena&           m_arena;
     ErrorReporter&   m_reporter;
-    Scope*           m_current = nullptr;
-    std::uint64_t    m_order   = 0;  
+    Scope*           m_current      = nullptr;
+    std::uint64_t    m_order        = 0;  
+    bool             m_enforce_prim = false;
 
 private:
     Scope* push_scope(Scope::Kind kind) {
@@ -184,7 +187,7 @@ private:
             }
         }
 
-        if (!first_primary) {
+        if (!first_primary && m_enforce_prim) {
             const ASTNode* at = head->decl;
             SemanticError::overload_missing_primary(m_reporter, at ? at->file_id : INVALID_FILE, at ? at->line : 0, name, decl_kind);
         }
@@ -365,6 +368,8 @@ private:
                     u->symbol = declare(*m_current, u->name, SymbolKind::TypeAlias, u, false);
                 } else if (u->is_directive()) {
                     m_current->using_directives.push_back(u);
+                } else if (u->is_namespace_alias()) {
+                    u->symbol = declare(*m_current, u->name, SymbolKind::Namespace, u, false);
                 }
                 
                 break;
@@ -626,7 +631,126 @@ private:
         }
     }
 
+    void build_record_specialization(nodes::TemplateDeclaration* tmpl, nodes::RecordDeclaration* rec) {
+        Symbol* primary = m_current->find_local(rec->get_name());
+
+        if (!primary || primary->kind != SymbolKind::Type || !primary->template_decl) {
+            SemanticError::specialization_without_primary(m_reporter, rec->file_id, rec->line, rec->get_name());
+            return;
+        }
+
+        if (
+            tmpl->is_empty_template() && 
+            rec->get_spec_args().size() != primary->template_decl->params().size()
+        ) {
+
+            SemanticError::specialization_arity(
+                m_reporter, 
+                rec->file_id, rec->line, 
+                rec->get_name(),
+                rec->get_spec_args().size(), 
+                primary->template_decl->params().size()
+            );
+
+            return;
+        }
+
+        if (nodes::TemplateParameter* d = first_defaulted_param(tmpl)) {          
+            SemanticError::specialization_default_param(m_reporter, rec->file_id, d->line, rec->get_name(), d->get_name());
+            return;
+        }
+
+        primary->specializations.push_back(tmpl);
+        Scope* params = push_scope(Scope::Kind::Template);
+        tmpl->scope = params;
+
+        for (nodes::TemplateParameter* p : tmpl->params()) {
+            if (!p->get_name().empty()) {
+                p->symbol = declare(*params, p->get_name(), SymbolKind::TemplateParam, p, true);
+            }
+
+            walk_expr(p->m_default_value);
+        }
+
+        walk_expr(tmpl->m_requires_clause);
+
+        for (auto* a : rec->get_spec_args()) {
+            if (a && a->is_value()) { walk_expr(a->value); }
+        }
+
+        Symbol* sym      = make_in<Symbol>(m_arena, rec->get_name(), SymbolKind::Type, rec);
+        sym->decl_order  = m_order++;
+        sym->owner       = params;
+        sym->template_decl = tmpl;
+        rec->symbol      = sym;
+        build_record_body(rec, sym);
+        pop_scope();
+    }
+
+    void build_function_specialization(nodes::TemplateDeclaration* tmpl, nodes::FunctionDeclaration* fn) {
+        if (!tmpl->is_empty_template()) {
+            SemanticError::partial_function_specialization(m_reporter, fn->file_id, fn->line, fn->get_name());
+            return;
+        }
+
+        if (!fn->is_specialization() || fn->get_spec_args().empty()) {
+            SemanticError::specialization_needs_args(m_reporter, fn->file_id, fn->line, fn->get_name());
+            return;
+        }
+
+        Symbol* primary = m_current->find_local(fn->get_name());
+
+        if (!primary || primary->kind != SymbolKind::Function || !primary->template_decl) {
+            SemanticError::specialization_without_primary(m_reporter, fn->file_id, fn->line, fn->get_name());
+            return;
+        }
+
+        if (fn->get_spec_args().size() != primary->template_decl->params().size()) {
+            SemanticError::specialization_arity(
+                m_reporter, 
+                fn->file_id, fn->line, 
+                fn->get_name(),
+                fn->get_spec_args().size(), 
+                primary->template_decl->params().size()
+            );
+
+            return;
+        }
+
+        if (nodes::TemplateParameter* d = first_defaulted_param(tmpl)) {
+            SemanticError::specialization_default_param(m_reporter, fn->file_id, d->line, fn->get_name(), d->get_name());
+            return;
+        }
+
+        check_declaration_modifiers(fn->get_modifiers(), kValidFunctionMods, m_reporter, fn, "function");
+        check_qualifier_conflicts(fn->qualifiers(), m_reporter, fn, "function");
+        check_cross_conflicts(fn->get_modifiers(), fn->qualifiers(), m_reporter, fn, "function");
+        primary->specializations.push_back(tmpl);
+        Scope* params = push_scope(Scope::Kind::Template);  
+        tmpl->scope = params;
+        walk_expr(tmpl->m_requires_clause);
+        for (auto* a : fn->get_spec_args()) { if (a && a->is_value()) { walk_expr(a->value); } }
+        Symbol* sym        = make_in<Symbol>(m_arena, fn->get_name(), SymbolKind::Function, fn);
+        sym->decl_order    = m_order++;
+        sym->owner         = params;
+        sym->type          = &fn->get_return_type();
+        sym->template_decl = tmpl;
+        fn->symbol         = sym;
+        build_function_body(fn, sym);
+        pop_scope();
+    }
+
     void build_template(nodes::TemplateDeclaration* tmpl) {
+        if (nodes::RecordDeclaration* spec = spec_record_of(tmpl)) {
+            build_record_specialization(tmpl, spec);
+            return;
+        }
+
+        if (nodes::FunctionDeclaration* fspec = spec_function_of(tmpl)) {
+            build_function_specialization(tmpl, fspec);
+            return;
+        }
+
         nodes::ASTNode* decl = tmpl->m_declaration;
         using K = ASTNode::Kind;
         Symbol* entity        = nullptr;
@@ -819,6 +943,27 @@ private:
             // Leaves: Literal, Identifier, QualifiedIdentifier.
             default: break;
         }
+    }
+
+    static nodes::RecordDeclaration* spec_record_of(nodes::TemplateDeclaration* t) {
+        nodes::ASTNode* d = t->m_declaration;
+        if (!d || d->kind != ASTNode::Kind::RecordDeclaration) { return nullptr; }
+        auto* r = static_cast<nodes::RecordDeclaration*>(d);
+        return r->is_specialization() ? r : nullptr;
+    }
+
+    static nodes::FunctionDeclaration* spec_function_of(nodes::TemplateDeclaration* t) {
+        nodes::ASTNode* d = t->m_declaration;
+        if (!d || d->kind != ASTNode::Kind::FunctionDeclaration) { return nullptr; }
+        auto* f = static_cast<nodes::FunctionDeclaration*>(d);
+        return (f->is_specialization() || t->is_empty_template()) ? f : nullptr;
+    }
+
+    static nodes::TemplateParameter* first_defaulted_param(nodes::TemplateDeclaration* t) {
+        for (nodes::TemplateParameter* p : t->params()) {
+            if (p->is_type_param() ? p->m_has_default_type : (p->m_default_value != nullptr)) return p;
+        }
+        return nullptr;
     }
 };
 

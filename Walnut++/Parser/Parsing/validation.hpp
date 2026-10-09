@@ -17,23 +17,12 @@ void Parser::validate_identifier(const tokenizing::Token& token) {
 }
 
 void Parser::validate_string_literal(const tokenizing::Token& token) {
-    std::string_view lexeme = token.lexeme();
-    std::size_t pos = 0;
+    using namespace tokenizing;
+    EscapeError err = EscapeError::None;
+    std::size_t at = 0;
 
-    while ((pos = lexeme.find('\\', pos)) != std::string::npos) {
-        if (pos + 1 >= lexeme.length()) { throw ParserError::invalid_escape_sequence(reporter, token, ""); }
-        const char escape_char = lexeme[pos + 1];
-
-        if (escape_char != 'n' && 
-            escape_char != 't' && 
-            escape_char != 'r' && 
-            escape_char != '"' && 
-            escape_char != '\'' && 
-            escape_char != '\\'
-        ) {
-            throw ParserError::invalid_escape_sequence(reporter, token, std::string(1, escape_char));
-        }
-        pos += 2;
+    if (!validate_literal(token.lexeme(), err, &at)) {
+        throw ParserError::invalid_escape_sequence(reporter, token, escape_error_text(err), at);
     }
 }
 
@@ -56,6 +45,16 @@ void Parser::validate_numeric_literal(const tokenizing::Token& token) {
     }
     
     if (!has_digit) { throw ParserError::invalid_literal(reporter, token, "Number must contain at least one digit"); }
+}
+
+void Parser::validate_character_literal(const tokenizing::Token& token) {
+    using namespace tokenizing;
+    std::uint32_t cp = 0;
+    EscapeError err = EscapeError::None;
+
+    if (!decode_char(token.lexeme(), cp, err)) {
+        throw ParserError::invalid_escape_sequence(reporter, token, escape_error_text(err), 0);
+    }
 }
 
 } // namespace parsing

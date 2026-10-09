@@ -1,0 +1,7 @@
+[Semantic] /run/media/christiandavis/Development/Walnut/Walnut++/input.wal:1289: Template Error on line 1289: 'describe' is a partial specialization of a function template, which is not supported (declare an overload instead)
+[Semantic] /run/media/christiandavis/Development/Walnut/Walnut++/input.wal:1295: Template Error on line 1295: explicit specialization of 'describe' must write its template arguments (e.g. 'describe<int>')
+[Semantic] /run/media/christiandavis/Development/Walnut/Walnut++/input.wal:1301: Template Error on line 1301: specialization of 'never_a_template' has no primary template in scope
+[Semantic] /run/media/christiandavis/Development/Walnut/Walnut++/input.wal:1307: Template Error on line 1307: specialization of 'describe' supplies 2 template arguments, but the primary template declares 1
+[Semantic] /run/media/christiandavis/Development/Walnut/Walnut++/input.wal:1313: Template Error on line 1313: specialization of 'Holder' has no primary template in scope
+[Semantic] /run/media/christiandavis/Development/Walnut/Walnut++/input.wal:1320: Template Error on line 1320: specialization of 'TypeName' has no primary template in scope
+[Semantic] /run/media/christiandavis/Development/Walnut/Walnut++/input.wal:1332: Redeclaration Error on line 1332: Redeclaration of 'd_int' (previously declared on line 1282)

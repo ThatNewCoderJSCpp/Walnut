@@ -216,6 +216,7 @@ struct CallExpression : ASTNode {
     static bool classof(const ASTNode* n) { return n->kind == Kind::CallExpression; }
 
     void add_argument(ASTNode* arg) { m_arguments.push_back(arg); }
+    ASTNode* get_callee() { return m_callee; }
     const ASTNode* get_callee() const { return m_callee; }
     const std::vector<ASTNode*>& get_arguments() const { return m_arguments; }
     std::size_t argument_count() const { return m_arguments.size(); }
@@ -559,6 +560,9 @@ struct DeleteExpression : ASTNode {
 struct NoexceptExpression : ASTNode {
     ASTNode* operand;
 
+    bool is_nothrow = false;
+    bool computed   = false;
+
     NoexceptExpression(ASTNode* operand_, std::uint32_t ln = 0) : ASTNode(Kind::NoexceptExpression, ln), operand(operand_) {}
 
     static bool classof(const ASTNode* n) { return n->kind == Kind::NoexceptExpression; }
@@ -686,6 +690,28 @@ struct DiscardExpression : ASTNode {
     }
 
     ASTNode* clone_into(Arena& a) const override { auto* c = make_in<DiscardExpression>(a, kind_, clone_child(operand, a), line); copy_base_to(c); return c; }
+};
+
+struct ThrowExpression : ASTNode {
+    ASTNode* operand;    // nullptr == bare `throw;` 
+
+    explicit ThrowExpression(ASTNode* op, std::uint32_t ln = 0) : ASTNode(Kind::ThrowExpression, ln), operand(op) {}
+
+    static bool classof(const ASTNode* n) { return n->kind == Kind::ThrowExpression; }
+
+    bool is_rethrow() const { return operand == nullptr; }
+
+    void print(std::ostream& os, std::size_t indent) const {
+        print_indent(os, indent);
+        os << "ThrowExpression" << (is_rethrow() ? " (rethrow)" : "") << "\n";
+        if (operand) print_node(operand, os, indent + 1);
+    }
+
+    ASTNode* clone_into(Arena& a) const override {
+        auto* c = make_in<ThrowExpression>(a, clone_child(operand, a), line);
+        copy_base_to(c);
+        return c;
+    }
 };
 
 } // namespace nodes

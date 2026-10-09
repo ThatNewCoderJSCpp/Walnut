@@ -252,6 +252,15 @@ nodes::ASTNode* Parser::parse_function_declaration(
         advance();
     }
 
+    std::vector<parser_types::TemplateArgument*> spec_args;
+    bool is_specialization = false;
+
+    if (concrete_match(tokenizing::Token::Kind::LessThan)) {
+        advance();
+        spec_args = parse_template_argument_list_body();
+        is_specialization = true;
+    }
+
     auto parameters = parse_function_parameters();
     const modifiers::FunctionQualifiers quals = parse_function_qualifiers();
     parser_types::TypeInfo return_type;
@@ -368,16 +377,13 @@ nodes::ASTNode* Parser::parse_function_declaration(
             }
         }
 
-        return make<nodes::FunctionDeclaration>(
-            std::move(name_parts), 
-            is_global_qualified, 
-            return_type,
-            mods, 
-            quals, 
-            line_number, 
-            parameters, 
-            body
+        auto* decl = make<nodes::FunctionDeclaration>(
+            std::move(name_parts), is_global_qualified, return_type,
+            mods, quals, line_number, parameters, body
         );
+
+        if (is_specialization) { decl->set_specialization(std::move(spec_args)); }
+        return decl;
     }
 
     return_type.type = parser_types::PrimitiveType::make_dynamic(arena);
@@ -494,16 +500,13 @@ nodes::ASTNode* Parser::parse_function_declaration(
         }
     }
 
-    return make<nodes::FunctionDeclaration>(
-        std::move(name_parts), 
-        is_global_qualified, 
-        return_type,
-        mods, 
-        quals, 
-        line_number, 
-        parameters, 
-        body
+    auto* decl = make<nodes::FunctionDeclaration>(
+        std::move(name_parts), is_global_qualified, return_type,
+        mods, quals, line_number, parameters, body
     );
+
+    if (is_specialization) { decl->set_specialization(std::move(spec_args)); }
+    return decl;
 }
 
 nodes::ASTNode* Parser::parse_return_statement() {

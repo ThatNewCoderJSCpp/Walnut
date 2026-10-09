@@ -393,6 +393,235 @@ public:
         ss << "template argument " << (index + 1) << " (" << value << ") does not fit the parameter's declared type";
         return make_and_report(r, f, line, ss.str());
     }
+
+    static SemanticError rethrow_outside_catch(ErrorReporter& reporter, FileId file_id, std::size_t line) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Exception")
+           << "a bare 'throw' may only appear inside a catch block";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError noexcept_violation(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::string_view name, const std::string& what
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Exception")
+           << "'" << name << "' is declared 'noexcept' but its body may throw (" << what << ")";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError not_a_namespace(ErrorReporter& reporter, FileId file_id, std::size_t line, const std::string& name) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Name") << "'" << name << "' is not a namespace";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+        static SemanticError template_arg_overflow(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::size_t index, const std::string& value, const std::string& param_type
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Template")
+           << "template argument " << index << " (" << value
+           << ") does not fit in the parameter type '" << param_type << "'";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError template_arg_underflow(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::size_t index, const std::string& value, const std::string& param_type
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Template")
+           << "template argument " << index << " (" << value
+           << ") underflows to zero in the parameter type '" << param_type << "'";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError not_a_constant(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, const char* why
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Constant")
+           << "expression is not a valid constant: " << why;
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError fallthrough_at_end(ErrorReporter& reporter, FileId file_id, std::size_t line) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Switch")
+           << "'fallthrough' cannot appear in the last case of a switch";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError fallthrough_not_last(ErrorReporter& reporter, FileId file_id, std::size_t line) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Switch")
+           << "'fallthrough' must be the last statement in its case";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError missing_required_modifier(
+        ErrorReporter& reporter,
+        FileId file_id,
+        std::size_t line,
+        std::string_view decl_kind,
+        std::string_view flag,             
+        std::string_view required_list,    
+        std::size_t required_count
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Modifier");
+        ss << flag << " on " << decl_kind << " declaration requires "
+           << (required_count > 1 ? "one of " : "") << required_list;
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError modifier_rule_violation(
+        ErrorReporter& reporter,
+        FileId file_id,
+        std::size_t line,
+        std::string_view decl_kind,
+        const char* why
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Modifier");
+        ss << why << " (on " << decl_kind << " declaration)";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError specialization_without_primary(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Template")
+           << "specialization of '" << name << "' has no primary template in scope";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError specialization_arity(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::string_view name, std::size_t got, std::size_t want
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Template")
+           << "specialization of '" << name << "' supplies " << got
+           << " template argument" << (got == 1 ? "" : "s") << ", but the primary template declares " << want;
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError partial_function_specialization(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Template")
+           << "'" << name << "' is a partial specialization of a function template, which is not supported"
+           << " (declare an overload instead)";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError specialization_needs_args(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Template")
+           << "explicit specialization of '" << name << "' must write its template arguments"
+           << " (e.g. '" << name << "<int>')";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError ambiguous_specialization(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Template")
+           << "ambiguous partial specializations of '" << name
+           << "'; no single specialization is more specialized than the others";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError specialization_default_param(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::string_view name, std::string_view param
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Template")
+           << "parameter '" << param << "' of the specialization of '" << name
+           << "' has a default argument; defaults belong on the primary template only";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError unexported_name(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::string_view name, std::string_view spelling, const std::string& unit,
+        std::size_t export_count, std::string_view suggestion
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Import");
+        ss << "'" << name << "' is not exported by \"" << spelling << "\" (" << unit << ")";
+        if (export_count == 0)        ss << "; that unit exports nothing";
+        else if (!suggestion.empty()) ss << "; did you mean '" << suggestion << "'?";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError unresolved_import_source(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view spelling
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Import")
+           << "cannot resolve import source \"" << spelling << "\"";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError import_target_failed(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::string_view spelling, const std::string& unit
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Import")
+           << "imported unit \"" << spelling << "\" (" << unit << ") failed to compile";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError missing_module(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::string_view name, std::string_view spelling, const std::string& unit
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Import")
+           << "\"" << spelling << "\" (" << unit << ") declares no module '" << name << "'";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError export_undefined(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::string_view name, const std::string& unit
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Import")
+           << "'" << name << "' is exported by " << unit << " but resolves to no definition";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError import_failure(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view why
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Import") << why;
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
+
+    static SemanticError duplicate_export(
+        ErrorReporter& reporter, FileId file_id, std::size_t line,
+        std::string_view name, const std::string& unit, std::size_t first_line
+    ) {
+        std::stringstream ss;
+        ss << build_error_header(line, "Import")
+           << "'" << name << "' is exported more than once by " << unit;
+        if (first_line != 0) ss << " (first at line " << first_line << ")";
+        return make_and_report(reporter, file_id, line, ss.str());
+    }
 };
 
 } // namespace semantics

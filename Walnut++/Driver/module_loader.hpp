@@ -46,6 +46,7 @@ public:
     }
 
     const std::unordered_map<FileId, ParsedUnit>& units() const noexcept { return m_units; }
+    const SourceManager& source_manager() const { return m_sm; }
 
     const ParsedUnit* unit(FileId f) const {
         const auto it = m_units.find(f);
@@ -72,6 +73,7 @@ private:
     }
 
     void process(FileId f) {
+        ScopedFile _f(m_reporter, f);
         nodes::BlockStatement* ast = parse_unit(f);
         m_units.emplace(f, ParsedUnit{ f, ast });
         if (ast) { scan_imports(f, ast); }
@@ -106,7 +108,7 @@ private:
         const fs::path base = fs::path(m_sm.absolute_path(importer)).parent_path();
         if (auto id = m_sm.load((base / fs::path(path)).string())) return id;
         if (auto id = m_sm.load(path))                             return id;
-        m_reporter.report(ErrorPhase::Loader, line, "cannot open imported file: " + path);
+        m_reporter.report(ErrorPhase::Loader, importer, line, "cannot open imported file: " + path);
         return std::nullopt;
     }
 };

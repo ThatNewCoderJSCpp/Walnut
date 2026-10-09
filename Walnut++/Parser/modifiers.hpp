@@ -195,13 +195,13 @@ public:
             { Flag::Consteval, "consteval " },
             { Flag::Explicit,  "explicit "  },
             { Flag::LValueRef, "& "         },
-            { Flag::Noexcept,  "Noexcept "  },
-            { Flag::Override,  "Override "  },
+            { Flag::Noexcept,  "noexcept "  },
+            { Flag::Override,  "override "  },
             { Flag::RValueRef, "&& "        },
-            { Flag::Virtual,   "Virtual "   },
-            { Flag::Async,     "Async"      },
-            { Flag::Primary,   "Primary"    },
-            { Flag::Overload,  "Overload"   }
+            { Flag::Virtual,   "virtual "   },
+            { Flag::Async,     "async "     },
+            { Flag::Primary,   "primary "   },
+            { Flag::Overload,  "overload "  }
         };
 
         for (auto&& entry : table) { if (has(entry.flag)) { os << entry.text; }}

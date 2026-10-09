@@ -135,7 +135,8 @@ private:
                     if (!cand->decl || cand->decl->kind != K::FunctionDeclaration) continue;
                     if (!same_signature(cand, fn)) continue;
                     const modifiers::FunctionQualifiers* q = quals_of(cand->decl);
-                    return q && q->has(FQ::Virtual);     
+                    if (q && q->has_any(kVirtualIntroducers)) return true;
+                    // non-virtual match: keep walking, an ancestor may still declare it virtual
                 }
             }
 
@@ -165,8 +166,12 @@ private:
         if (!s) return;
 
         for (Symbol* head : s->symbols) {
-            if (head->kind == SymbolKind::Function && head->next_overload) merge_overload_chain(head);                 
+            if (head->kind == SymbolKind::Function && head->next_overload) merge_overload_chain(head);
             if (head->kind == SymbolKind::Type && head->decl && head->decl->kind == K::RecordDeclaration) check_overrides(static_cast<nodes::RecordDeclaration*>(head->decl));
+
+            for (nodes::TemplateDeclaration* st : head->specializations) {     
+                if (st->m_declaration && st->m_declaration->kind == K::RecordDeclaration) check_overrides(static_cast<nodes::RecordDeclaration*>(st->m_declaration));
+            }
         }
 
         for (Scope* c : s->children) visit(c);

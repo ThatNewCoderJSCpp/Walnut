@@ -192,6 +192,8 @@ struct FunctionDeclaration : ASTNode {
     FunctionParameters* m_parameters;
     ASTNode* m_body;
     modifiers::FunctionQualifiers m_qualifiers;
+    std::vector<parser_types::TemplateArgument*> m_spec_args;
+    bool                                         m_is_specialization = false;
     semantics::Symbol* symbol = nullptr; 
 
     FunctionDeclaration(
@@ -255,10 +257,21 @@ struct FunctionDeclaration : ASTNode {
     const ASTNode* get_body() const { return m_body; }
     ASTNode* get_body() { return m_body; }
     bool has_body() const { return m_body != nullptr; }
-    modifiers::FunctionQualifiers qualifiers() const { return m_qualifiers; }
+    bool is_specialization() const { return m_is_specialization; }
+
+    const modifiers::FunctionQualifiers& qualifiers() const { return m_qualifiers; }
+          modifiers::FunctionQualifiers& qualifiers()       { return m_qualifiers; }
+
+    const std::vector<parser_types::TemplateArgument*>& get_spec_args() const { return m_spec_args; }
+          std::vector<parser_types::TemplateArgument*>& get_spec_args()       { return m_spec_args; }
 
     const FunctionParameter* find_parameter(std::string_view name) const {
         return m_parameters ? m_parameters->find_by_name(name) : nullptr;
+    }
+
+    void set_specialization(std::vector<parser_types::TemplateArgument*> args) {
+        m_is_specialization = true;
+        m_spec_args = std::move(args);
     }
 
     bool has_duplicate_parameter_names() const {
@@ -275,6 +288,29 @@ struct FunctionDeclaration : ASTNode {
         for (std::size_t i = 0; i < m_name_parts.size(); ++i) {
             if (i > 0) os << "::";
             os << m_name_parts[i];
+        }
+
+        if (m_is_specialization) {
+            print_indent(os, indent + 1);
+            os << "Specialization Args (" << m_spec_args.size() << "):";
+
+            if (m_spec_args.empty()) {
+                os << " <none>\n";
+            } else {
+                os << "\n";
+                for (std::size_t i = 0; i < m_spec_args.size(); ++i) {
+                    print_indent(os, indent + 2);
+                    os << "[" << i << "]:";
+                    const auto* a = m_spec_args[i];
+                    if (a->is_type()) {
+                        os << " " << a->type << (a->is_pack ? " ..." : "") << "\n";
+                    } else {
+                        os << "\n";
+                        print_node(a->value, os, indent + 3);
+                        if (a->is_pack) { print_indent(os, indent + 3); os << "...(pack)\n"; }
+                    }
+                }
+            }
         }
         
         os << "\n";
@@ -320,6 +356,8 @@ struct FunctionDeclaration : ASTNode {
             clone_child(m_body, a)
         );
 
+        c->m_is_specialization = m_is_specialization;
+        c->m_spec_args         = clone_targs(m_spec_args, a);
         copy_base_to(c);
         return c;
     }
@@ -563,8 +601,10 @@ struct OperatorFunctionDeclaration : ASTNode {
           FunctionParameters* get_parameters()       { return m_parameters; }
     bool has_parameters() const { return m_parameters && !m_parameters->empty(); }
     const ASTNode* get_body() const { return m_body; }
+    ASTNode* get_body() { return m_body; }
     bool has_body() const { return m_body != nullptr; }
-    modifiers::FunctionQualifiers qualifiers() const { return m_qualifiers; }
+    const modifiers::FunctionQualifiers& qualifiers() const { return m_qualifiers; }
+          modifiers::FunctionQualifiers& qualifiers()       { return m_qualifiers; }
     const modifiers::RawModifiers& get_modifiers() const { return m_modifiers; }
     OverloadableOperator get_overload() const { return overload; }
 

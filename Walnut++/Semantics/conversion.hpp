@@ -52,12 +52,22 @@ inline std::optional<NumericProfile> numeric_profile(const BuiltinType* b) {
 }
 
 inline ConversionRank rank_numeric(const NumericProfile& s, const NumericProfile& d) {
-    if (s.is_unsigned != d.is_unsigned) return ConversionRank::None;   
     using F = NumericProfile::Family;
-    if (s.family == F::Int   && d.family == F::Int)   return d.width >= s.width ? ConversionRank::Promotion  : ConversionRank::None;
-    if (s.family == F::Float && d.family == F::Float) return d.width >= s.width ? ConversionRank::Promotion  : ConversionRank::None;
-    if (s.family == F::Int   && d.family == F::Float) return d.width >= s.width ? ConversionRank::Conversion : ConversionRank::None;
-    return ConversionRank::None;   
+
+    if (s.family == F::Int && d.family == F::Int) {
+        if (s.is_unsigned != d.is_unsigned) return ConversionRank::None;
+        return d.width >= s.width ? ConversionRank::Promotion : ConversionRank::None;
+    }
+
+    if (s.family == F::Float && d.family == F::Float) return d.width >= s.width ? ConversionRank::Promotion : ConversionRank::None;
+
+    if (s.family == F::Int && d.family == F::Float) {
+        const unsigned src_bits = bit_width_of_rank(s.width);
+        const unsigned need     = s.is_unsigned ? src_bits : src_bits - 1;
+        return float_digits_of_bits(bit_width_of_rank(d.width)) >= need ? ConversionRank::Conversion : ConversionRank::None;
+    }
+
+    return ConversionRank::None;
 }
 
 inline ConversionRank rank_builtin(Type* src, Type* dst) {

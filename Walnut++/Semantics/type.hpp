@@ -103,19 +103,78 @@ inline int length_rank(parser_types::LengthModifier l) {
     }
 }
 
-inline int builtin_width(parser_types::LengthModifier l, bool long_form) {
-    return length_rank(l) + (long_form ? 1 : 0);
+inline int builtin_width(
+    parser_types::PrimitiveType::BaseKind base,
+    parser_types::LengthModifier l,
+    bool long_form
+) {
+    using BK = parser_types::PrimitiveType::BaseKind;
+    const int r = length_rank(l);
+
+    switch (base) {
+        case BK::Float: return r + (long_form ? 3 : 2);   
+        case BK::Int:   return r + (long_form ? 3 : 0);   
+        case BK::Char:  return -2;                        
+        case BK::Bool:  return -2;
+        default:        return 0;
+    }
+}
+
+inline const char* length_prefix(int rank) {
+    switch (rank) {
+        case -2: return "short short ";
+        case -1: return "short ";
+        case  1: return "long ";
+        case  2: return "long long ";
+        default: return "";
+    }
+}
+
+inline const char* length_prefix(parser_types::LengthModifier length) {
+    switch (length) {
+        case parser_types::LengthModifier::ShortShort: return "short short ";
+        case parser_types::LengthModifier::Short:      return "short ";
+        case parser_types::LengthModifier::Long:       return "long ";
+        case parser_types::LengthModifier::LongLong:   return "long long ";
+        default: return "";
+    }
+}
+
+inline std::string canonical_spelling(parser_types::PrimitiveType::BaseKind base, int w) {
+    using BK = parser_types::PrimitiveType::BaseKind;
+
+    switch (base) {
+        case BK::Int:
+            if (w >= -2 && w <= 2) return std::string(length_prefix(w))     + "int";
+            if (w >=  1 && w <= 5) return std::string(length_prefix(w - 3)) + "integer";
+            return "int<?>";
+
+        case BK::Float:
+            if (w >=  0 && w <= 4) return std::string(length_prefix(w - 2)) + "float";
+            if (w >=  1 && w <= 5) return std::string(length_prefix(w - 3)) + "double";
+            return "float<?>";
+
+        case BK::Bool:    return "bool";
+        case BK::Char:    return "char";
+        case BK::String:  return "string";
+        case BK::Text:    return "text";
+        case BK::Void:    return "void";
+        case BK::Auto:    return "auto";
+        case BK::Dynamic: return "dynamic";
+    }
+
+    return "<unknown>";
 }
 
 class BuiltinType : public Type {
 public:
     using BaseKind = parser_types::PrimitiveType::BaseKind;
-    BuiltinType(BaseKind base, parser_types::LengthModifier length, int width, bool is_unsigned, bool long_form, CV cv) : Type(TypeKind::Builtin, cv), m_base(base), m_length(length), m_width(std::int8_t(width)), m_unsigned(is_unsigned), m_long_form(long_form) {}
+
+    BuiltinType(BaseKind base, int width, bool is_unsigned, CV cv) : Type(TypeKind::Builtin, cv), m_base(base), m_width(std::int8_t(width)), m_unsigned(is_unsigned) {}
+
     BaseKind base()        const { return m_base; }
     int      width()       const { return m_width; }
     bool     is_unsigned() const { return m_unsigned; }
-    bool     is_long_form() const { return m_long_form; }
-    parser_types::LengthModifier length() const { return m_length; }
     bool     is_void()     const { return m_base == BaseKind::Void; }
     bool     is_dynamic()  const { return m_base == BaseKind::Dynamic; }
     bool     is_bool()     const { return m_base == BaseKind::Bool; }
@@ -123,27 +182,13 @@ public:
     void write_to(std::ostream& os) const override {
         write_cv(os);
         if (m_unsigned) os << "unsigned ";
-
-        switch (m_base) {
-            case BaseKind::Int:     os << "int";     break;
-            case BaseKind::Float:   os << "float";   break;
-            case BaseKind::Bool:    os << "bool";    break;
-            case BaseKind::Char:    os << "char";    break;
-            case BaseKind::String:  os << "string";  break;
-            case BaseKind::Text:    os << "text";    break;
-            case BaseKind::Void:    os << "void";    break;
-            case BaseKind::Auto:    os << "auto";    break;
-            case BaseKind::Dynamic: os << "dynamic"; break;
-        }
-
-        if (m_width) os << "/*w" << int(m_width) << "*/";
+        os << canonical_spelling(m_base, m_width);
     }
+
 private:
     BaseKind    m_base;
-    parser_types::LengthModifier m_length;
     std::int8_t m_width;
     bool        m_unsigned;
-    bool        m_long_form;
 };
 
 class PointerType : public Type {
@@ -334,6 +379,11 @@ public:
         bool is_unsigned = false, bool long_form = false, CV cv = CV{}
     );
 
+    Type* builtin_ranked(
+        parser_types::PrimitiveType::BaseKind base,
+        int width, bool is_unsigned = false, CV cv = CV{}
+    );
+
     Type* void_()   { return builtin(parser_types::PrimitiveType::BaseKind::Void); }
     Type* dynamic_(){ return builtin(parser_types::PrimitiveType::BaseKind::Dynamic); }
     Type* bool_()   { return builtin(parser_types::PrimitiveType::BaseKind::Bool); }
@@ -450,6 +500,13 @@ private:
 
     void mark_dependent(Type* t, bool dep) { if (dep) t->m_dependent = true; }
 };
+
+inline std::string type_str_of(Type* t) {
+    if (!t) return "<error-type>";
+    std::ostringstream os;
+    t->write_to(os);
+    return os.str();
+}
 
 } // namespace semantics
 } // namespace walnut

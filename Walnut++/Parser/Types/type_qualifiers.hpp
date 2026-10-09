@@ -10,33 +10,32 @@ namespace parser_types {
 
 struct IndirectionQualifier {
     enum class Kind : std::uint8_t {
-        Pointer,    // *
-        Reference   // &
+        Pointer,        // *
+        Reference,      // &
+        RValueReference // &&
     };
 
     Kind kind;
     bool is_const;  
     IndirectionQualifier(Kind k, bool c = false) : kind(k), is_const(c) {}
     bool is_pointer() const { return kind == Kind::Pointer; }
-    bool is_reference() const { return kind == Kind::Reference; }
+    bool is_reference()   const { return kind == Kind::Reference || kind == Kind::RValueReference; }
+    bool is_lvalue_ref()  const { return kind == Kind::Reference; }
+    bool is_rvalue_ref()  const { return kind == Kind::RValueReference; }
 
     void write_to(std::ostream& os) const {
         if (is_const) os << " const ";
-        os << (is_pointer() ? '*' : '&');
+        switch (kind) {
+            case Kind::Pointer:         os << '*';  break;
+            case Kind::Reference:       os << '&';  break;
+            case Kind::RValueReference: os << "&&"; break;
+        }
     }
     
     friend std::ostream& operator<<(std::ostream& os, IndirectionQualifier qual) {
         qual.write_to(os);
         return os;
     }
-
-#ifdef WALNUT_DEBUG
-    std::string to_string() const {
-        std::ostringstream oss;
-        oss << this;
-        return oss.str();
-    }
-#endif
 };
 
 class IndirectionList {
@@ -51,6 +50,7 @@ public:
     IndirectionList& operator=(IndirectionList&&) = default;
     void add_pointer(bool is_const = false) { m_qualifiers.emplace_back(IndirectionQualifier::Kind::Pointer, is_const); }
     void add_reference(bool is_const = false) { m_qualifiers.emplace_back(IndirectionQualifier::Kind::Reference, is_const); }
+    void add_rvalue_reference(bool is_const = false) { m_qualifiers.emplace_back(IndirectionQualifier::Kind::RValueReference, is_const); }
     bool empty() const noexcept { return m_qualifiers.empty(); }
     std::size_t size() const noexcept { return m_qualifiers.size(); }
     const IndirectionQualifier& operator[](std::size_t index) const {  return m_qualifiers[index]; }

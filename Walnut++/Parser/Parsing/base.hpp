@@ -111,6 +111,7 @@ private:
     void validate_identifier(const tokenizing::Token& token);
     void validate_string_literal(const tokenizing::Token& token);
     void validate_numeric_literal(const tokenizing::Token& token);
+    void validate_character_literal(const tokenizing::Token& token);
     void parse_indirection_qualifiers(parser_types::TypeInfo& info);
 
 private:
@@ -127,6 +128,7 @@ private:
     bool               fold_ahead();
     bool               looks_like_constrained_param();    
     static inline bool is_fold_operator(tokenizing::Token::Kind k);
+    static inline bool is_indirection_token(tokenizing::Token::Kind k);
 
 private:
     nodes::ASTNode* parse_statement();
@@ -180,6 +182,7 @@ private:
     nodes::ASTNode* parse_fold_expression();
     nodes::ASTNode* parse_discard_expression();
     nodes::ASTNode* parse_requires_expression();
+    nodes::ASTNode* parse_throw_expression();
 
     inline nodes::ASTNode* parse_type_query_expression();
     SmallVector<std::string_view, 4> parse_binding_names();
@@ -216,7 +219,7 @@ private:
     nodes::TemplateParameter*                    parse_template_parameter();
     std::vector<parser_types::TemplateArgument*> parse_template_argument_list_body();
     parser_types::TemplateArgument*              parse_alignas();
-    inline parser_types::TemplateArgument*       parse_type_or_value_operand();
+    inline parser_types::TemplateArgument*       parse_type_or_value_operand(bool force_type = false);
 
     std::size_t             scan_paired(std::size_t open_off, tokenizing::Token::Kind open, tokenizing::Token::Kind close);
     std::size_t             scan_angle_close(std::size_t open_off, bool* leftover = nullptr);

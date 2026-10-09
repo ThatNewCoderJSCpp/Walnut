@@ -149,6 +149,39 @@ inline OverloadableOperator classify_overloadable_operator(
 }
 
 } // namespace nodes
+
+inline bool is_assignment_op(tokenizing::Token::Kind k) {
+    using K = tokenizing::Token::Kind;
+
+    switch (k) {
+        case K::Equal: case K::PlusEqual: case K::MinusEqual: case K::AsteriskEqual:
+        case K::SlashEqual: case K::PercentEqual: case K::DoubleAsteriskEqual:
+        case K::PipeEqual: case K::AmpersandEqual: case K::CaretEqual:
+        case K::ShiftLeftEqual: case K::ShiftRightEqual: return true;
+        default: return false;
+    }
+}
+
+inline bool is_equality_op(tokenizing::Token::Kind k) {
+    using K = tokenizing::Token::Kind;
+    return k == K::LogicEqual || k == K::NotEqual;
+}
+
+inline bool is_comparison_op(tokenizing::Token::Kind k) {
+    using K = tokenizing::Token::Kind;
+    return k == K::LessThan || k == K::GreaterThan || k == K::LessEqual || k == K::GreaterEqual;
+}
+
+inline bool is_logical_op(tokenizing::Token::Kind k) {
+    using K = tokenizing::Token::Kind;
+    return k == K::LogicAnd || k == K::LogicOr;
+}
+
+inline bool is_shift_op(tokenizing::Token::Kind k) {
+    using K = tokenizing::Token::Kind;
+    return k == K::DoubleLessThan || k == K::DoubleGreaterThan;
+}
+
 } // namespace walnut
 
 #endif // WALNUT_NODES_OPERATOR_KIND_HPP

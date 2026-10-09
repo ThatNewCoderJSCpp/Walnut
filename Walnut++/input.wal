@@ -1230,3 +1230,105 @@ constexpr bool: is_noexcept_construct = std::is_nothrow_contructible<T>::value;
 
 template <typename T>
 constexpr bool: is_nothrow_construct = std::is_nothrow_contructible_v<T>;
+
+function blend(int: a, int: b) primary -> int {
+    return a + b;
+} end function blend
+
+function blend(float: a, float: b) overload -> float {
+    return a + b;
+} end function blend
+
+function blend(const string: a, const string: b) overload -> string {
+    return a + b;
+} end function blend
+
+function blend(int: a) overload -> int {
+    return a;
+} end function blend
+
+function probe(int: x) primary -> int { return x; } end function probe
+function probe(int: x) const overload -> int { return x + 1; } end function probe
+
+function twin(int: x) primary -> int { return x; } end function twin
+function twin(float: x) -> float { return x; } end function twin
+
+// expect: overloaded function 'orphan' must mark exactly one declaration 'primary'
+function orphan(int: x) overload -> int { return x; } end function orphan
+function orphan(float: x) overload -> float { return x; } end function orphan
+
+// expect: redefinition of 'clone_me' — identical signature, two bodies
+function clone_me(int: x) -> int { return x; } end function clone_me
+function clone_me(int: x) -> int { return x * 2; } end function clone_me
+
+function confused(int: x) primary -> int { return x; } end function confused
+
+template <typename T>
+function describe(const T: x) primary -> string {
+    return "generic";
+} end function describe
+
+template <>
+function describe<int>(const int: x) -> string {
+    return "int";
+} end function describe
+
+template <>
+function describe<bool>(const bool: x) -> string {
+    return "bool";
+} end function describe
+
+auto: d_generic = describe<float>(1.5);
+auto: d_int     = describe<int>(7);
+auto: d_bool    = describe<bool>(true);
+
+// ================= function specializations: should fail ==============
+
+// expect: partial specialization of a function template is not supported
+template <typename T>
+function describe<T*>(const T*: x) -> string {
+    return "pointer";
+} end function describe
+
+// expect: explicit specialization must write its template arguments
+template <>
+function describe(const double: x) -> string {
+    return "double";
+} end function describe
+
+// expect: specialization of 'never_a_template' has no primary template in scope
+template <>
+function never_a_template<int>(const int: x) -> int {
+    return x;
+} end function never_a_template
+
+// expect: supplies 2 template arguments, but the primary declares 1
+template <>
+function describe<int, float>(const int: x) -> string {
+    return "two";
+} end function describe
+
+// expect: parameter 'U' has a default argument (defaults belong on the primary)
+template <typename U = int>
+class Holder<U&&> {
+public:
+    function category() const -> int { return 4; } end function category
+} end class Holder
+
+// expect: duplicate specialization, caught in the instantiator on first use
+template <>
+class TypeName<int> {
+public:
+    function name() const -> string { return "int again"; } end function name
+} end class TypeName
+
+// ================= record specialization selection: should work =======
+
+auto: h_plain = Holder<int>().category();       // 0, primary
+auto: h_ptr   = Holder<int*>().category();      // 1, Holder<T*>
+auto: h_ref   = Holder<int&>().category();      // 2, Holder<T&>
+auto: h_box   = Holder<Box<int>>().category();  // 3, Holder<Box<T>>
+auto: d_kv    = Dict<float, int>().kind();      // 0, primary
+auto: d_int   = Dict<int, float>().kind();      // 1, Dict<int, V>
+auto: t_int   = TypeName<int>().name();         // "int"
+auto: t_gen   = TypeName<double>().name();      // "generic"

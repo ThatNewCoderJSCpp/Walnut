@@ -63,6 +63,8 @@ struct Symbol {
 
     nodes::TemplateDeclaration*   template_decl = nullptr;
 
+    SmallVector<nodes::TemplateDeclaration*, 2> specializations;
+
     Symbol(std::string_view n, SymbolKind k, nodes::ASTNode* d) noexcept : name(n), kind(k), decl(d) {}
 };
 

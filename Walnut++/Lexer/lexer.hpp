@@ -13,6 +13,7 @@
 #include <vector>
 #include "token_macro.hpp"
 #include "keywords.hpp"
+#include "escapes.hpp"
 #include "../Common/error_reporter.hpp"
 #include "../Common/profiler.hpp"
 
@@ -103,13 +104,16 @@ Token Lexer::string_literal() noexcept {
                 return Token(Token::Kind::String, start + 1, m_beg - start - 2, m_line_number);
             case '`':
                 return Token(Token::Kind::TextLiteral, start + 1, m_beg - start - 2, m_line_number);
-            case '\'':
-                if (m_beg - start - 2 == 1) { 
-                    return Token(Token::Kind::Character, start + 1, 1, m_line_number);
-                } else {
-                    report_error("Invalid character literal (characters are 1 letter or number)");
+            case '\'': {
+                const std::size_t interior = std::size_t(m_beg - start - 2);
+
+                if (interior == 0) {
+                    report_error("Empty character literal");
                     return Token(Token::Kind::Unexpected, start, m_beg - start, m_line_number);
                 }
+                
+                return Token(Token::Kind::Character, start + 1, interior, m_line_number);
+            }
             default:
                 return Token(Token::Kind::Unexpected, start, m_beg - start, m_line_number);  
         }
@@ -384,54 +388,42 @@ Token Lexer::number() noexcept {
 }
 
 Token Lexer::slash_or_comment() noexcept {
-    const char* start = m_beg;
-    get<false>();
+    get<false>();                          
 
     if (peek() == '/') {
         get<false>();
-        start = m_beg;
+        const char* start = m_beg;
+        while (peek() != '\0' && peek() != '\n') { get<false>(); }
+        return Token(Token::Kind::Comment, start, std::size_t(m_beg - start), m_line_number);
+    }
 
-        while (peek() != '\0') {
-            if (get<true>() == '\n') {
-                ++m_line_number;
-                return Token(Token::Kind::Comment, start, std::distance(start, m_beg) - 1, m_line_number);
-            }
-        }
-
-        report_error("Unterminated comment");
-        return Token(Token::Kind::Unexpected, m_beg, 1, m_line_number);
-    } else if (peek() == '*') {
+    if (peek() == '*') {
         get<false>();
-        start = m_beg;
-        std::size_t nesting_level = 1;
+        const char* start = m_beg;
+        const std::uint32_t open_line = m_line_number;   
+        std::size_t depth = 1;
 
         while (peek() != '\0') {
-            char c = get<true>();
+            const char c = get<true>();                  
 
             if (c == '*' && peek() == '/') {
                 get<false>();
-                nesting_level--;
-                if (nesting_level == 0) {
-                    return Token(Token::Kind::LongComment, start, std::distance(start, m_beg) - 2, m_line_number);
+                if (--depth == 0) {
+                    return Token(Token::Kind::LongComment, start, std::size_t(m_beg - start) - 2, m_line_number);
                 }
             } else if (c == '/' && peek() == '*') {
                 get<false>();
-                nesting_level++;
-            } else if (c == '\n') {
-                ++m_line_number;
+                ++depth;
             }
         }
 
-        report_error("Unterminated long comment");
+        m_line_number = open_line;
+        report_error("Unterminated block comment");
         return Token(Token::Kind::Unexpected, m_beg, 1, m_line_number);
-    } else {
-        if (peek() == '=') {
-            get<false>();
-            return Token(Token::Kind::SlashEqual, m_beg - 2, 2, m_line_number);
-        } else {
-            return Token(Token::Kind::Slash, m_beg - 1, 1, m_line_number);
-        }
     }
+
+    if (peek() == '=') { get<false>(); return Token(Token::Kind::SlashEqual, m_beg - 2, 2, m_line_number); }
+    return Token(Token::Kind::Slash, m_beg - 1, 1, m_line_number);
 }
 
 void display_all_tokens(const char* code, const std::string& output_file) {

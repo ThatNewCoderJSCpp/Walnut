@@ -33,6 +33,7 @@ nodes::ImportExportItem Parser::parse_import_export_item(bool is_import) {
     using K  = tokenizing::Token::Kind;
     using IK = nodes::ImportExportItem::Kind;
     nodes::ImportExportItem item;
+    item.line = current_token().line();
 
     auto read_qualified = [&](std::vector<std::string_view>& out, bool& glob, const char* ctx) {
         glob = match(K::DoubleColon);

@@ -8,6 +8,8 @@
 #include "Nodes/record_nodes.hpp"
 #include "Nodes/requires_expression_node.hpp"
 
+#include "Nodes/node_children.hpp"
+
 namespace walnut {
 namespace nodes {
 
@@ -74,6 +76,7 @@ inline void print_node(const ASTNode* node, std::ostream& os, std::size_t indent
         case ASTNode::Kind::StaticAssertDeclaration:     node_cast_unchecked<StaticAssertDeclaration>(node)->print(os, indent);     break;
         case ASTNode::Kind::DiscardExpression:           node_cast_unchecked<DiscardExpression>(node)->print(os, indent);           break;
         case ASTNode::Kind::RequiresExpression:          node_cast_unchecked<RequiresExpression>(node)->print(os, indent);          break;
+        case ASTNode::Kind::ThrowExpression:             node_cast_unchecked<ThrowExpression>(node)->print(os, indent);             break;
     }
 }
 

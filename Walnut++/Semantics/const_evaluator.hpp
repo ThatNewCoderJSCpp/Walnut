@@ -16,15 +16,50 @@ namespace semantics {
 
 struct ConstValue {
     enum class Kind : std::uint8_t { None = 0, Int, Float, Bool } kind = Kind::None;
+
+    enum class Fail : std::uint8_t {
+        NotConstant = 0,   
+        
+        Overflow,          
+        Underflow,         
+        Indeterminate,     
+        Undefined,         
+        Domain,           
+        ShiftWidth,  
+        Threw,     
+
+        Precision,         
+        Wrapped          
+    } fail = Fail::NotConstant;
+
     const WideInt*   i = nullptr;
     const WideFloat* f = nullptr;
     bool             b = false;
 
-    bool ok()       const { return kind != Kind::None; }
-    bool is_int()   const { return kind == Kind::Int; }
-    bool is_float() const { return kind == Kind::Float; }
-    bool is_bool()  const { return kind == Kind::Bool; }
+    bool ok()        const { return kind != Kind::None; }
+    bool is_error()  const { return kind == Kind::None && fail != Fail::NotConstant; }
+    bool is_int()    const { return kind == Kind::Int; }
+    bool is_float()  const { return kind == Kind::Float; }
+    bool is_bool()   const { return kind == Kind::Bool; }
+
+    static ConstValue error(Fail f) { ConstValue c; c.fail = f; return c; }
 };
+
+
+inline const char* fail_message(ConstValue::Fail f) {
+    switch (f) {
+        case ConstValue::Fail::Overflow:      return "value does not fit in its type";
+        case ConstValue::Fail::Underflow:     return "value underflows to zero in its type";
+        case ConstValue::Fail::Indeterminate: return "indeterminate form";
+        case ConstValue::Fail::Undefined:     return "undefined: division by zero";
+        case ConstValue::Fail::Domain:        return "argument outside the real domain";
+        case ConstValue::Fail::ShiftWidth:    return "shift count out of range";
+        case ConstValue::Fail::Precision:     return "result is subnormal; precision lost";
+        case ConstValue::Fail::Wrapped:       return "unsigned arithmetic wrapped";
+                case ConstValue::Fail::Threw: return "constant evaluation threw an exception";
+        default:                              return "not a constant expression";
+    }
+}
 
 class ConstEvaluator {
 public:
@@ -46,6 +81,101 @@ public:
             case ConstValue::Kind::Float: return !v.f->is_zero();
             default: ok = false; return false;
         }
+    }
+
+    static bool add_wrapped(const WideInt& a, const WideInt& b, const WideInt& r) {
+        if (a.is_negative() != b.is_negative()) return false;    
+        return r.magnitude() < a.magnitude();                    
+    }
+
+    static bool mul_wrapped(const WideInt& a, const WideInt& b, const WideInt& r) {
+        if (a.is_zero() || b.is_zero()) return false;
+        return (r / b) != a;
+    }
+
+    static bool checked_mul(WideInt& acc, const WideInt& x) {
+        if (acc.is_zero() || x.is_zero()) { acc = WideInt(); return true; }
+        const WideInt r = acc * x;
+        if (r / x != acc) return false;
+        acc = r;
+        return true;
+    }
+
+    ConstValue narrow(ConstValue v, nodes::ASTNode* site) {
+        using BK = parser_types::PrimitiveType::BaseKind;
+        if (!v.ok() || !site) return v;
+        Type* t = site->expr_type.type;
+        if (!t || !t->is_builtin()) return v;
+        auto* b = static_cast<BuiltinType*>(t);
+        const unsigned w = bit_width_of_rank(b->width());
+
+        if (v.is_int() && (b->base() == BK::Int || b->base() == BK::Char)) {
+            if (!b->is_unsigned()) {
+                if (!ConstTable::fits(*v.i, w, true)) return ConstValue::error(ConstValue::Fail::Overflow);
+                return v;
+            }
+
+            const WideInt wrapped = from_twos(to_twos(*v.i, w), w, false);  
+            ConstValue out = make_int(wrapped);
+            if (out.ok() && wrapped != *v.i) out.fail = ConstValue::Fail::Wrapped;       
+            return out;
+        }
+
+        if (v.is_float() && b->base() == BK::Float) {
+            WideFloat r;
+            if (!wf_round_to_width(*v.f, w, r)) return v;
+            if (!v.f->is_infinite() && r.is_infinite()) return ConstValue::error(ConstValue::Fail::Overflow);
+            if (!v.f->is_zero()     && r.is_zero())     return ConstValue::error(ConstValue::Fail::Underflow);
+            ConstValue out = make_float(r);
+            if (out.ok() && r.is_subnormal()) out.fail = ConstValue::Fail::Precision;
+            return out;
+        }
+
+        return v;
+    }
+
+public:
+    struct IntShape {
+        unsigned bits = 0;
+        bool     is_signed = true;
+        bool     known() const { return bits != 0; }
+    };
+
+    IntShape shape_of(nodes::ASTNode* site) const {
+        using BK = parser_types::PrimitiveType::BaseKind;
+        IntShape s;
+        Type* t = site ? site->expr_type.type : nullptr;
+        if (!t || !t->is_builtin()) return s;
+        auto* b = static_cast<BuiltinType*>(t);
+        if (b->base() != BK::Int && b->base() != BK::Char) return s;
+        s.bits      = bit_width_of_rank(b->width());
+        s.is_signed = !b->is_unsigned();
+        return s;
+    }
+
+    IntShape shape_for(nodes::BinaryExpression* b) const {
+        const bool shift = (b->op == TK::DoubleLessThan || b->op == TK::DoubleGreaterThan);
+        return shape_of(shift ? b->left : static_cast<nodes::ASTNode*>(b));
+    }
+
+    static WideUInt width_mask(unsigned bits) {
+        return bits >= unsigned(WideUInt::bits) ? ~WideUInt() : (WideUInt(std::uint64_t(1)) << bits) - WideUInt(std::uint64_t(1));
+    }
+
+    static WideUInt to_twos(const WideInt& v, unsigned bits) {
+        return WideUInt(v) & width_mask(bits);          
+    }
+
+    static WideInt from_twos(const WideUInt& pattern, unsigned bits, bool is_signed) {
+        const WideUInt m = width_mask(bits);
+        const WideUInt p = pattern & m;
+        
+        if (is_signed && bits > 0 && p.get_bit(bits - 1)) {
+            const WideUInt magnitude = ((~p) + WideUInt(std::uint64_t(1))) & m;
+            return -WideInt(magnitude);
+        }
+
+        return WideInt(p);
     }
 
 private:
@@ -145,7 +275,13 @@ private:
                 return convert_to(v, static_cast<BuiltinType*>(dst));
             }
 
-            case K::NoexceptExpression: return make_bool(true);   // until exceptions reach the checker
+            case K::ThrowExpression: return ConstValue::error(ConstValue::Fail::Threw);
+
+            case K::NoexceptExpression: {
+                auto* n = static_cast<nodes::NoexceptExpression*>(e);
+                if (!n->computed) return {};       
+                return make_bool(n->is_nothrow);
+            }
 
             default: return {};
         }
@@ -164,11 +300,10 @@ private:
             case TK::InfinityKeyword: return make_float(m_types.floats().intern(WideFloat::positive_infinity()));
 
             case TK::Character: {
-                // TODO(escapes): \n, \t, \xNN once the lexeme convention is settled
-                std::string_view s = lit->value;
-                if (s.size() >= 3 && s.front() == '\'' && s.back() == '\'') s = s.substr(1, s.size() - 2);
-                if (s.size() != 1) return {};
-                return make_int(WideInt(std::uint64_t(std::uint8_t(s[0]))));
+                std::uint32_t cp = 0;
+                tokenizing::EscapeError err = tokenizing::EscapeError::None;
+                if (!tokenizing::decode_char(lit->value, cp, err)) return {};
+                return make_int(WideInt(std::uint64_t(cp)));
             }
 
             case TK::True:  return make_bool(true);
@@ -230,28 +365,45 @@ private:
     }
 
     ConstValue eval_binary(nodes::BinaryExpression* b) {
+        if (is_assignment_op(b->op)) return {};          // never a constant expression
+
         if (b->op == TK::LogicAnd || b->op == TK::LogicOr) {
             ConstValue l = eval(b->left);
             bool ok = false; bool lt = truthy(l, ok);
-            if (!ok) return {};
+            if (!ok) return l.is_error() ? l : ConstValue{};
             if (b->op == TK::LogicAnd && !lt) return make_bool(false);
-            if (b->op == TK::LogicOr  &&  lt) return make_bool(true);
+            if (b->op == TK::LogicOr  &&  lt) return make_bool(true);   
             ConstValue r = eval(b->right);
             bool rt = truthy(r, ok);
-            return ok ? make_bool(rt) : ConstValue{};
+            return ok ? make_bool(rt) : (r.is_error() ? r : ConstValue{});
         }
 
         ConstValue l = eval(b->left), r = eval(b->right);
-        if (!l.ok() || !r.ok()) return {};
+        if (!l.ok()) return l;                         
+        if (!r.ok()) return r;
 
         if (l.is_float() || r.is_float()) {
-            if (l.is_int()) l = make_float(m_types.floats().from_int(*l.i));
-            if (r.is_int()) r = make_float(m_types.floats().from_int(*r.i));
+            bool lossy = false;
+
+            if (l.is_int()) {
+                WideFloat w;
+                lossy |= !wf_from_int_exact(*l.i, w);
+                l = make_float(w);
+            }
+
+            if (r.is_int()) {
+                WideFloat w;
+                lossy |= !wf_from_int_exact(*r.i, w);
+                r = make_float(w);
+            }
+
             if (!l.is_float() || !r.is_float()) return {};
-            return eval_float_op(b->op, *l.f, *r.f);
+            ConstValue v = narrow(eval_float_op(b->op, *l.f, *r.f), b);
+            if (v.ok() && lossy && v.fail == ConstValue::Fail::NotConstant) v.fail = ConstValue::Fail::Precision;
+            return v;
         }
 
-        if (l.is_int() && r.is_int()) return eval_int_op(b->op, *l.i, *r.i);
+        if (l.is_int() && r.is_int()) return narrow(eval_int_op(b->op, *l.i, *r.i, shape_for(b)), b);
 
         if (l.is_bool() && r.is_bool()) {
             if (b->op == TK::LogicEqual) return make_bool(l.b == r.b);
@@ -261,13 +413,32 @@ private:
         return {};
     }
 
-    ConstValue eval_int_op(TK op, const WideInt& a, const WideInt& b) {
+    ConstValue eval_int_op(TK op, const WideInt& a, const WideInt& b, const IntShape& sh) {
         switch (op) {
-            case TK::Plus:     return make_int(a + b);
-            case TK::Minus:    return make_int(a - b);
-            case TK::Asterisk: return make_int(a * b);
-            case TK::Slash:    return make_int(a / b);   
-            case TK::Percent:  return make_int(a % b);
+            case TK::Plus: {
+                const WideInt r = a + b;
+                return add_wrapped(a, b, r) ? ConstValue::error(ConstValue::Fail::Overflow) : make_int(r);
+            }
+
+            case TK::Minus: {
+                const WideInt nb = -b, r = a + nb;
+                return add_wrapped(a, nb, r) ? ConstValue::error(ConstValue::Fail::Overflow) : make_int(r);
+            }
+
+            case TK::Asterisk: {
+                const WideInt r = a * b;
+                return mul_wrapped(a, b, r) ? ConstValue::error(ConstValue::Fail::Overflow) : make_int(r);
+            }
+
+            case TK::Slash:
+                if (b.is_zero()) return ConstValue::error(a.is_zero() ? ConstValue::Fail::Indeterminate : ConstValue::Fail::Undefined);
+                return make_int(a / b);
+
+            case TK::Percent:
+                if (b.is_zero()) return ConstValue::error(a.is_zero() ? ConstValue::Fail::Indeterminate : ConstValue::Fail::Undefined);
+                return make_int(a % b);
+
+            case TK::DoubleAsterisk: return eval_int_pow(a, b);
 
             case TK::LogicEqual:   return make_bool(a == b);
             case TK::NotEqual:     return make_bool(a != b);
@@ -276,37 +447,95 @@ private:
             case TK::GreaterThan:  return make_bool(a >  b);
             case TK::GreaterEqual: return make_bool(a >= b);
 
-          
-            case TK::Ampersand: 
-            case TK::Pipe: 
-            case TK::Caret:
-            case TK::DoubleLessThan: 
-            case TK::DoubleGreaterThan: {
-                if (a.is_negative() || b.is_negative() || a.is_undefined() || b.is_undefined()) return {};
-                WideUInt ua(a), ub(b);
+            case TK::Ampersand:
+            case TK::Pipe:
+            case TK::Caret: {
+                if (!sh.known()) return {};
+                const WideUInt ua = to_twos(a, sh.bits), ub = to_twos(b, sh.bits);
+                const WideUInt r = (op == TK::Ampersand) ? (ua & ub)
+                                 : (op == TK::Pipe)      ? (ua | ub)
+                                                         : (ua ^ ub);
+                return make_int(from_twos(r, sh.bits, sh.is_signed));
+            }
 
-                switch (op) {
-                    case TK::Ampersand: return make_int(WideInt(ua & ub));
-                    case TK::Pipe:      return make_int(WideInt(ua | ub));
-                    case TK::Caret:     return make_int(WideInt(ua ^ ub));
-                    default: {
-                        if (b >= WideInt(std::uint64_t(WideInt::bits))) return {};
-                        std::size_t sh = std::size_t(b.get_lowest_bits());
-                        return make_int(WideInt(op == TK::DoubleLessThan ? ua << sh : ua >> sh));
-                    }
-                }
+            case TK::DoubleLessThan:
+            case TK::DoubleGreaterThan: {
+                if (!sh.known())    return {};
+                if (b.is_negative()) return ConstValue::error(ConstValue::Fail::ShiftWidth);
+                if (b >= WideInt(std::uint64_t(sh.bits))) return ConstValue::error(ConstValue::Fail::ShiftWidth);
+                const std::size_t n  = std::size_t(b.get_lowest_bits());
+                const WideInt     p2 = WideInt(WideUInt(std::uint64_t(1)) << n);
+                if (op == TK::DoubleGreaterThan) return make_int(a.floor_div(p2));  
+                const WideInt r = a * p2;
+                if (mul_wrapped(a, p2, r)) return ConstValue::error(ConstValue::Fail::Overflow);
+                return make_int(r);                                                 
             }
 
             default: return {};
         }
     }
 
+    ConstValue eval_int_pow(const WideInt& a, const WideInt& b) {
+        if (a.is_undefined() || b.is_undefined()) return {};
+        if (b.is_zero()) return make_int(WideInt(1));
+        const long long hb = a.highest_bit();        
+        const bool odd = b.get_bit(0);
+
+        if (b.is_negative()) {
+            if (hb <  0) return ConstValue::error(ConstValue::Fail::Undefined);        
+            if (hb != 0) return ConstValue::error(ConstValue::Fail::Domain);             
+            return make_int((a.is_negative() && odd) ? WideInt(-1) : WideInt(1));
+        }
+
+        if (hb <  0) return make_int(WideInt());
+        if (hb == 0) return make_int((a.is_negative() && odd) ? WideInt(-1) : WideInt(1));
+        if (b.highest_bit() >= 32) return ConstValue::error(ConstValue::Fail::Overflow);
+        const std::uint64_t e = b.get_lowest_bits();
+        if (static_cast<std::uint64_t>(hb) * e >= WideInt::bits) return ConstValue::error(ConstValue::Fail::Overflow);
+        WideInt r(1), p(a);
+
+        for (std::uint64_t t = e; t; t >>= 1) {
+            if (t & 1ull) { if (!checked_mul(r, p)) return ConstValue::error(ConstValue::Fail::Overflow); }
+            if (t >> 1)   { if (!checked_mul(p, p)) return ConstValue::error(ConstValue::Fail::Overflow); }
+        }
+
+        return make_int(r);
+    }
+
+    ConstValue guard_range(const WideFloat& r, const WideFloat& a, const WideFloat& b) {
+        if (r.is_undefined()) return ConstValue::error(ConstValue::Fail::Indeterminate);
+        if (r.is_nan())       return ConstValue::error(ConstValue::Fail::Domain);
+        const bool finite_in = a.is_finite() && b.is_finite();
+        if (finite_in && r.is_infinite()) return ConstValue::error(ConstValue::Fail::Overflow);
+        if (finite_in && r.is_zero() && !a.is_zero() && !b.is_zero()) return ConstValue::error(ConstValue::Fail::Underflow);
+        return make_float(r);
+    }
+
     ConstValue eval_float_op(TK op, const WideFloat& a, const WideFloat& b) {
         switch (op) {
-            case TK::Plus:         return make_float(a + b);   
-            case TK::Minus:        return make_float(a - b);
-            case TK::Asterisk:     return make_float(a * b);   
-            case TK::Slash:        return make_float(a / b);  
+            case TK::Plus:
+                if (a.is_infinite() && b.is_infinite() && a.is_negative() != b.is_negative())
+                    return ConstValue::error(ConstValue::Fail::Indeterminate);         
+                return guard_range(a + b, a, b);
+
+            case TK::Minus:
+                if (a.is_infinite() && b.is_infinite() && a.is_negative() == b.is_negative())
+                    return ConstValue::error(ConstValue::Fail::Indeterminate);          
+                return guard_range(a - b, a, b);
+
+            case TK::Asterisk:
+                if ((a.is_zero() && b.is_infinite()) || (a.is_infinite() && b.is_zero()))
+                    return ConstValue::error(ConstValue::Fail::Indeterminate);         
+                return guard_range(a * b, a, b);
+
+            case TK::Slash:
+                if (a.is_zero()     && b.is_zero())     return ConstValue::error(ConstValue::Fail::Indeterminate); 
+                if (a.is_infinite() && b.is_infinite()) return ConstValue::error(ConstValue::Fail::Indeterminate);  
+                if (b.is_zero())                        return ConstValue::error(ConstValue::Fail::Undefined);     
+                return guard_range(a / b, a, b);
+
+            case TK::DoubleAsterisk: return eval_float_pow(a, b);
+
             case TK::LogicEqual:   return make_bool(a == b);
             case TK::NotEqual:     return make_bool(a != b);
             case TK::LessThan:     return make_bool(a <  b);
@@ -315,6 +544,30 @@ private:
             case TK::GreaterEqual: return make_bool(a >= b);
             default: return {};
         }
+    }
+
+    static bool wf_is_integral(const WideFloat& x) {
+        return x.is_finite() && x.get_fractional_part().is_zero();
+    }
+
+    ConstValue eval_float_pow(const WideFloat& a, const WideFloat& b) {
+        const WideFloat one(1);
+        const WideFloat mag = mp::math::abs(a);
+        if (a.is_zero()     && b.is_zero())     return ConstValue::error(ConstValue::Fail::Indeterminate);  
+        if (a.is_infinite() && b.is_zero())     return ConstValue::error(ConstValue::Fail::Indeterminate);  
+        if (mag == one      && b.is_infinite()) return ConstValue::error(ConstValue::Fail::Indeterminate);  
+        if (a.is_zero()     && b.is_negative()) return ConstValue::error(ConstValue::Fail::Undefined);
+        if (a.is_negative() && b.is_finite() && !wf_is_integral(b)) return ConstValue::error(ConstValue::Fail::Domain);
+        return guard_range(mp::math::pow(a, b), a, b);
+    }
+
+    ConstValue finite_result(const WideFloat& r, const WideFloat& a, const WideFloat& b) {
+        const bool inputs_finite = a.is_finite() && b.is_finite();
+        if (r.is_undefined()) return ConstValue::error(ConstValue::Fail::Domain);
+        if (inputs_finite && r.is_nan())      return ConstValue::error(ConstValue::Fail::Domain);
+        if (inputs_finite && r.is_infinite()) return ConstValue::error(ConstValue::Fail::Overflow);
+        if (inputs_finite && r.is_zero() && !a.is_zero() && !b.is_zero()) return ConstValue::error(ConstValue::Fail::Underflow);
+        return make_float(r);
     }
 
     ConstValue convert_to(const ConstValue& v, BuiltinType* dst) {
@@ -338,9 +591,17 @@ private:
             }
 
             case BK::Float: {
-                if (v.is_float()) return v;   // TODO(dispatch-spine): round to dst's float width
-                if (v.is_int())   return make_float(m_types.floats().from_int(*v.i));
-                return {};
+                WideFloat src;
+
+                if      (v.is_float()) src = *v.f;
+                else if (v.is_int())   src = wf_from_int(*v.i);
+                else return {};
+
+                WideFloat out;
+                if (!wf_round_to_width(src, bit_width_of_rank(dst->width()), out)) return {};
+                if (!src.is_infinite() && out.is_infinite()) return ConstValue::error(ConstValue::Fail::Overflow);
+                if (!src.is_zero()     && out.is_zero())     return ConstValue::error(ConstValue::Fail::Underflow);
+                return make_float(out);
             }
 
             default: return {};

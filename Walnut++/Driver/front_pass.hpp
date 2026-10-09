@@ -51,26 +51,31 @@ public:
         return it == m_results.end() ? nullptr : &it->second;
     }
 
+    void enforce_primary_constructor(bool enable) { m_enforce_prim = enable; }
+
 private:
     ErrorReporter& m_reporter;
     Arena&         m_arena;
+
+    bool m_enforce_prim = false;
 
     std::unordered_map<FileId, UnitFrontResult> m_results;
     std::vector<FileId>                         m_order;
 
 private:
     void process(const ParsedUnit& unit) {
+        ScopedFile _f(m_reporter, unit.file);
         semantics::AnalysisContext ctx(m_arena, m_reporter);
-        m_reporter.set_current_file(unit.file);   
-        semantics::ScopeBuilder   builder(ctx);
-        semantics::Scope*         root = builder.build(unit.ast);   
+        semantics::ScopeBuilder builder(ctx);
+        if (m_enforce_prim) { builder.set_enforce_primary(true); }
+        semantics::Scope* root = builder.build(unit.ast);
         semantics::ImportResolver resolver(ctx);
         resolver.run(unit.ast);
         UnitFrontResult res;
         res.file    = unit.file;
         res.ast     = unit.ast;
         res.root    = root;
-        res.exports = resolver.exports();        
+        res.exports = resolver.exports();
         m_results.emplace(unit.file, std::move(res));
         m_order.push_back(unit.file);
     }

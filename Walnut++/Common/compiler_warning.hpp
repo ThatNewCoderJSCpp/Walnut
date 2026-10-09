@@ -12,8 +12,7 @@
 namespace walnut {
 
 struct CompilerWarning {
-    std::string message;
-    std::string file;                
+    std::string message;             
     std::size_t line;
     ErrorPhase  phase;
     FileId      file_id = INVALID_FILE;
@@ -24,6 +23,7 @@ struct CompilerWarning {
             case ErrorPhase::Parser:       return "Parser";
             case ErrorPhase::Semantic:     return "Semantic";
             case ErrorPhase::Preprocessor: return "Preprocessor";
+            case ErrorPhase::Loader:       return "Loader";
             default:                       return "Unknown";
         }
     }
@@ -32,7 +32,6 @@ struct CompilerWarning {
 class WarningReporter {
 private:
     std::vector<CompilerWarning> m_warnings;
-    std::string m_file;
     std::string m_output_path;
     ErrorOutput m_mode;
     const SourceManager* m_sources = nullptr;
@@ -41,7 +40,7 @@ private:
     bool m_enabled = true;           
 
 public:
-    explicit WarningReporter(std::string source_file = "<unknown>", ErrorOutput mode = ErrorOutput::Silent) : m_file(std::move(source_file)), m_mode(mode) {}
+    explicit WarningReporter(ErrorOutput mode = ErrorOutput::Silent) : m_mode(mode) {}
 
     void set_sources(const SourceManager* sources) noexcept { m_sources = sources; }
     void set_current_file(FileId id) noexcept { m_current_file = id; }
@@ -54,17 +53,15 @@ public:
 
     void report(ErrorPhase phase, FileId file_id, std::size_t line, std::string message) {
         if (!m_enabled) return;      
-        m_warnings.push_back({ std::move(message), m_file, line, phase, file_id });
+        m_warnings.push_back({ std::move(message), line, phase, file_id });
     }
 
     void report(ErrorPhase phase, std::size_t line, std::string message) {
         report(phase, m_current_file, line, std::move(message));
     }
 
-    void set_file(std::string file) { m_file = std::move(file); }
     void set_output_path(std::string path) { m_output_path = std::move(path); }
     void set_mode(ErrorOutput mode) noexcept { m_mode = mode; }
-    const std::string& file() const noexcept { return m_file; }
     ErrorOutput mode() const noexcept { return m_mode; }
 
     bool has_warnings() const noexcept { return !m_warnings.empty(); }
@@ -99,7 +96,7 @@ public:
 private:
     std::string display_name(const CompilerWarning& w) const {
         std::string p = display_path(w.file_id);
-        return p.empty() ? w.file : p;
+        return p.empty() ? "<unknown>" : p;
     }
 
     void write_to_stream(std::ostream& os) const {

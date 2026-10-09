@@ -75,9 +75,11 @@ struct ConstructorDeclaration : ASTNode {
     const std::vector<ASTNode*>& get_init_list() const { return m_init_list; }
     bool has_init_list() const { return !m_init_list.empty(); }
     const ASTNode* get_body() const { return m_body; }
+    ASTNode* get_body() { return m_body; }
     bool has_body() const { return m_body != nullptr; }
     const modifiers::RawModifiers& modifiers() const { return m_modifiers; }
-    modifiers::FunctionQualifiers qualifiers() const { return m_qualifiers; }
+    const modifiers::FunctionQualifiers& qualifiers() const { return m_qualifiers; }
+          modifiers::FunctionQualifiers& qualifiers()       { return m_qualifiers; }
     bool is_defaulted() const { return m_special == Special::Default; }
     bool is_deleted() const { return m_special == Special::Delete; }
 
@@ -158,6 +160,7 @@ struct DestructorDeclaration : ASTNode {
     static bool classof(const ASTNode* n) { return n->kind == Kind::DestructorDeclaration; }
 
     const ASTNode* get_body() const { return m_body; }
+    ASTNode* get_body() { return m_body; }
     bool has_body() const { return m_body != nullptr; }
     const modifiers::RawModifiers& modifiers() const { return m_modifiers; }
     modifiers::FunctionQualifiers qualifiers() const { return m_qualifiers; }

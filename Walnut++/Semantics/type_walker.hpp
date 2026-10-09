@@ -2,6 +2,7 @@
 #define WALNUT_SEMA_TYPE_WALKER_HPP
 
 #include <algorithm>
+#include <sstream>
 
 #include "type_impl.hpp"
 #include "conversion.hpp"
@@ -10,19 +11,26 @@
 #include "scope.hpp"
 #include "symbol.hpp"
 #include "semantic_error.hpp"
+#include "semantic_warning.hpp"
 
 #include "../Parser/nodes.hpp"
 #include "../Common/error_reporter.hpp"
 
 #include "instantiator.hpp"
 
+#include "throw_spec.hpp"
+
 namespace walnut {
 namespace semantics {
 
 class TypeWalker {
 public:
-    TypeWalker(TypeContext& types, ErrorReporter& reporter, Scope* root, Instantiator* inst = nullptr) noexcept : m_types(types), m_reporter(reporter), m_root(root), m_current(root), m_inst(inst), m_eval(types) {}
-
+    TypeWalker(
+        TypeContext& types, ErrorReporter& reporter, WarningReporter& warnings, Scope* root,
+        Instantiator* inst = nullptr, ThrowContext* throws = nullptr
+    ) noexcept
+        : m_types(types), m_reporter(reporter), m_warnings(warnings), m_root(root), m_current(root)
+        , m_inst(inst), m_eval(types), m_throws(throws) {}
     void run(nodes::BlockStatement* program) {
         if (!program) return;
         m_current = m_root;
@@ -68,17 +76,19 @@ private:
     };
 
 private:
-    TypeContext&             m_types;
-    ErrorReporter&           m_reporter;
-    Scope*                   m_root    = nullptr;
-    Scope*                   m_current = nullptr;
-    Instantiator*            m_inst    = nullptr;
-    ConstEvaluator           m_eval;
-    std::vector<ReturnFrame> m_returns;
-    unsigned long long int   m_loop_depth   = 0;   
-    unsigned long long int   m_switch_depth = 0;
-
-    Instantiator* m_inst = nullptr; 
+    TypeContext&                 m_types;
+    ErrorReporter&               m_reporter;
+    WarningReporter&             m_warnings;
+    Scope*                       m_root    = nullptr;
+    Scope*                       m_current = nullptr;
+    Instantiator*                m_inst    = nullptr;
+    ThrowContext*                m_throws  = nullptr;
+    ConstEvaluator               m_eval;
+    std::vector<ReturnFrame>     m_returns;
+    std::vector<nodes::ASTNode*> m_fn_bodies;
+    std::size_t                  m_catch_depth  = 0; 
+    unsigned long long int       m_loop_depth   = 0;   
+    unsigned long long int       m_switch_depth = 0;
 
 private:
     static nodes::ASTNode* mn(const nodes::ASTNode* n) { return const_cast<nodes::ASTNode*>(n); }
@@ -224,6 +234,8 @@ private:
                 if (fn->has_body()) build(mn(fn->get_body()));
                 pop_return(fn->get_return_type());
                 m_current = saved;
+                if (fn->has_body() && fn->symbol) m_fn_bodies.push_back(node);  
+                if (fn->has_body() && fn->symbol && m_throws) m_throws->pending.push_back(node);   
                 break;
             }
 
@@ -237,6 +249,8 @@ private:
                 if (op->has_body()) build(mn(op->get_body()));
                 pop_return(op->get_return_type());
                 m_current = saved;
+                if (op->has_body() && op->symbol) m_fn_bodies.push_back(node); 
+                if (op->has_body() && op->symbol && m_throws) m_throws->pending.push_back(node);    
                 break;
             }
 
@@ -250,6 +264,8 @@ private:
                 if (ct->has_body()) build(mn(ct->get_body()));
                 pop_return_fixed();
                 m_current = saved;
+                if (ct->has_body() && ct->symbol) m_fn_bodies.push_back(node);    
+                if (ct->has_body() && ct->symbol && m_throws) m_throws->pending.push_back(node);
                 break;
             }
 
@@ -262,6 +278,8 @@ private:
                 if (dt->has_body()) build(mn(dt->get_body()));
                 pop_return_fixed();
                 m_current = saved;
+                if (dt->has_body() && dt->symbol) m_fn_bodies.push_back(node);
+                if (dt->has_body() && dt->symbol && m_throws) m_throws->pending.push_back(node);
                 break;
             }
 
@@ -442,6 +460,35 @@ private:
                 }
 
                 --m_switch_depth;
+                const auto& cases = s->get_cases();
+
+                for (std::size_t i = 0; i + 1 < cases.size(); ++i) {
+                    nodes::SwitchCase* c = cases[i];
+                    if (c->body.empty())       continue;    
+                    if (case_terminates(c))    continue;
+                    if (marked_fallthrough(c)) continue;
+
+                    SemanticWarning::emit(
+                        m_warnings, file_of(c), c->line, "Switch",
+                        "case falls through to the next case; add 'fallthrough' if that is intentional"
+                    );
+                }
+
+                for (std::size_t i = 0; i < cases.size(); ++i) {
+                    nodes::SwitchCase* c = cases[i];
+                    const bool last_case = (i + 1 == cases.size());
+
+                    for (std::size_t j = 0; j < c->body.size(); ++j) {
+                        using V = nodes::SingleStatement::Variant;
+                        if (!is_single(c->body[j], V::Fallthrough)) continue;
+
+                        if (j + 1 != c->body.size())
+                            SemanticError::fallthrough_not_last(m_reporter, file_of(c->body[j]), c->body[j]->line);
+                        else if (last_case)
+                            SemanticError::fallthrough_at_end(m_reporter, file_of(c->body[j]), c->body[j]->line);
+                    }
+                }
+
                 m_current = saved;
                 break;
             }
@@ -449,7 +496,9 @@ private:
             case K::TryCatchStatement: {
                 auto* s = static_cast<nodes::TryCatchStatement*>(node);
                 build(s->get_try_body());
+                ++m_catch_depth;
                 build(s->get_catch_body());
+                --m_catch_depth;
                 break;
             }
 
@@ -488,7 +537,7 @@ private:
                 if (Type* t = type_of(sa->constraint))
                     if (!is_bool_testable(t)) SemanticError::condition_not_bool(m_reporter, file_of(sa), sa->line, type_str(t));
 
-                ConstValue v = m_eval.eval(sa->constraint);
+                ConstValue v = eval_checked(sa->constraint, true);
 
                 if (v.ok()) {
                     bool ok = false;
@@ -766,8 +815,14 @@ private:
             }
 
             case K::NoexceptExpression: {
-                auto* nx = static_cast<nodes::NoexceptExpression*>(e);
-                walk_expr(nx->operand);
+                auto* n = static_cast<nodes::NoexceptExpression*>(e);
+                walk_expr(n->operand);
+
+                if (m_throws) {
+                    n->is_nothrow = m_throws->analyzer.of_expr(n->operand).nothrow();
+                    n->computed   = true;
+                }
+
                 assign_typed(e, m_types.bool_(), VC::RValue);
                 break;
             }
@@ -862,6 +917,21 @@ private:
                 auto* b = static_cast<nodes::BraceInitializerList*>(e);
                 for (nodes::ASTNode* el : b->m_elements) walk_expr(el);
                 assign_typed(e, nullptr, VC::RValue);   
+                break;
+            }
+
+            case K::ThrowExpression: {
+                auto* t = static_cast<nodes::ThrowExpression*>(e);
+
+                if (t->is_rethrow()) {
+                    if (m_catch_depth == 0) SemanticError::rethrow_outside_catch(m_reporter, file_of(t), t->line);
+                } else {
+                    walk_expr(t->operand);
+                    if (Type* ot = type_of(t->operand))
+                        if (is_void_t(ot)) SemanticError::bad_operand(m_reporter, file_of(t), t->line, "throw", type_str(ot));
+                }
+
+                assign_typed(e, m_types.void_(), VC::RValue);
                 break;
             }
 
@@ -1236,7 +1306,12 @@ private:
 
         Symbol* found = members ? members->find_member(m->get_member()) : nullptr;
         m->resolved = found;
-        if (!found) { return nullptr; }
+        
+        if (!found) {
+            if (obj && !is_dynamic_t(obj) && !obj->is_error()) SemanticError::unresolved_name(m_reporter, file_of(m), m->line, m->get_member());
+            return nullptr;
+        }
+
         EnvGuard g(m_types, I ? &I->env : nullptr);          
         return symbol_type(found);
     }
@@ -1255,23 +1330,6 @@ private:
         return obj;
     }
 
-    Type* type_member_access(nodes::MemberAccessExpression* m) {
-        if (m->is_scope()) return symbol_type(m->resolved);   
-        Type* obj = type_of(m->m_object);
-        if (!obj) return nullptr;
-        if (m->is_arrow()) obj = arrow_target(obj);
-        Symbol* rec = record_symbol_of(obj);
-        Symbol* found = (rec && rec->inner_scope) ? rec->inner_scope->find_member(m->get_member()) : nullptr;
-
-        if (!found) {
-            SemanticError::unresolved_name(m_reporter, file_of(m), m->line, m->get_member());
-            return nullptr;
-        }
-
-        m->resolved = found;            
-        return symbol_type(found);
-    }
-
     Type* deduce_auto(Type* init) {
         if (!init) return nullptr;
         Type* t = init;
@@ -1282,28 +1340,6 @@ private:
     Type* decay_ref(Type* t, VC& vc) {
         if (t && t->is_reference()) { vc = VC::LValue; return static_cast<ReferenceType*>(t)->referent(); }
         return t;
-    }
-
-    Type* pop_return(const parser_types::TypeInfo& rt) {
-        ReturnFrame f = m_returns.back();
-        m_returns.pop_back();
-
-        if (f.saw_co) {
-            if (f.saw_value_return && f.site) {
-                SemanticError::coroutine_mixed_return(m_reporter, file_of(f.site), f.site->line);
-            }
-
-            if (f.deducing && f.site) {
-                SemanticError::coroutine_deduced_return(m_reporter, file_of(f.site), f.site->line);
-            }
-
-            return f.declared;  
-        }
-
-        if (!f.deducing) return f.declared;
-        Type* result = f.seen ? f.deduced : m_types.void_();          
-        const_cast<parser_types::TypeInfo&>(rt).canonical = result;
-        return result;
     }
 
     std::vector<ParamShape> shapes_of(Symbol* fn) {
@@ -1506,33 +1542,6 @@ private:
         return (t && t->is_function()) ? static_cast<FunctionType*>(t) : nullptr;
     }
 
-    static bool is_assignment_op(tokenizing::Token::Kind k) {
-        using K = tokenizing::Token::Kind;
-
-        switch (k) {
-            case K::Equal: case K::PlusEqual: case K::MinusEqual: case K::AsteriskEqual:
-            case K::SlashEqual: case K::PercentEqual: case K::DoubleAsteriskEqual:
-            case K::PipeEqual: case K::AmpersandEqual: case K::CaretEqual:
-            case K::ShiftLeftEqual: case K::ShiftRightEqual: return true;
-            default: return false;
-        }
-    }
-
-    static bool is_equality_op(tokenizing::Token::Kind k) {
-        using K = tokenizing::Token::Kind;
-        return k == K::LogicEqual || k == K::NotEqual;
-    }
-
-    static bool is_comparison_op(tokenizing::Token::Kind k) {
-        using K = tokenizing::Token::Kind;
-        return k == K::LessThan || k == K::GreaterThan || k == K::LessEqual || k == K::GreaterEqual;
-    }
-
-    static bool is_logical_op(tokenizing::Token::Kind k) {
-        using K = tokenizing::Token::Kind;
-        return k == K::LogicAnd || k == K::LogicOr;
-    }
-
     static bool is_lvalue(const nodes::ASTNode* n) {
         return n && n->expr_type.vc == VC::LValue;
     }
@@ -1609,6 +1618,54 @@ private:
         return static_cast<parser_types::PrimitiveType*>(ti.type)->base_kind() == bk;
     }
 
+    static bool is_single(const nodes::ASTNode* n, nodes::SingleStatement::Variant v) {
+        return n && n->kind == K::SingleStatement && static_cast<const nodes::SingleStatement*>(n)->variant == v;
+    }
+
+    static bool terminates(const nodes::ASTNode* s) {
+        if (!s) return false;
+
+        switch (s->kind) {
+            case K::ReturnStatement:
+                return true;
+
+            case K::SingleStatement: {
+                using V = nodes::SingleStatement::Variant;
+                const auto v = static_cast<const nodes::SingleStatement*>(s)->variant;
+                return v == V::Break || v == V::Continue || v == V::Repeat;
+            }
+
+            case K::ExpressionStatement:
+                return static_cast<const nodes::ExpressionStatement*>(s)->expr && static_cast<const nodes::ExpressionStatement*>(s)->expr->kind == K::ThrowExpression;
+
+            case K::BlockStatement: {
+                const auto& body = static_cast<const nodes::BlockStatement*>(s)->get_statements();
+                return !body.empty() && terminates(body.back());
+            }
+
+            case K::IfStatement: {
+                auto* i = static_cast<const nodes::IfStatement*>(s);
+                if (!i->get_else()) return false;                  
+                for (const nodes::IfBranch* br : i->get_branches()) if (!terminates(br->get_body())) return false;
+                return terminates(i->get_else());
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    static bool case_terminates(const nodes::SwitchCase* c) {
+        const auto& body = c->body;
+        return !body.empty() && terminates(body.back());
+    }
+
+    static bool marked_fallthrough(const nodes::SwitchCase* c) {
+        using V = nodes::SingleStatement::Variant;
+        if (c->has_fallthrough) return true;                      
+        return !c->body.empty() && is_single(c->body.back(), V::Fallthrough);
+    }
+
     bool operator_arity_ok(nodes::OverloadableOperator op, bool is_member, std::size_t n, const char*& why) {
         using OP = nodes::OverloadableOperator;
         
@@ -1654,9 +1711,35 @@ private:
         }
     }
 
+    ConstValue eval_checked(nodes::ASTNode* e, bool required = false) {
+        ConstValue v = m_eval.eval(e);
+        if (!e) return v;
+
+        if (v.is_error()) {
+            if (required) SemanticError::not_a_constant(m_reporter, file_of(e), e->line, fail_message(v.fail));
+            return v;
+        }
+
+        if (!v.ok()) return v; 
+
+        switch (v.fail) {
+            case ConstValue::Fail::Precision:
+                SemanticWarning::emit(m_warnings, file_of(e), e->line, "Constant", "constant expression lost precision: " + std::string(fail_message(v.fail)));
+                break;
+
+            case ConstValue::Fail::Wrapped:
+                SemanticWarning::emit(m_warnings, file_of(e), e->line, "Constant", "constant expression wrapped around its type: " + std::string(fail_message(v.fail)));
+                break;
+
+            default:
+                break;
+        }
+
+        return v;
+    }
+
     static std::string type_str(Type* t) {
-        if (!t) return "<error-type>";
-        std::ostringstream os; t->write_to(os); return os.str();
+        return type_str_of(t);
     }
 
     static std::string_view callee_name(nodes::ASTNode* n) {

@@ -800,37 +800,41 @@ struct EnumDeclaration : ASTNode {
 };
 
 struct UsingDeclaration : ASTNode {
-    enum class Variant : std::uint8_t { Alias = 0, Typedef, NamespaceDirective };
+    enum class Variant : std::uint8_t { Alias = 0, Typedef, NamespaceDirective, NamespaceAlias };
 
     Variant variant;
     std::string_view name;
     ASTNode* aliased_expr = nullptr;
     parser_types::TypeInfo aliased_type;
     std::vector<std::string_view> target_parts;
+    bool target_global = false;
     semantics::Symbol* symbol = nullptr; 
 
     UsingDeclaration(std::string_view n, ASTNode* expr, std::uint32_t ln = 0) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::Alias), name(n), aliased_expr(expr) {}
     UsingDeclaration(std::string_view n, const parser_types::TypeInfo& type, std::uint32_t ln = 0) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::Typedef), name(n), aliased_type(type) {}
     UsingDeclaration(std::vector<std::string_view> parts, std::uint32_t ln = 0) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::NamespaceDirective), target_parts(std::move(parts)) {}
+    UsingDeclaration(std::string_view n, std::vector<std::string_view> parts, bool global, std::uint32_t ln = 0) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::NamespaceAlias), name(n), target_parts(std::move(parts)), target_global(global) {}
 
     static bool classof(const ASTNode* n) { return n->kind == Kind::UsingDeclaration; }
 
     bool is_alias()     const { return variant == Variant::Alias; }
     bool is_typedef()   const { return variant == Variant::Typedef; }
     bool is_directive() const { return variant == Variant::NamespaceDirective; }
+    bool is_namespace_alias() const { return variant == Variant::NamespaceAlias; }
 
     const char* variant_name() const {
         switch (variant) {
             case Variant::Alias:              return "using-alias";
             case Variant::Typedef:            return "typedef";
             case Variant::NamespaceDirective: return "using-namespace";
+            case Variant::NamespaceAlias:     return "namespace-alias";
         }
 
         return "unknown";
     }
 
     std::string target_name() const {
-        std::string result;
+        std::string result = target_global ? "::" : "";
 
         for (std::size_t i = 0; i < target_parts.size(); ++i) {
             if (i > 0) result += "::";
@@ -857,6 +861,10 @@ struct UsingDeclaration : ASTNode {
             case Variant::NamespaceDirective:
                 print_indent(os, indent + 1); os << "Target: " << target_name() << "\n";
                 break;
+            case Variant::NamespaceAlias:
+                print_indent(os, indent + 1); os << "Name: " << name << "\n";
+                print_indent(os, indent + 1); os << "Target: " << target_name() << "\n";
+                break;
         }
     }
 
@@ -864,11 +872,13 @@ struct UsingDeclaration : ASTNode {
         UsingDeclaration* c;
 
         switch (variant) {
-            case Variant::Alias:   c = make_in<UsingDeclaration>(a, name, clone_child(aliased_expr, a), line); break;
-            case Variant::Typedef: c = make_in<UsingDeclaration>(a, name, aliased_type.clone_into(a), line);   break;
-            default:               c = make_in<UsingDeclaration>(a, target_parts, line);                       break;
+            case Variant::Alias:          c = make_in<UsingDeclaration>(a, name, clone_child(aliased_expr, a), line); break;
+            case Variant::Typedef:        c = make_in<UsingDeclaration>(a, name, aliased_type.clone_into(a), line);   break;
+            case Variant::NamespaceAlias: c = make_in<UsingDeclaration>(a, name, target_parts, target_global, line);  break;
+            default:                      c = make_in<UsingDeclaration>(a, target_parts, line);                       break;
         }
 
+        c->target_global = target_global;
         copy_base_to(c);
         return c;
     }
@@ -1009,6 +1019,7 @@ struct ImportExportItem {
 
     Kind                          kind = Kind::Name;
     std::vector<std::string_view> target_parts;       
+    std::uint32_t                 line = 0;
     bool                          target_global = false;
     bool                          has_source = false;
     std::string_view              source;             

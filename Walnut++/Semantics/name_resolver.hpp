@@ -319,6 +319,10 @@ private:
                 break;
             }
 
+            case K::ThrowExpression:
+                walk_expr(static_cast<nodes::ThrowExpression*>(e)->operand);
+                break;
+
             default:
                 break;
         }
@@ -559,11 +563,27 @@ private:
                     walk_expr(u->aliased_expr);                       // using X = <expr>
                 } else if (u->is_typedef()) {
                     resolve_type(u->aliased_type, u);                 // typedef <type> X
-                } else { // using namespace a::b;
-                    if (!resolve_name(m_current, m_root, u->target_parts, false, u)) {
+                } else if (u->is_namespace_alias()) {                 // namespace X = a::b;
+                    Symbol* target = resolve_name(m_current, m_root, u->target_parts, u->target_global, u);
+
+                    if (!target) {
+                        error_unresolved(u, u->target_name());
+                    } else {
+                        Symbol* c = chase(target);
+
+                        if (!c || c->kind != SymbolKind::Namespace) {
+                            SemanticError::not_a_namespace(m_reporter, u->file_id, u->line, u->target_name());
+                        } else if (u->symbol) {
+                            u->symbol->inner_scope   = c->inner_scope;
+                            u->symbol->import_target = c;
+                        }
+                    }
+                } else if (u->is_directive()) {                       // using namespace a::b;
+                    if (!resolve_name(m_current, m_root, u->target_parts, u->target_global, u)) {
                         error_unresolved(u, u->target_name());
                     }
                 }
+
                 break;
             }
 

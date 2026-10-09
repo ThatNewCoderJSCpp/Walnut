@@ -7,6 +7,7 @@
 #include "symbol.hpp"
 #include "overload.hpp"
 #include "semantic_error.hpp"
+#include "semantic_warning.hpp"
 #include "const_value.hpp"
 #include "const_evaluator.hpp"
 #include "../Parser/nodes.hpp"
@@ -40,10 +41,34 @@ public:
         std::vector<Arg>            args;              // post-default, canonical, packs flattened
         Type*                       type = nullptr;    // RecordType / FunctionType
         std::vector<ParamShape>     fn_shapes;
-        bool                        typed = false;     // body typed by walker?
+        bool                        typed = false;     
     };
 
-    Instantiator(Arena& arena, TypeContext& types, ErrorReporter& reporter) : m_arena(arena), m_types(types), m_reporter(reporter), m_eval(types) {}
+    enum class ArgCoerce : std::uint8_t {
+        Ok = 0,
+        Overflow,        // magnitude exceeds the declared width
+        Underflow,       // nonzero value rounds to zero at the declared width
+        WrongForm,       // float argument for an integer parameter, or vice versa
+        NotConstant      // no usable value at all
+    };
+
+    struct CoerceResult {
+        ArgCoerce status  = ArgCoerce::Ok;
+        bool      inexact = false;      // rounded, but still a usable argument
+        bool ok() const { return status == ArgCoerce::Ok; }
+
+        static CoerceResult fail(ArgCoerce s) { CoerceResult r; r.status = s; return r; }
+    };
+
+    struct SpecMatch {
+        nodes::TemplateDeclaration* tmpl = nullptr;
+        SubstEnv                    env;
+        bool                        failed = false;  
+    };
+
+public:
+    Instantiator(Arena& arena, TypeContext& types, ErrorReporter& reporter, WarningReporter& warnings)
+        : m_arena(arena), m_types(types), m_reporter(reporter), m_warnings(warnings), m_eval(types) {}
 
     std::function<void(nodes::ASTNode*, Scope*)> build_scopes;
 
@@ -200,7 +225,7 @@ private:
         }
 
         if (!complete_arguments(tmpl, args, site, quiet)) return nullptr;
-        Key key{ generic, args };                     
+        Key key{ generic, args };
         if (auto it = m_memo.find(key); it != m_memo.end()) return it->second;
 
         if (m_depth >= kMaxDepth) {
@@ -208,29 +233,37 @@ private:
             return nullptr;
         }
 
-        auto* I = make_in<Instantiation>(m_arena);
-        I->source = tmpl;
+        SpecMatch spec = select_specialization(generic, args, site, quiet);
+        if (spec.failed) return nullptr;
+        nodes::TemplateDeclaration* chosen = spec.tmpl ? spec.tmpl : tmpl;
+        auto* I   = make_in<Instantiation>(m_arena);
+        I->source = chosen;
         I->args   = args;
-        m_memo.emplace(std::move(key), I);              
-        const auto& ps = tmpl->params();
-        nodes::TemplateParameter* tpack = trailing_pack(ps);
-        const std::size_t fixed = ps.size() - (tpack ? 1 : 0);
+        m_memo.emplace(std::move(key), I);
 
-        for (std::size_t i = 0; i < fixed; ++i) {
-            if (!ps[i]->symbol) continue;
-            if      (args[i].is_type) I->env.types  [ps[i]->symbol] = args[i].type;
-            else if (args[i].value)   I->env.values [ps[i]->symbol] = args[i].value;
-            else if (args[i].fvalue)  I->env.fvalues[ps[i]->symbol] = args[i].fvalue;
-        }
+        if (spec.tmpl) {
+            I->env = std::move(spec.env);
+        } else {
+            const auto& ps = tmpl->params();
+            nodes::TemplateParameter* tpack = trailing_pack(ps);
+            const std::size_t fixed = ps.size() - (tpack ? 1 : 0);
 
-        if (tpack && tpack->symbol) {
-            std::vector<Type*>& pk = I->env.packs[tpack->symbol];
-            for (std::size_t i = fixed; i < args.size(); ++i) pk.push_back(args[i].type);
+            for (std::size_t i = 0; i < fixed; ++i) {
+                if (!ps[i]->symbol) continue;
+                if      (args[i].is_type) I->env.types  [ps[i]->symbol] = args[i].type;
+                else if (args[i].value)   I->env.values [ps[i]->symbol] = args[i].value;
+                else if (args[i].fvalue)  I->env.fvalues[ps[i]->symbol] = args[i].fvalue;
+            }
+
+            if (tpack && tpack->symbol) {
+                std::vector<Type*>& pk = I->env.packs[tpack->symbol];
+                for (std::size_t i = fixed; i < args.size(); ++i) pk.push_back(args[i].type);
+            }
         }
 
         ++m_depth;
-        I->decl = tmpl->m_declaration ? tmpl->m_declaration->clone_into(m_arena) : nullptr;
-        Scope* parent = tmpl->scope ? tmpl->scope->parent : nullptr;
+        I->decl = chosen->m_declaration ? chosen->m_declaration->clone_into(m_arena) : nullptr;
+        Scope* parent = chosen->scope ? chosen->scope->parent : nullptr;
         I->scope = make_in<Scope>(m_arena, Scope::Kind::Template, parent);
         if (I->decl && build_scopes) build_scopes(I->decl, I->scope);
         I->sym = entity_symbol(I->decl);
@@ -249,7 +282,7 @@ private:
             const bool poisoned = trapped || contains_error(I->type);
 
             if (poisoned) {
-                m_memo.erase(Key{ generic, I->args });  
+                m_memo.erase(Key{ generic, I->args });
                 m_scope_owner.erase(I->scope);
                 if (I->sym && I->sym->inner_scope) m_scope_owner.erase(I->sym->inner_scope);
                 --m_depth;
@@ -259,6 +292,65 @@ private:
 
         --m_depth;
         return I;
+    }
+
+    SpecMatch select_specialization(Symbol* generic, const std::vector<Arg>& args, nodes::ASTNode* site, bool quiet) {
+        SpecMatch full, partial;
+        bool partial_ambiguous = false;
+
+        for (nodes::TemplateDeclaration* st : generic->specializations) {
+            if (has_nontrailing_pack(st->params())) continue;          // unusable pattern, never matches
+            const auto* written = spec_args_of(st);
+            if (!written) continue;
+            std::size_t fixed = 0;
+            const parser_types::TemplateArgument* tpack = trailing_targ_pack(*written, fixed);
+            if (tpack ? args.size() < fixed : args.size() != written->size()) continue;
+            SubstEnv env;
+            bool ok = true;
+
+            for (std::size_t i = 0; i < fixed && ok; ++i) {
+                const parser_types::TemplateArgument* w = (*written)[i];
+                if (!w || !w->is_type() || !args[i].is_type) { ok = false; break; }
+                ok = deduce(m_types.canonicalize(w->type), args[i].type, env, m_types);
+            }
+
+            if (ok && tpack) {
+                if (!tpack->is_type()) { ok = false; }
+                else {
+                    std::vector<Type*> rest;
+                    rest.reserve(args.size() - fixed);
+
+                    for (std::size_t i = fixed; i < args.size(); ++i) {
+                        if (!args[i].is_type) { ok = false; break; }
+                        rest.push_back(args[i].type);
+                    }
+
+                    if (ok) {
+                        Type* pattern = m_types.pack_expansion(m_types.canonicalize(tpack->type));
+                        ok = deduce_pack(pattern, rest, env, m_types);
+                    }
+                }
+            }
+
+            if (!ok || !bindings_complete(st, env)) continue;
+
+            if (st->params().empty()) {          // full specialization / exact match
+                full.tmpl = st;
+                full.env  = std::move(env);
+                return full;
+            }
+
+            if (partial.tmpl) { partial_ambiguous = true; }
+            else { partial.tmpl = st; partial.env = std::move(env); }
+        }
+
+        if (partial_ambiguous) {
+            if (!quiet) SemanticError::ambiguous_specialization(m_reporter, file_of(site), line_of(site), generic->name);
+            SpecMatch bad; bad.failed = true;
+            return bad;
+        }
+
+        return partial;
     }
 
     void finish_function_type(Instantiation* I, nodes::FunctionDeclaration* fd) {
@@ -337,20 +429,37 @@ private:
         }
     }
 
-    bool coerce_value_arg(nodes::TemplateParameter* p, Arg& a) {
+    CoerceResult coerce_value_arg(nodes::TemplateParameter* p, Arg& a) {
         using BK = parser_types::PrimitiveType::BaseKind;
         Type* pt = m_types.strip_cv(m_types.canonicalize(p->m_type));
-        if (!pt || !pt->is_builtin()) return true;   
+        if (!pt || !pt->is_builtin()) return {};                 
         auto* b = static_cast<BuiltinType*>(pt);
 
         if (b->base() == BK::Float) {
-            if (a.fvalue) return true;                // TODO(dispatch-spine): round to the declared float width
-            if (a.value) { a.fvalue = m_types.floats().from_int(*a.value); a.value = nullptr; return true; }
-            return false;
+            const unsigned bits = bit_width_of_rank(b->width());
+
+            WideFloat src;
+            if      (a.fvalue) src = *a.fvalue;
+            else if (a.value)  src = wf_from_int(*a.value);
+            else               return CoerceResult::fail(ArgCoerce::NotConstant);
+
+            WideFloat out;
+            if (!wf_round_to_width(src, bits, out))      return CoerceResult::fail(ArgCoerce::NotConstant);
+            if (!src.is_infinite() && out.is_infinite()) return CoerceResult::fail(ArgCoerce::Overflow);
+            if (!src.is_zero()     && out.is_zero())     return CoerceResult::fail(ArgCoerce::Underflow);
+            CoerceResult r;
+            r.inexact = !wf_same_bits(out, src);
+            a.fvalue = m_types.floats().intern(out);
+            a.value  = nullptr;
+            return r;
         }
 
-        if (a.fvalue) return false;                 
-        return a.value && ConstTable::fits(*a.value, bit_width_of_rank(b->width()), !b->is_unsigned());
+        if (a.fvalue) return CoerceResult::fail(ArgCoerce::WrongForm);
+        if (!a.value) return CoerceResult::fail(ArgCoerce::NotConstant);
+
+        return ConstTable::fits(*a.value, bit_width_of_rank(b->width()), !b->is_unsigned())
+             ? CoerceResult{}
+             : CoerceResult::fail(ArgCoerce::Overflow);
     }
 
     bool complete_arguments(nodes::TemplateDeclaration* tmpl, std::vector<Arg>& args, nodes::ASTNode* site, bool quiet) {
@@ -368,7 +477,7 @@ private:
             return false;
         }
 
-        // defaults fill the FIXED prefix only; the pack tail defaults to empty.
+        // defaults fill the FIXED prefix only; the pack tail defaults to empty
         // earlier bindings (types AND values) are visible to later defaults
         if (args.size() < fixed) {
             SubstEnv partial;
@@ -378,6 +487,7 @@ private:
                 else if (args[i].value)   partial.values [params[i]->symbol] = args[i].value;
                 else if (args[i].fvalue)  partial.fvalues[params[i]->symbol] = args[i].fvalue;
             }
+
             m_types.push_subst(&partial);
 
             for (std::size_t i = args.size(); i < fixed; ++i) {
@@ -409,20 +519,49 @@ private:
             m_types.pop_subst();
         }
 
-        // form + range checks for the fixed prefix — the single choke point
-        // covering canon_args, defaults, and deduction-assembled paths
         for (std::size_t i = 0; i < fixed; ++i) {
             if (params[i]->is_type_param() != args[i].is_type) {
                 if (!quiet) SemanticError::template_arg_form(m_reporter, file_of(site), line_of(site), i);
                 return false;
             }
 
-            if (!args[i].is_type && !coerce_value_arg(params[i], args[i])) {
-                if (!quiet) SemanticError::template_arg_out_of_range(
-                    m_reporter, file_of(site), line_of(site), i,
-                    args[i].value ? args[i].value->to_string()
-                                  : args[i].fvalue ? args[i].fvalue->to_string() : "<value>");
-                return false;
+            if (!args[i].is_type) {
+                const CoerceResult r = coerce_value_arg(params[i], args[i]);
+
+                if (!r.ok()) {
+                    if (!quiet) {
+                        const std::string shown =
+                            args[i].value  ? args[i].value->to_string()
+                          : args[i].fvalue ? args[i].fvalue->to_string()
+                          :                  "<value>";
+
+                        const std::string pt = type_str_of(m_types.strip_cv(m_types.canonicalize(params[i]->m_type)));
+
+                        switch (r.status) {
+                            case ArgCoerce::Overflow:
+                                SemanticError::template_arg_overflow(m_reporter, file_of(site), line_of(site), i, shown, pt);
+                                break;
+                            case ArgCoerce::Underflow:
+                                SemanticError::template_arg_underflow(m_reporter, file_of(site), line_of(site), i, shown, pt);
+                                break;
+                            default:
+                                SemanticError::template_arg_out_of_range(
+                                    m_reporter, file_of(site), line_of(site), i, shown);
+                                break;
+                        }
+                    }
+
+                    return false;
+                }
+
+                if (r.inexact && !quiet) {
+                    std::stringstream ss;
+                    ss << "template argument " << i << " is not representable in '"
+                       << type_str_of(m_types.strip_cv(m_types.canonicalize(params[i]->m_type)))
+                       << "' and was rounded to " << args[i].fvalue->to_string();
+
+                    SemanticWarning::emit(m_warnings, file_of(site), line_of(site), "Template", ss.str());
+                }
             }
         }
 
@@ -487,7 +626,7 @@ private:
         if (!w->is_value()) return false;
         Arg a;
         if (!eval_value_arg(w->value, a)) return false;
-        if (!coerce_value_arg(p, a))      return false;
+        if (!coerce_value_arg(p, a).ok()) return false;
         if (a.value)  env.values [p->symbol] = a.value;
         if (a.fvalue) env.fvalues[p->symbol] = a.fvalue;
         return true;
@@ -513,6 +652,44 @@ private:
         }
     }
 
+    static const std::vector<parser_types::TemplateArgument*>* spec_args_of(nodes::TemplateDeclaration* t) {
+        nodes::ASTNode* d = t->m_declaration;
+        if (!d) return nullptr;
+
+        if (d->kind == nodes::ASTNode::Kind::RecordDeclaration) {
+            auto* r = static_cast<nodes::RecordDeclaration*>(d);
+            return r->is_specialization() ? &r->get_spec_args() : nullptr;
+        }
+
+        if (d->kind == nodes::ASTNode::Kind::FunctionDeclaration) {
+            auto* f = static_cast<nodes::FunctionDeclaration*>(d);
+            return f->is_specialization() ? &f->get_spec_args() : nullptr;
+        }
+
+        return nullptr;
+    }
+
+    static const parser_types::TemplateArgument* trailing_targ_pack(
+        const std::vector<parser_types::TemplateArgument*>& written, std::size_t& fixed_out
+    ) {
+        fixed_out = written.size();
+        if (written.empty()) return nullptr;
+        const parser_types::TemplateArgument* last = written.back();
+        if (!last || !last->is_pack) return nullptr;
+        fixed_out = written.size() - 1;
+        return last;
+    }
+
+    bool bindings_complete(nodes::TemplateDeclaration* st, const SubstEnv& env) {
+        for (nodes::TemplateParameter* p : st->params()) {
+            if (!p->symbol) return false;
+            if (p->m_is_pack)            { if (!env.lookup_pack(p->symbol)) return false; }
+            else if (p->is_type_param()) { if (!env.lookup_type(p->symbol)) return false; }
+            else                         { return false; }   // non-type params
+        }
+        return true;
+    }
+
     void unsupported(nodes::ASTNode* site, const char* what) {
         SemanticError::template_unsupported(m_reporter, file_of(site), line_of(site), what);
     }
@@ -520,9 +697,11 @@ private:
     static FileId        file_of(const nodes::ASTNode* n) { return n ? n->file_id : FileId{}; }
     static std::uint32_t line_of(const nodes::ASTNode* n) { return n ? n->line : 0; }
 
+private:
     Arena&         m_arena;
     TypeContext&   m_types;
     ErrorReporter& m_reporter;
+    WarningReporter& m_warnings;
     ConstEvaluator m_eval;
 
     std::unordered_map<Key, Instantiation*, KeyHash> m_memo;

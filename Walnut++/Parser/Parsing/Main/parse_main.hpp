@@ -171,6 +171,18 @@ nodes::ASTNode* Parser::parse_statement() {
     }
 }
 
+inline bool Parser::is_indirection_token(tokenizing::Token::Kind k) {
+    using K = tokenizing::Token::Kind;
+    switch (k) {
+        case K::Asterisk:
+        case K::DoubleAsterisk:
+        case K::Ampersand:
+        case K::LogicAnd:
+            return true;
+        default: return false;
+    }
+}
+
 void Parser::parse_indirection_qualifiers(parser_types::TypeInfo& info) {
     bool pending_const = false;
     
@@ -180,15 +192,17 @@ void Parser::parse_indirection_qualifiers(parser_types::TypeInfo& info) {
             pending_const = true;
             
             if (!current_token().is_one_of(
-                tokenizing::Token::Kind::Asterisk, 
-                tokenizing::Token::Kind::DoubleAsterisk, 
-                tokenizing::Token::Kind::Ampersand
+                tokenizing::Token::Kind::Asterisk,
+                tokenizing::Token::Kind::DoubleAsterisk,
+                tokenizing::Token::Kind::Ampersand,
+                tokenizing::Token::Kind::LogicAnd
             )) {
                 throw ParserError::unexpected_token(
                     reporter,
                     current_token(),
-                    {tokenizing::Token::Kind::Asterisk, tokenizing::Token::Kind::Ampersand},
-                    "const must be followed by * or &"
+                    {tokenizing::Token::Kind::Asterisk, tokenizing::Token::Kind::DoubleAsterisk,
+                    tokenizing::Token::Kind::Ampersand, tokenizing::Token::Kind::LogicAnd},
+                    "const must be followed by '*', '**', '&' or '&&'"
                 );
             }
         } else if (current_token().kind() == tokenizing::Token::Kind::Asterisk) {
@@ -203,6 +217,10 @@ void Parser::parse_indirection_qualifiers(parser_types::TypeInfo& info) {
         } else if (current_token().kind() == tokenizing::Token::Kind::Ampersand) {
             advance();
             info.add_reference(pending_const);
+            pending_const = false;
+        } else if (current_token().kind() == tokenizing::Token::Kind::LogicAnd) {
+            advance();
+            info.add_rvalue_reference(pending_const);   
             pending_const = false;
         } else {
             break;

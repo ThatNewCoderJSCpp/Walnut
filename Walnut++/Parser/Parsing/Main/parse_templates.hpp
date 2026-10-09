@@ -118,14 +118,11 @@ bool Parser::looks_like_type_argument(bool include_paren) {
             break;
         }
 
-        while (token_at(i).is_one_of(K::Asterisk, K::DoubleAsterisk, K::Ampersand, K::ConstantDeclaration)) {
+        while (token_at(i).is_one_of(K::Asterisk, K::DoubleAsterisk, K::Ampersand, K::LogicAnd, K::ConstantDeclaration)) {
             ++i;
         }
 
-        return token_at(i).is_one_of(
-            K::Comma, K::GreaterThan, K::DoubleGreaterThan,
-            K::Ellipsis
-        );
+        return token_at(i).is_one_of(K::Comma, K::GreaterThan, K::DoubleGreaterThan, K::Ellipsis) || (include_paren && token_at(i).kind() == K::RightParen);
     }
 
     return false;

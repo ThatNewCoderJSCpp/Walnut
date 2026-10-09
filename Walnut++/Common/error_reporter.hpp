@@ -43,10 +43,9 @@ constexpr bool operator&(ErrorOutput a, ErrorOutput b) noexcept {
 
 struct CompilerError {
     std::string message;
-    std::string file;                    // fallback name (used when no SourceManager resolves it)
     std::size_t line;
-    ErrorPhase phase;
-    FileId file_id = INVALID_FILE;       // resolved to a name at write time, per PathStyle
+    ErrorPhase  phase;
+    FileId      file_id = INVALID_FILE;
 
     constexpr const char* phase_name() const noexcept {
         switch (phase) {
@@ -62,17 +61,16 @@ struct CompilerError {
 
 class ErrorReporter {
 private:
-    std::vector<CompilerError> m_errors;
-    std::string m_file;                        
+    std::vector<CompilerError> m_errors;                 
     std::string m_output_path;
     ErrorOutput m_mode;
     const SourceManager* m_sources = nullptr; 
-    FileId m_current_file = 0;                
+    FileId m_current_file = INVALID_FILE;                
     PathStyle m_path_style = PathStyle::Absolute;
     std::vector<std::vector<CompilerError>> m_traps;
 
 public:
-    explicit ErrorReporter(std::string source_file = "<unknown>", ErrorOutput mode = ErrorOutput::Silent) : m_file(std::move(source_file)), m_mode(mode) {}
+    explicit ErrorReporter(ErrorOutput mode = ErrorOutput::Silent) : m_mode(mode) {}
 
     void set_sources(const SourceManager* sources) noexcept { m_sources = sources; }
 
@@ -84,17 +82,15 @@ public:
 
     void report(ErrorPhase phase, FileId file_id, std::size_t line, std::string message) {
         std::vector<CompilerError>& dst = m_traps.empty() ? m_errors : m_traps.back();
-        dst.push_back({ std::move(message), m_file, line, phase, file_id });
+        dst.push_back({ std::move(message), line, phase, file_id });
     }
 
     void report(ErrorPhase phase, std::size_t line, std::string message) {
         report(phase, m_current_file, line, std::move(message));
     }
 
-    void set_file(std::string file) { m_file = std::move(file); }
     void set_output_path(std::string path) { m_output_path = std::move(path); }
     void set_mode(ErrorOutput mode) noexcept { m_mode = mode; }
-    const std::string& file() const noexcept { return m_file; }
     ErrorOutput mode() const noexcept { return m_mode; }
     bool has_errors() const noexcept { return !m_errors.empty(); }
     std::size_t error_count() const noexcept { return m_errors.size(); }
@@ -143,7 +139,7 @@ public:
 private:
     std::string display_name(const CompilerError& e) const {
         std::string p = display_path(e.file_id);
-        return p.empty() ? e.file : p;
+        return p.empty() ? "<unknown>" : p;
     }
 
     void write_to_stream(std::ostream& os) const {
@@ -183,6 +179,20 @@ public:
 private:
     ErrorReporter& m_r;
     bool m_done = false;
+};
+
+template <typename Reporter>
+class ScopedFile {
+public:
+    ScopedFile(Reporter& r, FileId id) : m_r(r), m_prev(r.current_file()) { m_r.set_current_file(id); }
+    ~ScopedFile() { m_r.set_current_file(m_prev); }
+
+    ScopedFile(const ScopedFile&) = delete;
+    ScopedFile& operator=(const ScopedFile&) = delete;
+
+private:
+    Reporter& m_r;
+    FileId    m_prev;
 };
 
 } // namespace walnut

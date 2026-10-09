@@ -13,6 +13,8 @@
 #include "../modifiers.hpp"
 #include "../../Common/arena_allocator.hpp"
 #include "../../Common/small_vector.hpp"
+#include "../../Common/foundation.hpp"
+
 namespace walnut {
 
 namespace semantics { struct Symbol; struct Scope; struct Type;}
@@ -56,6 +58,7 @@ struct ASTNode {
         RequiresExpression,
         BraceConstructExpression,
         DiscardExpression,
+        ThrowExpression,
 
         // Statements 
         ExpressionStatement,
@@ -142,6 +145,7 @@ inline bool is_expression(const ASTNode* n) {
         case ASTNode::Kind::RequiresExpression:
         case ASTNode::Kind::CastExpression:  
         case ASTNode::Kind::CoYieldExpression:
+        case ASTNode::Kind::ThrowExpression:
             return true;
         default:
             return false;

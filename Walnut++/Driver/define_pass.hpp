@@ -19,7 +19,7 @@ public:
         for (FileId id : front.order()) {
             const UnitFrontResult* unit = front.result(id);
             if (!unit || !unit->root) { continue; }
-            m_reporter.set_current_file(unit->file);
+            ScopedFile _f(m_reporter, unit->file);
             m_validator.run(unit->root);
         }
     }

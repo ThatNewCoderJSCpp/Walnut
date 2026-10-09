@@ -319,9 +319,10 @@ inline nodes::ASTNode* Parser::parse_atom() {
         return parse_type_query_expression();
     }
 
-    if (current_token().is(tokenizing::Token::Kind::NewKeyword)) { return parse_new_expression(); }
-    if (current_token().is(tokenizing::Token::Kind::DeleteKeyword)) { return parse_delete_expression(); }
+    if (current_token().is(tokenizing::Token::Kind::NewKeyword))      { return parse_new_expression();      }
+    if (current_token().is(tokenizing::Token::Kind::DeleteKeyword))   { return parse_delete_expression();   }
     if (current_token().is(tokenizing::Token::Kind::NoexceptKeyword)) { return parse_noexcept_expression(); }
+    if (current_token().is(tokenizing::Token::Kind::ThrowKeyword))    { return parse_throw_expression();    }
 
     if (current_token().is_one_of(
             tokenizing::Token::Kind::DiscardConstKeyword,
@@ -556,10 +557,18 @@ inline nodes::ASTNode* Parser::parse_cast_expression() {
     return make<nodes::CastExpression>(ck, target, operand, static_cast<std::uint32_t>(line));
 }
 
-inline parser_types::TemplateArgument* Parser::parse_type_or_value_operand() {
+inline parser_types::TemplateArgument* Parser::parse_type_or_value_operand(bool force_type) {
+    using K = tokenizing::Token::Kind;
     auto* arg = make<parser_types::TemplateArgument>();
 
-    if (looks_like_type_argument(true) || match(tokenizing::Token::Kind::TypenameKeyword)) {
+    if (force_type) {
+        match(K::TypenameKeyword); // optional here, consume if written
+        arg->form = parser_types::TemplateArgument::Form::Type;
+        arg->type = parse_type_info();
+        return arg;
+    }
+
+    if (looks_like_type_argument(true) || match(K::TypenameKeyword)) {
         arg->form = parser_types::TemplateArgument::Form::Type;
         arg->type = parse_type_info();
     } else {
@@ -781,6 +790,22 @@ nodes::RequiresExpression::Requirement Parser::parse_requirement() {
     }
 
     return r;
+}
+
+inline nodes::ASTNode* Parser::parse_throw_expression() {
+    using K = tokenizing::Token::Kind;
+    const std::size_t line = current_token().line();
+    expect(K::ThrowKeyword, "Expected 'throw'");
+
+    if (current_token().is_one_of(
+        K::Semicolon, K::DoubleSemicolon, K::RightParen,
+        K::RightSquare, K::RightCurly, K::Colon, K::Comma, K::End
+    )) {
+        return make<nodes::ThrowExpression>(nullptr, static_cast<std::uint32_t>(line));
+    }
+
+    nodes::ASTNode* operand = parse_expression_pratt(to_int(Precedence::Assignment));
+    return make<nodes::ThrowExpression>(operand, static_cast<std::uint32_t>(line));
 }
 
 } // namespace parsing

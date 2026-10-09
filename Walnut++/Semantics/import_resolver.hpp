@@ -20,7 +20,7 @@ using nodes::ASTNode;
 
 // Outbound visibility record
 // Consumed by cross-file linking pass
-// Does not introduce a locally resolvable symbol.
+// Does not introduce a locally resolvable symbol
 struct ExportEntry {
     nodes::ImportExportItem::Kind kind;
     std::vector<std::string_view> public_parts;     // name as importers see it
