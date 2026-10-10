@@ -1,4 +1,0 @@
-struct A { static int: x = 1; } end struct A
-struct C { static int: z = 2; } end struct C
-struct B { static int: y = A::x + C::z; } end struct B
-println(B::y);

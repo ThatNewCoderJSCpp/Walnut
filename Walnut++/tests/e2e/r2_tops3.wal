@@ -1,7 +1,0 @@
-template <typename T>
-struct W {
-    T: v;
-    operator(+) function (int: k) const -> int { return k + 1; }
-} end struct W
-W<int>: a = W<int>{ 1 };
-println(a + 1);

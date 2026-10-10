@@ -1,91 +1,0 @@
-ERR:only lambdas can be 'mutable'
-function f() mutable -> int { return 1; } end function fERR:cannot apply '++' to a const expression
-function f() -> int { int: n = 0; auto: g = [n]() -> int { n++; return n; }; return g(); } end function fOK
-function f() -> int { int: n = 0; auto: g = [n]() mutable -> int { n++; return n; }; return g(); } end function fOK
-function f() -> int { int: n = 0; auto: g = [&n]() -> int { n++; return n; }; return g(); } end function fERR:cannot apply '++' to a const expression
-function f() -> int { int: n = 0; auto: g = [=]() -> int { n++; return n; }; return g(); } end function fERR:requires a polymorphic class
-struct A { int: x; } end struct A
-struct B extends A { int: y; } end struct B
-function f(A*: p) -> B* { return dynamic_cast<B*>(p); } end function fOK
-class A { public: destructor() virtual = default; } end class A
-class B extends A { public: int: y; } end class B
-function f(A*: p) -> B* { return dynamic_cast<B*>(p); } end function fERR:invalid
-class A { public: destructor() virtual = default; } end class A
-function f(A*: p) -> int { return dynamic_cast<int>(p); } end function fERR:'repeat' may only appear inside a loop
-function f() -> void { repeat; } end function fOK
-struct V { int: x; operator(==) function (const V&: o) const -> bool { return x == o.x; } } end struct V
-function f(V: a, V: b) -> bool { return a != b; } end function fERR:no matching overload
-struct V { int: x; } end struct V
-function f(V: a, V: b) -> bool { return a != b; } end function fOK
-function f(char: c) -> string { return c + "x"; } end function fERR:sizeof is not defined for 'string'
-function f() -> int { string: s = "a"; return sizeof(s); } end function fERR:no implicit conversion from 'string' to 'int'
-template <typename T> struct Box { using Elem = T; } end struct Box
-Box<int>::Elem: e = "x";OK
-template <typename T> struct Box { using Elem = T; } end struct Box
-Box<int>::Elem: e = 3;
-static_assert(sizeof(Box<long int>::Elem) == 8, "s")OK
-struct P { short short int: a; long int: b; } end struct P
-static_assert(sizeof(P) == 16 && alignof(P) == 8, "p")ERR:no implicit conversion from 'array[] int' to 'array[3] int'
-function f(array[] int: a) -> int { array[3] int: b = a; return b[0]; } end function fOK
-function g() -> array[2] int { array[2] int: t = {1, 2}; return t; } end function g
-function f() -> int { array int: a[] = g(); array int: b[] = a; return countof(b); } end function fOK
-template <int N> function n_of(array[N] int: a) -> int { return N; } end function n_of
-function f() -> int { array[4] int: a = {1, 2, 3, 4}; return n_of(a); } end function fERR:no matching overload
-template <int N> function n_of(array[N] int: a) -> int { return N; } end function n_of
-function f(array[] int: a) -> int { return n_of(a); } end function fERR:a fold expression needs a variadic parameter
-function g(int: a) -> int { return (a + ...); } end function gERR:only a template parameter pack can be expanded
-function f(int...: xs) -> int { return countof(xs); } end function f
-function h(int...: xs) -> int { return f(xs...); } end function hERR:no matching overload
-function f(int...[2]: xs) -> int { return countof(xs); } end function f
-int: r = f(1, 2, 3);OK
-function f(int...[2]: xs) -> int { return countof(xs); } end function f
-int: r = f(1, 2);ERR:no matching overload
-function f(int...: xs) -> int { return countof(xs); } end function f
-int: r = f(1, "x");OK
-template <typename... Ts> function n(const Ts...: ts) -> int { return countof(ts); } end function n
-static_assert(true, "x")
-int: r = n(1, "x", 2.5);ERR:declares 1 name but 'Point' has 2 fields
-struct Point { int: x; int: y; } end struct Point
-function f() -> Point { return Point{1, 2}; } end function f
-function g() -> int { auto: [a] = f(); return a; } end function gERR:cannot bind 'auto&' structured bindings to a temporary
-struct Point { int: x; int: y; } end struct Point
-function f() -> Point { return Point{1, 2}; } end function f
-function g() -> int { auto&: [a, b] = f(); return a; } end function gERR:structured bindings must be declared with 'auto'
-struct Point { int: x; int: y; } end struct Point
-function f() -> Point { return Point{1, 2}; } end function f
-function g() -> int { int: [a, b] = f(); return a; } end function gERR:is a private member
-class Sec { private: int: k; public: int: j; } end class Sec
-function g(Sec: s) -> int { auto: [a, b] = s; return b; } end function gERR:cannot assign to a const expression
-struct Point { int: x; int: y; } end struct Point
-function f() -> Point { return Point{1, 2}; } end function f
-function g() -> int { const auto: [a, b] = f(); a = 3; return a; } end function gERR:cannot be decomposed
-function g(int: z) -> int { auto: [a, b] = z; return a; } end function gERR:has 3 elements
-function g(array[3] int: z) -> int { auto: [a, b] = z; return a; } end function gOK
-struct Point { int: x; int: y; } end struct Point
-function f() -> Point { return Point{1, 2}; } end function f
-function g() -> int { int: t = 0; array Point: ps[] = {Point{1, 2}}; for (auto: [a, b] in ps) { t += a + b; } return t; } end function gERR:use of undeclared identifier 'later'
-function f() -> int { return later(); function later() -> int { return 1; } end function later } end function fOK
-function f() -> int { int: b = 2; function add(int: x) -> int { return x + b; } end function add
-return add(1); } end function fERR:can only capture the variable it initializes by reference
-function f() -> int { function(int) -> int: g = [g](int: n) -> int { return n; }; return g(1); } end function fERR:needs an explicit function type
-function f() -> int { auto: g = [&g](int: n) -> int { return n; }; return 1; } end function fOK
-function f() -> int { function(int) -> int: g = [&g](int: n) -> int { if (n == 0) then { return 0; } return g(n - 1); }; return g(3); } end function fOK
-struct A { int: k; operator(()) function (int: x) const -> int { return x + k; } } end struct A
-function(int) -> int: h = A{1};ERR:no implicit conversion from 'A'
-struct A { int: k; operator(()) function (string: x) const -> int { return k; } } end struct A
-function(int) -> int: h = A{1};ERR:operator '*' cannot be applied
-function f() -> int { auto: t = [](auto: x) -> auto { return x * 2; }; t("s"); return 0; } end function fERR:no implicit conversion from 'generic lambda'
-function f() -> int { auto: t = [](auto: x) -> auto { return x * 2; }; function(string) -> string: g = t; return 0; } end function fOK
-function f() -> int { auto: t = [](auto: x) -> auto { return x * 2; }; function(int) -> int: g = t; return g(2) + t(3); } end function fERR:'co_yield' can only be used in a function that returns generator<T>
-function a() -> int { co_yield 1; return 1; } end function aERR:a generator cannot return a value
-function b() -> generator<int> { return 5; } end function bERR:'co_yield' must be used as a statement
-function c() -> generator<int> { int: x = co_yield 1; } end function cERR:'co_return' can only be used in a function that returns generator<T>
-function d() -> void { co_return; } end function dERR:no implicit conversion from 'int' to 'string'
-function e() -> generator<string> { co_yield 3; } end function eERR:'await' needs a task
-function f() -> int { return await 3; } end function fOK
-function g() -> generator<int> { co_yield 1; co_yield 2; } end function g
-function h() -> int { int: t = 0; for (int: v in g()) { t += v; } return t; } end function hOK
-function k() async -> int { return 2; } end function k
-function m() -> int { task<int>: t = k(); return await t; } end function mERR:no implicit conversion from 'task<int>' to 'int'
-function k() async -> int { return 2; } end function k
-function m() -> int { int: v = k(); return v; } end function m

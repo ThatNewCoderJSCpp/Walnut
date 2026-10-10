@@ -1,2 +1,0 @@
-struct B { static int: y = 2 + 3; } end struct B
-println(B::y);

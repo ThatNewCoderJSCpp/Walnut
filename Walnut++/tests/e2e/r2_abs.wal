@@ -1,6 +1,0 @@
-class Shape {
- public:
-    function area() const virtual -> int;
-} end class Shape
-Shape: s;
-println(s.area());

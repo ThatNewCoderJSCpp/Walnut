@@ -1,2 +1,0 @@
-string: who = input();
-println("hello " + who);

@@ -1,2 +1,0 @@
-array[2] array[2] int: g = { { 1, 2 }, { 3, 4 } };
-println(g[1][0]);

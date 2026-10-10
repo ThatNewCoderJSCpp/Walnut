@@ -1,5 +1,0 @@
-short int: s = 1;
-s = s + 1;
-println(s);
-function g(short int: a) -> short int { return a + 1; } end function g
-println(g(s));

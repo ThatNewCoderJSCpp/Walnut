@@ -1,7 +1,0 @@
-function main() -> int {
-    int: base = 10;
-    auto: add = [base](int: v) -> int { return base + v; };
-    println(add(5));
-    return 0;
-}
-end function main

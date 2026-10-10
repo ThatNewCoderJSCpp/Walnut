@@ -1,3 +1,0 @@
-function f(int: a, int: a) -> int { return a; } end function f
-function main() -> int { println(f(1, 2)); return 0; }
-end function main

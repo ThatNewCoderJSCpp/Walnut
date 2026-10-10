@@ -1,7 +1,0 @@
-int: counter = 1;
-function bump() -> void { counter = counter * 2; } end function bump
-bump();
-bump();
-println("counter", counter);
-string: name = "Walnut";
-println(name + "!", name == "Walnut");

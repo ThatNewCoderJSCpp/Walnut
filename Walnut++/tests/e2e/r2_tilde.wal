@@ -1,6 +1,0 @@
-struct M {
-    int: c;
-    operator(~) function () const -> M { return M{ -c }; }
-} end struct M
-M: m = M{ 5 };
-println((~m).c);

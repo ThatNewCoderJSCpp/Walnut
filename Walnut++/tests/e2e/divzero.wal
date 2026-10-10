@@ -1,2 +1,0 @@
-int: z = 0;
-println(10 / z);

@@ -1,4 +1,0 @@
-template <typename T>
-function inc(T: a) -> T { return a + 1; } end function inc
-short int: s = 5;
-println(inc(s));

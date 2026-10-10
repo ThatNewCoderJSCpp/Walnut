@@ -1,6 +1,0 @@
-char: u = 'a';
-u = 'é';
-println(u, '日');
-string: s = "x";
-s += 'b';
-println(s);

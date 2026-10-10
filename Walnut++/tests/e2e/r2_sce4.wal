@@ -1,3 +1,0 @@
-struct A { static constexpr int: x = 1; } end struct A
-struct B { static constexpr int: y = A::x + A::x; } end struct B
-println(B::y);

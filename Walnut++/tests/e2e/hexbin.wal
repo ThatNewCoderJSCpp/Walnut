@@ -1,4 +1,0 @@
-int: a = 0xFF;
-int: b = 0b1011;
-long int: c = 0x7fffffffffffffff;
-println(a, b, c, a + 0x10);

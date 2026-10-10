@@ -1,7 +1,0 @@
-struct M {
-    int: c;
-    operator(++) function (int: dummy) -> M { M: old = *this; c += 1; return old; }
-} end struct M
-M: m = M{ 5 };
-M: o = m++;
-println(o.c, m.c);

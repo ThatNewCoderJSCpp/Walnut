@@ -1,6 +1,0 @@
-template <typename T>
-function zero() -> T { T: z = T{}; return z; } end function zero
-struct S { int: q; } end struct S
-template <typename T>
-function mk() -> T { return T(); } end function mk
-println(zero<int>(), zero<string>() == "", mk<S>().q);

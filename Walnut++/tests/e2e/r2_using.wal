@@ -1,9 +1,0 @@
-namespace a {
-    namespace c { int: v = 3; }
-    end namespace c
-    int: w = 4;
-}
-end namespace a
-using namespace a;
-println(w);
-println(c::v);

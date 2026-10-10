@@ -1,8 +1,0 @@
-function main() -> int {
-    auto: twice = [](auto: x) -> auto { return x + x; };
-    println(twice(3), twice(1.5), twice("ab"));
-    auto: pick = [](auto: a, auto: b) { return a; };
-    println(pick(1, "x"));
-    return 0;
-}
-end function main

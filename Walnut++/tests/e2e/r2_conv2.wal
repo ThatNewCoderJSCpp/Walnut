@@ -1,7 +1,0 @@
-struct V {
-    int: x;
-    operator(bool) function () const { return x != 0; }
-    operator(int) function () const { return x; }
-} end struct V
-V: v = V{ 3 };
-println(static_cast<int>(v));

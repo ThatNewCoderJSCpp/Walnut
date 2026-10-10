@@ -1,919 +1,0 @@
-OK
-constexpr int: a = 2 ** 10;
-static_assert(a == 1024, "a")ERR:argument outside the real domain
-constexpr int: a = 2 ** -1;ERR:does not fit
-constexpr int: a = 2 ** 40;ERR:division by zero
-constexpr int: a = 1 / 0;ERR:does not fit
-constexpr int: a = 2147483647 + 1;ERR:indeterminate
-constexpr float: a = 0.0 ** 0.0;ERR:not a constant expression
-int: r = 3;
-constexpr int: a = r + 1;ERR:requires an initializer
-constexpr int: a;OK
-constexpr auto: a = 2 ** 3;
-static_assert(a == 8, "a")OK
-constexpr int: a = 3;
-constexpr int: b = a ** 2;
-static_assert(b == 9, "b")OK
-constexpr float: f = 2.0 ** 0.5;
-static_assert(f > 1.41, "f")OK
-constexpr bool: t = 2 ** 3 == 8;
-static_assert(t, "t")OK
-constexpr string: s = "hi";OK
-static constinit int: g = 4 ** 2;ERR:not a constant expression
-int: r = 3;
-static constinit int: g = r;ERR:division by zero
-int: x = 1 / 0;OK
-int: r = 3;
-int: x = r ** 2;OK
-function f(int: n) -> int { constexpr int: k = 2 ** 4; return n ** 2 + k; } end function fERR:cannot be applied to operands of type 'string' and 'int'
-string: s = "a";
-auto: t = s ** 2;ERR:cannot be applied to operands of type 'bool' and 'int'
-bool: b = true ** 2;ERR:cannot be applied
-int: x = 1;
-auto: p = &x;
-auto: m = p * p;ERR:cannot be applied
-string: s = "a";
-auto: t = s * 2;ERR:cannot be applied
-string: s = "a";
-auto: t = s - 2;ERR:cannot be applied
-int: x = 3;
-x **= "a";ERR:cannot be applied
-float: f = 1.5;
-auto: m = f % 2;ERR:cannot be applied
-string: s = "a";
-bool: b = s < 3;ERR:cannot be applied
-int: x = 1;
-auto: p = &x;
-bool: b = p == 3;OK
-string: s = "a";
-string: t = s + "b";OK
-string: s = "a";
-bool: b = s == "a";OK
-int: x = 1;
-auto: p = &x;
-auto: q = p + 1;
-auto: d = q - p;
-bool: b = p == nullptr;OK
-auto: m = 2 ** 1.5;
-int: i = 7 % 3;
-char: c = 'a';
-char: k = c + 'b';OK
-int: x = 3;
-x **= 2;
-x <<= 1;
-x &= 3;OK
-bool: a = true;
-bool: b = a & false;
-bool: c = a == b;OK
-var: d = 3;
-auto: e = d ** "x";OK
-enum Color { Red, Green }
-bool: b = Color::Red == Color::Green;OK
-int: x = 1;
-int&: r = x;
-r = 4;
-int: z = r + 1;OK
-int: x = 1;
-const int&: r = x;OK
-const int&: r = 5;ERR:cannot bind non-const lvalue reference
-int&: r = 5;ERR:no implicit conversion from 'const int' to 'int&'
-const int: x = 1;
-int&: r = x;OK
-int&&: r = 5;ERR:cannot bind rvalue reference
-int: x = 1;
-int&&: r = x;ERR:no implicit conversion
-int: x = 1;
-float&: r = x;OK
-int: g = 1;
-function f() -> int& { return g; } end function fERR:cannot bind non-const lvalue reference
-function f() -> int& { return 5; } end function fOK
-function g(int*: p) -> int& { return *p; } end function gOK
-function f(int&: a) -> void { a = 2; } end function f
-int: y = 1;
-f(y);ERR:cannot bind non-const lvalue reference
-function f(int&: a) -> void { a = 2; } end function f
-f(3);OK
-function f(const int&: a) -> int { return a; } end function f
-int: q = f(3);OK
-function f(int&: a) -> int& { return a; } end function f
-int: y = 1;
-f(y) = 5;OK
-struct V { int: a; operator(**=) function(int: n) -> V& { return *this; } } end struct V
-V: v;
-v **= 2;OK
-struct V { int: a; operator(**) function(int: n) const -> V { return *this; } } end struct V
-V: v;
-auto: w = v ** 3;ERR:wrong parameter count
-struct V { int: a; operator(**) function(V: s, int: n) -> V { return V(); } } end struct VERR:no matching overload
-struct V { int: a; } end struct V
-V: v;
-auto: w = v ** 3;OK
-struct V { int: a; function f() const -> int { return this->a ** 2; } end function f } end struct VOK
-struct V { int: a; function f() -> V* { return this; } end function f } end struct VOK
-static_assert(2 ** 3 ** 2 == 512, "r")
-static_assert(-2 ** 2 == -4, "u")
-static_assert((-2) ** 3 == -8, "n")ERR:static assertion failed
-static_assert(2 ** 3 == 9, "x")OK
-constexpr bool: t = true;OK
-const bool: t = true;OK
-const string: s = "a";OK
-struct V { int: a; } end struct V
-const V: v = V();ERR:no implicit conversion
-const string: s = 3;ERR:no implicit conversion from 'int' to 'char'
-char: c = 300 ** 2;ERR:operands of type 'char' and 'int'
-char: c = 'a';
-auto: k = c + 1;ERR:operands of type 'int' and 'char'
-char: c = 'a';
-int: k = 1 * c;ERR:operands of type 'char' and 'float'
-char: c = 'a';
-auto: k = c / 2.0;ERR:operands of type 'char' and 'int'
-char: c = 'a';
-bool: b = c < 100;ERR:operands of type 'char' and 'int'
-char: c = 'a';
-c += 1;ERR:operands of type 'char' and 'int'
-char: c = 'a';
-auto: k = c & 7;ERR:cannot be applied
-int: x = 1;
-auto: p = &x;
-auto: q = p + 'a';OK
-char: c = 'a';
-bool: b = c == 'b';
-char: d = c + 'c';OK
-char: c = 'a';
-int: k = static_cast<int>(c) + 1;ERR:no implicit conversion from 'char' to 'int'
-char: c = 'a';
-int: k = c;ERR:no implicit conversion from 'int' to 'char'
-int: k = 65;
-char: c = k;ERR:division by zero
-int: x = 1 / 0;ERR:does not fit
-int: x = 2147483647 + 1;ERR:argument outside the real domain
-int: x = 2 ** -1;ERR:not a constant expression
-int: r = 3;
-static_assert(r > 0, "x")OK
-template <typename T>
-function f(T: x) -> T { return x; } end function f
-int: a = f(3);ERR:does not fit
-template <typename T>
-function f(T: x) -> T { constexpr T: k = 2 ** 40; return x; } end function f
-int: a = f(3);OK
-template <typename T>
-function f(T: x) -> T { constexpr T: k = 2 ** 40; return x; } end function fERR:static assertion failed
-template <int N>
-function g() -> int { static_assert(N > 0, "pos") return N; } end function g
-int: a = g<0>();OK
-template <int N>
-function g() -> int { static_assert(N > 0, "pos") return N ** 2; } end function g
-int: a = g<3>();ERR:not a constant expression
-template <typename T>
-function h(T: x) -> T { static_assert(x > 0, "param") return x; } end function h
-int: a = h(3);OK
-template <typename T>
-function f(T: x) -> T { constexpr T: k = 2 ** 10; return x ** 2; } end function f
-int: a = f(3);
-float: b = f(1.5);ERR:operands of type 'string' and 'int'
-template <typename T>
-function sq(T: x) -> T { return x ** 2; } end function sq
-string: s = sq("a");ERR:static assertion failed
-template <typename T>
-function f(T: x) -> T { static_assert(2 ** 3 == 9, "in template") return x; } end function f
-int: a = f(1);OK
-template <typename T>
-function f(T: x) -> T { static_assert(2 ** 3 == 9, "never instantiated") return x; } end function fERR:no implicit conversion from 'int' to 'char'
-template <typename T>
-function f(T: x) -> T { return 65; } end function f
-char: c = f('a');OK
-template <typename T>
-struct Box { T: v; function sq() const -> T { return v ** 2; } end function sq } end struct Box
-Box<int>: b;
-int: r = b.sq();ERR:string' and 'int'
-template <typename T>
-struct Box { T: v; function sq() const -> T { return v ** 2; } end function sq } end struct Box
-Box<string>: b;
-string: r = b.sq();ERR:does not fit
-template <typename T>
-struct Box { T: v; function k() const -> T { constexpr T: big = 2 ** 40; return big; } end function k } end struct Box
-Box<int>: b;
-int: r = b.k();OK
-template <int N>
-struct Arr { function size() const -> int { static_assert(N > 0, "n") return N ** 2; } end function size } end struct Arr
-Arr<4>: a;
-int: r = a.size();ERR:static assertion failed
-template <int N>
-struct Arr { function size() const -> int { static_assert(N > 0, "n") return N; } end function size } end struct Arr
-Arr<0>: a;
-int: r = a.size();ERR:no implicit conversion from 'Arr<0>' to 'string'
-template <int N>
-struct Arr { int: z; } end struct Arr
-Arr<0>: a;
-string: s = a;ERR:no implicit conversion from 'Arr<3>' to 'Arr<4>'
-template <int N>
-struct Arr { int: z; } end struct Arr
-Arr<3>: a;
-Arr<4>: b = a;OK
-template <int N>
-struct Arr { int: z; } end struct Arr
-Arr<3>: a;
-Arr<3>: b = a;
-Arr<1 + 2>: c = a;OK
-template <int N>
-struct Arr { function size() const -> int { static_assert(N > 0, "n") return N ** 2; } end function size } end struct Arr
-Arr<4>: a;
-int: r = a.size();ERR:static assertion failed
-template <int N>
-struct Arr { function size() const -> int { static_assert(N > 0, "n") return N; } end function size } end struct Arr
-Arr<0>: a;
-int: r = a.size();ERR:does not fit
-template <int N>
-struct Arr { function big() const -> int { constexpr int: k = N ** 40; return k; } end function big } end struct Arr
-Arr<2>: a;
-int: r = a.big();OK
-template <int N>
-struct Arr { function size() const -> int { return N; } end function size } end struct Arr
-template <int N>
-function count(const Arr<N>: a) -> int { static_assert(N == 5, "deduced") return a.size(); } end function count
-Arr<5>: a;
-int: r = count(a);ERR:static assertion failed
-template <int N>
-struct Arr { function size() const -> int { return N; } end function size } end struct Arr
-template <int N>
-function count(const Arr<N>: a) -> int { static_assert(N == 5, "deduced") return a.size(); } end function count
-Arr<6>: a;
-int: r = count(a);OK
-template <int N>
-struct Arr { function size() const -> int { return N; } end function size } end struct Arr
-template <int N>
-function grow(const Arr<N>: a) -> Arr<N + 1> { return Arr<N + 1>(); } end function grow
-Arr<5>: a;
-Arr<6>: b = grow(a);ERR:no implicit conversion from 'Arr<6>' to 'Arr<7>'
-template <int N>
-struct Arr { function size() const -> int { return N; } end function size } end struct Arr
-template <int N>
-function grow(const Arr<N>: a) -> Arr<N + 1> { return Arr<N + 1>(); } end function grow
-Arr<5>: a;
-Arr<7>: b = grow(a);OK
-template <int N>
-struct Arr { function kind() const -> int { return 0; } end function kind } end struct Arr
-template <>
-struct Arr<0> { function kind() const -> int { return 1; } end function kind } end struct Arr
-Arr<0>: z;
-int: k = z.kind();OK
-template <float F>
-struct Scale { function get() const -> float { return F * 2.0; } end function get } end struct Scale
-Scale<1.5>: s;
-float: f = s.get();OK
-template <typename T, int N>
-struct Mat { function kind() const -> int { static_assert(N != 1, "primary picked for 1") return 0; } end function kind } end struct Mat
-template <typename T>
-struct Mat<T, 1> { function kind() const -> int { return 1; } end function kind } end struct Mat
-Mat<float, 1>: m;
-int: k = m.kind();OK
-template <typename T, int N>
-struct Mat { function kind() const -> int { static_assert(N != 1, "primary picked for 1") return 0; } end function kind } end struct Mat
-template <typename T>
-struct Mat<T, 1> { function kind() const -> int { return 1; } end function kind } end struct Mat
-Mat<float, 2>: m;
-int: k = m.kind();ERR:static assertion failed
-template <typename T, int N>
-struct Mat { function kind() const -> int { static_assert(N != 1, "primary picked for 1") return 0; } end function kind } end struct Mat
-template <typename T>
-struct Mat<T, 1> { function kind() const -> int { static_assert(false, "spec picked") return 1; } end function kind } end struct Mat
-Mat<float, 1>: m;
-int: k = m.kind();OK
-template <typename T, int N>
-struct Mat { function kind() const -> int { static_assert(N != 1, "primary picked for 1") return 0; } end function kind } end struct Mat
-template <typename T>
-struct Mat<T, 1> { function kind() const -> int { static_assert(false, "spec picked") return 1; } end function kind } end struct Mat
-Mat<float, 2>: m;
-int: k = m.kind();OK
-template <int N>
-struct Arr { function kind() const -> int { static_assert(N != 0, "primary picked for 0") return 0; } end function kind } end struct Arr
-template <>
-struct Arr<0> { function kind() const -> int { return 1; } end function kind } end struct Arr
-Arr<0>: z;
-int: k = z.kind();OK
-constexpr int: SIZE = 4;
-template <int N>
-struct Arr { function size() const -> int { static_assert(N == 4, "n") return N; } end function size } end struct Arr
-Arr<SIZE>: a;
-Arr<4>: b = a;
-int: r = a.size();OK
-enum Lvl { Low, High }
-template <int N>
-struct Arr { function size() const -> int { return N; } end function size } end struct Arr
-Arr<Lvl::High>: a;
-Arr<1>: b = a;ERR:static assertion failed
-template <int N>
-struct Arr { function size() const -> int { return N; } end function size } end struct Arr
-template <int M>
-function pick() -> int { static_assert(M < 3, "m") return 0; } end function pick
-template <int N>
-function outer(const Arr<N>: a) -> int { return pick<N>(); } end function outer
-Arr<5>: a;
-int: r = outer(a);OK
-template <int N>
-struct Arr { function size() const -> int { return N; } end function size } end struct Arr
-template <int M>
-function pick() -> int { static_assert(M < 3, "m") return 0; } end function pick
-template <int N>
-function outer(const Arr<N>: a) -> int { return pick<N>(); } end function outer
-Arr<2>: a;
-int: r = outer(a);OK
-template <typename T>
-struct Hold { function kind() const -> int { static_assert(false, "primary picked") return 0; } end function kind } end struct Hold
-template <typename T>
-struct Hold<T*> { function kind() const -> int { return 1; } end function kind } end struct Hold
-Hold<int*>: h;
-int: k = h.kind();OK
-template <typename T>
-struct Hold { function kind() const -> int { static_assert(false, "primary picked") return 0; } end function kind } end struct Hold
-template <typename U>
-struct Hold<U*> { function kind() const -> int { return 1; } end function kind } end struct Hold
-Hold<int*>: h;
-int: k = h.kind();OK
-template <typename T, int N>
-struct Mat { function kind() const -> int { static_assert(false, "primary picked") return 0; } end function kind } end struct Mat
-template <typename U>
-struct Mat<U, 1> { function kind() const -> int { return 1; } end function kind } end struct Mat
-Mat<float, 1>: m;
-int: k = m.kind();OK
-template <typename T>
-function describe(const T: x) -> string {
-    return "generic";
-} end function describe
-auto: d_bool = describe<bool>(true);OK
-template <typename T>
-function describe(const T: x) -> string {
-    return "generic";
-} end function describe
-auto: d_bool = describe(true);OK
-template <typename T>
-function id(const T: x) -> T {
-    return x;
-} end function id
-auto: v = id(3);OK
-template <typename T>
-function id(T: x) -> T {
-    return x;
-} end function id
-auto: v = id(3);OK
-template <typename T>
-function id(T: x) -> T {
-    return x;
-} end function id
-int: v = id(3);OK
-template <typename T>
-function id(T: x) -> T { return x; } end function id
-auto: v = id(3);OK
-template <typename T>
-struct Hold { function kind() const -> int { return 0; } end function kind } end struct Hold
-template <typename T>
-struct Hold<T*> { function ptr() const -> int { return 1; } end function ptr } end struct Hold
-Hold<int*>: h;
-int: k = h.ptr();ERR:undeclared identifier 'ptr'
-template <typename T>
-struct Hold { function kind() const -> int { return 0; } end function kind } end struct Hold
-template <typename T>
-struct Hold<T*> { function ptr() const -> int { return 1; } end function ptr } end struct Hold
-Hold<int>: h;
-int: k = h.ptr();ERR:undeclared identifier 'kind'
-template <typename T>
-struct Hold { function kind() const -> int { return 0; } end function kind } end struct Hold
-template <typename T>
-struct Hold<T*> { function ptr() const -> int { return 1; } end function ptr } end struct Hold
-Hold<int*>: h;
-int: k = h.kind();OK
-template <typename T, int N>
-struct Mat { function kind() const -> int { return 0; } end function kind } end struct Mat
-template <typename T>
-struct Mat<T, 1> { function vec() const -> int { return 1; } end function vec } end struct Mat
-Mat<float, 1>: m;
-int: k = m.vec();ERR:undeclared identifier 'vec'
-template <typename T, int N>
-struct Mat { function kind() const -> int { return 0; } end function kind } end struct Mat
-template <typename T>
-struct Mat<T, 1> { function vec() const -> int { return 1; } end function vec } end struct Mat
-Mat<float, 2>: m;
-int: k = m.vec();OK
-template <int N>
-struct Arr { function kind() const -> int { return 0; } end function kind } end struct Arr
-template <>
-struct Arr<0> { function empty() const -> bool { return true; } end function empty } end struct Arr
-Arr<0>: z;
-bool: e = z.empty();OK
-template <typename T>
-struct Hold { int: a; } end struct Hold
-template <typename T>
-struct Hold<T*> { T: inner; function get() const -> T { return inner; } end function get } end struct Hold
-Hold<int*>: h;
-int: v = h.get();
-int: w = h.inner;ERR:no implicit conversion from 'float' to 'int'
-template <typename T>
-struct Hold { int: a; } end struct Hold
-template <typename T>
-struct Hold<T*> { T: inner; function get() const -> T { return inner; } end function get } end struct Hold
-Hold<float*>: h;
-int: v = h.get();OK
-template <typename T>
-struct Hold { int: a; } end struct Hold
-template <typename T>
-struct Hold<T*> { function ptr() const -> int { return 1; } end function ptr } end struct Hold
-template <typename U>
-function use(const Hold<U*>: h) -> int { return h.ptr(); } end function use
-Hold<char*>: h;
-int: r = use(h);ERR:no implicit conversion from 'short short int' to 'string'
-short short int: x = 1;
-string: s = x;OK
-static_assert(true, "")
-short short int: a = (2 ** 7 - 1);ERR:no implicit conversion from 'short int' to 'string'
-short int: x = 1;
-string: s = x;OK
-static_assert(true, "")
-short int: a = (2 ** 15 - 1);ERR:no implicit conversion from 'int' to 'string'
-int: x = 1;
-string: s = x;OK
-static_assert(true, "")
-int: a = (2 ** 30 - 1) + 2 ** 30;ERR:no implicit conversion from 'long int' to 'string'
-long int: x = 1;
-string: s = x;OK
-static_assert(true, "")
-long int: a = 1;ERR:no implicit conversion from 'long long int' to 'string'
-long long int: x = 1;
-string: s = x;OK
-static_assert(true, "")
-long long int: a = 1;ERR:no implicit conversion from 'long long int' to 'string'
-short short integer: x = 1;
-string: s = x;OK
-static_assert(true, "")
-short short integer: a = 1;ERR:no implicit conversion from 'short integer' to 'string'
-short integer: x = 1;
-string: s = x;OK
-static_assert(true, "")
-short integer: a = 1;ERR:no implicit conversion from 'integer' to 'string'
-integer: x = 1;
-string: s = x;OK
-static_assert(true, "")
-integer: a = 1;ERR:no implicit conversion from 'long integer' to 'string'
-long integer: x = 1;
-string: s = x;OK
-static_assert(true, "")
-long integer: a = 1;ERR:no implicit conversion from 'long long integer' to 'string'
-long long integer: x = 1;
-string: s = x;ERR:no implicit conversion from 'short short float' to 'string'
-short short float: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'short float' to 'string'
-short float: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'float' to 'string'
-float: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'long float' to 'string'
-long float: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'long long float' to 'string'
-long long float: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'float' to 'string'
-short short double: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'long float' to 'string'
-short double: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'long long float' to 'string'
-double: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'long double' to 'string'
-long double: x = 1.5;
-string: s = x;ERR:no implicit conversion from 'long long double' to 'string'
-long long double: x = 1.5;
-string: s = x;OK
-short short int: a = 127;ERR:does not fit
-short short int: a = 128;OK
-short int: a = 32767;ERR:does not fit
-short int: a = 32768;OK
-static_assert(true,"")
-constexpr long long integer: a = 1;OK
-unsigned int: u = 5;ERR:no implicit conversion from 'int' to 'unsigned int'
-unsigned int: u = -1;OK
-unsigned short short int: u = 255;ERR:no implicit conversion
-unsigned short short int: u = 256;OK
-short short float: f = 1.5;OK
-float: f = 1;OK
-long long integer: big = static_cast<long long integer>(2) ** 100;
-static_assert(static_cast<long long integer>(2) ** 2000 > 0, "huge")ERR:no implicit conversion from 'int' to 'short int'
-int: r = 3;
-short int: s = r;OK
-long long double: d = 2.5;
-short short double: e = 0.25;ERR:does not fit
-constexpr int: k = 2 ** 31;OK
-template <typename T>
-function describe(const T: x) -> string {
-    return "generic";
-} end function describe
-auto: d = describe<float>(1.5);OK
-template <typename T>
-function describe(const T: x) -> string {
-    return "generic";
-} end function describe
-template <>
-function describe<int>(const int: x) -> string {
-    return "int";
-} end function describe
-auto: d = describe<float>(1.5);
-auto: e = describe<int>(7);OK
-enum Small : unsigned int { None = 0, One = 1 }ERR:no implicit conversion from 'int' to 'unsigned int'
-enum Small : unsigned int { None = -1 }OK
-template <typename T>
-function describe(const T: x) -> string { return "generic"; } end function describe
-template <>
-function describe<int>(const int: x) -> string { static_assert(true, "x") return "int"; } end function describe
-auto: d = describe<float>(1.5);
-auto: e = describe<int>(7);ERR:static assertion failed
-template <typename T>
-struct Box { function k() const -> int { return 0; } end function k } end struct Box
-template <>
-struct Box<int> { function k() const -> int { static_assert(false, "int spec") return 1; } end function k } end struct Box
-Box<int>: a;
-int: x = a.k();OK
-template <typename T>
-struct Box { function k() const -> int { return 0; } end function k } end struct Box
-template <>
-struct Box<int> { function k() const -> int { static_assert(false, "int spec") return 1; } end function k } end struct Box
-Box<float>: a;
-int: x = a.k();OK
-template <typename A, typename B>
-struct P { function k() const -> int { return 0; } end function k } end struct P
-template <typename A>
-struct P<A, int> { function k() const -> int { static_assert(false, "spec") return 1; } end function k } end struct P
-P<float, char>: a;
-int: x = a.k();ERR:static assertion failed
-template <typename A, typename B>
-struct P { function k() const -> int { return 0; } end function k } end struct P
-template <typename A>
-struct P<A, int> { function k() const -> int { static_assert(false, "spec") return 1; } end function k } end struct P
-P<float, int>: a;
-int: x = a.k();OK
-template <int N>
-function f() -> int {
-if constexpr (N > 0) then { return N; } else then { string: s = 5; return 0; }
-} end function f
-int: a = f<3>();ERR:no implicit conversion from 'int' to 'string'
-template <int N>
-function f() -> int {
-if constexpr (N > 0) then { return N; } else then { string: s = 5; return 0; }
-} end function f
-int: a = f<0>();OK
-template <int N>
-function f() -> int {
-if constexpr (N == 1) then { return 1; } else if constexpr (N == 2) then { return 2; } else then { static_assert(N > 2, "big") return 3; }
-} end function f
-int: a = f<1>();
-int: b = f<2>();
-int: c = f<9>();ERR:static assertion failed
-template <int N>
-function f() -> int {
-if constexpr (N == 1) then { return 1; } else if constexpr (N == 2) then { return 2; } else then { static_assert(N > 2, "big") return 3; }
-} end function f
-int: a = f<0>();ERR:not a constant expression
-function g(int: x) -> int {
- if constexpr (x > 0) then { return 1; }
- return 0;
-} end function gERR:no implicit conversion from 'int' to 'string'
-function g() -> int {
- if constexpr (false) then { string: s = 5; }
- return 0;
-} end function gOK
-function g() -> int {
- if constexpr (2 ** 3 == 8) then { return 1; }
- return 0;
-} end function gOK
-template <int N>
-function f() -> int {
-int: r = 0;
-if (r > 1) then { r = 2; } else if constexpr (N == 0) then { string: s = 5; } else then { r = 3; }
-return r;
-} end function f
-int: a = f<4>();OK
-template <typename T>
-struct Box { T: v; } end struct Box
-template <int N>
-function h() -> int {
- if constexpr (N == 1) then { Box<int>: b; return b.v; } else then { return N; }
-} end function h
-int: a = h<1>();
-int: b = h<5>();ERR:undeclared identifier 'nonsense'
-template <int N>
-function f() -> int {
-if constexpr (N > 0) then { return N; } else then { return nonsense; }
-} end function f
-int: a = f<3>();OK
-constexpr function sq(int: x) -> int { return x * x; } end function sq
-static_assert(sq(7) == 49, "sq")ERR:static assertion failed
-constexpr function sq(int: x) -> int { return x * x; } end function sq
-static_assert(sq(7) == 50, "sq")OK
-constexpr function fact(int: n) -> int { if (n <= 1) then { return 1; } return n * fact(n - 1); } end function fact
-static_assert(fact(10) == 3628800, "fact")OK
-constexpr function fib(int: n) -> int {
- int: a = 0;
- int: b = 1;
- for (int: i = 0; i < n; ++i) {
-  int: t = a + b;
-  a = b;
-  b = t;
- }
- return a;
-} end function fib
-static_assert(fib(20) == 6765, "fib")OK
-constexpr function sum_to(int: n) -> int {
- int: s = 0;
- int: i = 1;
- while (i <= n) {
-  s += i;
-  i++;
- }
- return s;
-} end function sum_to
-static_assert(sum_to(100) == 5050, "sum")OK
-constexpr function first_over(int: limit) -> int {
- int: i = 0;
- while (true) {
-  i += 1;
-  if (i ** 2 > limit) then { break; }
- }
- return i;
-} end function first_over
-static_assert(first_over(50) == 8, "first")OK
-constexpr function odd_sum(int: n) -> int {
- int: s = 0;
- for (int: i = 0; i < n; i++) {
-  if (i % 2 == 0) then { continue; }
-  s += i;
- }
- return s;
-} end function odd_sum
-static_assert(odd_sum(10) == 25, "odd")ERR:does not fit
-constexpr function boom(int: x) -> int { return x * 1000000; } end function boom
-constexpr int: k = boom(5000);ERR:division by zero
-constexpr function d(int: x) -> int { return 10 / x; } end function d
-static_assert(d(0) == 1, "div")ERR:step limit
-constexpr function spin() -> int { int: z = 0; while (true) { z = 1; } return z; } end function spin
-constexpr int: k = spin();ERR:step limit
-constexpr function rec(int: n) -> int { return rec(n + 1); } end function rec
-constexpr int: k = rec(0);ERR:without returning
-constexpr function nothing(int: x) -> int { if (x > 0) then { return 1; } } end function nothing
-constexpr int: k = nothing(0);ERR:not a constant expression
-function plain(int: x) -> int { return x; } end function plain
-constexpr int: k = plain(3);OK
-function plain(int: x) -> int { return x; } end function plain
-int: k = plain(3);OK
-constexpr function scale(float: x) -> float { return x * 2.5; } end function scale
-static_assert(scale(2.0) == 5.0, "f")OK
-template <typename T>
-constexpr function twice(T: x) -> T { return x + x; } end function twice
-static_assert(twice(21) == 42, "t")
-static_assert(twice(1.25) == 2.5, "tf")OK
-template <int N>
-constexpr function pw() -> int { int: r = 1; for (int: i = 0; i < N; ++i) { r *= 2; } return r; } end function pw
-static_assert(pw<10>() == 1024, "pw")OK
-constexpr function g(int: x, int: y = 5) -> int { return x + y; } end function g
-static_assert(g(1) == 6, "def")
-static_assert(g(1, 2) == 3, "two")OK
-constexpr function w(short short int: x) -> short short int { short short int: y = x; y += 100; return y; } end function w
-static_assert(w(20) == 120, "w")ERR:does not fit
-constexpr function w(short short int: x) -> short short int { short short int: y = x; y += 100; return y; } end function w
-constexpr short short int: k = w(50);OK
-constexpr function f(int: n) -> int { return n ** 3; } end function f
-template <int N>
-struct Arr { function size() const -> int { return N; } end function size } end struct Arr
-Arr<f(2)>: a;
-Arr<8>: b = a;OK
-constexpr function pick(int: n) -> int {
- if constexpr (true) then { return n; }
- return 0;
-} end function pick
-static_assert(pick(4) == 4, "p")OK
-function f(short short int: x) -> int { return 1; } end function f
-function f(int: x) -> int { return 2; } end function f
-int: r = f(20);OK
-function g(short short int: x) -> int { return 1; } end function g
-int: r = g(20);ERR:no matching overload
-function g(short short int: x) -> int { return 1; } end function g
-int: r = g(300);ERR:no matching overload
-function g(short short int: x) -> int { return 1; } end function g
-int: v = 20;
-int: r = g(v);OK
-short short int: y = 5;
-y += 100;
-y = 7;ERR:no implicit conversion
-short short int: y = 5;
-y = 300;OK
-function h(unsigned int: x) -> int { return 1; } end function h
-int: r = h(5);OK
-function h(const short int&: x) -> int { return 1; } end function h
-int: r = h(5);ERR:no matching overload
-function h(short int&: x) -> int { return 1; } end function h
-int: r = h(5);OK
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-template <Addable T>
-function add(T: x, T: y) -> T { return x + y; } end function add
-int: r = add(1, 2);
-float: q = add(1.5, 2.5);ERR:constraints not satisfied for 'add': Addable<S>
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-struct S { int: v; } end struct S
-template <Addable T>
-function add(T: x, T: y) -> T { return x + y; } end function add
-S: s;
-S: r = add(s, s);OK
-template <int N>
-concept Small = N < 10
-template <int N> requires Small<N>
-function f() -> int { return N; } end function f
-int: r = f<3>();ERR:constraints not satisfied for 'f': Small<12>
-template <int N>
-concept Small = N < 10
-template <int N> requires Small<N>
-function f() -> int { return N; } end function f
-int: r = f<12>();OK
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-static_assert(Addable<int>, "int")
-static_assert(Addable<float>, "float")ERR:static assertion failed
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-struct S { int: v; } end struct S
-static_assert(Addable<S>, "S")OK
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-struct S { int: v; } end struct S
-static_assert(!Addable<S>, "not S")OK
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-template <typename T>
-concept Numberish = Addable<T> && requires (T: a) { a * a; a / a; }
-static_assert(Numberish<int>, "n")
-static_assert(!Numberish<string>, "s")OK
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-struct S { int: v; } end struct S
-template <typename T>
-concept AddOrS = Addable<T> || requires (T: a) { a.v; }
-static_assert(AddOrS<int>, "i")
-static_assert(AddOrS<S>, "s")OK
-template <typename T>
-concept HasV = requires (T: a) { { a.v } -> int; }
-struct S { int: v; } end struct S
-struct F { float: v; } end struct F
-static_assert(HasV<S>, "S")
-static_assert(!HasV<F>, "F")OK
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-struct S { int: v; } end struct S
-template <typename T> requires Addable<T>
-function pick(T: x) -> int { return 1; } end function pick
-template <typename T> requires (!Addable<T>)
-function pick(T: x) -> int { return 2; } end function pick
-int: a = pick(5);
-S: s;
-int: b = pick(s);OK
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-template <typename T>
-function g(T: x) -> int {
- if constexpr (Addable<T>) then { return 1; } else then { return 0; }
-} end function g
-int: a = g(3);OK
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-template <Addable T>
-struct Box { T: v; function twice() const -> T { return v + v; } end function twice } end struct Box
-Box<int>: b;
-int: t = b.twice();ERR:constraints not satisfied for 'Box'
-template <typename T>
-concept Addable = requires (T: a, T: b) { a + b; }
-struct S { int: v; } end struct S
-template <Addable T>
-struct Box { T: v; } end struct Box
-Box<S>: b;OK
-template <int N>
-concept Small = N < 10
-static_assert(Small<3>, "3")
-static_assert(!Small<30>, "30")ERR:'secret' is a private member of 'Vault'
-class Vault {
- private:
- int: secret;
- public:
- function peek() const -> int { return secret; } end function peek
-} end class Vault
-Vault: v;
-int: x = v.secret;OK
-class Vault {
- private:
- int: secret;
- public:
- function peek() const -> int { return secret; } end function peek
-} end class Vault
-Vault: v;
-int: x = v.peek();ERR:private member
-class Vault {
- int: secret;
-} end class Vault
-Vault: v;
-int: x = v.secret;OK
-struct Open {
- int: x;
-} end struct Open
-Open: o;
-int: y = o.x;ERR:'concealed' is a private member of 'Vault'
-class Vault {
- private:
- function concealed() const -> int { return 1; } end function concealed
-} end class Vault
-Vault: v;
-int: x = v.concealed();OK
-class Base {
- protected:
- int: p;
-} end class Base
-class Derived extends Base {
- public:
- function get() const -> int { return this->p; } end function get
-} end class Derived
-Derived: d;
-int: x = d.get();ERR:'p' is a protected member of 'Base'
-class Base {
- protected:
- int: p;
-} end class Base
-class Derived extends Base {
-} end class Derived
-Derived: d;
-int: x = d.p;OK
-class Pt {
- private:
- int: x;
- public:
- function same(const Pt&: o) const -> bool { return o.x == x; } end function same
-} end class Pt
-Pt: a;
-Pt: b;
-bool: s = a.same(b);OK
-class Vault {
- private:
- int: secret;
- friend function snoop(const Vault&: v) -> int;
-} end class Vault
-function snoop(const Vault&: v) -> int { return v.secret; } end function snoopOK
-template <typename T>
-class Box {
- private:
- T: v;
- public:
- function get() const -> T { return v; } end function get
-} end class Box
-Box<int>: b;
-int: x = b.get();ERR:private member
-template <typename T>
-class Box {
- private:
- T: v;
-} end class Box
-Box<int>: b;
-int: x = b.v;ERR:'secret' is a private member of 'Vault'
-class Vault {
- private:
- int: secret;
- friend function snoop(const Vault&: v) -> int;
-} end class Vault
-function other(const Vault&: v) -> int { return v.secret; } end function otherERR:'x' may be used before it is assigned
-function f() -> int { int: x; return x; } end function fOK
-function f() -> int { int: x; x = 4; return x; } end function fERR:'x' may be used before it is assigned
-function f() -> int { int: x; x = x + 1; return x; } end function fOK
-function f(bool: c) -> int { int: x; if (c) then { x = 1; } else then { x = 2; } return x; } end function fOK
-function set(int&: out) -> void { out = 3; } end function set
-function f() -> int { int: x; set(x); return x; } end function fOK
-function f() -> int { int: x; int*: p = &x; return 0; } end function fERR:'y' may be used before it is assigned
-function f() -> int { int: x = 1; float: y; float: z = y * 2.0; return x; } end function fOK
-int: g;
-function f() -> int { return g; } end function fOK
-println("hi", 3, 2.5, true, 'c');
-print(1);
-string: s = input();ERR:cannot be applied to operand of type 'S'
-struct S { int: v; } end struct S
-S: s;
-println(s);OK
-function print(int: x) -> int { return x; } end function print
-int: r = print(3);ERR:no matching overload
-string: s = input(3);ERR:no implicit conversion from 'P' to 'string'
-struct P { int: x; constructor(int: a) : x(a) { int: z = 0; } } end struct P
-string: s = P(3);ERR:no implicit conversion from 'P' to 'string'
-struct P { int: x; } end struct P
-string: s = P();ERR:no matching overload
-struct P { int: x; constructor(int: a) : x(a) { int: z = 0; } } end struct P
-P: p = P(3, 4);ERR:no implicit conversion from 'B<int>' to 'string'
-template <typename T>
-struct B { T: v; } end struct B
-string: s = B<int>();OK
-struct P { int: x; constructor(int: a) : x(a) { int: z = 0; } } end struct P
-P: p = P(3);OK
-template <typename T>
-struct B { T: v; constructor(T: a) : v(a) { int: z = 0; } } end struct B
-B<float>: b = B<float>(2.5);ERR:no matching overload
-template <typename T>
-struct B { T: v; constructor(T: a) : v(a) { int: z = 0; } } end struct B
-B<string>: b = B<string>(2.5);ERR:no matching overload
-struct P { int: x; } end struct P
-P: p = P(1);

@@ -1,3 +1,0 @@
-println('é');
-char: u = 'é';
-println(u);

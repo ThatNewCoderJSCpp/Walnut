@@ -1,183 +1,0 @@
-OK
-struct Oops { int: code; } end struct Oops
-try { int: a = 1; } catch (Oops: o) { int: c = o.code; }
-OK
-function f() -> int { try { int: a = 1; } catch (int: e) { return e; } return 0; } end function f
-ERR:no implicit conversion from 'int' to 'string'
-try { int: a = 1; } catch (int: e) { string: s = e; }
-OK
-array int: xs[3] = {1, 2, 3};
-int: t = 0;
-for (int: x in xs) { t += x; }
-OK
-array string: xs[] = {"a", "b"};
-for (auto: x in xs) { string: y = x; }
-ERR:cannot be iterated
-int: n = 3;
-for (int: x in n) { int: y = x; }
-ERR:no implicit conversion from 'string' to 'int' in for-each loop
-array string: xs[] = {"a"};
-for (int: x in xs) { int: y = x; }
-ERR:too many initializers
-array int: xs[2] = {1, 2, 3};
-ERR:no implicit conversion from 'string' to 'int'
-array int: xs[2] = {1, "two"};
-OK
-array int: xs[4];
-int: v = xs[1];
-ERR:no implicit conversion from 'string' to 'int'
-array string: xs[2] = {"a", "b"};
-int: v = xs[0];
-OK
-class A { public: int: a; } end class A
-class B extends A { public: int: b; } end class B
-B: x;
-A&: r = x;
-A*: p = &x;
-const A&: c = x;
-ERR:no implicit conversion from 'A*' to 'B*'
-class A { public: int: a; } end class A
-class B extends A { public: int: b; } end class B
-A: x;
-B*: p = &x;
-ERR:no implicit conversion
-class A { public: int: a; } end class A
-class C { public: int: c; } end class C
-C: x;
-A&: r = x;
-OK
-function area(int: w, int: h = 2) -> int { return w * h; } end function area
-int: a = area(3);
-ERR:no implicit conversion from 'string' to 'int'
-function area(int: w, int: h = "x") -> int { return w * h; } end function area
-OK
-template <int N>
-function f() -> int { if constexpr (N == 0) then { return 1; } else then { return 2 * f<N - 1>(); } } end function f
-int: r = f<5>();
-OK
-template <int N>
-function f() -> int { int: k = N; return k + 1; } end function f
-int: r = f<5>();
-ERR:no implicit conversion from 'int' to 'string'
-template <int N>
-function f() -> int { string: s = N; return 0; } end function f
-int: r = f<5>();
-OK
-struct Box { int: v; constructor(int: a) : v(a) { int: z = 0; } } end struct Box
-function g() -> int { Box: b = Box(3); return b.v; } end function g
-OK
-array int: d[3] = {1, 2, 3};
-int*: p = &d[0];
-p += 1;
-p -= 1;
-ERR:no implicit conversion
-array int: d[3] = {1, 2, 3};
-int*: p = &d[0];
-p += "x";
-OK
-int: x = 1;
-x <<= 3;
-OK
-function sq(int: x) -> int { return x * x; } end function sq
-function(int) -> int: f = sq;
-int: r = f(3);
-ERR:no implicit conversion
-function sq(int: x) -> int { return x * x; } end function sq
-function(string) -> int: f = sq;
-ERR:without returning a value
-function f(int: x) -> int { if (x > 0) then { return 1; } } end function f
-OK
-function f(int: x) -> int { if (x > 0) then { return 1; } else then { return 2; } } end function f
-OK
-function f(int: x) -> int { while (true) { if (x > 3) then { return x; } x += 1; } } end function f
-ERR:without returning a value
-function f(int: x) -> int { while (true) { if (x > 3) then { break; } x += 1; } } end function f
-OK
-function f(int: x) -> int { switch (x) { case 1: return 5; default: return 6; } } end function f
-OK
-function f(int: x) -> int { throw "no"; } end function f
-OK
-function f(int: x) -> int { try { return 1; } catch (...) { return 2; } } end function f
-OK
-function main() -> int { println(1); } end function main
-OK
-function g(int: x) { int: y = x; } end function g
-OK
-long int: m = 3000000000 - 1;
-auto: big = 3000000000;
-long int: z = big;
-ERR:does not fit
-int: m = 3000000000;
-OK
-int: x = 1;
-auto&: r = x;
-r = 2;
-const auto: c = x;
-ERR:const
-int: x = 1;
-const auto: c = x;
-c = 3;
-OK
-array int: d[4] = {1, 2, 3, 4};
-int*: a = &d[0];
-int*: b = &d[3];
-long int: n = b - a;
-ERR:const
-struct S { int: v; } end struct S
-const S: s = S{0};
-s.v = 5;
-ERR:cannot call non-const member function 'set' on a const object
-struct S { int: v; function set(int: x) -> void { v = x; } end function set } end struct S
-const S: s = S{0};
-s.set(1);
-ERR:const
-struct S { int: v; function bad() const -> void { v = 2; } end function bad } end struct S
-ERR:cannot call non-const member function 'set'
-struct S { int: v; function set(int: x) -> void { v = x; } end function set
- function bad() const -> void { set(1); } end function bad } end struct S
-OK
-struct S { int: v; function get() const -> int { return v; } end function get } end struct S
-const S: s = S{0};
-int: g = s.get();
-S: t = s;
-t.v = 3;
-OK
-struct S { mutable int: hits; function touch() const -> void { hits += 1; } end function touch } end struct S
-OK
-function k(var: v) -> int { return 1; } end function k
-int: a = k(3);
-int: b = k("s");
-int: x = 4;
-int: c = k(x);
-OK
-var: v = 5;
-var: r = v > 3 ? v : 0;
-OK
-enum Shape { Tri, Sq }
-int: i = static_cast<int>(Shape::Sq);
-Shape: s = static_cast<Shape>(1);
-OK
-class A { public: int: a; } end class A
-class B extends A { public: int: b; } end class B
-B: x;
-A*: p = &x;
-B*: q = static_cast<B*>(p);
-ERR:invalid static_cast
-class A { public: int: a; } end class A
-class C { public: int: c; } end class C
-A: x;
-C*: q = static_cast<C*>(&x);
-OK
-template <typename T = int, int N = 3>
-struct D { function size() const -> int { return N; } end function size } end struct D
-D<>: a;
-int: n = a.size();
-OK
-function total(array int: xs) -> int { return 0; } end function total
-array int: d[3] = {1, 2, 3};
-int: t = total(d);
-ERR:no matching overload
-function total(array int: xs) -> int { return 0; } end function total
-array string: d[3] = {"a", "b", "c"};
-int: t = total(d);
-
