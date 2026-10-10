@@ -21,6 +21,10 @@
 #define WALNUT_RUNTIME_LIBS ""
 #endif
 
+#ifndef WALNUT_RELOCATABLE
+#define WALNUT_RELOCATABLE 0
+#endif
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -32,6 +36,10 @@
 
 #ifndef _WIN32
 #include <sys/wait.h>
+#endif
+
+#if defined(_WIN32)
+extern "C" __declspec(dllimport) unsigned long __stdcall GetModuleFileNameW(void* module, wchar_t* filename, unsigned long size);
 #endif
 
 namespace {
@@ -81,7 +89,45 @@ void print_usage(std::ostream& os) {
           "  -h, --help         show this help\n";
 }
 
+fs::path executable_dir() {
+#if defined(_WIN32)
+    std::wstring buf(32768, L'\0');
+    const unsigned long n = GetModuleFileNameW(nullptr, buf.data(), static_cast<unsigned long>(buf.size()));
+    buf.resize(n);
+    return fs::path(buf).parent_path();
+#else
+    std::error_code ec;
+    return fs::read_symlink("/proc/self/exe", ec).parent_path();
+#endif
+}
+
+std::string relocate(const std::string& list) {
+    if (!WALNUT_RELOCATABLE) return list;
+    const fs::path base = executable_dir();
+    std::string out;
+    std::string cur;
+
+    auto flush = [&] {
+        if (cur.empty()) return;
+        if (!out.empty()) out += ';';
+        out += cur.rfind("../", 0) == 0 ? (base / fs::path(cur)).lexically_normal().string() : cur;
+        cur.clear();
+    };
+
+    for (char c : list) {
+        if (c == ';') flush();
+        else cur += c;
+    }
+
+    flush();
+    return out;
+}
+
 bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
+    o.runtime_dir    = relocate(o.runtime_dir);
+    o.extra_includes = relocate(o.extra_includes);
+    o.extra_libs     = relocate(o.extra_libs);
+
     exit_code = 0;
     if (argc < 2) { print_usage(std::cerr); exit_code = 2; return false; }
     const std::string cmd = argv[1];
@@ -134,6 +180,14 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     if (const char* env = std::getenv("WALNUT_RUNTIME_DIR")) if (*env) o.runtime_dir = env;
     if (const char* env = std::getenv("WALNUT_CXX")) if (*env) o.cxx = env;
     return true;
+}
+
+int run_command(const std::string& cmd) {
+#ifdef _WIN32
+    return std::system(("\"" + cmd + "\"").c_str());
+#else
+    return std::system(cmd.c_str());
+#endif
 }
 
 std::string quote(const std::string& s) {
@@ -235,7 +289,7 @@ bool compile_cpp(const Options& o, const fs::path& cpp_path, const fs::path& exe
     cmd += " " + quote(cpp_path.string()) + " -o " + quote(exe_path.string());
     for (const std::string& lib : split_list(o.extra_libs)) cmd += " " + quote(lib);
     if (o.verbose) std::cerr << cmd << "\n";
-    const int status = exit_status_of(std::system(cmd.c_str()));
+    const int status = exit_status_of(run_command(cmd));
 
     if (status != 0) {
         std::cerr << "walnut: the C++ compiler failed on the generated code (exit status " << status << ")\n";
@@ -306,7 +360,7 @@ int run(const Options& o) {
     std::string cmd = quote(exe.string());
     for (const std::string& a : o.program_args) cmd += " " + quote(a);
     std::cout.flush();
-    const int status = exit_status_of(std::system(cmd.c_str()));
+    const int status = exit_status_of(run_command(cmd));
     std::error_code ec;
     if (!o.keep_cpp) fs::remove_all(tmp, ec);
     else std::cerr << "walnut: generated C++ kept at " << cpp_path.string() << "\n";

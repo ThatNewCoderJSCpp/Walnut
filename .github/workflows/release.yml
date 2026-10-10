@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(sed -n 's/^project(walnut VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::CMakeLists.txt says VERSION $version but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config \
+            libx11-dev libxft-dev libxrender-dev libfontconfig1-dev libfreetype-dev \
+            libssl-dev libpango1.0-dev libcairo2-dev zlib1g-dev libjpeg-dev \
+            libvulkan-dev libgl-dev
+
+      - name: Configure
+        run: |
+          lib=/usr/lib/x86_64-linux-gnu
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWALNUT_PACKAGE=ON -DWALNUT_BUILD_DEBUG_DRIVER=OFF -DFIZMO_TUNE=OFF \
+            -DJPEG_LIBRARY=$lib/libjpeg.a -DJPEG_LIBRARY_RELEASE=$lib/libjpeg.a \
+            -DZLIB_LIBRARY=$lib/libz.a -DZLIB_LIBRARY_RELEASE=$lib/libz.a
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Check walnut only needs common system libraries
+        run: |
+          readelf -d build/walnut | grep NEEDED
+          if readelf -d build/walnut | grep NEEDED | grep -E "libjpeg|libstdc\+\+|libgcc_s"; then
+            echo "::error::walnut links to a library users may not have"
+            exit 1
+          fi
+
+      - name: Package
+        working-directory: build
+        run: cpack
+
+      - name: Test the package
+        run: |
+          mkdir -p smoke
+          tar -xzf build/Walnut-*.tar.gz -C smoke
+          printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
+          smoke/Walnut-*/bin/walnut run smoke/ok.wal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walnut-linux-x86_64
+          path: build/Walnut-*.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-libjpeg-turbo
+            mingw-w64-ucrt-x86_64-vulkan-headers
+            unzip
+
+      - name: Check the version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(sed -n 's/^project(walnut VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::CMakeLists.txt says VERSION $version but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+      - name: Configure
+        run: |
+          lib=$(cygpath -m "$MINGW_PREFIX/lib")
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWALNUT_PACKAGE=ON -DWALNUT_BUILD_DEBUG_DRIVER=OFF -DFIZMO_TUNE=OFF \
+            -DJPEG_LIBRARY=$lib/libjpeg.a -DJPEG_LIBRARY_RELEASE=$lib/libjpeg.a \
+            -DZLIB_LIBRARY=$lib/libz.a -DZLIB_LIBRARY_RELEASE=$lib/libz.a
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Check walnut only needs DLLs that come with Windows
+        run: |
+          objdump -p build/walnut.exe | grep "DLL Name"
+          if objdump -p build/walnut.exe | grep "DLL Name" | grep -iE "libstdc|libgcc|libwinpthread|zlib|libjpeg"; then
+            echo "::error::walnut needs a DLL that users will not have"
+            exit 1
+          fi
+
+      - name: Package
+        working-directory: build
+        run: cpack
+
+      - name: Test the package
+        run: |
+          mkdir -p smoke
+          unzip -q build/Walnut-*.zip -d smoke
+          printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
+          smoke/Walnut-*/bin/walnut.exe run smoke/ok.wal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walnut-windows
+          path: build/Walnut-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Attach Walnut to the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: packages/*
+          fail_on_unmatched_files: true
