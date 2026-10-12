@@ -9,7 +9,7 @@
 #include "../Common/arena_allocator.hpp"
 #include "../Common/profiler.hpp"
 #include "../Common/compiler_warning.hpp"
-#include "../Common/small_vector.hpp"
+#include "../Common/foundation.hpp"
 
 #include <cstdint>
 #include <cstring>

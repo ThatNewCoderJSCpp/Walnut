@@ -4,7 +4,7 @@
 #include <string_view>
 #include <cstdint>
 
-#include "../Common/small_vector.hpp"  
+#include "../Common/foundation.hpp"  
 
 namespace walnut {
     namespace nodes        { struct ASTNode; struct TemplateDeclaration; }

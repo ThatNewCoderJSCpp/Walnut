@@ -1,12 +1,19 @@
 #ifndef WALNUT_FOUNDATION_HPP
 #define WALNUT_FOUNDATION_HPP
 
+#ifndef FIZMO
 #define FIZMO
+#endif
+#ifndef FIZMO_COLLECTIONS
+#define FIZMO_COLLECTIONS
+#endif
 #include "fizmo/includes.hpp"
 
 namespace walnut {
 
 namespace mp = fizmo::multiprecision;
+
+using fizmo::collections::SmallVector;
 
 using WideInt   = mp::int2048;
 using WideUInt  = mp::uint2048;

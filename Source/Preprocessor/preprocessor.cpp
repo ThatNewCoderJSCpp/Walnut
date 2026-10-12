@@ -466,7 +466,7 @@ PPVec Preprocessor::expand(PPVec input, Reader* src) {
             continue;
         }
 
-        if (actuals.empty() && (m.params.size() + (m.variadic ? 1u : 0u)) >= 1) actuals.push_back({});
+        if (actuals.empty() && (m.params.size() + (m.variadic ? 1u : 0u)) >= 1) actuals.emplace_back();
 
         if (!m.variadic && actuals.size() != m.params.size()) m_reporter.report(ErrorPhase::Preprocessor, T.tok.line(), "macro '" + std::string(name) + "' passed " + std::to_string(actuals.size()) + " args, expected " + std::to_string(m.params.size()));
         else if (m.variadic && actuals.size() < m.params.size()) m_reporter.report(ErrorPhase::Preprocessor, T.tok.line(), "macro '" + std::string(name) + "' needs at least " + std::to_string(m.params.size()) + " args");

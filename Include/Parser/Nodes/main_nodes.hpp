@@ -12,7 +12,6 @@
 #include "../Types/dependent_types.hpp"
 #include "../modifiers.hpp"
 #include "../../Common/arena_allocator.hpp"
-#include "../../Common/small_vector.hpp"
 #include "../../Common/foundation.hpp"
 
 namespace walnut {

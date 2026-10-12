@@ -10,9 +10,9 @@ permissions:
   contents: write
 
 jobs:
-  linux:
-    name: Linux x86_64
-    runs-on: ubuntu-22.04
+  version:
+    name: Check the version
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +26,21 @@ jobs:
             exit 1
           fi
 
+  linux:
+    name: Linux ${{ matrix.arch }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -36,8 +51,9 @@ jobs:
 
       - name: Configure
         run: |
-          lib=/usr/lib/x86_64-linux-gnu
+          lib=/usr/lib/$(gcc -print-multiarch)
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWALNUT_PACKAGE=ON -DWALNUT_BUILD_DEBUG_DRIVER=OFF -DFIZMO_TUNE=OFF \
+            -DWALNUT_PACKAGE_PLATFORM=linux-${{ matrix.arch }} \
             -DJPEG_LIBRARY=$lib/libjpeg.a -DJPEG_LIBRARY_RELEASE=$lib/libjpeg.a \
             -DZLIB_LIBRARY=$lib/libz.a -DZLIB_LIBRARY_RELEASE=$lib/libz.a
 
@@ -65,13 +81,69 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: walnut-linux-x86_64
+          name: walnut-linux-${{ matrix.arch }}
+          path: build/Walnut-*.tar.gz
+          if-no-files-found: error
+
+  linux-i686:
+    name: Linux i686
+    needs: version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build, check, package and test in a 32-bit container
+        run: |
+          docker run --rm --platform linux/386 -v "$PWD:/src" -w /src i386/debian:bookworm bash -euo pipefail -c '
+            apt-get update
+            apt-get install -y --no-install-recommends ca-certificates git g++ cmake ninja-build pkg-config file binutils \
+              libx11-dev libxft-dev libxrender-dev libfontconfig-dev libfreetype-dev \
+              libssl-dev libpango1.0-dev libcairo2-dev zlib1g-dev libjpeg-dev \
+              libvulkan-dev libgl-dev
+            lib=/usr/lib/$(gcc -print-multiarch)
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWALNUT_PACKAGE=ON -DWALNUT_BUILD_DEBUG_DRIVER=OFF -DFIZMO_TUNE=OFF \
+              -DWALNUT_PACKAGE_PLATFORM=linux-i686 \
+              -DJPEG_LIBRARY=$lib/libjpeg.a -DJPEG_LIBRARY_RELEASE=$lib/libjpeg.a \
+              -DZLIB_LIBRARY=$lib/libz.a -DZLIB_LIBRARY_RELEASE=$lib/libz.a
+            cmake --build build -j 4
+            readelf -d build/walnut | grep NEEDED
+            if readelf -d build/walnut | grep NEEDED | grep -E "libjpeg|libstdc\+\+|libgcc_s"; then
+              echo "::error::walnut links to a library users may not have"
+              exit 1
+            fi
+            (cd build && cpack)
+            mkdir -p smoke
+            tar -xzf build/Walnut-*.tar.gz -C smoke
+            printf "function main() -> int {\n    return 0;\n} end function main\n" > smoke/ok.wal
+            smoke/Walnut-*/bin/walnut run smoke/ok.wal
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walnut-linux-i686
           path: build/Walnut-*.tar.gz
           if-no-files-found: error
 
   windows:
-    name: Windows
-    runs-on: windows-latest
+    name: Windows ${{ matrix.platform }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - msystem: MINGW64
+            prefix: mingw-w64-x86_64
+            platform: windows-mingw64
+            runner: windows-latest
+          - msystem: UCRT64
+            prefix: mingw-w64-ucrt-x86_64
+            platform: windows-ucrt64
+            runner: windows-latest
+          - msystem: CLANGARM64
+            prefix: mingw-w64-clang-aarch64
+            platform: windows-clangarm64
+            runner: windows-11-arm
     defaults:
       run:
         shell: msys2 {0}
@@ -80,30 +152,23 @@ jobs:
 
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: UCRT64
+          msystem: ${{ matrix.msystem }}
           update: true
           install: >-
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-zlib
-            mingw-w64-ucrt-x86_64-libjpeg-turbo
-            mingw-w64-ucrt-x86_64-vulkan-headers
+            git
             unzip
-
-      - name: Check the version matches the tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          version=$(sed -n 's/^project(walnut VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::CMakeLists.txt says VERSION $version but the tag is $GITHUB_REF_NAME"
-            exit 1
-          fi
+            ${{ matrix.prefix }}-cc
+            ${{ matrix.prefix }}-cmake
+            ${{ matrix.prefix }}-ninja
+            ${{ matrix.prefix }}-zlib
+            ${{ matrix.prefix }}-libjpeg-turbo
+            ${{ matrix.prefix }}-vulkan-headers
 
       - name: Configure
         run: |
           lib=$(cygpath -m "$MINGW_PREFIX/lib")
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWALNUT_PACKAGE=ON -DWALNUT_BUILD_DEBUG_DRIVER=OFF -DFIZMO_TUNE=OFF \
+            -DWALNUT_PACKAGE_PLATFORM=${{ matrix.platform }} \
             -DJPEG_LIBRARY=$lib/libjpeg.a -DJPEG_LIBRARY_RELEASE=$lib/libjpeg.a \
             -DZLIB_LIBRARY=$lib/libz.a -DZLIB_LIBRARY_RELEASE=$lib/libz.a
 
@@ -113,7 +178,7 @@ jobs:
       - name: Check walnut only needs DLLs that come with Windows
         run: |
           objdump -p build/walnut.exe | grep "DLL Name"
-          if objdump -p build/walnut.exe | grep "DLL Name" | grep -iE "libstdc|libgcc|libwinpthread|zlib|libjpeg"; then
+          if objdump -p build/walnut.exe | grep "DLL Name" | grep -iE "libstdc|libgcc|libwinpthread|libc\+\+|libunwind|zlib|libjpeg"; then
             echo "::error::walnut needs a DLL that users will not have"
             exit 1
           fi
@@ -131,14 +196,14 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: walnut-windows
+          name: walnut-${{ matrix.platform }}
           path: build/Walnut-*.zip
           if-no-files-found: error
 
   publish:
     name: Attach Walnut to the release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, windows]
+    needs: [linux, linux-i686, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
