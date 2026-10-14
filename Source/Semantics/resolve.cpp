@@ -69,6 +69,92 @@ Symbol* resolve_lexical_visible(Scope* from, std::string_view name, const nodes:
     return nullptr;
 }
 
+std::vector<Symbol*> resolve_path(
+    Scope* from, Scope* root,
+    const std::vector<std::string_view>& parts,
+    bool is_global, const nodes::ASTNode* use
+) {
+    std::vector<Symbol*> chain;
+    if (parts.empty()) return chain;
+    Scope* cur = nullptr;
+    std::size_t first = 0;
+
+    if (is_global) {
+        cur = root;
+    } else {
+        if (!from) return chain;
+        Symbol* head = resolve_lexical_visible(from, parts[0], use);
+        if (!head) return chain;
+        chain.push_back(head);
+        if (parts.size() == 1 || !head->inner_scope || !scope_carrier(head->kind)) return chain;
+        cur = head->inner_scope;
+        first = 1;
+    }
+
+    for (std::size_t i = first; i < parts.size() && cur; ++i) {
+        Symbol* s = cur->kind == Scope::Kind::Record ? cur->find_member(parts[i]) : cur->find_local(parts[i]);
+        if (!s) break;
+        chain.push_back(s);
+        if (i + 1 == parts.size()) break;
+        if (!s->inner_scope || !scope_carrier(s->kind)) break;
+        cur = s->inner_scope;
+    }
+
+    return chain;
+}
+
+namespace {
+
+bool is_container(const Scope* s) {
+    return s && (s->kind == Scope::Kind::Namespace || s->kind == Scope::Kind::Module);
+}
+
+const Scope* container_of(const Scope* s) {
+    while (s && !is_container(s)) s = s->parent;
+    return s;
+}
+
+bool is_file_root(const Scope* s) {
+    return s && (!s->parent || !s->parent->parent);
+}
+
+std::string scope_path(const Scope* s) {
+    std::vector<std::string_view> parts;
+    for (; s && !is_file_root(s); s = s->parent) if (s->owner_symbol) parts.push_back(s->owner_symbol->name);
+    std::string out;
+    for (auto it = parts.rbegin(); it != parts.rend(); ++it) { if (!out.empty()) out += "::"; out += std::string(*it); }
+    return out;
+}
+
+}
+
+std::string visibility_violation(const Symbol* sym, const Scope* from, const nodes::ASTNode* use) {
+    if (!sym || !sym->decl || !use || sym->visibility == Visibility::Global) return {};
+    const bool other_file = sym->decl->file_id != use->file_id;
+    const std::string name(sym->name);
+
+    if (sym->visibility == Visibility::Local) {
+        if (!other_file) return {};
+        return "'" + name + "' is local, so it is never exported and cannot be used through an import from another file";
+    }
+
+    const Scope* declared_in = sym->kind == SymbolKind::Namespace && sym->inner_scope ? sym->inner_scope : container_of(sym->owner);
+    if (!declared_in) return {};
+
+    if (is_file_root(declared_in)) {
+        if (!other_file) return {};
+        return "'" + name + "' is hidden at the top level of its file, so only that file can use it";
+    }
+
+    const Scope* allowed = container_of(declared_in->parent);
+    for (const Scope* s = from; s; s = s->parent) if (s == allowed) return {};
+
+    const std::string where = scope_path(declared_in);
+    const std::string around = is_file_root(allowed) ? std::string("its own file") : "'" + scope_path(allowed) + "' and the namespaces inside it";
+    if (sym->kind == SymbolKind::Namespace) return "namespace '" + where + "' is hidden, so it can only be used inside " + around;
+    return "'" + name + "' is hidden in '" + where + "', so it can only be used inside " + around;
+}
+
 Symbol* resolve_name(
     Scope* from, Scope* root,
     const std::vector<std::string_view>& parts,
@@ -80,7 +166,17 @@ Symbol* resolve_name(
     Symbol* head = resolve_lexical_visible(from, parts[0], use);
     if (parts.size() == 1) { return head; }
     if (!head || !head->inner_scope || !scope_carrier(head->kind)) { return nullptr; }
-    return descend(head->inner_scope, parts, 1);
+    if (Symbol* found = descend(head->inner_scope, parts, 1)) { return found; }
+    if (head->kind != SymbolKind::Namespace) { return nullptr; }
+
+    for (Scope* s = from; s; s = s->parent) {
+        if (s->kind == Scope::Kind::Record) { continue; }
+        Symbol* other = s->find_local(parts[0]);
+        if (!other || other == head || other->kind != SymbolKind::Namespace || !other->inner_scope) { continue; }
+        if (Symbol* found = descend(other->inner_scope, parts, 1)) { return found; }
+    }
+
+    return nullptr;
 }
 
 } // namespace semantics

@@ -1,0 +1,11 @@
+namespace std {
+    template <typename T>
+    constexpr function move(T&: value) noexcept -> T&& {
+        return static_cast<T&&>(value);
+    } end function move
+
+    template <typename T>
+    constexpr function move(T&&: value) noexcept -> T&& {
+        return static_cast<T&&>(value);
+    } end function move
+} end namespace std

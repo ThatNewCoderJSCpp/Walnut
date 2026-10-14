@@ -97,7 +97,7 @@ nodes::ASTNode* Parser::parse_namespace_declaration() {
     auto* body = make<nodes::BlockStatement>();
 
     while (current_token().kind() != tokenizing::Token::Kind::RightCurly && current_token().kind() != tokenizing::Token::Kind::End) {
-        body->add_statement(parse_statement());
+        parse_declaration_into(body);
     }
 
     if (!match(tokenizing::Token::Kind::RightCurly)) {

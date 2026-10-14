@@ -36,6 +36,8 @@ public:
 
     void load(FileId root);
 
+    void add_module_dir(std::string dir) { m_module_dirs.push_back(std::move(dir)); }
+
     const std::unordered_map<FileId, ParsedUnit>& units() const noexcept { return m_units; }
     const SourceManager& source_manager() const { return m_sm; }
 
@@ -52,6 +54,7 @@ private:
     ErrorReporter&               m_reporter;
     Arena&                       m_arena;
 
+    std::vector<std::string>               m_module_dirs;
     std::unordered_set<FileId>             m_seen;   
     std::vector<FileId>                    m_work;   
     std::unordered_map<FileId, ParsedUnit> m_units;  
@@ -70,6 +73,8 @@ private:
     void scan_imports(FileId importer, nodes::BlockStatement* ast);
 
     std::optional<FileId> resolve_file(std::string_view raw, FileId importer, std::uint32_t line);
+
+    std::optional<FileId> resolve_module(const std::vector<std::string_view>& parts, FileId importer, std::uint32_t line);
 };
 
 } // namespace driver

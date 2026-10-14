@@ -30,6 +30,11 @@ public:
     void run(const std::unordered_map<FileId, UnitFrontResult>& results, const std::unordered_map<FileId, std::unordered_map<std::string, FileId>>& file_edges);
 
 private:
+    void check_export_visibility();
+
+public:
+
+private:
     using IK = nodes::ImportExportItem::Kind;
 
     struct Pending {
@@ -43,6 +48,7 @@ private:
     const SourceManager& m_sm;
     const std::unordered_map<FileId, UnitFrontResult>*                         m_results    = nullptr;
     const std::unordered_map<FileId, std::unordered_map<std::string, FileId>>* m_file_edges = nullptr;
+    std::unordered_set<const semantics::Symbol*>                                m_bound_files;
 
 private:
     const UnitFrontResult* unit(FileId f) const {
@@ -84,6 +90,8 @@ private:
     bool bind_named(const Pending& p, const nodes::ImportExportItem& it, semantics::Symbol* ph, const UnitFrontResult& tgt);
 
     bool bind_file(const Pending& p, semantics::Symbol* ph, const UnitFrontResult& tgt);
+
+    bool bind_module(const Pending& p, const nodes::ImportExportItem& it, semantics::Symbol* ph, const UnitFrontResult& tgt);
 
     static std::size_t item_line(const Pending& p) { return p.item->line ? p.item->line : p.decl->line; }
 };

@@ -43,7 +43,7 @@ struct Symbol {
     SymbolKind                    kind;
     nodes::ASTNode*               decl  = nullptr;   // defining node
 
-    Visibility                    visibility;
+    Visibility                    visibility = Visibility::Global;
 
     // Points into the decl node. nullptr for Namespace/Module. Return type for function
     const parser_types::TypeInfo* type  = nullptr;
@@ -58,11 +58,12 @@ struct Symbol {
     std::uint64_t                 decl_order  = 0;    
     bool                          is_hoisted  = false;
     std::uint8_t                  member_access = 0;
-    std::uint8_t                  intrinsic     = 0;
 
     bool                          is_imported   = false;
     std::string_view              import_source;
     Symbol*                       import_target = nullptr;
+
+    Symbol*                       extern_target = nullptr;
 
     nodes::TemplateDeclaration*   template_decl = nullptr;
     Type*                         bound_type    = nullptr;

@@ -1,4 +1,5 @@
 #include "Semantics/overload.hpp"
+#include <algorithm>
 
 namespace walnut {
 namespace semantics {
@@ -10,7 +11,29 @@ ParamShape shape_of(const nodes::FunctionParameter* p, TypeContext& ctx) {
     s.unbounded   = s.is_pack && p->is_infinite_variadic();
     s.cap         = s.is_pack && !s.unbounded ? p->variadic_length() : 0;
     s.has_default = p->has_initializer();
+    s.exact       = s.is_pack && p->is_exact_variadic() && !p->has_initializer();
     return s;
+}
+
+std::vector<ParamShape> shapes_of_function_type(const FunctionType* ft) {
+    std::vector<ParamShape> out;
+    if (!ft) return out;
+    const std::vector<FnParamInfo>& info = ft->param_info();
+
+    for (std::size_t i = 0; i < ft->params().size(); ++i) {
+        ParamShape s{};
+        Type* p = ft->params()[i];
+        const FnParamInfo* pi = i < info.size() ? &info[i] : nullptr;
+        s.is_pack = pi && pi->is_pack();
+        s.element = s.is_pack && p && p->is_array() ? static_cast<ArrayType*>(p)->element() : p;
+        s.unbounded = s.is_pack && pi->pack == FnParamInfo::Pack::Unbounded;
+        s.cap = s.is_pack && !s.unbounded ? pi->cap : 0;
+        s.has_default = pi && pi->def;
+        s.exact = s.is_pack && pi->pack == FnParamInfo::Pack::Exact && !pi->def;
+        out.push_back(s);
+    }
+
+    return out;
 }
 
 bool lex_better(const std::vector<ConversionRank>& A, const std::vector<ConversionRank>& B) {
@@ -54,7 +77,7 @@ CandidateMatch match_arguments(const std::vector<ParamShape>& params, const std:
                 continue;
             }
 
-            relax(cur[a], prev[a].ranks);                         
+            if (!P.exact || P.cap == 0) relax(cur[a], prev[a].ranks);
             std::vector<ConversionRank> acc = prev[a].ranks;
             std::size_t max_take = P.unbounded ? (n - a) : std::min<std::size_t>(P.cap, n - a);
 
@@ -62,7 +85,7 @@ CandidateMatch match_arguments(const std::vector<ParamShape>& params, const std:
                 ConversionRank r = rank_conversion(args[a + t - 1], P.element, ctx);
                 if (r == ConversionRank::None) break;
                 acc.push_back(r);
-                relax(cur[a + t], acc);
+                if (!P.exact || t == P.cap) relax(cur[a + t], acc);
             }
         }
 
@@ -82,7 +105,12 @@ bool assign_arguments(const std::vector<ParamShape>& params, const std::vector<T
     prev[0].ok = true;
 
     auto relax = [](Cell& dst, const Cell& src, std::vector<ConversionRank> cand, std::size_t took) {
-        if (dst.ok && !lex_better(cand, dst.ranks)) return;
+        if (dst.ok && !lex_better(cand, dst.ranks)) {
+            if (lex_better(dst.ranks, cand)) return;
+            std::vector<std::size_t> takes = src.takes;
+            takes.push_back(took);
+            if (!std::lexicographical_compare(dst.takes.begin(), dst.takes.end(), takes.begin(), takes.end())) return;
+        }
         dst.ok = true;
         dst.ranks = std::move(cand);
         dst.takes = src.takes;
@@ -109,7 +137,7 @@ bool assign_arguments(const std::vector<ParamShape>& params, const std::vector<T
                 continue;
             }
 
-            relax(cur[a], prev[a], prev[a].ranks, 0);
+            if (!P.exact || P.cap == 0) relax(cur[a], prev[a], prev[a].ranks, 0);
             std::vector<ConversionRank> acc = prev[a].ranks;
             const std::size_t max_take = P.unbounded ? (n - a) : std::min<std::size_t>(P.cap, n - a);
 
@@ -117,7 +145,7 @@ bool assign_arguments(const std::vector<ParamShape>& params, const std::vector<T
                 ConversionRank r = args[a + t - 1] ? rank_conversion(args[a + t - 1], P.element, ctx) : ConversionRank::Conversion;
                 if (r == ConversionRank::None) break;
                 acc.push_back(r);
-                relax(cur[a + t], prev[a], acc, t);
+                if (!P.exact || t == P.cap) relax(cur[a + t], prev[a], acc, t);
             }
         }
 
@@ -159,6 +187,27 @@ Selection select_overload(const std::vector<CandidateMatch>& cands) {
     return { SelectStatus::Ok, std::size_t(best) };
 }
 
+Selection select_overload(const std::vector<CandidateMatch>& cands, const std::vector<bool>& from_template) {
+    Selection sel = select_overload(cands);
+    if (sel.status != SelectStatus::Ambiguous) return sel;
+    std::vector<CandidateMatch> kept = cands;
+    bool dropped = false;
+
+    for (std::size_t t = 0; t < kept.size(); ++t) {
+        if (!kept[t].viable || t >= from_template.size() || !from_template[t]) continue;
+
+        for (std::size_t n = 0; n < cands.size(); ++n) {
+            if (!cands[n].viable || n >= from_template.size() || from_template[n]) continue;
+            if (better_candidate(cands[t], cands[n])) continue;
+            kept[t].viable = false;
+            dropped = true;
+            break;
+        }
+    }
+
+    return dropped ? select_overload(kept) : sel;
+}
+
 bool variadic_signature_ok(const std::vector<ParamShape>& params, std::size_t& bad_index) {
     for (std::size_t i = 0; i + 1 < params.size(); ++i) {
         const ParamShape& P = params[i];
@@ -177,12 +226,12 @@ bool signature_defaults_ok(const std::vector<ParamShape>& params, std::size_t& b
     const std::size_t pm = params.size();
 
     for (std::size_t i = 0; i < pm; ++i) {
-        if (params[i].is_pack || !params[i].has_default) continue;
-        
+        if (!params[i].has_default) continue;
+
         for (std::size_t j = i + 1; j < pm; ++j) {
-            if (params[j].is_pack) break;
             if (params[j].element == params[i].element) { bad_i = i; bad_j = j; return false; }
-            if (!params[j].has_default) break;   
+            const bool optional = params[j].has_default || (params[j].is_pack && !params[j].exact);
+            if (!optional) break;
         }
     }
 

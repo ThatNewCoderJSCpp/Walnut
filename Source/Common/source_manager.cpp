@@ -6,6 +6,31 @@ namespace walnut {
 std::optional<FileId> SourceManager::load(const std::string& raw_path) {
     if (auto it = m_by_raw.find(raw_path); it != m_by_raw.end()) return it->second;  
     namespace fs = std::filesystem;
+
+    if (auto v = m_virtual.find(fs::path(raw_path).lexically_normal().generic_string()); v != m_virtual.end()) {
+        if (auto it = m_by_path.find(v->first); it != m_by_path.end()) {
+            m_by_raw.emplace(raw_path, it->second);
+            return it->second;
+        }
+
+        const std::size_t n = v->second.size();
+        char* buf = static_cast<char*>(m_arena.alloc_raw(n + 1, alignof(char)));
+        if (n > 0) std::memcpy(buf, v->second.data(), n);
+        buf[n] = '\0';
+        const FileId id = static_cast<FileId>(m_files.size());
+        Entry e;
+        e.data           = buf;
+        e.size           = n;
+        e.absolute       = v->first;
+        e.relative       = v->first;
+        e.relative_ready = true;
+        e.filename       = fs::path(v->first).filename().string();
+        m_files.push_back(std::move(e));
+        m_by_path.emplace(v->first, id);
+        m_by_raw.emplace(raw_path, id);
+        return id;
+    }
+
     std::error_code ec;
     fs::path abs_path = fs::absolute(raw_path, ec).lexically_normal();  
     std::string abs = ec ? raw_path : abs_path.string();

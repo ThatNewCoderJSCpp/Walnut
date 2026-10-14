@@ -252,6 +252,10 @@ void for_each_child(ASTNode* n, Fn&& fn) {
             break;
         }
 
+        case K::TypeQueryOverload:
+            yield(static_cast<TypeQueryOverload*>(n)->m_value);
+            break;
+
         case K::ConstructorDeclaration: {
             auto* c = static_cast<ConstructorDeclaration*>(n);
             yield_params(c->get_parameters());

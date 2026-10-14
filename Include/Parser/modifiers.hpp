@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <array>
+#include <string_view>
 #include "../Lexer/token_macro.hpp"
 
 namespace walnut {
@@ -33,19 +34,23 @@ public:
         Local       = 1 << 7,
         Global      = 1 << 8,
         Extern      = 1 << 9,
-        Immutable   = 1 << 10,  
         Volatile    = 1 << 11,
         ThreadLocal = 1 << 12, 
         Mutable     = 1 << 13,
         Friend      = 1 << 14   
     };
 
-    static constexpr std::size_t MAX_MODIFIERS = 15;
+    static constexpr std::size_t MAX_MODIFIERS = 14;
+
+    enum class Linkage : std::uint8_t { Walnut = 0, C, Cpp };
 
 private:
     std::uint8_t m_count = 0;
     std::uint16_t m_flags = 0;
+    Linkage m_linkage = Linkage::Walnut;
     std::array<tokenizing::Token::Kind, MAX_MODIFIERS> m_source_order{};
+    const std::string_view* m_native_files = nullptr;
+    std::uint8_t m_native_file_count = 0;
 
 public:
     constexpr RawModifiers() noexcept = default;
@@ -54,6 +59,14 @@ public:
     constexpr bool is_modified() const noexcept { return m_flags != Flag::None; }
     constexpr std::uint16_t flags() const noexcept { return m_flags; }
     constexpr std::uint8_t count() const noexcept { return m_count; }
+    constexpr Linkage linkage() const noexcept { return m_linkage; }
+    constexpr void set_linkage(Linkage l) noexcept { m_linkage = l; }
+    constexpr bool is_native_extern() const noexcept { return has(Extern) && m_linkage != Linkage::Walnut; }
+    constexpr bool is_walnut_extern() const noexcept { return has(Extern) && m_linkage == Linkage::Walnut; }
+    constexpr void set_native_files(const std::string_view* files, std::uint8_t count) noexcept { m_native_files = files; m_native_file_count = count; }
+    constexpr void copy_native_files(const RawModifiers& o) noexcept { m_native_files = o.m_native_files; m_native_file_count = o.m_native_file_count; }
+    constexpr std::uint8_t native_file_count() const noexcept { return m_native_file_count; }
+    constexpr std::string_view native_file(std::uint8_t i) const noexcept { return m_native_files[i]; }
     constexpr void clear() noexcept { m_flags = 0; m_count = 0; }
 
 public:
@@ -95,7 +108,6 @@ struct FunctionQualifiers {
         Consteval = 1 << 7,
         Nodiscard = 1 << 8,
         Async     = 1 << 9,
-        Overload  = 1 << 10,
         Mutable   = 1 << 11
     };
 

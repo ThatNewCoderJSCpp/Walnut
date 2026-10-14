@@ -80,6 +80,7 @@ struct IfBranch : ASTNode {
     ASTNode* body;
     bool     is_constexpr   = false;
     int      constant_value = -1;
+    semantics::Scope* scope = nullptr;
 
     IfBranch(ASTNode* cond, ASTNode* b) : ASTNode(Kind::IfBranch), condition(cond), body(b) {}
 
@@ -115,6 +116,7 @@ struct NamespaceDeclaration : ASTNode {
     std::vector<std::string_view> m_name_parts;
     BlockStatement* m_body;
     semantics::Symbol* symbol = nullptr; 
+    modifiers::RawModifiers m_modifiers;
 
     NamespaceDeclaration(
         std::vector<std::string_view> name_parts,
@@ -547,6 +549,8 @@ struct ImportExportItem {
     std::vector<std::string_view> alias_parts;
     bool                          alias_global = false;
     bool                          is_template = false;
+    bool                          from_module_path = false;
+    std::vector<std::string_view> module_parts;
     ASTNode*                      decl = nullptr;      
 
     static const char* kind_name(Kind k);
@@ -636,6 +640,19 @@ struct StaticAssertDeclaration : ASTNode {
 
     std::string_view get_message() const { return message; }
     const ASTNode* get_constraint() const { return constraint; }
+
+    void print(std::ostream& os, std::size_t indent) const;
+
+    ASTNode* clone_into(Arena& a) const override;
+};
+
+struct NativeCodeBlock : ASTNode {
+    std::string_view code;
+    bool             is_c = false;
+
+    NativeCodeBlock(std::string_view text, bool c_language, std::uint32_t ln = 0) : ASTNode(Kind::NativeCodeBlock, ln), code(text), is_c(c_language) {}
+
+    static bool classof(const ASTNode* n) { return n->kind == Kind::NativeCodeBlock; }
 
     void print(std::ostream& os, std::size_t indent) const;
 

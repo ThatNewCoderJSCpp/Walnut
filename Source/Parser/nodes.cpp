@@ -48,6 +48,7 @@ void print_node(const ASTNode* node, std::ostream& os, std::size_t indent) {
         case ASTNode::Kind::CastExpression:              node_cast_unchecked<CastExpression>(node)->print(os, indent);              break;
         case ASTNode::Kind::ImportExportDeclaration:     node_cast_unchecked<ImportExportDeclaration>(node)->print(os, indent);     break;
         case ASTNode::Kind::OperatorFunctionDeclaration: node_cast_unchecked<OperatorFunctionDeclaration>(node)->print(os, indent); break;
+        case ASTNode::Kind::TypeQueryOverload:           node_cast_unchecked<TypeQueryOverload>(node)->print(os, indent);           break;
         case ASTNode::Kind::TypeQuery:                   node_cast_unchecked<TypeQueryExpression>(node)->print(os, indent);         break;
         case ASTNode::Kind::EnumDeclaration:             node_cast_unchecked<EnumDeclaration>(node)->print(os, indent);             break;
         case ASTNode::Kind::EnumValue:                   node_cast_unchecked<EnumValue>(node)->print(os, indent);                   break;
@@ -64,6 +65,7 @@ void print_node(const ASTNode* node, std::ostream& os, std::size_t indent) {
         case ASTNode::Kind::ConceptDeclaration:          node_cast_unchecked<ConceptDeclaration>(node)->print(os, indent);          break;
         case ASTNode::Kind::BraceConstructExpression:    node_cast_unchecked<BraceConstructExpression>(node)->print(os, indent);    break;
         case ASTNode::Kind::StaticAssertDeclaration:     node_cast_unchecked<StaticAssertDeclaration>(node)->print(os, indent);     break;
+        case ASTNode::Kind::NativeCodeBlock:             node_cast_unchecked<NativeCodeBlock>(node)->print(os, indent);             break;
         case ASTNode::Kind::DiscardExpression:           node_cast_unchecked<DiscardExpression>(node)->print(os, indent);           break;
         case ASTNode::Kind::RequiresExpression:          node_cast_unchecked<RequiresExpression>(node)->print(os, indent);          break;
         case ASTNode::Kind::ThrowExpression:             node_cast_unchecked<ThrowExpression>(node)->print(os, indent);             break;

@@ -5,8 +5,67 @@ namespace parsing {
 
 nodes::BlockStatement* Parser::parse_program() {
     nodes::BlockStatement* program = make<nodes::BlockStatement>();
-    while (current_token().kind() != tokenizing::Token::Kind::End) { program->add_statement(parse_statement()); }
+    while (current_token().kind() != tokenizing::Token::Kind::End) { parse_declaration_into(program); }
     return program;
+}
+
+void Parser::parse_declaration_into(nodes::BlockStatement* block) {
+    m_declaration_level = true;
+    nodes::ASTNode* s = parse_statement();
+    m_declaration_level = false;
+    block->add_statement(s);
+    for (nodes::ASTNode* extra : m_spliced) block->add_statement(extra);
+    m_spliced.clear();
+}
+
+nodes::ASTNode* Parser::parse_extern_block(const modifiers::RawModifiers& mods) {
+    const tokenizing::Token open = current_token();
+    advance();
+    std::vector<nodes::ASTNode*> items;
+    const bool native = mods.is_native_extern();
+
+    while (current_token().kind() != tokenizing::Token::Kind::RightCurly && current_token().kind() != tokenizing::Token::Kind::End) {
+        std::size_t item_line = current_token().line();
+        const tokenizing::Token item_start = current_token();
+        modifiers::RawModifiers item = parse_raw_modifiers();
+
+        if (item.has(modifiers::RawModifiers::Extern)) {
+            throw ParserError::invalid_declaration(reporter, item_start, "This is already inside an extern block, so it can't have its own 'extern'");
+        }
+
+        item.add(modifiers::RawModifiers::Extern);
+        item.add_token(tokenizing::Token::Kind::ExternKeyword);
+        item.set_linkage(mods.linkage());
+        item.copy_native_files(mods);
+
+        if (current_token().kind() == tokenizing::Token::Kind::FunctionKeyword && lookahead(1).kind() != tokenizing::Token::Kind::LeftParen) {
+            items.push_back(parse_function_declaration(item, item_line));
+            continue;
+        }
+
+        if (native) {
+            throw ParserError::invalid_declaration(reporter, current_token(), "An extern \"C\" or extern \"C++\" block can only hold function declarations");
+        }
+
+        if (current_token().kind() == tokenizing::Token::Kind::ArrayKeyword) items.push_back(parse_array_declaration(item, item_line));
+        else items.push_back(parse_variable_declaration(item, item_line, true));
+    }
+
+    if (!match(tokenizing::Token::Kind::RightCurly)) {
+        throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::RightCurly, "Expected '}' to close the extern block");
+    }
+
+    if (!match(tokenizing::Token::Kind::EndKeyword)) {
+        throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::EndKeyword, "Expected 'end extern' after the extern block");
+    }
+
+    if (!match(tokenizing::Token::Kind::ExternKeyword)) {
+        throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::ExternKeyword, "Expected 'extern' after 'end'");
+    }
+
+    if (items.empty()) throw ParserError::empty_block(reporter, open, "extern");
+    for (std::size_t i = 1; i < items.size(); ++i) m_spliced.push_back(items[i]);
+    return items[0];
 }
 
 bool Parser::looks_like_user_type_declaration() {
@@ -40,6 +99,9 @@ bool Parser::looks_like_user_type_declaration() {
 }
 
 nodes::ASTNode* Parser::parse_statement() {
+    const bool declaration_level = m_declaration_level;
+    m_declaration_level = false;
+
     switch (current_token().kind()) {
         case tokenizing::Token::Kind::LeftCurly:           return parse_block(); 
         case tokenizing::Token::Kind::IfKeyword:           return parse_if_statement();
@@ -117,11 +179,43 @@ nodes::ASTNode* Parser::parse_statement() {
         case tokenizing::Token::Kind::LocalKeyword:
         case tokenizing::Token::Kind::GlobalKeyword:
         case tokenizing::Token::Kind::VolatileKeyword:
-        case tokenizing::Token::Kind::ImmutableKeyword:
         case tokenizing::Token::Kind::ExternKeyword:
         case tokenizing::Token::Kind::FriendKeyword: {
             std::size_t line = current_token().line();
             modifiers::RawModifiers mods = parse_raw_modifiers();
+
+            if (current_token().kind() == tokenizing::Token::Kind::RawCode) {
+                const tokenizing::Token raw = current_token();
+
+                if (!declaration_level) {
+                    throw ParserError::invalid_declaration(reporter, raw, "C and C++ code can only be written at file or namespace level");
+                }
+
+                if (!mods.exactly(modifiers::RawModifiers::Extern) || mods.native_file_count()) {
+                    throw ParserError::invalid_declaration(reporter, raw, "A C or C++ code block is written 'extern \"C\" code { ... } end extern' or 'extern \"C++\" code { ... } end extern', with nothing else before 'code'");
+                }
+
+                advance();
+                if (!match(tokenizing::Token::Kind::EndKeyword)) throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::EndKeyword, "Expected 'end extern' after the code block");
+                if (!match(tokenizing::Token::Kind::ExternKeyword)) throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::ExternKeyword, "Expected 'extern' after 'end'");
+                return make<nodes::NativeCodeBlock>(raw.lexeme(), mods.linkage() == modifiers::RawModifiers::Linkage::C, static_cast<std::uint32_t>(raw.line()));
+            }
+
+            if (current_token().kind() == tokenizing::Token::Kind::LeftCurly && mods.has(modifiers::RawModifiers::Extern)) {
+                if (!declaration_level) {
+                    throw ParserError::invalid_declaration(reporter, current_token(), "An extern block can only be at file or namespace level");
+                }
+
+                if (!mods.exactly(modifiers::RawModifiers::Extern)) {
+                    throw ParserError::invalid_declaration(reporter, current_token(), "An extern block can't have other modifiers; put them on the declarations inside it");
+                }
+
+                return parse_extern_block(mods);
+            }
+
+            if (mods.native_file_count() && current_token().kind() != tokenizing::Token::Kind::FunctionKeyword) {
+                throw ParserError::invalid_declaration(reporter, current_token(), "'from' can only be used on function declarations and extern blocks");
+            }
 
             if (current_token().is_one_of(                    
                     tokenizing::Token::Kind::ClassKeyword,
@@ -139,6 +233,19 @@ nodes::ASTNode* Parser::parse_statement() {
             if (current_token().kind() == tokenizing::Token::Kind::EnumKeyword) {
                 return parse_enum_declaration(mods, line);
             }
+
+            if (current_token().kind() == tokenizing::Token::Kind::NamespaceKeyword) {
+                const tokenizing::Token at = current_token();
+                nodes::ASTNode* node = parse_namespace_declaration();
+
+                if (node && node->kind == nodes::ASTNode::Kind::NamespaceDeclaration) {
+                    static_cast<nodes::NamespaceDeclaration*>(node)->m_modifiers = mods;
+                } else {
+                    throw ParserError::unexpected_token(reporter, at, std::vector<tokenizing::Token::Kind>{}, "A namespace alias cannot have modifiers; put them on the namespace itself");
+                }
+
+                return node;
+            }
             
             if (current_token().kind() == tokenizing::Token::Kind::FunctionKeyword) {
                 if (lookahead(1).kind() == tokenizing::Token::Kind::LeftParen) {
@@ -154,8 +261,23 @@ nodes::ASTNode* Parser::parse_statement() {
             return parse_variable_declaration(mods, line, true);
         }
 
+        case tokenizing::Token::Kind::TypeofKeyword:
+        case tokenizing::Token::Kind::DecltypeKeyword:
+        case tokenizing::Token::Kind::DiscardConstKeyword: {
+            if (computed_type_declaration_ahead()) {
+                std::size_t line = current_token().line();
+                return parse_variable_declaration({}, line, true);
+            }
+            return parse_expression_statement();
+        }
+
         case tokenizing::Token::Kind::Identifier:
         case tokenizing::Token::Kind::DoubleColon: {
+            if (current_token().kind() == tokenizing::Token::Kind::Identifier && parser_types::find_type_op(current_token().lexeme()) && computed_type_declaration_ahead()) {
+                std::size_t line = current_token().line();
+                return parse_variable_declaration({}, line, true);
+            }
+
             if (looks_like_user_type_declaration()) {
                 std::size_t line = current_token().line();
                 return parse_variable_declaration({}, line, true);
@@ -262,6 +384,10 @@ parser_types::TypeInfo Parser::parse_type_only() {
     } else if (current_token().kind() == tokenizing::Token::Kind::VariantKeyword) {
         info = parse_variant_type();
         return info;
+    } else if (current_token().is_one_of(tokenizing::Token::Kind::TypeofKeyword, tokenizing::Token::Kind::DecltypeKeyword, tokenizing::Token::Kind::DiscardConstKeyword)
+               || (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::LeftParen && parser_types::find_type_op(current_token().lexeme()))) {
+        info = parse_computed_type();
+        return info;
     } else if (current_token().kind() == tokenizing::Token::Kind::Identifier || current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
         using K = tokenizing::Token::Kind;
         bool is_global = false;
@@ -333,6 +459,81 @@ parser_types::TypeInfo Parser::parse_type_only() {
     return info;
 }
 
+bool Parser::computed_type_declaration_ahead() {
+    using K = tokenizing::Token::Kind;
+    if (token_at(1).kind() != K::LeftParen) return false;
+    int depth = 0;
+    std::size_t k = 1;
+
+    for (; k < 4096; ++k) {
+        const K t = token_at(k).kind();
+        if (t == K::End) return false;
+        if (t == K::LeftParen) ++depth;
+        else if (t == K::RightParen && --depth == 0) break;
+    }
+
+    for (++k; k < 4096; ++k) {
+        const K t = token_at(k).kind();
+        if (t == K::Colon) return true;
+        if (t != K::Asterisk && t != K::DoubleAsterisk && t != K::Ampersand && t != K::LogicAnd && t != K::ConstantDeclaration) return false;
+    }
+
+    return false;
+}
+
+parser_types::TypeInfo Parser::parse_computed_type() {
+    using K = tokenizing::Token::Kind;
+    using Op = parser_types::TypeOp;
+    parser_types::TypeInfo info;
+    const tokenizing::Token at = current_token();
+    const K kw = at.kind();
+    Op op = Op::DiscardConst;
+    int min_types = 1;
+    int max_types = 1;
+
+    if (kw == K::TypeofKeyword || kw == K::DecltypeKeyword) {
+        op = kw == K::TypeofKeyword ? Op::Typeof : Op::Decltype;
+        min_types = max_types = 0;
+    } else if (kw == K::Identifier) {
+        const parser_types::TypeOpInfo* info_op = parser_types::find_type_op(at.lexeme());
+        if (!info_op) throw ParserError::invalid_expression(reporter, at, "Expected a type operation");
+        op = info_op->op;
+        min_types = info_op->min_types;
+        max_types = info_op->max_types;
+    }
+
+    advance();
+    expect(K::LeftParen, "Expected '(' after type operation");
+    AngleGuard _g(this, false);
+    nodes::ASTNode* e = nullptr;
+    std::vector<parser_types::TypeInfo> args;
+
+    if (op == Op::Typeof || op == Op::Decltype || op == Op::Conditional) {
+        e = parse_expression_pratt(to_int(Precedence::None));
+        if (op == Op::Conditional) expect(K::Comma, "conditional(condition, TrueType, FalseType) needs a ',' after the condition");
+    }
+
+    if (max_types != 0) {
+        args.push_back(parse_type_info());
+        while (match(K::Comma)) args.push_back(parse_type_info());
+    }
+
+    const int count = static_cast<int>(args.size());
+
+    if (count < min_types || (max_types >= 0 && count > max_types)) {
+        std::string want = std::to_string(min_types);
+        if (max_types < 0) want = "at least " + want;
+        else if (max_types != min_types) want += " to " + std::to_string(max_types);
+        throw ParserError::invalid_expression(reporter, at,
+            std::string(parser_types::type_op_name(op)) + " takes " + want + (min_types == 1 && max_types == 1 ? " type" : " types") + ", but " + std::to_string(count) + (count == 1 ? " was given" : " were given"));
+    }
+
+    expect(K::RightParen, "Expected ')' to close the type operation");
+    info.type = make<parser_types::ComputedType>(op, e, std::move(args));
+    parse_indirection_qualifiers(info);
+    return info;
+}
+
 parser_types::TypeInfo Parser::parse_type_info() {
     modifiers::RawModifiers mods = parse_raw_modifiers();
     parser_types::TemplateArgument* alignment = parse_alignas();
@@ -348,11 +549,46 @@ parser_types::TypeInfo Parser::parse_function_pointer_type() {
     expect(tokenizing::Token::Kind::FunctionKeyword, "Expected 'function' keyword");
     expect(tokenizing::Token::Kind::LeftParen, "Expected '(' after 'function' in function pointer type");
     std::vector<parser_types::TypeInfo> param_types;
+    std::vector<parser_types::FunctionPointerType::ParamExtra> extras;
+    bool any_extra = false;
+
+    auto read_param = [&]() {
+        param_types.push_back(parse_type_info());
+        parser_types::FunctionPointerType::ParamExtra extra;
+
+        if (match(tokenizing::Token::Kind::Ellipsis)) {
+            extra.variadic = parser_types::FunctionPointerType::UNBOUNDED;
+
+            if (match(tokenizing::Token::Kind::LessThan)) {
+                if (current_token().kind() != tokenizing::Token::Kind::Integer) { throw ParserError::invalid_expression(reporter, current_token(), "Expected integer for exact variadic count"); }
+                extra.variadic = literal_size(current_token());
+                if (extra.variadic == 0) { throw ParserError::invalid_expression(reporter, current_token(), "An exact variadic count must be at least 1"); }
+                advance();
+                expect(tokenizing::Token::Kind::GreaterThan, "Expected '>' after exact variadic count");
+                extra.exact = true;
+            } else if (match(tokenizing::Token::Kind::LeftSquare)) {
+                if (current_token().kind() != tokenizing::Token::Kind::Integer) { throw ParserError::invalid_expression(reporter, current_token(), "Expected integer for variadic size"); }
+                extra.variadic = literal_size(current_token());
+                advance();
+                expect(tokenizing::Token::Kind::RightSquare, "Expected ']' after variadic size");
+            }
+        }
+
+        if (match(tokenizing::Token::Kind::Equal)) {
+            if (extra.variadic == parser_types::FunctionPointerType::UNBOUNDED) { throw ParserError::invalid_expression(reporter, current_token(), "A '...' parameter takes any number of arguments, so it can't have a default; give it a limit with '...[N]' or '...<N>' to fill missing ones with a default"); }
+            extra.default_value = parse_expression();
+        }
+
+        any_extra = any_extra || extra.variadic || extra.default_value;
+        extras.push_back(extra);
+    };
 
     if (!concrete_match(tokenizing::Token::Kind::RightParen)) {
-        param_types.push_back(parse_type_info());
-        while (match(tokenizing::Token::Kind::Comma)) { param_types.push_back(parse_type_info()); }
+        read_param();
+        while (match(tokenizing::Token::Kind::Comma)) { read_param(); }
     }
+
+    if (!any_extra) extras.clear();
 
     expect(tokenizing::Token::Kind::RightParen, "Expected ')' after function pointer parameter types");
     parser_types::TypeInfo return_type;
@@ -371,7 +607,8 @@ parser_types::TypeInfo Parser::parse_function_pointer_type() {
     info.type = make<parser_types::FunctionPointerType>(
         std::move(param_types),
         return_type,
-        quals
+        quals,
+        std::move(extras)
     );
 
     parse_indirection_qualifiers(info);

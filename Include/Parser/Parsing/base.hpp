@@ -48,19 +48,32 @@ private:
     std::size_t              nesting_depth = 0;
     std::uint32_t            m_node_order  = 1;
     bool                     m_in_template_args = false;
+    bool                     m_no_brace_construct = false;
     std::size_t              m_pending_close_angle = 0;
     std::unordered_set<std::string_view> m_template_names;
     std::unordered_set<std::string_view> m_concept_names;
+    bool                     m_declaration_level = false;
+    std::vector<nodes::ASTNode*> m_spliced;
     Arena&                   arena;
     ErrorReporter&           reporter;
 
     struct AngleGuard {
         Parser* self;
         bool prev;
-        AngleGuard(Parser* s, bool v) : self(s), prev(s->m_in_template_args) { s->m_in_template_args = v; }
-        ~AngleGuard() { self->m_in_template_args = prev; }
+        bool prev_brace;
+        AngleGuard(Parser* s, bool v) : self(s), prev(s->m_in_template_args), prev_brace(s->m_no_brace_construct) { s->m_in_template_args = v; s->m_no_brace_construct = false; }
+        ~AngleGuard() { self->m_in_template_args = prev; self->m_no_brace_construct = prev_brace; }
         AngleGuard(const AngleGuard&) = delete;
         AngleGuard& operator=(const AngleGuard&) = delete;
+    };
+
+    struct NoBraceConstructGuard {
+        Parser* self;
+        bool prev;
+        explicit NoBraceConstructGuard(Parser* s) : self(s), prev(s->m_no_brace_construct) { s->m_no_brace_construct = true; }
+        ~NoBraceConstructGuard() { self->m_no_brace_construct = prev; }
+        NoBraceConstructGuard(const NoBraceConstructGuard&) = delete;
+        NoBraceConstructGuard& operator=(const NoBraceConstructGuard&) = delete;
     };
 
     struct QualifiedTypeComponent {
@@ -111,6 +124,7 @@ private:
     void validate_identifier(const tokenizing::Token& token);
     void validate_string_literal(const tokenizing::Token& token);
     void validate_numeric_literal(const tokenizing::Token& token);
+    std::size_t literal_size(const tokenizing::Token& token);
     void validate_character_literal(const tokenizing::Token& token);
     void parse_indirection_qualifiers(parser_types::TypeInfo& info);
 
@@ -127,12 +141,17 @@ private:
     bool               looks_like_declaration();
     bool               fold_ahead();
     nodes::ASTNode*    parse_call_argument();
+    bool               initializer_brace_ahead();
+    bool               computed_type_declaration_ahead();
+    parser_types::TypeInfo parse_computed_type();
     bool               looks_like_constrained_param();    
     static  bool is_fold_operator(tokenizing::Token::Kind k);
     static  bool is_indirection_token(tokenizing::Token::Kind k);
 
 private:
     nodes::ASTNode* parse_statement();
+    void            parse_declaration_into(nodes::BlockStatement* block);
+    nodes::ASTNode* parse_extern_block(const modifiers::RawModifiers& mods);
     nodes::ASTNode* parse_single_statement();
     nodes::ASTNode* parse_for_loop();
     nodes::ASTNode* parse_for_each_loop();
@@ -202,6 +221,7 @@ private:
     nodes::FunctionParameters*    parse_function_parameters();
     modifiers::FunctionQualifiers parse_function_qualifiers();
     nodes::ASTNode*               parse_operator_function(const modifiers::RawModifiers& mods, std::size_t line_number);
+    nodes::ASTNode*               parse_type_query_overload(const parser_types::TypeQueryInfo& info, std::size_t line_number);
 
 private:
     void                                   parse_lambda_capture_item(nodes::LambdaCaptureList* captures);
@@ -220,6 +240,7 @@ private:
     nodes::TemplateParameter*                    parse_template_parameter();
     std::vector<parser_types::TemplateArgument*> parse_template_argument_list_body();
     parser_types::TemplateArgument*              parse_alignas();
+    nodes::ASTNode*                              parse_type_test(nodes::ASTNode* operand, bool is_test);
     parser_types::TemplateArgument*       parse_type_or_value_operand(bool force_type = false);
 
     std::size_t             scan_paired(std::size_t open_off, tokenizing::Token::Kind open, tokenizing::Token::Kind close);

@@ -28,7 +28,8 @@ enum class PathStyle : std::uint8_t {
 enum class ErrorOutput : std::uint8_t {
     Silent = 0,
     StdErr = 1 << 0,
-    File   = 1 << 1
+    File   = 1 << 1,
+    StdOut = 1 << 2
 };
 
 constexpr ErrorOutput operator|(ErrorOutput a, ErrorOutput b) noexcept {

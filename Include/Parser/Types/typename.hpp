@@ -29,7 +29,8 @@ public:
         Enum,
         EnumClass,
         Variant,
-        Qualified
+        Qualified,
+        Computed
     };
 
     virtual ~Type() = default;
@@ -44,6 +45,7 @@ public:
     bool is_enum_class() const { return kind() == Kind::EnumClass; }
     bool is_variant() const { return kind() == Kind::Variant; }
     bool is_qualified() const { return kind() == Kind::Qualified; }
+    bool is_computed() const { return kind() == Kind::Computed; }
 
     virtual void write_to(std::ostream& os) const = 0;
 };

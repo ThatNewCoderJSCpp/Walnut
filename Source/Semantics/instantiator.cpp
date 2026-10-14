@@ -10,6 +10,7 @@ Instantiator::Instantiator(Arena& arena, TypeContext& types, ErrorReporter& repo
     m_types.value_symbol_hook = [this](Symbol* s, TemplateArg& out) { return classify_value_symbol(s, out); };
     m_types.member_type_hook = [this](Type* rec, std::string_view name) -> Type* { return member_type(rec, name); };
     m_types.callable_hook = [this](Type* rec, Type* sig) -> Symbol* { return call_operator_for(rec, sig); };
+    m_types.type_query_overload_hook = [this](RecordType* rt, std::string_view name, const std::vector<Type*>& others) { return type_query_overload(rt, name, others); };
     m_types.extent_param_hook = [](nodes::ASTNode* e) -> Symbol* {
         if (!e || e->kind != nodes::ASTNode::Kind::Identifier) return nullptr;
         Symbol* s = static_cast<nodes::Identifier*>(e)->resolved;
@@ -111,7 +112,10 @@ auto Instantiator::instantiate_for_call(
 
     std::vector<Arg> args;
     if (!assemble_args(tmpl, env, args, site, true)) return nullptr;
-    return instantiate_impl(generic, std::move(args), site, true);
+    const std::size_t before = m_memo.size();
+    Instantiation* I = instantiate_impl(generic, std::move(args), site, true);
+    if (I && m_memo.size() > before && !I->typed) I->speculative = true;
+    return I;
 }
 
 auto Instantiator::canon_args(const std::vector<parser_types::TemplateArgument*>& written, bool& ok) -> std::vector<Arg> {
@@ -207,6 +211,7 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
     I->source = chosen;
     I->args   = args;
     m_memo.emplace(std::move(key), I);
+    m_created.push_back(I);
 
     if (spec.tmpl) {
         I->env = std::move(spec.env);
@@ -494,6 +499,61 @@ Symbol* Instantiator::call_operator_for(Type* rec, Type* sig) {
     }
 
     return nullptr;
+}
+
+TypeQueryOverloadResult Instantiator::type_query_overload(RecordType* rt, std::string_view name, const std::vector<Type*>& others) {
+    TypeQueryOverloadResult out;
+    if (!rt) return out;
+
+    Instantiation* I = rt->is_instantiation() ? for_record(rt, nullptr) : nullptr;
+    Symbol* owner = I ? I->sym : rt->decl();
+    if (!owner || !owner->decl || owner->decl->kind != nodes::ASTNode::Kind::RecordDeclaration) return out;
+    auto* rd = static_cast<nodes::RecordDeclaration*>(owner->decl);
+
+    if (I) m_types.push_subst(&I->env);
+    struct Pop { TypeContext& t; bool on; ~Pop() { if (on) t.pop_subst(); } } pop{ m_types, I != nullptr };
+
+    auto plain = [this](Type* t) -> Type* {
+        if (t && t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+        return m_types.strip_cv(t);
+    };
+
+    for (const nodes::RecordDeclaration::Member& m : rd->get_members()) {
+        if (!m.node || m.node->kind != nodes::ASTNode::Kind::TypeQueryOverload) continue;
+        auto* q = static_cast<nodes::TypeQueryOverload*>(m.node);
+        if (q->name != name || q->m_params.size() != others.size()) continue;
+
+        bool matches = true;
+
+        for (std::size_t i = 0; i < others.size() && matches; ++i) {
+            matches = plain(m_types.canonicalize(q->m_params[i])) == plain(others[i]);
+        }
+
+        if (!matches) continue;
+        out.found = true;
+        const std::string where = "'operator(" + std::string(name) + ")' of '" + type_str_of(rt) + "'";
+
+        if (!q->is_trait) {
+            out.type = m_types.canonicalize(q->m_return_type);
+            if (!out.type || out.type->is_error()) out.error = where + " does not name a valid type";
+            return out;
+        }
+
+        ConstValue v = m_eval.eval(q->m_value);
+
+        if (v.kind == ConstValue::Kind::Bool) {
+            out.value = v.b ? 1 : 0;
+        } else if (v.kind == ConstValue::Kind::Int && v.i && ConstTable::fits(*v.i, 64, true)) {
+            const WideInt& x = *v.i;
+            out.value = x.is_negative() ? -static_cast<std::int64_t>(WideInt(-x).get_lowest_bits()) : static_cast<std::int64_t>(x.get_lowest_bits());
+        } else {
+            out.error = where + " must return a constant";
+        }
+
+        return out;
+    }
+
+    return out;
 }
 
 Type* Instantiator::member_type(Type* rec, std::string_view name) {

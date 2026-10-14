@@ -79,6 +79,18 @@ jobs:
           printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
           smoke/Walnut-*/bin/walnut run smoke/ok.wal
 
+      - name: Test the package on a system that only has a C++ compiler
+        run: |
+          docker run --rm -v "$PWD/smoke:/smoke" ubuntu:22.04 bash -c '
+            set -e
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq g++ > /dev/null
+            /smoke/Walnut-*/bin/walnut run /smoke/ok.wal
+            if /smoke/Walnut-*/bin/walnut run /smoke/ok.wal --cxx no-such-compiler 2>&1 | grep -q "cannot find the C++ compiler"; then exit 0; fi
+            echo "::error::walnut did not explain a missing C++ compiler"
+            exit 1
+          '
+
       - uses: actions/upload-artifact@v4
         with:
           name: walnut-linux-${{ matrix.arch }}

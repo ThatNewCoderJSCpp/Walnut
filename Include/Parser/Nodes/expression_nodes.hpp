@@ -66,6 +66,8 @@ struct BinaryExpression : ASTNode {
     ASTNode* right;
     semantics::Symbol* resolved = nullptr;
     bool negate_result = false;
+    bool swap_operands = false;
+    semantics::Type* memberwise = nullptr;
 
     BinaryExpression(ASTNode* l, tokenizing::Token::Kind o, ASTNode* r, std::uint32_t ln) : ASTNode(Kind::BinaryExpression, ln), left(l), op(o), right(r) {}
 
@@ -179,6 +181,7 @@ struct CallExpression : ASTNode {
     std::vector<ASTNode*> m_arguments;
     std::vector<parser_types::TemplateArgument*> m_template_args;
     semantics::Symbol* resolved = nullptr;
+    bool returns_rvalue_ref = false;
     ASTNode* closure_spec = nullptr;
 
     CallExpression(ASTNode* callee, std::uint32_t ln = 0) : ASTNode(Kind::CallExpression, ln), m_callee(callee) {}
@@ -244,6 +247,7 @@ struct MemberAccessExpression : ASTNode {
     std::string_view m_member;
     Op               m_op;
     semantics::Symbol* resolved = nullptr; 
+    std::vector<semantics::Symbol*> arrow_ops;
 
     MemberAccessExpression(ASTNode* object, std::string_view member, Op op, std::uint32_t ln) : ASTNode(Kind::MemberAccessExpression, ln), m_object(object), m_member(member), m_op(op) {}
 
@@ -264,7 +268,7 @@ struct MemberAccessExpression : ASTNode {
 };
 
 struct CastExpression : ASTNode {
-    enum class CastKind : std::uint8_t { Static = 0, Dynamic, Reinterpret, Const, Bit };
+    enum class CastKind : std::uint8_t { Static = 0, Dynamic, Reinterpret, Const, Bit, Is, As };
 
     CastKind                        cast_kind;
     parser_types::TypeInfo          target;   
@@ -306,12 +310,16 @@ struct TemplateInstantiation : ASTNode {
 };
 
 struct TypeQueryExpression : ASTNode {
-    enum class Op : std::uint8_t { Sizeof = 0, Countof, Typeid, Typeof, Alignof, Decltype };
+    enum class Op : std::uint8_t { Sizeof = 0, Countof, Typeid, Typeof, Alignof, Decltype, Trait };
 
     Op                              op;
     parser_types::TemplateArgument* operand;  
     semantics::Type*                queried = nullptr;
     long long                       pack_count = -1;
+    parser_types::TypeTrait         trait = parser_types::TypeTrait::IsSame;
+    std::vector<parser_types::TemplateArgument*> extra_operands;
+    std::vector<semantics::Type*>   extra_queried;
+    const std::string*              type_name = nullptr;
 
     TypeQueryExpression(Op o, parser_types::TemplateArgument* operand_, std::uint32_t ln = 0) : ASTNode(Kind::TypeQuery, ln), op(o), operand(operand_) {}
 

@@ -1,4 +1,6 @@
 #include "Parser/Parsing/Main/parse_modules.hpp"
+#include <algorithm>
+#include <cctype>
 
 namespace walnut {
 namespace parsing {
@@ -95,6 +97,48 @@ nodes::ImportExportItem Parser::parse_import_export_item(bool is_import) {
         return item;
     }
 
+    if (is_import && current_token().is(K::ModuleKeyword) && lookahead(1).kind() == K::Dot) {
+        advance();
+        item.kind = IK::File;
+        item.from_module_path = true;
+        std::string key = "module:";
+        tokenizing::Token last = current_token();
+
+        while (match(K::Dot)) {
+            const std::string_view part = current_token().lexeme();
+            const bool word = !part.empty() && (std::isalpha(static_cast<unsigned char>(part.front())) || part.front() == '_')
+                && std::all_of(part.begin(), part.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; });
+
+            if (!word) {
+                throw ParserError::unexpected_token(reporter, current_token(), {K::Identifier}, "Expected a module name after '.' in 'import module.<name>'");
+            }
+
+            if (!item.module_parts.empty()) key += '/';
+            key += part;
+            item.module_parts.push_back(part);
+            last = current_token();
+            advance();
+        }
+
+        char* stored = arena.alloc_array_uninit<char>(key.size());
+        std::copy(key.begin(), key.end(), stored);
+        item.has_source = true;
+        item.source = std::string_view(stored, key.size());
+        item.has_alias = true;
+
+        if (match(K::AsKeyword)) {
+            read_qualified(item.alias_parts, item.alias_global, "Expected a name after 'as'");
+        } else if (is_keyword(item.module_parts.back())) {
+            throw ParserError::invalid_expression(reporter, last,
+                "'" + std::string(item.module_parts.back()) + "' is a keyword, so this module needs a name: 'import module." + key.substr(7) + " as <name>'");
+        } else {
+            item.alias_parts.push_back(item.module_parts.back());
+        }
+
+        consume_semicolons();
+        return item;
+    }
+
     if (match(K::ModuleKeyword)) {
         item.kind = IK::Module;
         item.target_parts.push_back(read_string("Expected a module name string after 'module'"));
@@ -103,28 +147,32 @@ nodes::ImportExportItem Parser::parse_import_export_item(bool is_import) {
             expect(K::FromKeyword, "Expected 'from' in module import");
             item.has_source = true;
             item.source = read_string("Expected a module path string after 'from'");
+
+            if (match(K::AsKeyword)) {
+                item.has_alias = true;
+                read_qualified(item.alias_parts, item.alias_global, "Expected a name after 'as'");
+            }
         }
 
         return item;
     }
 
-    if (match(K::AtSymbol)) {
-        if (is_import) {
-            item.kind = IK::File;
-            item.has_source = true;
-            item.source = read_string("Expected a file path string after '@'");
+    if (is_import && current_token().is(K::String)) {
+        item.kind = IK::File;
+        item.has_source = true;
+        item.source = read_string("Expected a file path string");
 
-            if (!match(K::AsKeyword)) {
-                throw ParserError::missing_token(reporter, current_token(), K::AsKeyword, "import @\"...\" requires 'as <name>'");
-            }
-
-            item.has_alias = true;
-            read_qualified(item.alias_parts, item.alias_global, "Expected a name after 'as'");
-        } else {
-            item.kind = IK::This;
-            expect(K::ThisKeyword, "Expected 'this' after '@' in export");
+        if (!match(K::AsKeyword)) {
+            throw ParserError::missing_token(reporter, current_token(), K::AsKeyword, "import \"...\" requires 'as <name>'");
         }
 
+        item.has_alias = true;
+        read_qualified(item.alias_parts, item.alias_global, "Expected a name after 'as'");
+        return item;
+    }
+
+    if (!is_import && match(K::ThisKeyword)) {
+        item.kind = IK::This;
         return item;
     }
 

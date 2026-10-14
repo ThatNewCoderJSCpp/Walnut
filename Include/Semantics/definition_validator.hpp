@@ -49,9 +49,8 @@ private:
 
     void merge_overload_chain(Symbol* head);
 
-    Symbol* base_record_of(nodes::RecordDeclaration* rec);
 
-    bool overrides_base_virtual(Symbol* base, Symbol* fn);
+    bool overrides_base_virtual(Scope* scope, Symbol* fn, int depth = 0);
 
     void check_overrides(nodes::RecordDeclaration* rec);
 

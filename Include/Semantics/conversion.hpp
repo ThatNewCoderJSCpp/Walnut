@@ -62,6 +62,12 @@ bool is_derived_record(Type* derived, Type* base, TypeContext& ctx);
 
 bool unsized_array_accepts(Type* src, Type* dst, TypeContext& ctx);
 
+bool dynamic_value_type(Type* t, TypeContext& ctx, bool allow_void);
+
+bool dynamic_callable(FunctionType* f, TypeContext& ctx);
+
+int variant_alternative_for(Type* src, VariantType* v, TypeContext& ctx);
+
 ConversionRank rank_reference_binding(Type* src, ReferenceType* dst, TypeContext& ctx);
 
 ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx);

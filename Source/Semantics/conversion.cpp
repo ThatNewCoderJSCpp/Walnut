@@ -26,9 +26,13 @@ ConversionRank rank_numeric(const NumericProfile& s, const NumericProfile& d) {
         return d.width >= s.width ? ConversionRank::Promotion : ConversionRank::None;
     }
 
-    if (s.family == F::Float && d.family == F::Float) return d.width >= s.width ? ConversionRank::Promotion : ConversionRank::None;
+    if (s.family == F::Float && d.family == F::Float) {
+        if (!s.is_unsigned && d.is_unsigned) return ConversionRank::None;
+        return d.width >= s.width ? ConversionRank::Promotion : ConversionRank::None;
+    }
 
     if (s.family == F::Int && d.family == F::Float) {
+        if (!s.is_unsigned && d.is_unsigned) return ConversionRank::None;
         const unsigned src_bits = bit_width_of_rank(s.width);
         const unsigned need     = s.is_unsigned ? src_bits : src_bits - 1;
         return float_digits_of_bits(bit_width_of_rank(d.width)) >= need ? ConversionRank::Conversion : ConversionRank::None;
@@ -82,7 +86,7 @@ ConversionRank rank_user_defined(
 }
 
 bool cv_at_least(const CV& have, const CV& want) {
-    return (!have.is_const || want.is_const) && (!have.is_volatile || want.is_volatile) && (!have.is_immutable || want.is_immutable);
+    return (!have.is_const || want.is_const) && (!have.is_volatile || want.is_volatile);
 }
 
 Scope* record_scope_of(Type* t, TypeContext& ctx) {
@@ -103,6 +107,42 @@ bool is_derived_record(Type* derived, Type* base, TypeContext& ctx) {
     Scope* d = record_scope_of(derived, ctx);
     Scope* b = record_scope_of(base, ctx);
     return d && b && d != b && scope_derives_from(d, b);
+}
+
+bool dynamic_value_type(Type* t, TypeContext& ctx, bool allow_void) {
+    if (!t) return false;
+    if (t->is_reference()) {
+        auto* r = static_cast<ReferenceType*>(t);
+        if (r->ref_qual() == RefQual::LValue && !r->referent()->cv().is_const) return false;
+        t = r->referent();
+    }
+    t = ctx.strip_cv(t);
+    if (!t || !t->is_builtin()) return false;
+    auto* b = static_cast<BuiltinType*>(t);
+    if (b->is_void()) return allow_void;
+    return b->base() != parser_types::PrimitiveType::BaseKind::Auto;
+}
+
+int variant_alternative_for(Type* src, VariantType* v, TypeContext& ctx) {
+    if (!src || !v) return -1;
+    Type* s = ctx.strip_cv(src->is_reference() ? static_cast<ReferenceType*>(src)->referent() : src);
+    const std::vector<Type*>& alts = v->alternatives();
+    for (std::size_t i = 0; i < alts.size(); ++i) if (ctx.strip_cv(alts[i]) == s) return static_cast<int>(i);
+    int found = -1;
+
+    for (std::size_t i = 0; i < alts.size(); ++i) {
+        if (rank_conversion(s, alts[i], ctx) == ConversionRank::None) continue;
+        if (found >= 0) return -2;
+        found = static_cast<int>(i);
+    }
+
+    return found;
+}
+
+bool dynamic_callable(FunctionType* f, TypeContext& ctx) {
+    if (!f || !dynamic_value_type(f->ret(), ctx, true)) return false;
+    for (Type* p : f->params()) if (!dynamic_value_type(p, ctx, false)) return false;
+    return true;
 }
 
 bool unsized_array_accepts(Type* src, Type* dst, TypeContext& ctx) {
@@ -144,6 +184,12 @@ ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx) {
     if (dst->is_builtin() && static_cast<BuiltinType*>(dst)->is_dynamic()) {
         Type* sv = ctx.strip_cv(src);
         if (sv->is_builtin() && !static_cast<BuiltinType*>(sv)->is_void()) return ConversionRank::Conversion;
+        if (sv->is_null()) return ConversionRank::Conversion;
+        if (sv->is_function() && dynamic_callable(static_cast<FunctionType*>(sv), ctx)) return ConversionRank::Conversion;
+    }
+
+    if (Type* dvt = ctx.strip_cv(dst); dvt && dvt->kind() == TypeKind::Variant && ctx.strip_cv(src)->kind() != TypeKind::Variant) {
+        if (variant_alternative_for(src, static_cast<VariantType*>(dvt), ctx) >= 0) return ConversionRank::Conversion;
     }
 
     if (src->is_builtin() && static_cast<BuiltinType*>(src)->is_dynamic()) {

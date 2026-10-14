@@ -26,6 +26,18 @@
 namespace walnut {
 namespace codegen {
 
+struct NativeCode {
+    std::string text;
+    bool        is_c = false;
+    std::string path;
+    std::size_t line = 0;
+};
+
+struct SplitProgram {
+    std::string                                      header;
+    std::vector<std::pair<std::string, std::string>> sources;
+};
+
 struct CodegenUnit {
     FileId                 file = INVALID_FILE;
     nodes::BlockStatement* ast  = nullptr;
@@ -51,8 +63,16 @@ public:
     CppEmitter& operator=(const CppEmitter&) = delete;
 
     bool uses_coroutines() const { return m_uses_coroutines; }
+    bool uses_native_externs() const { return !m_native_externs.empty(); }
+    const std::vector<std::string>& native_files() const { return m_native_files; }
+    const std::vector<NativeCode>& native_code() const { return m_native_code; }
+    std::function<std::string(const char*)> path_of_text;
 
     bool emit(const std::vector<CodegenUnit>& units, std::ostream& out);
+    bool emit_split(const std::vector<CodegenUnit>& units, SplitProgram& out);
+
+    static constexpr const char* kLineReset = "#pragma walnut_line_reset";
+    std::function<std::string(FileId)> source_path;
 
 private:
     struct RecordInfo {
@@ -89,6 +109,10 @@ private:
     std::vector<nodes::EnumDeclaration*>          m_enum_decls;
     std::vector<nodes::ASTNode*>                  m_script;
     std::vector<nodes::ASTNode*>                  m_global_decls;
+    std::vector<const Sym*>                       m_native_externs;
+    std::vector<std::string>                      m_native_files;
+    std::vector<NativeCode>                       m_native_code;
+    std::vector<const char*>                      m_native_code_seen;
     Sym*                                          m_main_fn = nullptr;
 
     std::unordered_map<const Sym*, std::string>   m_name_cache;
@@ -99,6 +123,8 @@ private:
     int                                           m_temp = 0;
 
     bool                                          m_uses_coroutines = false;
+    std::unordered_map<const RecordInfo*, std::string> m_equality_names;
+    std::vector<RecordInfo*>                      m_equality_queue;
     Type*                                         m_yield_type = nullptr;
     RecordInfo*                                   m_current_record = nullptr;
     bool                                          m_current_static = false;
@@ -230,12 +256,28 @@ private:
     }
 
     std::string constant_value_code(const semantics::ConstValue& v, Type* t, const nodes::ASTNode* at);
+    std::string default_code(nodes::ASTNode* def, Type* t, const nodes::ASTNode* at);
+    void function_value_args(const semantics::FunctionType* ft, const std::vector<nodes::ASTNode*>& args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes);
 
     std::string literal(nodes::Literal* lit);
 
     std::string symbol_ref(Sym* s, const nodes::ASTNode* at);
 
     std::string expr(nodes::ASTNode* e);
+
+    std::string expr_unwrapped(nodes::ASTNode* e);
+
+    bool needs_volatile_access(const nodes::ASTNode* e);
+
+    std::string native_type(Type* t, bool c_linkage);
+
+    void emit_native_externs(std::ostream& decls, std::ostream& wrappers);
+
+    static nodes::VariableDeclaration* inline_variable(nodes::ASTNode* decl) {
+        if (!decl || decl->kind != nodes::ASTNode::Kind::VariableDeclaration) return nullptr;
+        auto* v = static_cast<nodes::VariableDeclaration*>(decl);
+        return v->get_type_info().modifiers.has(modifiers::RawModifiers::Inline) && !v->is_structured_binding() ? v : nullptr;
+    }
 
     static const char* node_kind_name(const nodes::ASTNode* n);
 
@@ -275,6 +317,14 @@ private:
     std::string pass_arg(nodes::ASTNode* arg, Type* param, const nodes::ASTNode* at);
 
     std::string binary(nodes::BinaryExpression* b);
+    std::string equality_helper(Type* t, const nodes::ASTNode* at);
+    void emit_special_members(std::ostream& os, RecordInfo* r, bool polymorphic);
+    std::string align_prefix(const parser_types::TemplateArgument* a, const std::string& cpp_natural);
+    std::string type_test(nodes::CastExpression* c);
+    RecordInfo* init_record(RecordInfo* r, Sym* target);
+    std::string member_object(nodes::MemberAccessExpression* m);
+    int self_ref_kind(RecordInfo* r, const nodes::FunctionParameters* ps);
+    void emit_equality_helpers(std::ostream& os);
 
     std::string unary(nodes::UnaryExpression* u);
 
@@ -344,6 +394,9 @@ private:
     void switch_statement(std::ostream& os, nodes::SwitchStatement* s);
 
     void statement(std::ostream& os, nodes::ASTNode* s);
+    void line_marker(std::ostream& os, const nodes::ASTNode* n);
+    static const nodes::ASTNode* located(const nodes::ASTNode* n, int depth);
+    void line_reset(std::ostream& os);
 
     Type* return_type_of(Sym* fn);
 
@@ -396,7 +449,9 @@ private:
 
     std::string binding_global(const nodes::VariableDeclaration* v);
 
-    void emit_globals(std::ostream& os);
+    void emit_globals(std::ostream& os, bool as_extern = false);
+    bool needs_header_body(const FuncInfo& f);
+    std::string main_function_code();
 
     void emit_definitions(std::ostream& os);
 

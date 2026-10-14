@@ -4,13 +4,12 @@ namespace walnut {
 namespace semantics {
 
 std::uint8_t CV::bits() const {
-    return std::uint8_t(is_const) | (std::uint8_t(is_volatile) << 1) | (std::uint8_t(is_immutable) << 2);
+    return std::uint8_t(is_const) | (std::uint8_t(is_volatile) << 1);
 }
 
 void Type::write_cv(std::ostream& os) const {
     if (m_cv.is_const)     os << "const ";
     if (m_cv.is_volatile)  os << "volatile ";
-    if (m_cv.is_immutable) os << "immutable ";
 }
 
 int length_rank(parser_types::LengthModifier l) {
@@ -98,14 +97,23 @@ bool TemplateArg::operator==(const TemplateArg& o) const {
     return expr == o.expr;
 }
 
-FunctionType::FunctionType(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept) : Type(TypeKind::Function), m_ret(ret), m_params(std::move(params)), m_const(is_const), m_ref(rq), m_noexcept(is_noexcept) {}
+FunctionType::FunctionType(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept, std::vector<FnParamInfo> info) : Type(TypeKind::Function), m_ret(ret), m_params(std::move(params)), m_const(is_const), m_ref(rq), m_noexcept(is_noexcept), m_info(std::move(info)) {}
 
 void FunctionType::write_to(std::ostream& os) const {
     os << '(';
 
     for (std::size_t i = 0; i < m_params.size(); ++i) {
         if (i) os << ", ";
-        m_params[i]->write_to(os);
+        const FnParamInfo* info = i < m_info.size() ? &m_info[i] : nullptr;
+
+        if (info && info->is_pack() && m_params[i]->is_array()) static_cast<const ArrayType*>(m_params[i])->element()->write_to(os);
+        else m_params[i]->write_to(os);
+
+        if (!info) continue;
+        if (info->pack == FnParamInfo::Pack::Unbounded) os << "...";
+        if (info->pack == FnParamInfo::Pack::UpTo) os << "...[" << info->cap << "]";
+        if (info->pack == FnParamInfo::Pack::Exact) os << "...<" << info->cap << ">";
+        if (info->def) os << " = " << (info->def_key.size() > 2 && info->def_key[1] == ':' ? info->def_key.substr(2) : std::string("..."));
     }
 
     os << ") \u2192 ";

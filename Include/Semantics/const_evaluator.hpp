@@ -60,6 +60,8 @@ public:
     std::function<const SubstEnv*(Symbol*)> env_of;
     std::function<int(nodes::TemplateInstantiation*)> concept_value;
 
+    ConstValue eval_named(Symbol* s) { return eval_symbol(s); }
+
     ConstValue eval(nodes::ASTNode* e) {
         if (!e || m_depth > kMaxDepth) return {};
         ++m_depth;
@@ -99,6 +101,7 @@ public:
     }
 
     bool layout_of(Type* t, long long& size, long long& align, int depth = 0);
+    long long alignment_of(const parser_types::TemplateArgument* a);
 
     bool record_layout(RecordType* rt, long long& size, long long& align, int depth);
 

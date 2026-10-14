@@ -93,44 +93,37 @@ void DefinitionValidator::merge_overload_chain(Symbol* head) {
     }
 }
 
-Symbol* DefinitionValidator::base_record_of(nodes::RecordDeclaration* rec) {
-    const parser_types::TypeInfo& inh = rec->get_inherits();
-    if (!inh.type) return nullptr;
-    Type* t = m_types.canonicalize(inh);
-    t = t ? m_types.strip_cv(t) : nullptr;
-    return (t && t->is_record()) ? static_cast<RecordType*>(t)->decl() : nullptr;
-}
+auto DefinitionValidator::overrides_base_virtual(Scope* scope, Symbol* fn, int depth) -> bool {
+    if (!scope || depth > 64) return false;
 
-auto DefinitionValidator::overrides_base_virtual(Symbol* base, Symbol* fn) -> bool {
-    for (Symbol* b = base; b; ) {
-        if (b->inner_scope) {
-            for (Symbol* cand = b->inner_scope->find_member(fn->name); cand; cand = cand->next_overload) {
-                if (!cand->decl || cand->decl->kind != K::FunctionDeclaration) continue;
-                if (!same_signature(cand, fn)) continue;
-                const modifiers::FunctionQualifiers* q = quals_of(cand->decl);
-                if (q && q->has_any(kVirtualIntroducers)) return true;
-                // non-virtual match: keep walking, an ancestor may still declare it virtual
-            }
+    for (Scope* b : scope->bases) {
+        if (!b) continue;
+
+        for (Symbol* cand = b->find_local(fn->name); cand; cand = cand->next_overload) {
+            if (!cand->decl || cand->decl->kind != K::FunctionDeclaration) continue;
+            if (!same_signature(cand, fn)) continue;
+            const modifiers::FunctionQualifiers* q = quals_of(cand->decl);
+            if (q && q->has_any(kVirtualIntroducers)) return true;
         }
 
-        nodes::ASTNode* bd = b->decl;
-        b = (bd && bd->kind == K::RecordDeclaration) ? base_record_of(static_cast<nodes::RecordDeclaration*>(bd)) : nullptr;
+        if (overrides_base_virtual(b, fn, depth + 1)) return true;
     }
 
     return false;
 }
 
 void DefinitionValidator::check_overrides(nodes::RecordDeclaration* rec) {
-    Symbol* base = base_record_of(rec);
+    Scope* own = rec->symbol ? rec->symbol->inner_scope : nullptr;
+    const bool has_base = own && !own->bases.empty();
 
     for (const nodes::RecordDeclaration::Member& m : rec->get_members()) {
         if (!m.node || m.node->kind != K::FunctionDeclaration) continue;
         auto* fn = static_cast<nodes::FunctionDeclaration*>(m.node);
         if (!fn->qualifiers().has(FQ::Override) || !fn->symbol) continue;
 
-        if (!base)
+        if (!has_base)
             SemanticError::invalid_override(m_reporter, fn->file_id, fn->line, fn->get_name(), "the class has no base class");
-        else if (!overrides_base_virtual(base, fn->symbol))
+        else if (!overrides_base_virtual(own, fn->symbol))
             SemanticError::invalid_override(m_reporter, fn->file_id, fn->line, fn->get_name(), "no matching virtual function exists in a base class");
     }
 }

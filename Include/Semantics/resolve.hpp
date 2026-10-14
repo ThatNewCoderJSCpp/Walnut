@@ -2,6 +2,7 @@
 #define WALNUT_SEMANTICS_RESOLVE_HPP
 
 #include <vector>
+#include <string>
 #include <string_view>
 
 #include "scope.hpp"
@@ -27,6 +28,14 @@ Symbol* resolve_name(
     const std::vector<std::string_view>& parts,
     bool is_global, const nodes::ASTNode* use
 );
+
+std::vector<Symbol*> resolve_path(
+    Scope* from, Scope* root,
+    const std::vector<std::string_view>& parts,
+    bool is_global, const nodes::ASTNode* use
+);
+
+std::string visibility_violation(const Symbol* sym, const Scope* from, const nodes::ASTNode* use);
 
 } // namespace semantics
 } // namespace walnut

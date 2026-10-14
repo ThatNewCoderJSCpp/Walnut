@@ -2,7 +2,9 @@
 #define WALNUT_SEMA_TYPE_WALKER_HPP
 
 #include <algorithm>
+#include <set>
 #include <sstream>
+#include <tuple>
 
 #include "type_impl.hpp"
 #include "conversion.hpp"
@@ -13,6 +15,7 @@
 #include "semantic_error.hpp"
 #include "semantic_warning.hpp"
 #include "prelude.hpp"
+#include "resolve.hpp"
 
 #include "../Parser/nodes.hpp"
 #include "../Common/error_reporter.hpp"
@@ -35,6 +38,9 @@ public:
     ~TypeWalker() {
         if (m_inst) m_inst->check_constraints = nullptr;
         m_types.closure_hook = nullptr;
+        m_types.expr_walk_hook = m_saved_walk_hook;
+        m_types.type_error_hook = m_saved_error_hook;
+        m_types.conversions_hook = m_saved_conversions_hook;
     }
 
     void type_pending_instances();
@@ -47,6 +53,13 @@ public:
 private:
     using K = nodes::ASTNode::Kind;
     using VC = nodes::ValueCategory;
+
+    struct SiteGuard {
+        nodes::ASTNode*& slot;
+        nodes::ASTNode*  saved;
+        SiteGuard(nodes::ASTNode*& s, nodes::ASTNode* now) : slot(s), saved(s) { slot = now; }
+        ~SiteGuard() { slot = saved; }
+    };
 
     struct OpResult {
         Type*        type       = nullptr;
@@ -86,6 +99,12 @@ private:
     WarningReporter&             m_warnings;
     Scope*                       m_root    = nullptr;
     Scope*                       m_current = nullptr;
+    std::function<void(nodes::ASTNode*)> m_saved_walk_hook;
+    std::function<void(const std::string&)> m_saved_error_hook;
+    std::function<void(Type*)>              m_saved_conversions_hook;
+    nodes::ASTNode*              m_site = nullptr;
+    bool                         m_quiet_deleted = false;
+    std::set<std::tuple<std::uint32_t, std::size_t, std::string>> m_reported_type_errors;
     Instantiator*                m_inst    = nullptr;
     ThrowContext*                m_throws  = nullptr;
     ConstEvaluator               m_eval;
@@ -236,6 +255,7 @@ private:
     void walk_param_defaults(const nodes::FunctionParameters* ps);
 
     Symbol* generic_of_instance(Symbol* s);
+    bool is_template_instance(Symbol* s);
 
     Type* type_call(nodes::CallExpression* c, const std::vector<Type*>& args, VC& vc);
 
@@ -257,7 +277,7 @@ private:
 
     void check_const_call(Symbol* chosen, nodes::CallExpression* c);
 
-    Type* arrow_target(Type* obj);
+    Type* arrow_target(Type* obj, std::vector<Symbol*>* chain = nullptr);
 
     Type* deduce_auto_declared(const parser_types::TypeInfo& ti, Type* init);
 
@@ -310,9 +330,7 @@ private:
 
     void touch_record(Type* t, nodes::ASTNode* site);
 
-    bool printable(Type* t);
 
-    Type* type_intrinsic(nodes::CallExpression* c, Symbol* sym, const std::vector<Type*>& args);
 
     CandidateMatch match_with_constants(nodes::CallExpression* c, const std::vector<ParamShape>& shapes, const std::vector<Type*>& args);
 
@@ -333,10 +351,33 @@ private:
     void ensure_conversions(Type* t);
 
     void check_operator_signature(nodes::OperatorFunctionDeclaration* od, Symbol* sym);
+    void check_type_query_overload(nodes::TypeQueryOverload* q);
 
     Type* resolve_member_operator(Type* recv, nodes::OverloadableOperator wanted, const std::vector<Type*>& extra, Symbol** chosen = nullptr);
 
     OpResult resolve_operator(nodes::OverloadableOperator want, const std::vector<Type*>& operands);
+    Type* synthesize_comparison(nodes::BinaryExpression* b, Type* l, Type* r, Symbol*& resolved_op);
+    bool memberwise_equality(Type* t, int depth);
+    std::string default_construct_failure(Type* t, int depth = 0);
+    void check_alignas(parser_types::TemplateArgument* a, Type* natural, nodes::ASTNode* site);
+    void report_not_dynamic(Type* from, nodes::ASTNode* site);
+    std::string plain_value_failure(Type* t, int depth = 0);
+    void check_union(nodes::RecordDeclaration* r);
+    void type_type_test(nodes::CastExpression* c);
+    void check_member_ambiguity(Scope* members, std::string_view name, nodes::ASTNode* site);
+    nodes::ASTNode* m_operator_site = nullptr;
+    void check_member_initialization(nodes::ConstructorDeclaration* ct, const std::vector<const Symbol*>& initialized);
+    bool report_if_deleted(Symbol* fn);
+
+    enum class SpecialOp : std::uint8_t { CopyCtor, CopyAssign, MoveCtor, MoveAssign };
+    nodes::RecordDeclaration* record_decl_of(Type* t, Symbol*& owner);
+    int self_ref_kind(const nodes::FunctionParameters* ps, Type* self);
+    void special_decls(nodes::RecordDeclaration* rd, Type* self, int& copy, int& move);
+    std::string special_failure(Type* t, SpecialOp op, int depth);
+    bool is_xvalue(nodes::ASTNode* e);
+    bool implicitly_moved(nodes::ASTNode* e, nodes::ASTNode* site);
+    void check_copy_or_move(nodes::ASTNode* expr, Type* from, Type* to, nodes::ASTNode* site);
+    std::string equality_failure_of(Type* l, Type* r);
 
     OpResult resolve_incdec(Type* recv, nodes::OverloadableOperator want, bool postfix);
 
@@ -415,6 +456,10 @@ private:
     bool constant_true(nodes::ASTNode* cond);
 
     bool always_exits(nodes::ASTNode* s);
+
+    void check_discarded_result(nodes::ASTNode* e);
+
+    void check_chosen_overload_visibility(nodes::CallExpression* c);
 
     void check_falls_off(Type* ret, nodes::ASTNode* body, std::string_view name, nodes::ASTNode* site);
 

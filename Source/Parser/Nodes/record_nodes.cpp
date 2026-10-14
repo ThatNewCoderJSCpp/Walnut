@@ -189,6 +189,7 @@ void RecordDeclaration::print(std::ostream& os, std::size_t indent) const {
         
     if (has_inherits()) {
         os << m_inherits;
+        for (const parser_types::TypeInfo& b : m_extra_bases) os << ", " << b;
     } else {
         os << "<none>";
     }
@@ -218,6 +219,7 @@ ASTNode* RecordDeclaration::clone_into(Arena& a) const {
     c->m_is_specialization = m_is_specialization;
     c->m_spec_args         = clone_targs(m_spec_args, a);
     c->m_alignment         = clone_targ(m_alignment, a);
+    for (const parser_types::TypeInfo& b : m_extra_bases) c->m_extra_bases.push_back(b.clone_into(a));
     c->m_members.reserve(m_members.size());
     for (const auto& m : m_members) c->m_members.push_back({ m.access, clone_child(m.node, a) });
     return c;

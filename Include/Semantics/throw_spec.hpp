@@ -9,6 +9,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <deque>
 #include <vector>
 
 namespace walnut {
@@ -78,6 +79,8 @@ private:
     TypeContext& m_types;
     std::unordered_map<Symbol*, ThrowInfo> m_cache;
     std::unordered_set<Symbol*>            m_active;
+    std::unordered_set<Symbol*>            m_cycle_targets;
+    std::deque<ThrowInfo>                  m_uncached;
 };
 
 struct ThrowContext {

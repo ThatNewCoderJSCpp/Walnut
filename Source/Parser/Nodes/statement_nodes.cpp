@@ -113,6 +113,12 @@ void NamespaceDeclaration::print(std::ostream& os, std::size_t indent) const {
     os << "NamespaceDeclaration\n";
     print_indent(os, indent + 1);
     os << "Name: " << full_name() << "\n";
+
+    if (!m_modifiers.empty()) {
+        print_indent(os, indent + 1);
+        os << "Modifiers: " << m_modifiers << "\n";
+    }
+
     print_indent(os, indent + 1);
     os << "Body:";
 
@@ -124,7 +130,7 @@ void NamespaceDeclaration::print(std::ostream& os, std::size_t indent) const {
     }
 }
 
-ASTNode* NamespaceDeclaration::clone_into(Arena& a) const { auto* c = make_in<NamespaceDeclaration>(a, m_name_parts, clone_typed(m_body, a), line); copy_base_to(c); return c; }
+ASTNode* NamespaceDeclaration::clone_into(Arena& a) const { auto* c = make_in<NamespaceDeclaration>(a, m_name_parts, clone_typed(m_body, a), line); c->m_modifiers = m_modifiers; copy_base_to(c); return c; }
 
 ForStatement::ForStatement(ASTNode* init, ASTNode* cond, ASTNode* inc, ASTNode* b) : ASTNode(Kind::ForStatement)
         , initializer(init), condition(cond), increment(inc)
@@ -651,7 +657,13 @@ void print_import_export_item(std::ostream& os, const ImportExportItem& it, std:
             print_indent(os, indent + 1); os << "Name: " << it.source << "\n";
             break;
         case ImportExportItem::Kind::File:
-            print_indent(os, indent + 1); os << "Path: " << it.source << "\n";
+            if (it.from_module_path) {
+                print_indent(os, indent + 1); os << "Module: ";
+                for (std::size_t i = 0; i < it.module_parts.size(); ++i) { if (i) { os << "."; } os << it.module_parts[i]; }
+                os << "\n";
+            } else {
+                print_indent(os, indent + 1); os << "Path: " << it.source << "\n";
+            }
             print_indent(os, indent + 1); os << "As: "; write_qualified(it.alias_global, it.alias_parts); os << "\n";
             break;
         case ImportExportItem::Kind::This:
@@ -738,6 +750,15 @@ void StaticAssertDeclaration::print(std::ostream& os, std::size_t indent) const 
 }
 
 ASTNode* StaticAssertDeclaration::clone_into(Arena& a) const { auto* c = make_in<StaticAssertDeclaration>(a, message, clone_child(constraint, a), line); copy_base_to(c); return c; }
+
+void NativeCodeBlock::print(std::ostream& os, std::size_t indent) const {
+    print_indent(os, indent);
+    os << (is_c ? "NativeCodeBlock (C)\n" : "NativeCodeBlock (C++)\n");
+    print_indent(os, indent + 1);
+    os << "Length: " << code.size() << "\n";
+}
+
+ASTNode* NativeCodeBlock::clone_into(Arena& a) const { auto* c = make_in<NativeCodeBlock>(a, code, is_c, line); copy_base_to(c); return c; }
 
 } // namespace nodes
 } // namespace walnut

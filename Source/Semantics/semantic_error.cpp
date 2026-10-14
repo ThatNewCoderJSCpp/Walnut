@@ -1,4 +1,5 @@
 #include "Semantics/semantic_error.hpp"
+#include "Preprocessor/native_headers.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -82,6 +83,8 @@ SemanticError SemanticError::unresolved_name(
     std::stringstream ss;
     ss << build_error_header(line, "Name");
     ss << "use of undeclared identifier '" << name << "'";
+    if (name == "move") ss << "; 'move' is part of the core library, so write 'std::move'";
+    if (const std::string why = native::skipped_reason(name); !why.empty()) ss << "; " << why;
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -378,10 +381,11 @@ SemanticError SemanticError::template_unsupported(ErrorReporter& r, FileId f, st
     return make_and_report(r, f, line, ss.str());
 }
 
-SemanticError SemanticError::static_assert_failed(ErrorReporter& r, FileId f, std::size_t line) {
+SemanticError SemanticError::static_assert_failed(ErrorReporter& r, FileId f, std::size_t line, std::string_view message) {
     std::stringstream ss;
     ss << build_error_header(line, "Assertion");
     ss << "static assertion failed";
+    if (!message.empty()) ss << ": " << message;
     return make_and_report(r, f, line, ss.str());
 }
 

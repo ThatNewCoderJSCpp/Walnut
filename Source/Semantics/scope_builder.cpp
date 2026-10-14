@@ -11,6 +11,17 @@ Scope* ScopeBuilder::build(nodes::BlockStatement* program) {
 }
 
 Symbol* ScopeBuilder::declare(Scope& scope, std::string_view name, SymbolKind kind, ASTNode* decl, bool hoisted, Visibility vis) {
+    using modifiers::RawModifiers;
+    constexpr std::uint16_t vis_mask = RawModifiers::Global | RawModifiers::Local | RawModifiers::Hidden;
+
+    if (const RawModifiers* mods = decl_modifiers(decl); mods && mods->has_any(vis_mask) && scope.kind != Scope::Kind::Namespace && scope.kind != Scope::Kind::Module) {
+        const char* why = scope.kind == Scope::Kind::Record
+            ? "class members cannot be 'global', 'local' or 'hidden'; use public, protected or private instead"
+            : "only file-level and namespace-level declarations can be 'global', 'local' or 'hidden'";
+        SemanticError::modifier_rule_violation(m_reporter, decl->file_id, decl->line, "visibility", why);
+        vis = Visibility::Global;
+    }
+
     Symbol* existing = scope.find_local(name);
     const bool overloadable = existing && kind == SymbolKind::Function && existing->kind == SymbolKind::Function;
 
@@ -54,11 +65,29 @@ bool ScopeBuilder::decl_is_hoisted(const ASTNode* n) {
     }
 }
 
+const modifiers::RawModifiers* ScopeBuilder::decl_modifiers(const ASTNode* n) {
+    if (!n) return nullptr;
+
+    switch (n->kind) {
+        case ASTNode::Kind::VariableDeclaration:         return &static_cast<const nodes::VariableDeclaration*>(n)->get_type_info().modifiers;
+        case ASTNode::Kind::FunctionDeclaration:         return &static_cast<const nodes::FunctionDeclaration*>(n)->get_modifiers();
+        case ASTNode::Kind::OperatorFunctionDeclaration: return &static_cast<const nodes::OperatorFunctionDeclaration*>(n)->get_modifiers();
+        case ASTNode::Kind::RecordDeclaration:           return &static_cast<const nodes::RecordDeclaration*>(n)->get_modifiers();
+        case ASTNode::Kind::ArrayDeclaration:            return &static_cast<const nodes::ArrayDeclaration*>(n)->get_array_modifiers();
+        case ASTNode::Kind::EnumDeclaration:             return &static_cast<const nodes::EnumDeclaration*>(n)->get_modifiers();
+        case ASTNode::Kind::NamespaceDeclaration:        return &static_cast<const nodes::NamespaceDeclaration*>(n)->m_modifiers;
+        default:                                         return nullptr;
+    }
+}
+
 Visibility ScopeBuilder::decl_visibility(const ASTNode* n) {
     using modifiers::RawModifiers;
     const RawModifiers* mods = nullptr;
 
     switch (n->kind) {
+        case ASTNode::Kind::NamespaceDeclaration:
+            mods = &static_cast<const nodes::NamespaceDeclaration*>(n)->m_modifiers;
+            break;
         case ASTNode::Kind::VariableDeclaration:
             mods = &static_cast<const nodes::VariableDeclaration*>(n)->get_type_info().modifiers;
             break;
@@ -164,6 +193,7 @@ void ScopeBuilder::build(ASTNode* node) {
         case K::VariableDeclaration: {
             auto* v = static_cast<nodes::VariableDeclaration*>(node);
             check_declaration_modifiers(v->get_type_info().modifiers, kValidVariableMods, m_reporter, v, "variable");
+            check_member_only_modifiers(v->get_type_info().modifiers, v, "variable");
             build_variable(v);
             break;
         }
@@ -197,7 +227,7 @@ void ScopeBuilder::build(ASTNode* node) {
 
             for (nodes::IfBranch* br : s->branches) {
                 const bool init = br->condition && br->condition->kind == K::VariableDeclaration;
-                if (init) { push_scope(Scope::Kind::Block); }
+                if (init) { br->scope = push_scope(Scope::Kind::Block); }
                 build(br->condition);     
                 build(br->body);         
                 if (init) { pop_scope(); }
@@ -328,6 +358,7 @@ void ScopeBuilder::build(ASTNode* node) {
         case K::ArrayDeclaration: {
             auto* a = static_cast<nodes::ArrayDeclaration*>(node);
             check_declaration_modifiers(a->get_array_modifiers(), kValidVariableMods, m_reporter, a, "array");
+            check_member_only_modifiers(a->get_array_modifiers(), a, "array");
             const bool hoisted = a->get_array_modifiers().has(modifiers::RawModifiers::Hoisted);
             a->symbol = declare(*m_current, a->get_name(), SymbolKind::Variable, a, hoisted, decl_visibility(a));
             a->symbol->type = &a->get_element_type();   
@@ -433,13 +464,34 @@ void ScopeBuilder::build_destructor(nodes::DestructorDeclaration* dtor) {
 }
 
 void ScopeBuilder::build_namespace(nodes::NamespaceDeclaration* ns) {
+    using modifiers::RawModifiers;
     Scope*  saved = m_current;
     Symbol* sym   = nullptr;
+    const RawModifiers& mods = ns->m_modifiers;
+    constexpr std::uint16_t vis_mask = RawModifiers::Global | RawModifiers::Local | RawModifiers::Hidden;
+    check_declaration_modifiers(mods, vis_mask, m_reporter, ns, "namespace");
+    const bool explicit_vis = mods.has_any(vis_mask);
+    const Visibility vis = decl_visibility(ns);
+
+    if (explicit_vis && m_current->kind != Scope::Kind::Namespace && m_current->kind != Scope::Kind::Module) {
+        SemanticError::modifier_rule_violation(m_reporter, ns->file_id, ns->line, "namespace", "only file-level and namespace-level namespaces can be 'global', 'local' or 'hidden'");
+    }
+
+    const std::size_t last = ns->name_parts().size() - 1;
+    std::size_t index = 0;
 
     for (std::string_view part : ns->name_parts()) {
+        const bool is_last = index++ == last;
         sym = m_current->find_local(part);
 
         if (sym && sym->kind == SymbolKind::Namespace) {
+            if (is_last && explicit_vis && sym->visibility != vis) {
+                static const char* const names[] = { "global", "local", "hidden" };
+                SemanticError::emit(m_reporter, ns->file_id, ns->line, "Visibility",
+                    "namespace '" + std::string(part) + "' was first declared " + names[static_cast<int>(sym->visibility)] +
+                    "; every block of the same namespace must use the same visibility");
+            }
+
             m_current = sym->inner_scope;            
         } else if (sym) {
             SemanticError::redeclaration(m_reporter, ns->file_id, ns->line, part, sym->decl ? sym->decl->file_id : INVALID_FILE, sym->decl ? sym->decl->line : 0);
@@ -448,8 +500,10 @@ void ScopeBuilder::build_namespace(nodes::NamespaceDeclaration* ns) {
         } else {
             sym = make_in<Symbol>(m_arena, part, SymbolKind::Namespace, ns);
             sym->decl_order = m_order++;
+            sym->visibility = is_last ? vis : Visibility::Global;
             m_current->declare(sym);
             Scope* ns_scope = make_in<Scope>(m_arena, Scope::Kind::Namespace, m_current);
+            ns_scope->owner_symbol = sym;
             sym->inner_scope = ns_scope;
             m_current = ns_scope;
         }
@@ -722,7 +776,10 @@ void ScopeBuilder::build_lambda(nodes::LambdaExpression* lam) {
                 case M::ByValue:
                 case M::ByReference:
                 case M::InitByValue:
-                    if (!c.name.empty()) { c.symbol = declare(*m_current, c.name, SymbolKind::Variable, lam, false); }
+                    if (!c.name.empty()) {
+                        c.symbol = declare(*m_current, c.name, SymbolKind::Variable, lam, false);
+                        if (c.symbol && c.mode == M::InitByValue) c.symbol->is_hoisted = true;
+                    }
                     break;
                 default: break;  // This / ThisByReference / AllByValue / AllByReference introduce no name 
             }

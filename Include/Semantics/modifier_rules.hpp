@@ -27,15 +27,15 @@ inline constexpr std::uint16_t kValidFunctionMods =
 inline constexpr std::uint16_t kValidVariableMods =
     RM::Const | RM::Constexpr | RM::Constinit | RM::Hoisted | RM::Inline |
     RM::Static | RM::Hidden | RM::Local | RM::Global | RM::Extern |
-    RM::Immutable | RM::Volatile | RM::ThreadLocal | RM::Mutable | RM::Friend;
+    RM::Volatile | RM::ThreadLocal | RM::Mutable | RM::Friend;
 
 inline constexpr std::uint16_t kValidEnumMods =
-    RM::Hoisted | RM::Local | RM::Global | RM::Hidden | RM::Inline;
+    RM::Hoisted | RM::Local | RM::Global | RM::Hidden;
 
 inline constexpr std::uint16_t kVirtualIntroducers = FQ::Virtual | FQ::Override;
 
 inline constexpr ExclusiveGroup kModExclusive[] = {
-    { RM::Const     | RM::Mutable | RM::Immutable },   
+    { RM::Const     | RM::Mutable                 },
     { RM::Local     | RM::Global  | RM::Hidden    },   
     { RM::Static    | RM::Extern                  },   
     { RM::Constexpr | RM::Constinit               },   
@@ -47,7 +47,11 @@ inline constexpr ExclusiveGroup kModExclusive[] = {
     { RM::Mutable   | RM::Static                  },
     { RM::Mutable   | RM::ThreadLocal             },
     { RM::Mutable   | RM::Extern                  },
-    { RM::Immutable | RM::Volatile                },
+    { RM::Inline    | RM::Extern                  },
+    { RM::Inline    | RM::Mutable                 },
+    { RM::Inline    | RM::Volatile                },
+    { RM::Inline    | RM::ThreadLocal             },
+    { RM::Inline    | RM::Constinit               },
 };
 
 inline constexpr RequiresRule kModRequires[] = {
@@ -65,7 +69,10 @@ inline constexpr ExclusiveGroup kFuncExclusive[] = {
 inline constexpr std::array<RequiresRule, 0> kFuncRequires{};
 
 inline constexpr CrossRule kCrossExclusive[] = {
-    { RM::Constexpr, FQ::Async, "constexpr functions cannot be async" }
+    { RM::Constexpr, FQ::Async,    "constexpr functions cannot be async" },
+    { RM::Inline,    FQ::Async,    "inline functions cannot be async, because a coroutine cannot be pasted into its caller" },
+    { RM::Inline,    FQ::Virtual,  "inline functions cannot be virtual, because a virtual call is only chosen at run time" },
+    { RM::Inline,    FQ::Override, "inline functions cannot override, because a virtual call is only chosen at run time" }
 };
 
 inline int count_bits(std::uint16_t x) { int n = 0; while (x) { x &= x - 1; ++n; } return n; }

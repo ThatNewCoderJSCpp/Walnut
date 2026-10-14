@@ -58,7 +58,6 @@ constexpr bool is_variable_modifier(const tokenizing::Token& token) noexcept {
         tokenizing::Token::Kind::VolatileKeyword,
         tokenizing::Token::Kind::ExternKeyword,
         tokenizing::Token::Kind::ConstinitKeyword,
-        tokenizing::Token::Kind::ImmutableKeyword,
         tokenizing::Token::Kind::InlineKeyword,
         tokenizing::Token::Kind::StaticKeyword,
         tokenizing::Token::Kind::MutableKeyword,
@@ -78,7 +77,6 @@ constexpr bool is_variable_modifier(tokenizing::Token::Kind token) noexcept {
             token == tokenizing::Token::Kind::VolatileKeyword ||
             token == tokenizing::Token::Kind::ExternKeyword ||
             token == tokenizing::Token::Kind::ConstinitKeyword ||
-            token == tokenizing::Token::Kind::ImmutableKeyword ||
             token == tokenizing::Token::Kind::InlineKeyword ||
             token == tokenizing::Token::Kind::StaticKeyword ||
             token == tokenizing::Token::Kind::MutableKeyword ||

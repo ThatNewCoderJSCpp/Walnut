@@ -49,8 +49,36 @@ nodes::ASTNode* Parser::parse_constructor_declaration(const modifiers::RawModifi
             );
         }
 
-        init_list.push_back(parse_expression());
-        while (match(tokenizing::Token::Kind::Comma)) { init_list.push_back(parse_expression()); }
+        const auto member_init = [this]() -> nodes::ASTNode* {
+            if (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::LeftCurly) {
+                const std::size_t brace_line = current_token().line();
+                nodes::ASTNode* name = make<nodes::Identifier>(current_token().lexeme(), static_cast<std::uint32_t>(brace_line));
+                advance();
+                nodes::BraceInitializerList* init = parse_brace_initializer_list();
+                return make<nodes::BraceConstructExpression>(name, init, static_cast<std::uint32_t>(brace_line));
+            }
+
+            nodes::ASTNode* e = nullptr;
+            {
+                NoBraceConstructGuard no_brace(this);
+                e = parse_expression();
+            }
+
+            if (e && e->kind == nodes::ASTNode::Kind::BinaryExpression) {
+                auto* b = static_cast<nodes::BinaryExpression*>(e);
+
+                if (b->op == tokenizing::Token::Kind::Equal && b->left && b->left->kind == nodes::ASTNode::Kind::Identifier) {
+                    auto* call = make<nodes::CallExpression>(b->left, static_cast<std::uint32_t>(b->line));
+                    call->add_argument(b->right);
+                    return call;
+                }
+            }
+
+            return e;
+        };
+
+        init_list.push_back(member_init());
+        while (match(tokenizing::Token::Kind::Comma)) { init_list.push_back(member_init()); }
     }
 
     if (!concrete_match(tokenizing::Token::Kind::LeftCurly)) {
@@ -226,6 +254,7 @@ nodes::ASTNode* Parser::parse_record_declaration(const modifiers::RawModifiers& 
     }
 
     parser_types::TypeInfo inherits; 
+    std::vector<parser_types::TypeInfo> extra_bases;
     
     if (
         current_token().is_one_of(
@@ -236,6 +265,7 @@ nodes::ASTNode* Parser::parse_record_declaration(const modifiers::RawModifiers& 
     ) {
         advance(); 
         inherits = parse_type_info();  
+        while (match(tokenizing::Token::Kind::Comma)) extra_bases.push_back(parse_type_info());
     }
 
     if (concrete_match(tokenizing::Token::Kind::Semicolon) || concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
@@ -256,6 +286,7 @@ nodes::ASTNode* Parser::parse_record_declaration(const modifiers::RawModifiers& 
     }
 
     auto* decl = make<nodes::RecordDeclaration>(form, std::move(name_parts), mods, inherits, false, line_number);
+    decl->m_extra_bases = std::move(extra_bases);
     decl->set_alignment(alignment);
     if (is_specialization) { decl->set_specialization(std::move(spec_args)); }
     nodes::AccessLevel access = (form == Form::Class) ? nodes::AccessLevel::Private : nodes::AccessLevel::Public;

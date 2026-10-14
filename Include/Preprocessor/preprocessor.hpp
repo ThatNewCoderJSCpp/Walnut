@@ -12,6 +12,7 @@
 #include "../Common/foundation.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -67,6 +68,7 @@ public:
 
     void undefine(const std::string& name) { m_macros.erase(name); }
     void add_include_dir(std::string dir) { m_include_dirs.push_back(std::move(dir)); }
+    void set_native_args(std::function<std::vector<std::string>(bool)> provider) { m_native_args = std::move(provider); }
 
     tokenizing::TokenStream preprocess(FileId main);
 
@@ -85,6 +87,8 @@ private:
     void run_file(FileId file, unsigned int depth);
 
     void handle_directive(Reader& r, FileId file, unsigned int depth);
+
+    bool import_native_headers(Reader& r, FileId file, unsigned int depth);
 
     void do_define(TokenVec& body, FileId file, std::uint32_t line);
 
@@ -234,6 +238,7 @@ private:
     std::unordered_map<std::string, Macro> m_macros;
     std::string                            m_key;
     std::vector<std::string>               m_include_dirs;
+    std::function<std::vector<std::string>(bool)> m_native_args;
     std::unordered_set<FileId>             m_pragma_once;
     std::vector<CondFrame>                 m_cond;
     std::vector<Token>                     m_out;

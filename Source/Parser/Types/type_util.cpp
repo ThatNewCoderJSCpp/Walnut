@@ -35,7 +35,7 @@ parser_types::PrimitiveType::BaseKind lexeme_to_base_kind(std::string_view lexem
     if (lexeme == "bool" || lexeme == "boolean") return BK::Bool;
     if (lexeme == "char" || lexeme == "character") return BK::Char;
     if (lexeme == "string" || lexeme == "str") return BK::String;
-    if (lexeme == "text") return BK::Text;
+    if (lexeme == "text" || lexeme == "txt") return BK::Text;
     if (lexeme == "void") return BK::Void;
     if (lexeme == "auto" || lexeme == "automatic") return BK::Auto;
     if (lexeme == "let" || lexeme == "var" || lexeme == "def" || lexeme == "define" || lexeme == "variable" || lexeme == "any") return BK::Dynamic;

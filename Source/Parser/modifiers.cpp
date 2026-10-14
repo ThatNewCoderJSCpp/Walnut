@@ -15,7 +15,6 @@ const char* RawModifiers::flag_name(Flag f) noexcept {
         case Flag::Local:       return "local";
         case Flag::Global:      return "global";
         case Flag::Extern:      return "extern";
-        case Flag::Immutable:   return "immutable";
         case Flag::Volatile:    return "volatile";
         case Flag::ThreadLocal: return "threadlocal";
         case Flag::Mutable:     return "mutable";
@@ -44,7 +43,6 @@ void RawModifiers::write_to(std::ostream& os) const {
         { Flag::Local,       "local "       },
         { Flag::Global,      "global "      },
         { Flag::Extern,      "extern "      },
-        { Flag::Immutable,   "immutable "   },
         { Flag::Volatile,    "volatile "    },
         { Flag::Mutable,     "mutable "     },
         { Flag::Constinit,   "constinit "   },
@@ -53,6 +51,8 @@ void RawModifiers::write_to(std::ostream& os) const {
     };
 
     for (auto&& entry : table) { if (has(entry.flag)) { os << entry.text; }}
+    if (m_linkage == Linkage::C) os << "\"C\" ";
+    else if (m_linkage == Linkage::Cpp) os << "\"C++\" ";
 }
 
 void FunctionQualifiers::write_to(std::ostream& os) const {
@@ -74,7 +74,6 @@ void FunctionQualifiers::write_to(std::ostream& os) const {
         { Flag::RValueRef, "&& "        },
         { Flag::Virtual,   "virtual "   },
         { Flag::Async,     "async "     },
-        { Flag::Overload,  "overload "  },
         { Flag::Mutable,   "mutable "   }
     };
 
@@ -97,7 +96,6 @@ const char* FunctionQualifiers::flag_name(Flag f) noexcept {
         case Flag::RValueRef: return "&&";
         case Flag::Virtual:   return "virtual";
         case Flag::Async:     return "async";
-        case Flag::Overload:  return "overload";
         case Flag::Mutable:   return "mutable";
         case Flag::Nodiscard: return "nodiscard";
         case Flag::None:      return "none";

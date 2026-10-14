@@ -1,4 +1,5 @@
 #include "Parser/Types/dependent_types.hpp"
+#include "Parser/nodes.hpp"
 
 namespace walnut {
 namespace parser_types {
@@ -7,7 +8,9 @@ Type* FunctionPointerType::clone_into(Arena& arena) const {
     std::vector<TypeInfo> cloned_params;
     cloned_params.reserve(m_param_types.size());
     for (const auto& p : m_param_types) { cloned_params.push_back(p.clone_into(arena)); }
-    return make_in<FunctionPointerType>(arena, std::move(cloned_params), m_return_type.clone_into(arena), m_quals);
+    std::vector<ParamExtra> extras = m_extras;
+    for (ParamExtra& e : extras) if (e.default_value) e.default_value = e.default_value->clone_into(arena);
+    return make_in<FunctionPointerType>(arena, std::move(cloned_params), m_return_type.clone_into(arena), m_quals, std::move(extras));
 }
 
 void FunctionPointerType::write_to(std::ostream& os) const {
@@ -16,6 +19,12 @@ void FunctionPointerType::write_to(std::ostream& os) const {
     for (std::size_t i = 0; i < m_param_types.size(); ++i) {
         if (i > 0) os << ", ";
         m_param_types[i].write_to(os);
+        if (i >= m_extras.size()) continue;
+        const ParamExtra& e = m_extras[i];
+        if (e.variadic == UNBOUNDED) os << "...";
+        else if (e.variadic && e.exact) os << "...<" << e.variadic << ">";
+        else if (e.variadic) os << "...[" << e.variadic << "]";
+        if (e.default_value) os << " = ...";
     }
 
     os << ") " << m_quals << " \u2192 ";
@@ -42,6 +51,27 @@ void ArrayType::write_to(std::ostream& os) const {
         
     os << "] ";
     m_element_type.write_to(os);
+}
+
+Type* ComputedType::clone_into(Arena& arena) const {
+    std::vector<TypeInfo> args;
+    args.reserve(m_args.size());
+    for (const TypeInfo& a : m_args) args.push_back(a.clone_into(arena));
+    return make_in<ComputedType>(arena, m_op, m_expr ? m_expr->clone_into(arena) : nullptr, std::move(args));
+}
+
+void ComputedType::write_to(std::ostream& os) const {
+    os << type_op_name(m_op) << "(";
+    bool first = true;
+    if (m_expr) { os << "..."; first = false; }
+
+    for (const TypeInfo& a : m_args) {
+        if (!first) os << ", ";
+        a.write_to(os);
+        first = false;
+    }
+
+    os << ")";
 }
 
 Type* VariantType::clone_into(Arena& arena) const {

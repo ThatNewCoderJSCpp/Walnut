@@ -85,6 +85,11 @@ bool Parser::looks_like_type_argument(bool include_paren) {
         return true;
     }
 
+    if (k == K::TypeofKeyword || k == K::DecltypeKeyword || k == K::DiscardConstKeyword
+        || (k == K::Identifier && token_at(i + 1).kind() == K::LeftParen && parser_types::find_type_op(token_at(i).lexeme()))) {
+        return true;
+    }
+
     if (k == K::DoubleColon || k == K::Identifier) {
         if (token_at(i).kind() == K::DoubleColon) ++i;
         if (token_at(i).kind() != K::Identifier) return false;

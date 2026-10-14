@@ -62,11 +62,29 @@ private:
 
     static Visibility decl_visibility(const ASTNode* n);
 
+    static const modifiers::RawModifiers* decl_modifiers(const ASTNode* n);
+
     static Symbol* member_symbol(nodes::ASTNode* n);
 
     static bool is_friend_decl(const nodes::ASTNode* n);
 
     void validate_record_specials(nodes::RecordDeclaration* rec);
+
+    void check_member_only_modifiers(const modifiers::RawModifiers& mods, const ASTNode* site, std::string_view kind) {
+        const bool in_record = m_current && m_current->kind == Scope::Kind::Record;
+
+        if (mods.has(modifiers::RawModifiers::Mutable) && !in_record) {
+            SemanticError::modifier_rule_violation(m_reporter, site->file_id, site->line, kind, "only class, struct and union fields can be 'mutable'");
+        }
+
+        if (mods.has(modifiers::RawModifiers::Inline) && in_record) {
+            SemanticError::modifier_rule_violation(m_reporter, site->file_id, site->line, kind, "fields cannot be 'inline'; use 'static constexpr' for a constant shared by every object");
+        }
+
+        if (mods.has(modifiers::RawModifiers::Inline) && site->kind == ASTNode::Kind::ArrayDeclaration) {
+            SemanticError::modifier_rule_violation(m_reporter, site->file_id, site->line, kind, "arrays cannot be 'inline'; pasting a whole array at every use would copy it each time");
+        }
+    }
 
     void build(ASTNode* node);
 

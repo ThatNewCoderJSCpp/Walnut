@@ -62,6 +62,7 @@ struct TemplateArgument {
     nodes::ASTNode* value = nullptr;     
     std::string_view value_repr;        
     bool is_pack = false;
+    std::int64_t align_value = 0;
 
     bool is_type()  const { return form == Form::Type; }
     bool is_value() const { return form == Form::Value; }

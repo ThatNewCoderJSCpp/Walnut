@@ -60,9 +60,11 @@ bool is_statement(const ASTNode* n) {
         case ASTNode::Kind::ImportExportDeclaration:
         case ASTNode::Kind::ModuleDeclaration:
         case ASTNode::Kind::OperatorFunctionDeclaration:
+        case ASTNode::Kind::TypeQueryOverload:
         case ASTNode::Kind::ForEachStatement:
         case ASTNode::Kind::CoReturnStatement:
         case ASTNode::Kind::StaticAssertDeclaration:
+        case ASTNode::Kind::NativeCodeBlock:
         case ASTNode::Kind::RecordDeclaration:    
         case ASTNode::Kind::ConceptDeclaration:    
             return true;

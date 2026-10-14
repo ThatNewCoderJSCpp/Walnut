@@ -82,10 +82,12 @@ struct ASTNode {
         ImportExportDeclaration,
         ModuleDeclaration,
         OperatorFunctionDeclaration,
+        TypeQueryOverload,
         ForEachStatement,
         CoReturnStatement,
         ConceptDeclaration,
         StaticAssertDeclaration,
+        NativeCodeBlock,
 
         // Auxiliary 
         IfBranch,

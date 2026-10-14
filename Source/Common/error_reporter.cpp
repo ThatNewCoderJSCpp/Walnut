@@ -10,6 +10,7 @@ void ErrorReporter::report(ErrorPhase phase, FileId file_id, std::size_t line, s
 void ErrorReporter::flush() const {
     if (m_errors.empty()) return;
     if (m_mode & ErrorOutput::StdErr) write_to_stream(std::cerr);
+    if (m_mode & ErrorOutput::StdOut) write_to_stream(std::cout);
     if (m_mode & ErrorOutput::File)   write_to_file();
 }
 

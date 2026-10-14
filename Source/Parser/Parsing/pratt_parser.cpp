@@ -114,6 +114,23 @@ bool is_constructible_callee(const nodes::ASTNode* n) {
     }
 }
 
+bool Parser::initializer_brace_ahead() {
+    using K = tokenizing::Token::Kind;
+    int depth = 0;
+
+    for (std::size_t k = 0; k < 4096; ++k) {
+        const tokenizing::Token& t = token_at(k);
+        if (t.kind() == K::End) return false;
+        if (t.kind() == K::LeftCurly) ++depth;
+        else if (t.kind() == K::RightCurly && --depth == 0) {
+            const K after = token_at(k + 1).kind();
+            return after == K::Comma || after == K::LeftCurly;
+        }
+    }
+
+    return false;
+}
+
 nodes::ASTNode* Parser::parse_call_argument() {
     const std::size_t line = current_token().line();
     nodes::ASTNode* arg = parse_expression_pratt(to_int(Precedence::None));
@@ -145,7 +162,7 @@ nodes::ASTNode* Parser::parse_expression_pratt(int min_precedence) {
         const bool template_val  = callable_lt && !template_call && !template_inst && (is_known_template(left) || template_value_ahead());
         const bool template_ambig = callable_lt && !template_call && !template_inst && !template_val && template_ambiguous_ahead();
         const bool template_angle = template_call || template_inst || template_val || template_ambig;
-        const bool brace_construct = (op == tokenizing::Token::Kind::LeftCurly) && is_constructible_callee(left);
+        const bool brace_construct = (op == tokenizing::Token::Kind::LeftCurly) && (!m_no_brace_construct || initializer_brace_ahead()) && is_constructible_callee(left);
 
         if (m_in_template_args && (
                 op == tokenizing::Token::Kind::LessThan        ||
@@ -155,6 +172,11 @@ nodes::ASTNode* Parser::parse_expression_pratt(int min_precedence) {
             )
         ) {
             if (!template_angle) break;
+        }
+
+        if ((op == tokenizing::Token::Kind::IsKeyword || op == tokenizing::Token::Kind::AsKeyword) && to_int(Precedence::Comparison) >= min_precedence) {
+            left = parse_type_test(left, op == tokenizing::Token::Kind::IsKeyword);
+            continue;
         }
 
         Precedence prec = (template_angle || brace_construct) ? Precedence::Postfix : get_infix_precedence(op);
@@ -250,6 +272,7 @@ nodes::ASTNode* Parser::parse_atom() {
         tokenizing::Token::Kind::NullptrKeyword, tokenizing::Token::Kind::InfinityKeyword,
         tokenizing::Token::Kind::ThisKeyword
     )) {
+        if (current_token().is_one_of(tokenizing::Token::Kind::Integer, tokenizing::Token::Kind::Float)) validate_numeric_literal(current_token());
         auto literal = make<nodes::Literal>(current_token().lexeme(), current_token().kind(), line);
         advance();
         return literal;
@@ -257,6 +280,35 @@ nodes::ASTNode* Parser::parse_atom() {
     
     if (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
         return parse_identifier_or_qualified();
+    }
+
+    if (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::LeftParen) {
+        if (const parser_types::TypeTraitInfo* trait = parser_types::find_type_trait(current_token().lexeme())) {
+            const tokenizing::Token at = current_token();
+            advance();
+            advance();
+            AngleGuard _g(this, false);
+            std::vector<parser_types::TemplateArgument*> operands;
+
+            do {
+                auto* arg = make<parser_types::TemplateArgument>();
+                arg->form = parser_types::TemplateArgument::Form::Type;
+                arg->type = parse_type_info();
+                operands.push_back(arg);
+            } while (match(tokenizing::Token::Kind::Comma));
+
+            expect(tokenizing::Token::Kind::RightParen, "Expected ')' to close the type trait");
+
+            if (static_cast<int>(operands.size()) != trait->arity) {
+                throw ParserError::invalid_expression(reporter, at,
+                    std::string(trait->name) + " takes " + std::to_string(trait->arity) + (trait->arity == 1 ? " type" : " types") + ", but " + std::to_string(operands.size()) + (operands.size() == 1 ? " was given" : " were given"));
+            }
+
+            auto* q = make<nodes::TypeQueryExpression>(nodes::TypeQueryExpression::Op::Trait, operands.front(), line);
+            q->trait = trait->trait;
+            for (std::size_t i = 1; i < operands.size(); ++i) q->extra_operands.push_back(operands[i]);
+            return q;
+        }
     }
 
     if (current_token().is_one_of(
@@ -491,6 +543,28 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
     return make<nodes::BinaryExpression>(left, op, right, line);
 }
 
+nodes::ASTNode* Parser::parse_type_test(nodes::ASTNode* operand, bool is_test) {
+    using K = tokenizing::Token::Kind;
+    const std::size_t line = current_token().line();
+    advance();
+    parser_types::TypeInfo target = parse_type_info();
+    const std::size_t end = tokens.position();
+
+    if (const parser_types::IndirectionQualifier* last = target.indirection.back(); last && last->is_reference() && end > 0) {
+        const K before = tokens.begin()[end - 1].kind();
+        const K next = current_token().kind();
+        const bool terminator = next == K::RightParen || next == K::Semicolon || next == K::Comma || next == K::RightSquare || next == K::RightCurly || next == K::End || next == K::QuestionMark || next == K::Colon;
+
+        if ((before == K::Ampersand || before == K::LogicAnd) && !terminator) {
+            target.indirection.pop_back();
+            tokens.seek(end - 1);
+            m_cur_tok = &tokens.current();
+        }
+    }
+
+    return make<nodes::CastExpression>(is_test ? nodes::CastExpression::CastKind::Is : nodes::CastExpression::CastKind::As, target, operand, static_cast<std::uint32_t>(line));
+}
+
 nodes::ASTNode* Parser::parse_cast_expression() {
     using K = tokenizing::Token::Kind;
     const std::size_t line = current_token().line();
@@ -682,7 +756,9 @@ nodes::ASTNode* Parser::parse_discard_expression() {
     DK dk;
 
     switch (current_token().kind()) {
-        case K::DiscardConstKeyword:     dk = DK::Const;     break;
+        case K::DiscardConstKeyword:
+            throw ParserError::invalid_expression(reporter, current_token(),
+                "discard_const works on types, like 'discard_const(typeof(x)): y = x;'; to remove const from a value, use const_cast<T>(value)");
         case K::DiscardNodiscardKeyword: dk = DK::Nodiscard; break;
         default:
             throw ParserError::unexpected_token(

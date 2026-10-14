@@ -82,11 +82,12 @@ void ImportResolver::import_item(const nodes::ImportExportItem& it, Scope* root,
         }
         case IK::File: {  
             Scope* parent = namespace_path_parent(root, it.alias_parts, origin);
-            if (parent && !it.alias_parts.empty()) declare_import(parent, it.alias_parts.back(), SymbolKind::Import, origin, it.source);
+            if (parent && !it.alias_parts.empty()) declare_import(parent, it.alias_parts.back(), SymbolKind::Namespace, origin, it.source);
             break;
         }
         case IK::Module: {
-            declare_import(root, it.target_parts.empty() ? std::string_view{} : it.target_parts.back(), SymbolKind::Module, origin, it.source);
+            const auto& parts = it.has_alias ? it.alias_parts : it.target_parts;
+            declare_import(root, parts.empty() ? std::string_view{} : parts.back(), SymbolKind::Module, origin, it.source);
             break;
         }
         case IK::Function:  // parser rejects import-function
@@ -95,8 +96,9 @@ void ImportResolver::import_item(const nodes::ImportExportItem& it, Scope* root,
     }
 }
 
-void ImportResolver::export_item(const nodes::ImportExportItem& it, std::string_view module_owner) {
+void ImportResolver::export_item(const nodes::ImportExportItem& it, std::string_view module_owner, const ASTNode* at) {
     ExportEntry e;
+    if (at) { e.file = at->file_id; e.line = at->line; }
     e.kind          = it.kind;
     e.source        = it.source;
     e.has_source    = it.has_source;
@@ -121,7 +123,7 @@ void ImportResolver::process_import_export(nodes::ImportExportDeclaration* decl,
         
     for (const auto& it : decl->get_items()) {
         if (is_import) import_item(it, root, decl);
-        else           export_item(it, module_owner);
+        else           export_item(it, module_owner, decl);
     }
 }
 

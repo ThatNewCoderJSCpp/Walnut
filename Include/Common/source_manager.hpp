@@ -42,12 +42,17 @@ class SourceManager {
     std::vector<Entry> m_files; // index == FileId
     std::unordered_map<std::string, FileId> m_by_path;
     std::unordered_map<std::string, FileId> m_by_raw;
+    std::unordered_map<std::string, std::string> m_virtual;
 
 public:
+    static constexpr const char* LIBRARY_ROOT = "<walnut>";
+
     explicit SourceManager(Arena& arena) noexcept : m_arena(arena) {}
     tokenizing::TokenStream lex(FileId id, ErrorReporter& reporter);
 
     std::optional<FileId> load(const std::string& raw_path);
+    void add_virtual(const std::string& path, std::string content) { m_virtual[path] = std::move(content); }
+    bool has_virtual(const std::string& path) const { return m_virtual.count(path) != 0; }
 
     const char* data(FileId id) const noexcept { return m_files[id].data; }
     std::size_t size(FileId id) const noexcept { return m_files[id].size; }
@@ -64,6 +69,14 @@ public:
     const std::string& relative_path(FileId id) const;
 
     const std::string& filename(FileId id) const noexcept { return m_files[id].filename; }
+
+    std::optional<FileId> file_containing(const char* p) const noexcept {
+        for (std::size_t i = 0; i < m_files.size(); ++i) {
+            const Entry& e = m_files[i];
+            if (p >= e.data && p <= e.data + e.size) return static_cast<FileId>(i);
+        }
+        return std::nullopt;
+    }
     const std::string& path(FileId id)     const noexcept { return m_files[id].absolute; }
 };
 

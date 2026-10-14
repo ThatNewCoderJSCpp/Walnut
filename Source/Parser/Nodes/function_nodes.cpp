@@ -25,7 +25,7 @@ void FunctionParameter::print(std::ostream& os, std::size_t indent) const {
 
     if (is_variadic()) {
         os << "...";
-        if (!is_infinite_variadic()) { os << "[" << m_variadic_length << "]"; }
+        if (!is_infinite_variadic()) { os << (m_variadic_exact ? "<" : "[") << m_variadic_length << (m_variadic_exact ? ">" : "]"); }
     }
 
     os << "\n";
@@ -39,6 +39,7 @@ void FunctionParameter::print(std::ostream& os, std::size_t indent) const {
 
 ASTNode* FunctionParameter::clone_into(Arena& a) const {
     auto* c = make_in<FunctionParameter>(a, m_name, m_type.clone_into(a), clone_child(m_initializer, a), m_is_init_in_decl, m_variadic_length);
+    c->m_variadic_exact = m_variadic_exact;
     copy_base_to(c);
     return c;
 }
@@ -219,6 +220,7 @@ ASTNode* FunctionDeclaration::clone_into(Arena& a) const {
 
     c->m_is_specialization = m_is_specialization;
     c->m_spec_args         = clone_targs(m_spec_args, a);
+    c->m_lowered_operator  = m_lowered_operator;
     copy_base_to(c);
     return c;
 }
@@ -384,6 +386,39 @@ void OperatorFunctionDeclaration::print(std::ostream& os, std::size_t indent) co
     else        { print_indent(os, indent + 2); os << "<none>\n"; }
 }
 
+void TypeQueryOverload::print(std::ostream& os, std::size_t indent) const {
+    print_indent(os, indent);
+    os << "TypeQueryOverload\n";
+    print_indent(os, indent + 1);
+    os << "Overloads: " << name << "\n";
+
+    for (const parser_types::TypeInfo& p : m_params) {
+        print_indent(os, indent + 1);
+        os << "Parameter: " << p << "\n";
+    }
+
+    print_indent(os, indent + 1);
+    os << "Returns: " << m_return_type << "\n";
+
+    if (m_value) {
+        print_indent(os, indent + 1);
+        os << "Value:\n";
+        print_node(m_value, os, indent + 2);
+    }
+}
+
+ASTNode* TypeQueryOverload::clone_into(Arena& a) const {
+    auto* c = make_in<TypeQueryOverload>(a, name, line);
+    c->is_trait = is_trait;
+    c->op = op;
+    c->trait = trait;
+    for (const parser_types::TypeInfo& p : m_params) c->m_params.push_back(p.clone_into(a));
+    c->m_return_type = m_return_type.clone_into(a);
+    c->m_value = clone_child(m_value, a);
+    copy_base_to(c);
+    return c;
+}
+
 ASTNode* OperatorFunctionDeclaration::clone_into(Arena& a) const {
     OperatorFunctionDeclaration* c;
 
@@ -412,6 +447,7 @@ ASTNode* OperatorFunctionDeclaration::clone_into(Arena& a) const {
 
     copy_base_to(c);
     c->overload = overload;
+    c->m_deleted = m_deleted;
     return c;
 }
 

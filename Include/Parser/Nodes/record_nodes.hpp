@@ -119,6 +119,7 @@ struct RecordDeclaration : ASTNode {
     Form                                         m_form;
     std::vector<std::string_view>                m_name_parts;
     parser_types::TypeInfo                       m_inherits;
+    std::vector<parser_types::TypeInfo>          m_extra_bases;
     bool                                         m_is_declaration;
     bool                                         m_is_specialization = false;                
     std::vector<parser_types::TemplateArgument*> m_spec_args; 
@@ -127,6 +128,17 @@ struct RecordDeclaration : ASTNode {
     modifiers::RawModifiers                      m_mods;
     semantics::Symbol* symbol = nullptr; 
     semantics::Scope* scope = nullptr;
+
+    struct EqualityStep {
+        ASTNode*           field  = nullptr;
+        semantics::Symbol* op     = nullptr;
+        semantics::Type*   nested = nullptr;
+        semantics::Type*   base   = nullptr;
+    };
+
+    std::uint8_t              equality_state = 0;
+    std::vector<EqualityStep> equality_steps;
+    std::string               equality_failure;
 
     RecordDeclaration(Form form, std::vector<std::string_view> name_parts, const modifiers::RawModifiers& mods, const parser_types::TypeInfo& inherits, bool is_declaration, std::uint32_t ln)
 ;
@@ -144,6 +156,13 @@ struct RecordDeclaration : ASTNode {
 
     bool has_inherits() const { return m_inherits.has_type(); }
     const parser_types::TypeInfo& get_inherits() const { return m_inherits; }
+
+    std::vector<parser_types::TypeInfo*> all_bases() {
+        std::vector<parser_types::TypeInfo*> out;
+        if (m_inherits.has_type()) out.push_back(&m_inherits);
+        for (parser_types::TypeInfo& b : m_extra_bases) out.push_back(&b);
+        return out;
+    }
     bool is_forward() const { return m_is_declaration; }
     
     const char* form_keyword() const;

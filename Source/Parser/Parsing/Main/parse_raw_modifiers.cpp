@@ -1,4 +1,7 @@
 #include "Parser/Parsing/Main/parse_raw_modifiers.hpp"
+#include "Common/file_kind.hpp"
+#include <algorithm>
+#include <vector>
 
 namespace walnut {
 namespace parsing {
@@ -85,6 +88,56 @@ modifiers::RawModifiers Parser::parse_raw_modifiers() {
                 raw.add(modifiers::RawModifiers::Extern);
                 raw.add_token(kind);
                 advance();
+
+                if (current_token().kind() == tokenizing::Token::Kind::String) {
+                    validate_string_literal(current_token());
+                    std::string_view lang = current_token().lexeme();
+                    if (lang.size() >= 2 && lang.front() == '"' && lang.back() == '"') lang = lang.substr(1, lang.size() - 2);
+
+                    if (lang == "C") raw.set_linkage(modifiers::RawModifiers::Linkage::C);
+                    else if (lang == "C++") raw.set_linkage(modifiers::RawModifiers::Linkage::Cpp);
+                    else throw ParserError::invalid_literal(reporter, current_token(), "extern only understands \"C\" and \"C++\"");
+
+                    advance();
+                }
+
+                if (current_token().kind() == tokenizing::Token::Kind::FromKeyword) {
+                    if (raw.linkage() == modifiers::RawModifiers::Linkage::Walnut) {
+                        throw ParserError::invalid_declaration(reporter, current_token(), "'from' names the C or C++ file that defines these functions, so it needs a language first, as in 'extern \"C\" from \"file.c\"'");
+                    }
+
+                    advance();
+                    std::vector<std::string_view> files;
+
+                    for (;;) {
+                        if (current_token().kind() != tokenizing::Token::Kind::String) {
+                            throw ParserError::invalid_declaration(reporter, current_token(), "Expected a file name in quotes after 'from', as in 'extern \"C\" from \"file.c\"'");
+                        }
+
+                        validate_string_literal(current_token());
+                        std::string_view file = current_token().lexeme();
+                        if (file.size() >= 2 && file.front() == '"' && file.back() == '"') file = file.substr(1, file.size() - 2);
+                        const FileKind fk = classify_file(file);
+
+                        if (is_walnut_file(fk)) {
+                            throw ParserError::invalid_declaration(reporter, current_token(), "'" + std::string(file) + "' is a Walnut file; use import or #include for Walnut code, and extern \"C\" or extern \"C++\" only for C and C++ files");
+                        }
+
+                        if (!is_native_header(fk) && !is_native_code(fk)) {
+                            throw ParserError::invalid_declaration(reporter, current_token(), "'" + std::string(file) + "' isn't a C or C++ file; 'from' takes C and C++ headers (.h, .hpp, .hh, .hxx), source files (.c, .cpp, .cc, .cxx), object files (.o, .obj) and libraries (.a, .so, .dylib, .lib, .dll)");
+                        }
+
+                        if (std::find(files.begin(), files.end(), file) == files.end()) files.push_back(file);
+                        advance();
+                        if (current_token().kind() != tokenizing::Token::Kind::Comma) break;
+                        advance();
+                    }
+
+                    if (files.size() > 255) throw ParserError::invalid_declaration(reporter, current_token(), "An extern can name at most 255 files");
+                    std::string_view* stored = arena.alloc_array_uninit<std::string_view>(files.size());
+                    for (std::size_t i = 0; i < files.size(); ++i) ::new (static_cast<void*>(stored + i)) std::string_view(files[i]);
+                    raw.set_native_files(stored, static_cast<std::uint8_t>(files.size()));
+                }
                 break;
                 
             case tokenizing::Token::Kind::VolatileKeyword:
@@ -108,12 +161,6 @@ modifiers::RawModifiers Parser::parse_raw_modifiers() {
                 advance();
                 break;
 
-            case tokenizing::Token::Kind::ImmutableKeyword:
-                if (raw.has(modifiers::RawModifiers::Immutable)) throw ParserError::duplicate_type_modifiers(reporter, current_token());
-                raw.add(modifiers::RawModifiers::Immutable);
-                raw.add_token(kind);
-                advance();
-                break;
                 
             default:
                 return raw;

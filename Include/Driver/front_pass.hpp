@@ -49,6 +49,11 @@ private:
 
 private:
     void process(const ParsedUnit& unit);
+
+    static void hoist_module_functions(nodes::BlockStatement* ast);
+    void attach_member_definitions(nodes::BlockStatement* ast);
+    void lower_template_operators(std::vector<nodes::ASTNode*>& stmts);
+    void lower_template_operator(nodes::ASTNode* s);
 };
 
 } // namespace driver

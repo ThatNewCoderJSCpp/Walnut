@@ -1,4 +1,7 @@
 #include "Preprocessor/preprocessor.hpp"
+#include "Lexer/numeric_literal.hpp"
+#include "Common/file_kind.hpp"
+#include "Preprocessor/native_headers.hpp"
 
 namespace walnut {
 namespace preprocessing {
@@ -33,6 +36,7 @@ void Preprocessor::run_file(FileId file, unsigned int depth) {
     }
 
     if (m_pragma_once.count(file)) return;
+    if (classify_file(m_sm.absolute_path(file)) == FileKind::WalnutHeader) m_pragma_once.insert(file);
     const FileId prev_file = m_cur_file;
     m_cur_file = file;
     m_sm.lex(file, m_reporter);
@@ -51,6 +55,7 @@ void Preprocessor::run_file(FileId file, unsigned int depth) {
         }
 
         if (!emitting()) { r.adv(); continue; }
+        if (t.is(Kind::ExternKeyword) && import_native_headers(r, file, depth)) continue;
         if (!is_expandable(t)) { emit(t); r.adv(); continue; }
         PPVec seed;
         seed.push_back(ppt(t));
@@ -65,6 +70,77 @@ void Preprocessor::run_file(FileId file, unsigned int depth) {
     }
 
     m_cur_file = prev_file;
+}
+
+bool Preprocessor::import_native_headers(Reader& r, FileId file, unsigned int depth) {
+    namespace fs = std::filesystem;
+    const Token& lang = r.peek(1);
+    if (!lang.is(Kind::String) || (lang.lexeme() != "C" && lang.lexeme() != "C++")) return false;
+    if (!r.peek(2).is(Kind::FromKeyword)) return false;
+    std::vector<std::string> names;
+    std::size_t k = 3;
+
+    for (;;) {
+        if (!r.peek(k).is(Kind::String)) return false;
+        names.emplace_back(r.peek(k).lexeme());
+        if (r.peek(k + 1).is(Kind::Comma)) { k += 2; continue; }
+        if (r.peek(k + 1).is(Kind::Semicolon)) break;
+        return false;
+    }
+
+    const std::uint32_t line = r.cur().line();
+    const bool cpp = lang.lexeme() == "C++";
+    for (std::size_t i = 0; i <= k + 1; ++i) r.adv();
+    const fs::path base = fs::path(m_sm.absolute_path(file)).parent_path();
+    std::vector<std::string> headers;
+    std::vector<std::string> others;
+
+    for (const std::string& n : names) {
+        const FileKind kind = classify_file(n);
+
+        if (is_walnut_file(kind)) {
+            m_reporter.report(ErrorPhase::Preprocessor, line, "'" + n + "' is a Walnut file; use import or #include for Walnut code, and extern \"C\" or extern \"C++\" only for C and C++ files");
+            return true;
+        }
+
+        if (!is_native_header(kind) && !is_native_code(kind)) {
+            m_reporter.report(ErrorPhase::Preprocessor, line, "'" + n + "' isn't a C or C++ file; 'from' takes C and C++ headers (.h, .hpp, .hh, .hxx), source files (.c, .cpp, .cc, .cxx), object files (.o, .obj) and libraries (.a, .so, .dylib, .lib, .dll)");
+            return true;
+        }
+
+        std::error_code ec;
+        const fs::path full = (base / n).lexically_normal();
+
+        if (!fs::is_regular_file(full, ec)) {
+            m_reporter.report(ErrorPhase::Preprocessor, line, "cannot find '" + n + "', named in 'from'; the path is relative to the folder of the file that names it (" + base.generic_string() + ")");
+            return true;
+        }
+
+        (is_native_header(kind) ? headers : others).push_back(full.generic_string());
+    }
+
+    if (headers.empty()) {
+        m_reporter.report(ErrorPhase::Preprocessor, line, "'extern \"" + std::string(lang.lexeme()) + "\" from ...;' reads the declarations in C or C++ headers, but none of the files named is a header; name a .h or .hpp file, or list the functions in an extern block");
+        return true;
+    }
+
+    std::vector<std::string> args;
+    if (m_native_args) args = m_native_args(cpp);
+    for (const std::string& dir : m_include_dirs) args.push_back("-I" + dir);
+    native::HeaderScan scan = native::read_headers(headers, others, cpp, args);
+    for (const std::string& e : scan.errors) m_reporter.report(ErrorPhase::Preprocessor, line, e);
+    if (!scan.errors.empty()) return true;
+    for (const auto& [name, why] : scan.skipped) native::note_skipped(name, "'" + name + "' is declared in " + fs::path(headers.front()).filename().string() + ", but Walnut can't use it: " + why);
+
+    if (scan.functions == 0) {
+        m_warnings.report(ErrorPhase::Preprocessor, line, "found no functions that Walnut can use in " + fs::path(headers.front()).filename().string());
+        return true;
+    }
+
+    const std::string virtual_path = fs::path(headers.front() + ".walh").lexically_normal().generic_string();
+    m_sm.add_virtual(virtual_path, scan.walnut_text);
+    if (std::optional<FileId> id = m_sm.load(virtual_path)) run_file(*id, depth + 1);
+    return true;
 }
 
 void Preprocessor::handle_directive(Reader& r, FileId file, unsigned int depth) {
@@ -155,6 +231,11 @@ void Preprocessor::do_include(TokenVec& body, FileId from, std::uint32_t line, u
         path = join_until(body, 1, Kind::GreaterThan);
     } else {
         m_reporter.report(ErrorPhase::Preprocessor, line, "#include expects \"file\" or <file>");
+        return;
+    }
+
+    if (!is_walnut_file(classify_file(path))) {
+        m_reporter.report(ErrorPhase::Preprocessor, line, not_walnut_reason(path, "#include"));
         return;
     }
 
@@ -637,17 +718,20 @@ PPToken Preprocessor::glue(const PPToken& l, const PPToken& r, std::uint32_t lin
 }
 
 PPToken Preprocessor::stringize(const PPVec& toks, std::uint32_t line) {
-    std::string s = "\"";
+    std::string s;
     bool first = true;
 
     for (const PPToken& pt : toks) {
         if (pt.placemarker) continue;
         if (!first) s += ' ';
         first = false;
-        for (char c : pt.tok.lexeme()) { if (c == '"' || c == '\\') s += '\\'; s += c; }
+        std::string spelled(pt.tok.lexeme());
+        if (pt.tok.is(Kind::String))           spelled = "\"" + spelled + "\"";
+        else if (pt.tok.is(Kind::Character))   spelled = "'" + spelled + "'";
+        else if (pt.tok.is(Kind::TextLiteral)) spelled = "`" + spelled + "`";
+        for (char c : spelled) { if (c == '"' || c == '\\') s += '\\'; s += c; }
     }
 
-    s += '"';
     PPToken p;
     p.tok = make_token(Kind::String, s, line);
     return p;
@@ -739,33 +823,15 @@ std::string Preprocessor::spell(const TokenVec& toks) {
 }
 
 long long Preprocessor::parse_int(std::string_view sv) {
-    std::string s(sv);
+    const tokenizing::NumericLiteral n = tokenizing::parse_numeric_literal(sv);
+    if (!n.error.empty() || n.digits.empty() || n.is_float) return 0;
 
-    while (!s.empty()) {
-        char c = s.back();
-        if (c == 'u' || c == 'U' || c == 'l' || c == 'L') s.pop_back();
-        else break;
+    try {
+        return static_cast<long long>(std::stoull(n.digits, nullptr, n.base));
+    } catch (...) {
+        m_reporter.report(ErrorPhase::Preprocessor, 0, "integer in #if is too large: " + std::string(sv));
+        return 0;
     }
-
-    if (s.empty()) return 0;
-    int base = 10; std::size_t off = 0;
-    if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { base = 16; off = 2; }
-    else if (s.size() > 2 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) { base = 2; off = 2; }
-    else if (s.size() > 1 && s[0] == '0') { base = 8; off = 1; }
-    long long v = 0;
-
-    for (std::size_t i = off; i < s.size(); ++i) {
-        char c = s[i];
-        int d;
-        if (c >= '0' && c <= '9') d = c - '0';
-        else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
-        else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
-        else break;
-        if (d >= base) break;
-        v = v * base + d;
-    }
-
-    return v;
 }
 
 std::vector<Token> Preprocessor::lex_fragment(const std::string& text) {

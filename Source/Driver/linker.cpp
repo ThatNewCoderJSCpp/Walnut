@@ -6,6 +6,7 @@ namespace driver {
 void Linker::run(const std::unordered_map<FileId, UnitFrontResult>& results, const std::unordered_map<FileId, std::unordered_map<std::string, FileId>>& file_edges) {
     m_results    = &results;
     m_file_edges = &file_edges;
+    check_export_visibility();
     std::vector<Pending> pending = collect();
     bool progress = true;
 
@@ -25,6 +26,42 @@ void Linker::run(const std::unordered_map<FileId, UnitFrontResult>& results, con
         const std::vector<std::string_view>& parts = local_parts(*p.item);
         std::string name(parts.empty() ? std::string_view{} : parts.back());
         report(p, "unresolved import '" + name + "' from \"" + std::string(p.item->source) + "\" (cyclic or unresolvable re-export)");
+    }
+}
+
+void Linker::check_export_visibility() {
+    for (const auto& kv : *m_results) {
+        const UnitFrontResult& u = kv.second;
+        if (!u.root) continue;
+
+        for (const semantics::ExportEntry& e : u.exports) {
+            if (e.kind == IK::This || e.kind == IK::File || e.kind == IK::Module) continue;
+            const std::vector<std::string_view> origin = export_origin_parts(e);
+            if (origin.empty()) continue;
+            semantics::Scope* cur = u.root;
+            std::string path;
+
+            for (std::size_t i = 0; i < origin.size() && cur; ++i) {
+                semantics::Symbol* s = cur->find_local(origin[i]);
+                if (!s || s->is_imported) break;
+                if (!path.empty()) path += "::";
+                path += std::string(origin[i]);
+                bool all_private = s->visibility != semantics::Visibility::Global;
+
+                if (s->kind == semantics::SymbolKind::Function && i + 1 == origin.size()) {
+                    for (const semantics::Symbol* o = s; o; o = o->next_overload) if (o->visibility == semantics::Visibility::Global) all_private = false;
+                }
+
+                if (all_private) {
+                    const char* what = s->visibility == semantics::Visibility::Local ? "local" : "hidden";
+                    semantics::SemanticError::emit(m_reporter, e.file != INVALID_FILE ? e.file : u.file, e.line,
+                        "Export", "cannot export '" + path + "' because it is " + what + "; only global declarations can be exported");
+                    break;
+                }
+
+                cur = s->inner_scope;
+            }
+        }
     }
 }
 
@@ -166,7 +203,7 @@ bool Linker::try_bind(const Pending& p) {
     }
 
     if (target == INVALID_FILE) {
-        semantics::SemanticError::unresolved_import_source(m_reporter, p.importer, item_line(p), it.source);
+        if (!it.from_module_path) semantics::SemanticError::unresolved_import_source(m_reporter, p.importer, item_line(p), it.source);
         return true;
     }
 
@@ -180,6 +217,7 @@ bool Linker::try_bind(const Pending& p) {
     semantics::Symbol* ph = semantics::resolve_qualified(imp->root, local_parts(it));
     if (!ph || !ph->is_imported) return true;
     if (it.kind == IK::File) return bind_file(p, ph, *tgt);
+    if (it.kind == IK::Module) return bind_module(p, it, ph, *tgt);
     return bind_named(p, it, ph, *tgt);
 }
 
@@ -231,21 +269,74 @@ bool Linker::bind_named(const Pending& p, const nodes::ImportExportItem& it, sem
     return true;
 }
 
+bool Linker::bind_module(const Pending& p, const nodes::ImportExportItem& it, semantics::Symbol* ph, const UnitFrontResult& tgt) {
+    if (m_bound_files.count(ph)) return true;
+    const std::string_view module = it.target_parts.empty() ? std::string_view{} : it.target_parts.back();
+    const std::string label = unit_label(tgt.file);
+    bool found = false;
+
+    for (const semantics::ExportEntry& e : tgt.exports) {
+        if (e.module_owner != module) continue;
+        found = true;
+        bool defer = false;
+        resolve_export(tgt, e, defer);
+        if (defer) return false;
+    }
+
+    if (!found) {
+        semantics::SemanticError::missing_module(m_reporter, p.importer, item_line(p), module, it.source, label);
+        m_bound_files.insert(ph);
+        return true;
+    }
+
+    semantics::Scope* ns = ph->inner_scope ? ph->inner_scope : make_in<semantics::Scope>(m_arena, semantics::Scope::Kind::Module, ph->owner);
+
+    for (const semantics::ExportEntry& e : tgt.exports) {
+        if (e.module_owner != module) continue;
+        bool defer = false;
+        semantics::Symbol* r = resolve_export(tgt, e, defer);
+        std::vector<std::string_view> name = export_public_parts(e);
+
+        if (!r) {
+            semantics::SemanticError::export_undefined(m_reporter, p.importer, item_line(p), name.empty() ? std::string_view{} : name.back(), label);
+            continue;
+        }
+
+        if (name.empty()) continue;
+        semantics::Symbol* alias = make_in<semantics::Symbol>(m_arena, name.back(), r->kind, r->decl);
+        alias->is_imported   = true;
+        alias->import_target = r;
+        alias->type          = r->type;
+        alias->inner_scope   = r->inner_scope;
+
+        if (semantics::Symbol* clash = ns->declare(alias)) {
+            semantics::SemanticError::duplicate_export(m_reporter, p.importer, item_line(p), name.back(), label, clash->decl ? clash->decl->line : 0);
+        }
+    }
+
+    ph->inner_scope = ns;
+    m_bound_files.insert(ph);
+    return true;
+}
+
 bool Linker::bind_file(const Pending& p, semantics::Symbol* ph, const UnitFrontResult& tgt) {
-    if (ph->inner_scope) return true;
+    if (m_bound_files.count(ph)) return true;
+
+    bool export_all = false;
 
     for (const semantics::ExportEntry& e : tgt.exports) {
         if (!e.module_owner.empty()) continue;
+        if (e.kind == IK::This) { export_all = true; continue; }
         bool defer = false;
         resolve_export(tgt, e, defer);
         if (defer) return false;
     }
 
     const std::string label = unit_label(tgt.file);
-    semantics::Scope* ns = make_in<semantics::Scope>(m_arena, semantics::Scope::Kind::Namespace, ph->owner);
+    semantics::Scope* ns = ph->inner_scope ? ph->inner_scope : make_in<semantics::Scope>(m_arena, semantics::Scope::Kind::Namespace, ph->owner);
 
     for (const semantics::ExportEntry& e : tgt.exports) {
-        if (!e.module_owner.empty()) continue;
+        if (!e.module_owner.empty() || e.kind == IK::This) continue;
         bool defer = false;
         semantics::Symbol* r = resolve_export(tgt, e, defer);
         std::vector<std::string_view> name = export_public_parts(e);
@@ -273,7 +364,23 @@ bool Linker::bind_file(const Pending& p, semantics::Symbol* ph, const UnitFrontR
         }
     }
 
+    if (export_all && tgt.root) {
+        for (semantics::Symbol* s : tgt.root->symbols) {
+            if (!s || s->is_imported || ns->find_local(s->name)) continue;
+            bool global = s->visibility == semantics::Visibility::Global;
+            for (const semantics::Symbol* o = s->next_overload; o && !global; o = o->next_overload) global = o->visibility == semantics::Visibility::Global;
+            if (!global) continue;
+            semantics::Symbol* alias = make_in<semantics::Symbol>(m_arena, s->name, s->kind, s->decl);
+            alias->is_imported   = true;
+            alias->import_target = s;
+            alias->type          = s->type;
+            alias->inner_scope   = s->inner_scope;
+            ns->declare(alias);
+        }
+    }
+
     ph->inner_scope = ns;
+    m_bound_files.insert(ph);
     return true;
 }
 

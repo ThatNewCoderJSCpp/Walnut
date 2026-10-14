@@ -17,6 +17,15 @@ nodes::ASTNode* Parser::parse_static_assert() {
     std::string_view message = current_token().lexeme();
     advance();
     expect(tokenizing::Token::Kind::RightParen, "Expected closing ')' to end static_assert");
+
+    if (!concrete_match(tokenizing::Token::Kind::Semicolon) && !concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
+        throw ParserError::missing_token(
+            reporter, current_token(), tokenizing::Token::Kind::Semicolon,
+            "static_assert must end with a semicolon"
+        );
+    }
+
+    consume_semicolons();
     return make<nodes::StaticAssertDeclaration>(message, cond, line_number);
 }
 

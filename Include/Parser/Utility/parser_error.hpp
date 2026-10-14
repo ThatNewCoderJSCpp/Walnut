@@ -45,6 +45,8 @@ public:
 
     static ParserError invalid_expression(ErrorReporter& reporter, const tokenizing::Token& token, const std::string& message);
 
+    static ParserError invalid_declaration(ErrorReporter& reporter, const tokenizing::Token& token, const std::string& message);
+
     static ParserError missing_token(ErrorReporter& reporter, const tokenizing::Token& token, tokenizing::Token::Kind expected, const std::string& context);
 
     static ParserError invalid_operator(ErrorReporter& reporter, const tokenizing::Token& token, const std::string& op_type);

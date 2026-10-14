@@ -56,6 +56,82 @@ Token Lexer::string_literal() noexcept {
 }
 
 Token Lexer::next() noexcept {
+    Token t = scan();
+    m_prev2 = m_prev1;
+    m_prev1 = t.kind();
+    m_prev1_text = t.lexeme();
+    return t;
+}
+
+Token Lexer::raw_code(const char* word_start) noexcept {
+    const char* p = m_beg;
+    std::uint32_t line = m_line_number;
+    while (is_space(*p)) { if (*p == '\n') ++line; ++p; }
+    if (*p != '{') return Token(Token::Kind::Identifier, word_start, m_beg, m_line_number);
+    const std::uint32_t start_line = line;
+    ++p;
+    const char* content = p;
+    int depth = 1;
+
+    while (*p) {
+        const char c = *p;
+
+        if (c == '\n') { ++line; ++p; continue; }
+
+        if (c == '/' && p[1] == '/') {
+            while (*p && *p != '\n') ++p;
+            continue;
+        }
+
+        if (c == '/' && p[1] == '*') {
+            p += 2;
+            while (*p && !(p[0] == '*' && p[1] == '/')) { if (*p == '\n') ++line; ++p; }
+            if (*p) p += 2;
+            continue;
+        }
+
+        if (c == '"' && p > content && p[-1] == 'R' && (p - 1 == content || !is_identifier_char(p[-2]) || p[-2] == '8' || p[-2] == 'u' || p[-2] == 'U' || p[-2] == 'L')) {
+            const char* d = p + 1;
+            while (*d && *d != '(' && *d != '\n') ++d;
+            if (*d != '(') { ++p; continue; }
+            const std::string_view delim(p + 1, static_cast<std::size_t>(d - (p + 1)));
+            p = d + 1;
+
+            while (*p) {
+                if (*p == ')' && std::string_view(p + 1).substr(0, delim.size()) == delim && p[1 + delim.size()] == '"') { p += delim.size() + 2; break; }
+                if (*p == '\n') ++line;
+                ++p;
+            }
+            continue;
+        }
+
+        if (c == '"' || (c == '\'' && !(p > content && is_identifier_char(p[-1])))) {
+            ++p;
+            while (*p && *p != c && *p != '\n') { if (*p == '\\' && p[1]) ++p; ++p; }
+            if (*p == c) ++p;
+            continue;
+        }
+
+        if (c == '{') ++depth;
+
+        if (c == '}' && --depth == 0) {
+            const Token t(Token::Kind::RawCode, content, p, start_line);
+            m_beg = p + 1;
+            m_line_number = line;
+            return t;
+        }
+
+        ++p;
+    }
+
+    m_beg = p;
+    m_line_number = start_line;
+    report_error("This C or C++ code block never ends; it needs a '}' that matches its '{'");
+    m_line_number = line;
+    return Token(Token::Kind::Unexpected, word_start, 1, start_line);
+}
+
+Token Lexer::scan() noexcept {
     while (is_space(peek())) { get<true>(); }
 
     switch (peek()) {
@@ -111,20 +187,6 @@ Token Lexer::next() noexcept {
             } else if (peek() == '>') {
                 get<false>();
                 return Token(Token::Kind::DoubleRightArrow, m_beg - 2, 2, m_line_number);
-            } else if (peek() == '+') {
-                get<false>();
-                if (peek() == '+') {
-                    get<false>();
-                    return Token(Token::Kind::DoublePlusEqual, m_beg - 3, 3, m_line_number);
-                }
-                return Token(Token::Kind::PlusEqual, m_beg - 2, 2, m_line_number);
-            } else if (peek() == '-') {
-                get<false>();
-                if (peek() == '-') {
-                    get<false>();
-                    return Token(Token::Kind::DoubleMinusEqual, m_beg - 3, 3, m_line_number);
-                }
-                return Token(Token::Kind::MinusEqual, m_beg - 2, 2, m_line_number);
             } else {
                 return Token(Token::Kind::Equal, m_beg - 1, 1, m_line_number);
             }
@@ -292,6 +354,11 @@ Token Lexer::identifier() noexcept {
     get<false>();
     while (is_identifier_char(peek())) { get<false>(); }
     std::string_view lexeme(start, m_beg - start);
+
+    if (lexeme == "code" && m_prev2 == Token::Kind::ExternKeyword && m_prev1 == Token::Kind::String && (m_prev1_text == "C" || m_prev1_text == "C++")) {
+        return raw_code(start);
+    }
+
     Token::Kind kind = get_keyword(lexeme);
     if (kind != Token::Kind::Unexpected) { return Token(kind, start, m_beg, m_line_number); }
     return Token(Token::Kind::Identifier, start, m_beg, m_line_number); 
@@ -299,39 +366,52 @@ Token Lexer::identifier() noexcept {
 
 Token Lexer::number() noexcept {
     const char* start = m_beg;
-
-    if (m_beg[0] == '0' && (m_beg[1] == 'x' || m_beg[1] == 'X')) {
-        const char h = m_beg[2];
-        if ((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f') || (h >= 'A' && h <= 'F')) {
-            get<false>(); get<false>();
-            while ((peek() >= '0' && peek() <= '9') || (peek() >= 'a' && peek() <= 'f') || (peek() >= 'A' && peek() <= 'F')) { get<false>(); }
-            return Token(Token::Kind::Integer, start, m_beg, m_line_number);
+    auto in_base = [](char c, int base) {
+        if (base == 2)  return c == '0' || c == '1';
+        if (base == 16) return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        return c >= '0' && c <= '9';
+    };
+    auto digits = [&](int base) {
+        while (true) {
+            const char c = peek();
+            if (in_base(c, base)) { get<false>(); continue; }
+            if ((c == '_' || c == '\'') && m_beg > start && in_base(m_beg[-1], base) && in_base(m_beg[1], base)) { get<false>(); continue; }
+            break;
         }
-    }
+    };
+    auto suffix = [&]() { while (is_identifier_char(peek())) { get<false>(); } };
 
-    if (m_beg[0] == '0' && (m_beg[1] == 'b' || m_beg[1] == 'B') && (m_beg[2] == '0' || m_beg[2] == '1')) {
+    if (m_beg[0] == '0' && (m_beg[1] == 'x' || m_beg[1] == 'X') && in_base(m_beg[2], 16)) {
         get<false>(); get<false>();
-        while (peek() == '0' || peek() == '1') { get<false>(); }
+        digits(16);
+        suffix();
         return Token(Token::Kind::Integer, start, m_beg, m_line_number);
     }
 
-    get<false>(); 
-    bool is_float = false; 
-    while (is_digit(peek())) { get<false>(); } 
+    if (m_beg[0] == '0' && (m_beg[1] == 'b' || m_beg[1] == 'B') && in_base(m_beg[2], 2)) {
+        get<false>(); get<false>();
+        digits(2);
+        suffix();
+        return Token(Token::Kind::Integer, start, m_beg, m_line_number);
+    }
+
+    bool is_float = false;
+    digits(10);
 
     if (peek() == '.') {
-        is_float = true; 
-        get<false>(); 
-        while (is_digit(peek())) { get<false>(); }
+        is_float = true;
+        get<false>();
+        digits(10);
     }
 
     if ((peek() == 'e' || peek() == 'E') && (is_digit(m_beg[1]) || ((m_beg[1] == '+' || m_beg[1] == '-') && is_digit(m_beg[2])))) {
         is_float = true;
         get<false>();
         if (peek() == '+' || peek() == '-') get<false>();
-        while (is_digit(peek())) { get<false>(); }
+        digits(10);
     }
 
+    suffix();
     if (is_float) { return Token(Token::Kind::Float, start, m_beg, m_line_number); }
     return Token(Token::Kind::Integer, start, m_beg, m_line_number);
 }

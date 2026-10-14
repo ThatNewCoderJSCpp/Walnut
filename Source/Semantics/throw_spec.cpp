@@ -65,9 +65,15 @@ ThrowSpec ThrowAnalyzer::declared_or_inferred(Symbol* fn) {
 
 const ThrowInfo& ThrowAnalyzer::of_function_body(Symbol* fn) {
     static const ThrowInfo unknown_info = [] { ThrowInfo i; i.unknown = true; return i; }();
+    static const ThrowInfo nothing_more{};
     if (!fn) return unknown_info;
     if (auto it = m_cache.find(fn); it != m_cache.end()) return it->second;
-    if (!m_active.insert(fn).second) return unknown_info;
+
+    if (!m_active.insert(fn).second) {
+        m_cycle_targets.insert(fn);
+        return nothing_more;
+    }
+
     const FunctionLike f = as_function_like(fn->decl);
     ThrowInfo info;
 
@@ -82,6 +88,8 @@ const ThrowInfo& ThrowAnalyzer::of_function_body(Symbol* fn) {
     }
 
     m_active.erase(fn);
+    m_cycle_targets.erase(fn);
+    if (!m_cycle_targets.empty()) return m_uncached.emplace_back(std::move(info));
     return m_cache.emplace(fn, std::move(info)).first->second;
 }
 
@@ -105,7 +113,6 @@ ThrowInfo ThrowAnalyzer::of_expr(nodes::ASTNode* e) {
             info.merge(of_expr(c->get_callee()));
             Symbol* callee = c->resolved;
             if (!callee) { info.unknown = true; return info; }
-            if (callee->intrinsic) return info;
             if (declared_noexcept(callee)) return info;
             info.merge(of_function_body(callee));
             return info;
@@ -171,6 +178,22 @@ ThrowInfo ThrowAnalyzer::of_stmt(nodes::ASTNode* s) {
 
         case K::ExpressionStatement:
             return of_expr(static_cast<nodes::ExpressionStatement*>(s)->expr);
+
+        case K::IfStatement: {
+            auto* is = static_cast<nodes::IfStatement*>(s);
+            bool decided = false;
+
+            for (nodes::IfBranch* br : is->get_branches()) {
+                if (br->condition && br->condition->kind == K::VariableDeclaration) info.merge(of_stmt(br->condition));
+                else info.merge(of_expr(br->condition));
+                if (br->constant_value == 0) continue;
+                info.merge(of_stmt(br->body));
+                if (br->constant_value == 1) { decided = true; break; }
+            }
+
+            if (!decided) info.merge(of_stmt(is->else_branch));
+            return info;
+        }
 
         case K::TryCatchStatement: {
             auto* t = static_cast<nodes::TryCatchStatement*>(s);

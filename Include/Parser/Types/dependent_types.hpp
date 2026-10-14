@@ -2,6 +2,7 @@
 #define WALNUT_DEPENDENT_TYPES_HPP
 
 #include "type_info.hpp"
+#include "type_ops.hpp"
 
 namespace walnut {
 
@@ -10,21 +11,36 @@ namespace nodes { struct ASTNode; }
 namespace parser_types {
 
 class FunctionPointerType : public Type {
+public:
+    static constexpr std::size_t UNBOUNDED = static_cast<std::size_t>(-1);
+
+    struct ParamExtra {
+        std::size_t     variadic = 0;
+        bool            exact = false;
+        nodes::ASTNode* default_value = nullptr;
+    };
+
 private:
     std::vector<TypeInfo> m_param_types;   
     TypeInfo m_return_type;
     modifiers::FunctionQualifiers m_quals;
+    std::vector<ParamExtra> m_extras;
 
 public:
     FunctionPointerType(
         std::vector<TypeInfo> param_types,
         const TypeInfo& return_type,
-        const modifiers::FunctionQualifiers& quals
+        const modifiers::FunctionQualifiers& quals,
+        std::vector<ParamExtra> extras = {}
     )
         : m_param_types(std::move(param_types))
         , m_return_type(return_type)
         , m_quals(quals)
+        , m_extras(std::move(extras))
     {}
+
+    const std::vector<ParamExtra>& extras() const { return m_extras; }
+    bool has_extras() const { return !m_extras.empty(); }
 
     Kind kind() const override { return Kind::FunctionPointer; }
 
@@ -91,6 +107,30 @@ public:
     ) {
         return make_in<ArrayType>(arena, element_type, dimension, dimension_expr);
     }
+};
+
+class ComputedType : public Type {
+public:
+    using Op = TypeOp;
+
+private:
+    Op                    m_op;
+    nodes::ASTNode*       m_expr = nullptr;
+    std::vector<TypeInfo> m_args;
+
+public:
+    ComputedType(Op op, nodes::ASTNode* expr, std::vector<TypeInfo> args = {}) : m_op(op), m_expr(expr), m_args(std::move(args)) {}
+
+    Kind kind() const override { return Kind::Computed; }
+
+    Type* clone_into(Arena& arena) const override;
+
+    void write_to(std::ostream& os) const override;
+
+    Op op() const { return m_op; }
+    nodes::ASTNode* expr() const { return m_expr; }
+    const std::vector<TypeInfo>& args() const { return m_args; }
+    std::vector<TypeInfo>& args() { return m_args; }
 };
 
 class VariantType : public Type {

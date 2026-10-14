@@ -14,9 +14,12 @@ struct ParamShape {
     bool        unbounded;   
     std::size_t cap;         
     bool        has_default;
+    bool        exact = false;
 };
 
 ParamShape shape_of(const nodes::FunctionParameter* p, TypeContext& ctx);
+
+std::vector<ParamShape> shapes_of_function_type(const FunctionType* ft);
 
 struct CandidateMatch {
     bool                        viable = false;
@@ -33,6 +36,8 @@ bool better_candidate(const CandidateMatch& A, const CandidateMatch& B);
 
 enum class SelectStatus : std::uint8_t { Ok = 0, NoMatch, Ambiguous };
 struct Selection { SelectStatus status; std::size_t index = 0; };
+
+Selection select_overload(const std::vector<CandidateMatch>& cands, const std::vector<bool>& from_template);
 
 Selection select_overload(const std::vector<CandidateMatch>& cands);
 

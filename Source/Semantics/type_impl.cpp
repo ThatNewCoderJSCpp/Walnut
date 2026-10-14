@@ -1,4 +1,8 @@
 #include "Semantics/type_impl.hpp"
+#include "Parser/nodes.hpp"
+#include "Parser/Nodes/node_children.hpp"
+#include "Semantics/type_ops.hpp"
+#include <sstream>
 
 namespace walnut {
 namespace semantics {
@@ -119,29 +123,57 @@ Type* TypeContext::record(Symbol* decl, TemplateArgs args, CV cv) {
     return t;
 }
 
-Type* TypeContext::function(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept) {
+Type* TypeContext::function(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept, std::vector<FnParamInfo> info) {
+    bool trivial = true;
+    for (const FnParamInfo& i : info) if (!i.trivial()) trivial = false;
+    if (trivial || info.size() != params.size()) info.clear();
     std::uint8_t flags = std::uint8_t(is_const) | (std::uint8_t(rq) << 1) | (std::uint8_t(is_noexcept) << 3);
-    FuncKey key{ ret, params, flags };
+    FuncKey key{ ret, params, flags, info };
     if (auto it = m_functions.find(key); it != m_functions.end()) return it->second;
-    Type* t = make_in<FunctionType>(m_arena, ret, std::move(params), is_const, rq, is_noexcept);
+    Type* t = make_in<FunctionType>(m_arena, ret, std::move(params), is_const, rq, is_noexcept, std::move(info));
     bool dep = (ret && ret->is_dependent()) || any_dependent(static_cast<FunctionType*>(t)->params());
     mark_dependent(t, dep);
     m_functions.emplace(std::move(key), t);
     return t;
 }
 
-Type* TypeContext::variant(std::vector<Type*> alternatives) {
-    // small N (2-5 typical): insertion sort beats std::sort overhead; swap in
-    // your faster sort at this call site when benchmarking. Comparator is a
-    // single pointer compare, stable within the compilation.
-    for (std::size_t i = 1; i < alternatives.size(); ++i) {
-        Type* v = alternatives[i];
-        std::size_t j = i;
-        while (j > 0 && alternatives[j - 1] > v) { alternatives[j] = alternatives[j - 1]; --j; }
-        alternatives[j] = v;
+bool TypeContext::default_key(nodes::ASTNode* e, std::string& key) {
+    key.clear();
+    if (!e) return false;
+    if (!e->expr_type.type && expr_walk_hook) expr_walk_hook(e);
+    TemplateArg v;
+
+    if (value_eval_hook && value_eval_hook(e, v)) {
+        if (v.value) { key = "i:" + v.value->to_string(); return true; }
+
+        if (v.fvalue) {
+            std::ostringstream os;
+            os.precision(60);
+            os << *v.fvalue;
+            key = "f:" + os.str();
+            return true;
+        }
     }
 
-    alternatives.erase(std::unique(alternatives.begin(), alternatives.end()), alternatives.end());
+    if (e->kind == nodes::ASTNode::Kind::Literal) {
+        auto* lit = static_cast<nodes::Literal*>(e);
+        using TK = tokenizing::Token::Kind;
+        if (lit->token_kind == TK::String) key = "s:\"" + std::string(lit->value) + "\"";
+        else if (lit->token_kind == TK::Character) key = "c:'" + std::string(lit->value) + "'";
+        else key = "l:" + std::string(lit->value);
+        return true;
+    }
+
+    std::ostringstream os;
+    os << "p:" << static_cast<const void*>(e);
+    key = os.str();
+    return false;
+}
+
+Type* TypeContext::variant(std::vector<Type*> alternatives) {
+    std::vector<Type*> unique;
+    for (Type* a : alternatives) if (std::find(unique.begin(), unique.end(), a) == unique.end()) unique.push_back(a);
+    alternatives = std::move(unique);
     SeqKey key{ alternatives };
     if (auto it = m_variants.find(key); it != m_variants.end()) return it->second;
     Type* t = make_in<VariantType>(m_arena, std::move(alternatives));
@@ -212,8 +244,47 @@ Type* TypeContext::pack_expansion(Type* pattern) {
     return t;
 }
 
+Type* TypeContext::without_const(Type* t) {
+    if (!t) return t;
+
+    if (t->is_reference()) {
+        auto* r = static_cast<ReferenceType*>(t);
+        return reference(without_const(r->referent()), r->ref_qual(), r->cv());
+    }
+
+    CV c = t->cv();
+    c.is_const = false;
+    return with_cv(t, c);
+}
+
+Type* TypeContext::computed_expr_type(nodes::ASTNode* e, bool decltype_rules) {
+    using K = nodes::ASTNode::Kind;
+    if (!e) return error_();
+    const Symbol* named = nullptr;
+    if (e->kind == K::Identifier) named = static_cast<nodes::Identifier*>(e)->resolved;
+    else if (e->kind == K::QualifiedIdentifier) named = static_cast<nodes::QualifiedIdentifier*>(e)->resolved;
+
+    const bool plain_declared = named && (named->kind == SymbolKind::Variable || named->kind == SymbolKind::Parameter) && named->type && named->decl
+        && named->decl->kind != K::ArrayDeclaration
+        && !(named->type->type && named->type->type->is_primitive() && static_cast<parser_types::PrimitiveType*>(named->type->type)->base_kind() == parser_types::PrimitiveType::BaseKind::Auto && !named->type->canonical);
+
+    if (decltype_rules && plain_declared) return canonicalize(*named->type);
+    if (!e->expr_type.type && expr_walk_hook) expr_walk_hook(e);
+    Type* t = e->expr_type.type;
+
+    if (!t) {
+        if (!plain_declared) return error_();
+        t = canonicalize(*named->type);
+        return t && t->is_reference() ? static_cast<ReferenceType*>(t)->referent() : t;
+    }
+
+    if (decltype_rules) return (e->expr_type.vc == nodes::ValueCategory::LValue && !t->is_reference()) ? reference(t, RefQual::LValue, CV{}) : t;
+    return t->is_reference() ? static_cast<ReferenceType*>(t)->referent() : t;
+}
+
 Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
     if (info.canonical) return apply_subst(info.canonical);  
+    bool computed = false;
     const std::size_t dims_before = m_dim_evals;
     const CV base_cv = cv_from_modifiers(info.modifiers);
     Type* base = nullptr;
@@ -303,6 +374,67 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
                && (static_cast<parser_types::UserDefinedType*>(info.type)->name() == "generator" || static_cast<parser_types::UserDefinedType*>(info.type)->name() == "task")) {
         Type* value = canonicalize(info.template_args[0]->type);
         base = coroutine(value, static_cast<parser_types::UserDefinedType*>(info.type)->name() == "generator", base_cv);
+    } else if (info.type && info.type->is_computed()) {
+        using TOp = parser_types::TypeOp;
+        auto* ct = static_cast<parser_types::ComputedType*>(info.type);
+        computed = true;
+        Type* t = nullptr;
+        std::string error;
+
+        if (ct->op() == TOp::Typeof || ct->op() == TOp::Decltype) {
+            t = computed_expr_type(ct->expr(), ct->op() == TOp::Decltype);
+        } else if (ct->op() == TOp::Conditional) {
+            nodes::ASTNode* cond = ct->expr();
+            if (cond && !cond->expr_type.type && expr_walk_hook) expr_walk_hook(cond);
+            TemplateArg v;
+
+            if (cond && value_eval_hook && value_eval_hook(cond, v) && v.value) {
+                t = canonicalize(ct->args()[v.value->is_zero() ? 1 : 0]);
+            } else {
+                bool dependent = false;
+                std::vector<nodes::ASTNode*> stack{ cond };
+
+                while (!stack.empty() && !dependent) {
+                    nodes::ASTNode* n = stack.back();
+                    stack.pop_back();
+                    if (!n) continue;
+                    if (n->kind == nodes::ASTNode::Kind::Identifier) {
+                        const Symbol* s = static_cast<nodes::Identifier*>(n)->resolved;
+                        if (s && s->kind == SymbolKind::TemplateParam) dependent = true;
+                    }
+                    if (n->kind == nodes::ASTNode::Kind::TypeQuery) {
+                        auto* q = static_cast<nodes::TypeQueryExpression*>(n);
+                        if (q->queried && q->queried->is_dependent()) dependent = true;
+                        for (Type* x : q->extra_queried) if (x && x->is_dependent()) dependent = true;
+                    }
+                    nodes::for_each_child<true>(n, [&](nodes::ASTNode* c) { stack.push_back(c); });
+                }
+
+                if (dependent) {
+                    Type* first = canonicalize(ct->args()[0]);
+                    t = dependent_name(strip_cv(first && first->is_reference() ? static_cast<ReferenceType*>(first)->referent() : first), "conditional");
+                } else {
+                    error = "conditional needs a condition that is known at compile time";
+                    t = error_();
+                }
+            }
+        } else {
+            std::vector<Type*> types;
+            types.reserve(ct->args().size());
+            for (const parser_types::TypeInfo& a : ct->args()) types.push_back(canonicalize(a));
+            t = apply_type_op(*this, ct->op(), types, error);
+        }
+
+        if (!error.empty() && type_error_hook) type_error_hook(error);
+
+        if (!t || t->is_error() || t->is_reference()) {
+            base = t ? t : error_();
+        } else {
+            CV merged = t->cv();
+            merged.is_const = merged.is_const || base_cv.is_const;
+            merged.is_volatile = merged.is_volatile || base_cv.is_volatile;
+            base = with_cv(t, merged);
+        }
     } else if (info.type && info.type->is_primitive()) {
         auto* p = static_cast<parser_types::PrimitiveType*>(info.type);
         base = builtin(p->base_kind(), p->length_modifier(), p->is_unsigned(), p->used_long_form(), base_cv);
@@ -328,12 +460,39 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
         } else {
             base = array(el, extent, base_cv);
         }
+    } else if (info.type && info.type->is_variant()) {
+        auto* vt = static_cast<parser_types::VariantType*>(info.type);
+        std::vector<Type*> alts;
+        alts.reserve(vt->count());
+        for (const parser_types::TypeInfo& a : vt->alternatives()) alts.push_back(strip_cv(canonicalize(a)));
+        Type* v = variant(std::move(alts));
+        base = base_cv.is_const || base_cv.is_volatile ? with_cv(v, base_cv) : v;
     } else if (info.type && info.type->is_function_pointer()) {
         auto* fp = static_cast<parser_types::FunctionPointerType*>(info.type);
         std::vector<Type*> params;
         params.reserve(fp->param_count());
         for (const parser_types::TypeInfo& pt : fp->param_types()) params.push_back(canonicalize(pt));
-        base = function(canonicalize(fp->return_type()), std::move(params), false, RefQual::None, false);
+        std::vector<FnParamInfo> info;
+
+        for (std::size_t i = 0; i < fp->extras().size() && i < params.size(); ++i) {
+            const parser_types::FunctionPointerType::ParamExtra& e = fp->extras()[i];
+            FnParamInfo pi;
+
+            if (e.variadic) {
+                pi.pack = e.variadic == parser_types::FunctionPointerType::UNBOUNDED ? FnParamInfo::Pack::Unbounded : (e.exact ? FnParamInfo::Pack::Exact : FnParamInfo::Pack::UpTo);
+                pi.cap = pi.pack == FnParamInfo::Pack::Unbounded ? 0 : e.variadic;
+                if (params[i]) params[i] = array(strip_cv(params[i]), std::nullopt);
+            }
+
+            if (e.default_value) {
+                pi.def = e.default_value;
+                if (!default_key(e.default_value, pi.def_key) && type_error_hook) type_error_hook("a default value in a function type has to be a constant, so that every value of the type uses the same default");
+            }
+
+            info.push_back(pi);
+        }
+
+        base = function(canonicalize(fp->return_type()), std::move(params), false, RefQual::None, false, std::move(info));
     } else {
         base = dynamic_();   
     }
@@ -350,7 +509,7 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
         }
     }
 
-    if (m_dim_evals == dims_before) const_cast<parser_types::TypeInfo&>(info).canonical = result;    
+    if (m_dim_evals == dims_before && !computed) const_cast<parser_types::TypeInfo&>(info).canonical = result;    
     return apply_subst(result);   
 }
 

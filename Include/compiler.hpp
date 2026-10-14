@@ -45,7 +45,10 @@ private:
 
     bool m_report_timing = false;
     std::vector<std::string> m_include_dirs{ "include" };
+    std::vector<std::string> m_module_dirs;
     std::vector<std::pair<std::string, std::string>> m_defines;
+    std::vector<std::string> m_extra_inputs;
+    std::function<std::vector<std::string>(bool)> m_native_args;
 
 public:
     struct AnalyzedUnit {
@@ -157,8 +160,12 @@ public:
 
     CompilerPipeline& report_timing(bool on = true) { m_report_timing = on; return *this; }
     CompilerPipeline& add_include_dir(std::string dir) { m_include_dirs.push_back(std::move(dir)); return *this; }
+    CompilerPipeline& add_module_dir(std::string dir) { m_module_dirs.push_back(std::move(dir)); return *this; }
+    CompilerPipeline& add_library_file(const std::string& path, std::string content) { sources.add_virtual(std::string(SourceManager::LIBRARY_ROOT) + "/" + path, std::move(content)); return *this; }
     CompilerPipeline& define_macro(std::string name, std::string value = "1") { m_defines.emplace_back(std::move(name), std::move(value)); return *this; }
     CompilerPipeline& suppress_warnings() { warnings.set_enabled(false); return *this; }
+    CompilerPipeline& add_input(std::string path) { m_extra_inputs.push_back(std::move(path)); return *this; }
+    CompilerPipeline& set_native_header_args(std::function<std::vector<std::string>(bool)> provider) { m_native_args = std::move(provider); return *this; }
 
 private:
     bool front_end_failed() const {
@@ -176,6 +183,38 @@ private:
 
         driver::WalkPass walker(reporter, warnings, types, ast_arena, instantiator);
         walker.run(front);
+    }
+
+    std::vector<std::string> m_missing_native;
+
+    void check_native_files(const std::vector<nodes::ASTNode*>& stmts) {
+        namespace fs = std::filesystem;
+
+        for (nodes::ASTNode* s : stmts) {
+            if (!s) continue;
+
+            if (s->kind == nodes::ASTNode::Kind::NamespaceDeclaration) {
+                auto* ns = static_cast<nodes::NamespaceDeclaration*>(s);
+                if (ns->get_body()) check_native_files(ns->get_body()->statements);
+                continue;
+            }
+
+            if (s->kind != nodes::ASTNode::Kind::FunctionDeclaration) continue;
+            auto* f = static_cast<nodes::FunctionDeclaration*>(s);
+            const modifiers::RawModifiers& mods = f->get_modifiers();
+            if (!mods.native_file_count() || FileId(f->file_id) >= sources.file_count()) continue;
+            const fs::path base = fs::path(sources.absolute_path(FileId(f->file_id))).parent_path();
+
+            for (std::uint8_t i = 0; i < mods.native_file_count(); ++i) {
+                const std::string file(mods.native_file(i));
+                std::error_code ec;
+                if (fs::is_regular_file(base / file, ec)) continue;
+                const std::string key = (base / file).generic_string();
+                if (std::find(m_missing_native.begin(), m_missing_native.end(), key) != m_missing_native.end()) continue;
+                m_missing_native.push_back(key);
+                reporter.report(ErrorPhase::Semantic, FileId(f->file_id), f->line, "Extern Error on line " + std::to_string(f->line) + ": cannot find '" + file + "', named in 'from'; the path is relative to the folder of the file that names it (" + base.generic_string() + ")");
+            }
+        }
     }
 
     void report_internal_error(const std::string& what) {
@@ -198,7 +237,6 @@ public:
         warnings.set_current_file(*main_id);
         const char* source = sources.data(*main_id);
 
-    #ifdef WALNUT_DEBUG
         if (m_output_tokens) {
             std::string tokens_path;
 
@@ -209,10 +247,10 @@ public:
                 tokens_path = "output/" + std::filesystem::path(input_file).filename().string() + ".tokens";
             }
 
-            std::filesystem::create_directories(std::filesystem::path(tokens_path).parent_path());
+            const std::filesystem::path tokens_dir = std::filesystem::path(tokens_path).parent_path();
+            if (!tokens_dir.empty()) std::filesystem::create_directories(tokens_dir);
             tokenizing::display_all_tokens(source, tokens_path);
         }
-    #endif
 
         nodes::BlockStatement* ast = nullptr;
 
@@ -220,11 +258,35 @@ public:
             preprocessing::Preprocessor pp(sources, reporter, warnings, ast_arena);
             for (const auto& dir : m_include_dirs) pp.add_include_dir(dir);
             for (const auto& [name, value] : m_defines) pp.define(name, value);
+            if (m_native_args) pp.set_native_args(m_native_args);
             driver::ModuleLoader loader(sources, pp, reporter, ast_arena);
+            for (const auto& dir : m_module_dirs) loader.add_module_dir(dir);
             loader.load(*main_id);
+
+            for (const std::string& extra : m_extra_inputs) {
+                auto extra_id = sources.load(extra);
+                if (!extra_id) { reporter.report(ErrorPhase::Loader, INVALID_FILE, 0, "Could not open input file: " + extra); continue; }
+                loader.load(*extra_id);
+            }
+            std::optional<FileId> core_id;
+
+            const std::string core_path = std::string(SourceManager::LIBRARY_ROOT) + "/core.walh";
+
+            if (sources.has_virtual(core_path)) {
+                core_id = sources.load(core_path);
+                if (core_id) loader.load(*core_id);
+            }
+
             if (const driver::ParsedUnit* root = loader.unit(*main_id)) { ast = root->ast; }
             driver::FrontPass front(reporter, ast_arena);
             front.run(loader.units());
+
+            if (core_id) {
+                if (const driver::UnitFrontResult* core = front.result(*core_id); core && core->root) {
+                    semantics::Scope* prelude = semantics::prelude_scope();
+                    for (semantics::Symbol* sym : core->root->symbols) if (sym && !prelude->find_local(sym->name)) prelude->symbols.push_back(sym);
+                }
+            }
             m_units.clear();
             m_main_file = *main_id;
             for (FileId id : front.order()) {
@@ -233,6 +295,7 @@ public:
             driver::Linker linker(reporter, ast_arena, loader.source_manager());
             linker.run(front.results(), loader.file_edges());
             run_semantic_passes(front);
+            for (const AnalyzedUnit& u : m_units) if (u.ast) check_native_files(u.ast->statements);
         } catch (const parsing::ParserError&) {
         } catch (const std::exception& e) {
             report_internal_error(e.what());
@@ -240,14 +303,13 @@ public:
             report_internal_error("unknown exception");
         }
 
-    #ifdef WALNUT_DEBUG
         if (ast && m_output_ast) {
             std::string ast_path = ast_output_path.empty() ? "output/parsed_tree.txt" : ast_output_path;
-            std::filesystem::create_directories(std::filesystem::path(ast_path).parent_path());
+            const std::filesystem::path ast_dir = std::filesystem::path(ast_path).parent_path();
+            if (!ast_dir.empty()) std::filesystem::create_directories(ast_dir);
             std::ofstream ast_out(ast_path);
             if (ast_out) { ast->print(ast_out, 0); }
         }
-    #endif
 
         warnings.flush();
 

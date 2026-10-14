@@ -164,6 +164,8 @@ const char* CastExpression::cast_name() const {
         case CastKind::Reinterpret: return "reinterpret_cast";
         case CastKind::Const:       return "const_cast";
         case CastKind::Bit:         return "bit_cast";
+        case CastKind::Is:          return "is";
+        case CastKind::As:          return "as";
     }
     return "unknown_cast";
 }
@@ -214,6 +216,7 @@ const char* TypeQueryExpression::op_name() const {
         case Op::Typeof:   return "typeof";
         case Op::Alignof:  return "alignof";
         case Op::Decltype: return "decltype";
+        case Op::Trait:    return parser_types::type_trait_name(trait).data();
     }
     return "unknown";
 }
@@ -231,9 +234,20 @@ void TypeQueryExpression::print(std::ostream& os, std::size_t indent) const {
     } else {
         os << "Operand: <none>\n";
     }
+
+    for (const parser_types::TemplateArgument* x : extra_operands) {
+        print_indent(os, indent + 1);
+        if (x) os << "Type: " << x->type << "\n";
+    }
 }
 
-ASTNode* TypeQueryExpression::clone_into(Arena& a) const { auto* c = make_in<TypeQueryExpression>(a, op, clone_targ(operand, a), line); copy_base_to(c); return c; }
+ASTNode* TypeQueryExpression::clone_into(Arena& a) const {
+    auto* c = make_in<TypeQueryExpression>(a, op, clone_targ(operand, a), line);
+    c->trait = trait;
+    for (const parser_types::TemplateArgument* x : extra_operands) c->extra_operands.push_back(clone_targ(x, a));
+    copy_base_to(c);
+    return c;
+}
 
 NewExpression::NewExpression(const parser_types::TypeInfo& t, std::vector<ASTNode*> a, ASTNode* size, bool arr, std::uint32_t ln) : ASTNode(Kind::NewExpression, ln), type(t), args(std::move(a)),array_size(size), is_array(arr) {}
 

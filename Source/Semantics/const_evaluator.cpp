@@ -1,5 +1,7 @@
 #include "Semantics/const_evaluator.hpp"
+#include "Semantics/type_ops.hpp"
 #include "Lexer/escapes.hpp"
+#include "Lexer/numeric_literal.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -37,6 +39,9 @@ ConstValue ConstEvaluator::coerce(const ConstValue& v, Type* dst) {
     dst = m_types.strip_cv(dst);
     if (!is_constant_type(dst)) return v;
     auto* b = static_cast<BuiltinType*>(dst);
+    if (b->base() == BK::Float && b->is_unsigned()) {
+        if ((v.is_int() && v.i->is_negative()) || (v.is_float() && v.f->is_negative() && !v.f->is_zero())) return ConstValue::error(ConstValue::Fail::Overflow);
+    }
     ConstValue out = convert_to(v, b);
     if (out.ok() || out.is_error()) return out;
     if (v.is_int() && (b->base() == BK::Int || b->base() == BK::Char)) return ConstValue::error(ConstValue::Fail::Overflow);
@@ -95,6 +100,23 @@ bool ConstEvaluator::layout_of(Type* t, long long& size, long long& align, int d
     return false;
 }
 
+long long ConstEvaluator::alignment_of(const parser_types::TemplateArgument* a) {
+    if (!a) return 0;
+    if (a->align_value > 0) return a->align_value;
+
+    const bool named_value = a->is_type() && a->type.resolved && (a->type.resolved->kind == SymbolKind::Variable || a->type.resolved->kind == SymbolKind::EnumConstant);
+
+    if (a->is_type() && !named_value) {
+        long long s = 0, al = 0;
+        Type* t = m_types.canonicalize(const_cast<parser_types::TypeInfo&>(a->type));
+        return t && layout_of(t, s, al) ? al : 0;
+    }
+
+    ConstValue v = named_value ? eval_symbol(a->type.resolved) : eval(a->value);
+    if (!v.ok() || !v.is_int() || v.i->is_negative() || !ConstTable::fits(*v.i, 32, false)) return 0;
+    return static_cast<long long>(v.i->get_lowest_bits());
+}
+
 bool ConstEvaluator::record_layout(RecordType* rt, long long& size, long long& align, int depth) {
     Symbol* owner = rt->decl();
     if (rt->is_instantiation() && m_types.record_scope_hook) {
@@ -111,11 +133,11 @@ bool ConstEvaluator::record_layout(RecordType* rt, long long& size, long long& a
     align = 1;
     bool has_vptr = false;
 
-    if (rd->m_inherits.type) {
+    for (parser_types::TypeInfo* info : rd->all_bases()) {
         long long bs = 0, ba = 0;
-        if (!layout_of(m_types.canonicalize(rd->m_inherits), bs, ba, depth + 1)) return false;
-        offset = bs;
-        align = ba;
+        if (!layout_of(m_types.canonicalize(*info), bs, ba, depth + 1)) return false;
+        offset = (offset + ba - 1) / ba * ba + bs;
+        if (ba > align) align = ba;
     }
 
     using FQ = modifiers::FunctionQualifiers;
@@ -136,13 +158,17 @@ bool ConstEvaluator::record_layout(RecordType* rt, long long& size, long long& a
         if (!n) continue;
         Type* ft = nullptr;
 
+        long long forced = 0;
+
         if (n->kind == K::VariableDeclaration) {
             auto* v = static_cast<nodes::VariableDeclaration*>(n);
             if (v->get_type_info().modifiers.has(RM::Static)) continue;
             ft = m_types.canonicalize(v->get_type_info());
+            forced = alignment_of(v->get_type_info().alignment);
         } else if (n->kind == K::ArrayDeclaration) {
             auto* a = static_cast<nodes::ArrayDeclaration*>(n);
             if (a->get_array_modifiers().has(RM::Static)) continue;
+            forced = alignment_of(a->m_alignment);
             Type* el = m_types.canonicalize(a->m_element_type);
             std::optional<std::size_t> extent = a->m_dimension;
             if (!extent && a->m_initializer && !a->m_dimension_expr) extent = a->m_initializer->m_elements.size();
@@ -154,10 +180,13 @@ bool ConstEvaluator::record_layout(RecordType* rt, long long& size, long long& a
 
         long long fs = 0, fa = 0;
         if (!ft || ft->is_reference() || !layout_of(ft, fs, fa, depth + 1)) return false;
-        offset = (offset + fa - 1) / fa * fa + fs;
+        if (forced > fa) fa = forced;
+        if (rd->is_union()) offset = fs > offset ? fs : offset;
+        else offset = (offset + fa - 1) / fa * fa + fs;
         if (fa > align) align = fa;
     }
 
+    if (const long long forced = alignment_of(rd->m_alignment); forced > align) align = forced;
     size = (offset + align - 1) / align * align;
     if (size == 0) size = 1;
     return true;
@@ -256,12 +285,32 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
         case K::TypeQuery: {
             auto* q = static_cast<nodes::TypeQueryExpression*>(e);
             using QOp = nodes::TypeQueryExpression::Op;
+
+            if (q->op == QOp::Trait) {
+                std::vector<Type*> types;
+
+                if (q->queried) {
+                    types.push_back(m_types.apply_subst(q->queried));
+                    for (Type* x : q->extra_queried) types.push_back(x ? m_types.apply_subst(x) : nullptr);
+                } else {
+                    types.push_back(q->operand ? m_types.canonicalize(q->operand->type) : nullptr);
+                    for (parser_types::TemplateArgument* x : q->extra_operands) types.push_back(x ? m_types.canonicalize(x->type) : nullptr);
+                }
+                std::string error;
+                const std::optional<std::int64_t> r = eval_type_trait(m_types, q->trait, types, error);
+                if (!error.empty() && m_types.type_error_hook) m_types.type_error_hook(error);
+                if (!r) return ConstValue{};
+                if (parser_types::type_trait_gives_int(q->trait)) return make_int(WideInt(*r));
+                return make_bool(*r != 0);
+            }
+
             if (q->pack_count >= 0) return make_int(WideInt(std::uint64_t(q->pack_count)));
             Type* t = q->queried ? m_types.strip_cv(m_types.apply_subst(q->queried)) : nullptr;
             if (!t || t->is_dependent()) return {};
 
             if (q->op == QOp::Countof) {
                 if (t->is_array() && static_cast<ArrayType*>(t)->extent()) return make_int(WideInt(std::uint64_t(*static_cast<ArrayType*>(t)->extent())));
+                if (std::optional<std::size_t> n = enumerator_count(t)) return make_int(WideInt(std::uint64_t(*n)));
                 return {};
             }
 
@@ -300,7 +349,11 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
 
             switch (u->op) {
                 case TK::Minus:
-                    if (v.is_int())   return make_int(-*v.i);
+                    if (v.is_int()) {
+                        const IntShape sh = shape_of(u);
+                        if (sh.bits && !sh.is_signed) return make_int(from_twos(to_twos(-*v.i, sh.bits), sh.bits, false));
+                        return make_int(-*v.i);
+                    }
                     if (v.is_float()) return make_float(-*v.f);
                     return {};
                 case TK::Plus:
@@ -337,7 +390,9 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
         case K::CastExpression: {
             auto* c = static_cast<nodes::CastExpression*>(e);
             ConstValue v = eval(c->operand);
-            if (!v.ok()) return {};
+            if (c->get_cast_kind() == nodes::CastExpression::CastKind::Is || c->get_cast_kind() == nodes::CastExpression::CastKind::As) return {};
+            if (!v.ok()) return v;
+            if (Type* target = m_types.canonicalize(c->get_target()); target && target->is_reference()) return v;
             Type* dst = m_types.strip_cv(m_types.canonicalize(c->get_target()));
             if (!dst || !dst->is_builtin()) return {};
             return convert_to(v, static_cast<BuiltinType*>(dst));
@@ -358,13 +413,30 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
 auto ConstEvaluator::eval_literal(nodes::Literal* lit) -> ConstValue {
     switch (lit->get_kind()) {
         case TK::Integer: {
-            std::string s(lit->value);
-            if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) return make_int(m_types.consts().parse(s.substr(2), 16));
-            if (s.size() > 2 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) return make_int(m_types.consts().parse(s.substr(2), 2));
-            return make_int(m_types.consts().parse(s, 10));
+            const tokenizing::NumericLiteral n = tokenizing::parse_numeric_literal(lit->value);
+            if (!n.error.empty() || n.digits.empty()) return {};
+            const WideInt* v = m_types.consts().parse(n.digits, n.base);
+            if (!v || !n.has_suffix) return make_int(v);
+            const unsigned w = bit_width_of_rank(n.rank);
+
+            if (n.type_is_float) {
+                WideFloat r;
+                const WideFloat f = wf_from_int(*v);
+                return wf_round_to_width(f, w, r) ? make_float(r) : make_float(f);
+            }
+
+            return make_int(from_twos(to_twos(*v, w), w, !n.is_unsigned));
         }
 
-        case TK::Float: return make_float(m_types.floats().parse(std::string(lit->value)));
+        case TK::Float: {
+            const tokenizing::NumericLiteral n = tokenizing::parse_numeric_literal(lit->value);
+            if (!n.error.empty()) return {};
+            const WideFloat* f = m_types.floats().parse(n.body);
+            if (!f || !n.has_suffix) return make_float(f);
+            WideFloat r;
+            if (!wf_round_to_width(*f, bit_width_of_rank(n.rank), r)) return make_float(f);
+            return make_float(r);
+        }
         case TK::InfinityKeyword: return make_float(m_types.floats().intern(WideFloat::positive_infinity()));
 
         case TK::Character: {
@@ -405,7 +477,7 @@ ConstValue ConstEvaluator::eval_symbol(Symbol* s) {
             auto* vd = static_cast<nodes::VariableDeclaration*>(s->decl);
             using RM = modifiers::RawModifiers;
             const auto& mods = vd->get_type_info().modifiers;
-            if (!mods.has(RM::Constexpr) && !mods.has(RM::Const)) return {};
+            if (!mods.has(RM::Constexpr) && !mods.has(RM::Const) && !mods.has(RM::Inline)) return {};
             if (!vd->has_initializer()) return {};
             const SubstEnv* env = env_of ? env_of(s) : nullptr;
             const bool cacheable = env != nullptr || m_types.subst_stack().empty();

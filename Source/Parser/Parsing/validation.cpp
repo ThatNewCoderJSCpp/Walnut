@@ -1,4 +1,5 @@
 #include "Parser/Parsing/validation.hpp"
+#include "Lexer/numeric_literal.hpp"
 
 namespace walnut {
 namespace parsing {
@@ -24,24 +25,21 @@ void Parser::validate_string_literal(const tokenizing::Token& token) {
 }
 
 void Parser::validate_numeric_literal(const tokenizing::Token& token) {
-    const std::string_view lexeme = token.lexeme();
-    bool has_digit = false;
-    bool has_decimal = false;
-    
-    for (std::size_t i = 0; i < lexeme.length(); ++i) {
-        char c = lexeme[i];
+    const tokenizing::NumericLiteral lit = tokenizing::parse_numeric_literal(token.lexeme());
+    if (!lit.error.empty()) throw ParserError::invalid_literal(reporter, token, lit.error);
+    if (lit.digits.empty()) throw ParserError::invalid_literal(reporter, token, "Number must contain at least one digit");
+}
 
-        if (std::isdigit(c)) {
-            has_digit = true;
-        } else if (c == '.') {
-            if (has_decimal) { throw ParserError::invalid_literal(reporter, token, "Multiple decimal points in number"); }
-            has_decimal = true;
-        } else if (c != '-' || i > 0) {
-            throw ParserError::invalid_literal(reporter, token, "Invalid character in number");
-        }
+std::size_t Parser::literal_size(const tokenizing::Token& token) {
+    validate_numeric_literal(token);
+    const tokenizing::NumericLiteral lit = tokenizing::parse_numeric_literal(token.lexeme());
+    if (lit.is_float || lit.has_suffix) throw ParserError::invalid_literal(reporter, token, "A size must be a plain whole number");
+
+    try {
+        return static_cast<std::size_t>(std::stoull(lit.digits, nullptr, lit.base));
+    } catch (...) {
+        throw ParserError::invalid_literal(reporter, token, "Size is too large");
     }
-    
-    if (!has_digit) { throw ParserError::invalid_literal(reporter, token, "Number must contain at least one digit"); }
 }
 
 void Parser::validate_character_literal(const tokenizing::Token& token) {

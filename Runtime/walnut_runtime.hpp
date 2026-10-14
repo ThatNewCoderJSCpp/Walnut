@@ -7,15 +7,18 @@
 #include "fizmo/includes.hpp"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <exception>
 #include <optional>
 #include <cstdlib>
 #include <functional>
+#include <cmath>
 #include <limits>
 #include <iostream>
 #include <memory>
 #include <new>
+#include <cstddef>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -27,6 +30,14 @@
 #if defined(__cpp_impl_coroutine) && __cpp_impl_coroutine >= 201902L
 #include <coroutine>
 #define WALNUT_RT_COROUTINES 1
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#define WALNUT_FORCE_INLINE [[gnu::always_inline]] inline
+#elif defined(_MSC_VER)
+#define WALNUT_FORCE_INLINE __forceinline
+#else
+#define WALNUT_FORCE_INLINE inline
 #endif
 
 namespace walnut_rt {
@@ -61,9 +72,27 @@ using f512  = mp::float512;
 using f1024 = mp::float1024;
 using f2048 = mp::float2048;
 
+using uf32   = mp::ufloat32;
+using uf64   = mp::ufloat64;
+using uf128  = mp::ufloat128;
+using uf256  = mp::ufloat256;
+using uf512  = mp::ufloat512;
+using uf1024 = mp::ufloat1024;
+using uf2048 = mp::ufloat2048;
+
 using string    = std::string;
 using text      = std::string;
 using character = char32_t;
+
+template <class T>
+inline T& volatile_access(T& object) noexcept {
+#if defined(__GNUC__) || defined(__clang__)
+    __asm__ __volatile__("" : : "r"(&object) : "memory");
+#else
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+#endif
+    return object;
+}
 
 struct runtime_error : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -90,6 +119,13 @@ template <> struct float_info<f256>  { static constexpr bool value = true; stati
 template <> struct float_info<f512>  { static constexpr bool value = true; static constexpr std::size_t bits = 512; };
 template <> struct float_info<f1024> { static constexpr bool value = true; static constexpr std::size_t bits = 1024; };
 template <> struct float_info<f2048> { static constexpr bool value = true; static constexpr std::size_t bits = 2048; };
+template <> struct float_info<uf32>   { static constexpr bool value = true; static constexpr std::size_t bits = 32; };
+template <> struct float_info<uf64>   { static constexpr bool value = true; static constexpr std::size_t bits = 64; };
+template <> struct float_info<uf128>  { static constexpr bool value = true; static constexpr std::size_t bits = 128; };
+template <> struct float_info<uf256>  { static constexpr bool value = true; static constexpr std::size_t bits = 256; };
+template <> struct float_info<uf512>  { static constexpr bool value = true; static constexpr std::size_t bits = 512; };
+template <> struct float_info<uf1024> { static constexpr bool value = true; static constexpr std::size_t bits = 1024; };
+template <> struct float_info<uf2048> { static constexpr bool value = true; static constexpr std::size_t bits = 2048; };
 
 template <typename T> inline constexpr bool is_int_v   = int_info<std::decay_t<T>>::value;
 template <typename T> inline constexpr bool is_float_v = float_info<std::decay_t<T>>::value;
@@ -274,6 +310,47 @@ inline To cast(const From& v) {
     }
 }
 
+template <typename F>
+inline double float_to_double(const F& v) {
+    if (v.is_nan() || v.is_undefined()) return std::numeric_limits<double>::quiet_NaN();
+    if (v.is_infinite()) return v.is_negative() ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
+    if (v.is_zero()) return v.is_negative() ? -0.0 : 0.0;
+    const auto parts = v.frexp();
+    const double significand = static_cast<double>(static_cast<unsigned long long>(parts.first.get_lowest_bits()));
+    const double magnitude = std::ldexp(significand, static_cast<int>(to_ll(parts.second)) - static_cast<int>(F::mantissa_bits));
+    return v.is_negative() ? -magnitude : magnitude;
+}
+
+template <typename Native, typename W>
+inline Native to_native(const W& v) {
+    if constexpr (std::is_same_v<Native, const char*>) {
+        return v.c_str();
+    } else if constexpr (std::is_same_v<Native, W>) {
+        return v;
+    } else if constexpr (std::is_floating_point_v<Native>) {
+        return static_cast<Native>(float_to_double(v));
+    } else if constexpr (std::is_signed_v<Native>) {
+        return static_cast<Native>(to_ll_exact(v));
+    } else {
+        return static_cast<Native>(v.get_lowest_bits());
+    }
+}
+
+template <typename W, typename Native>
+inline W from_native(const Native& n) {
+    if constexpr (std::is_same_v<Native, const char*> || std::is_same_v<Native, char*>) {
+        return W(n ? n : "");
+    } else if constexpr (std::is_same_v<Native, W>) {
+        return n;
+    } else if constexpr (std::is_floating_point_v<Native>) {
+        return W(static_cast<double>(n));
+    } else if constexpr (std::is_signed_v<Native>) {
+        return W(static_cast<long long>(n));
+    } else {
+        return W(static_cast<unsigned long long>(n));
+    }
+}
+
 template <typename T>
 inline bool truthy(const T& v) {
     if constexpr (std::is_same_v<T, bool>) return v;
@@ -354,14 +431,23 @@ inline T op_pow(const T& a, const T& b) {
     }
 }
 
-template <typename T>
+template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
 inline T op_bitand(const T& a, const T& b) { return from_twos<T>(to_twos(a) & to_twos(b)); }
-template <typename T>
+template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
 inline T op_bitor(const T& a, const T& b)  { return from_twos<T>(to_twos(a) | to_twos(b)); }
-template <typename T>
+template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
 inline T op_bitxor(const T& a, const T& b) { return from_twos<T>(to_twos(a) ^ to_twos(b)); }
-template <typename T>
+template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
 inline T op_bitnot(const T& a)             { return from_twos<T>(~to_twos(a)); }
+
+template <typename E, std::enable_if_t<std::is_enum_v<E>, int> = 0>
+inline E op_bitand(E a, E b) { return static_cast<E>(static_cast<std::underlying_type_t<E>>(a) & static_cast<std::underlying_type_t<E>>(b)); }
+template <typename E, std::enable_if_t<std::is_enum_v<E>, int> = 0>
+inline E op_bitor(E a, E b)  { return static_cast<E>(static_cast<std::underlying_type_t<E>>(a) | static_cast<std::underlying_type_t<E>>(b)); }
+template <typename E, std::enable_if_t<std::is_enum_v<E>, int> = 0>
+inline E op_bitxor(E a, E b) { return static_cast<E>(static_cast<std::underlying_type_t<E>>(a) ^ static_cast<std::underlying_type_t<E>>(b)); }
+template <typename E, std::enable_if_t<std::is_enum_v<E>, int> = 0>
+inline E op_bitnot(E a)      { return static_cast<E>(~static_cast<std::underlying_type_t<E>>(a)); }
 
 inline bool op_bitand(bool a, bool b) { return a && b; }
 inline bool op_bitor(bool a, bool b)  { return a || b; }
@@ -478,6 +564,11 @@ inline std::string utf8(char32_t c) { std::string s; append_utf8(s, c); return s
 class dynamic;
 inline std::string to_display(const dynamic& d);
 
+struct dynamic_function {
+    std::size_t arity = 0;
+    std::function<dynamic(std::vector<dynamic>&)> body;
+};
+
 template <typename T>
 inline std::string to_display(const T& v) {
     if constexpr (std::is_same_v<T, bool>) return v ? "true" : "false";
@@ -493,7 +584,7 @@ inline std::string to_display(const T& v) {
 
 class dynamic {
 public:
-    using value_type = std::variant<std::monostate, bool, char32_t, i2048, f2048, std::string>;
+    using value_type = std::variant<std::monostate, bool, char32_t, i2048, f2048, std::string, std::shared_ptr<dynamic_function>>;
 
     dynamic() = default;
     dynamic(bool b) : m_v(b) {}
@@ -502,6 +593,7 @@ public:
     dynamic(std::string&& s) : m_v(std::move(s)) {}
     dynamic(const char* s) : m_v(std::string(s)) {}
     dynamic(std::nullptr_t) : m_v(std::monostate{}) {}
+    dynamic(std::shared_ptr<dynamic_function> f) : m_v(std::move(f)) {}
 
     template <typename T, typename = std::enable_if_t<is_int_v<T>>>
     dynamic(const T& v) : m_v(cast<i2048>(v)) {}
@@ -515,6 +607,7 @@ public:
     bool is_int()    const { return std::holds_alternative<i2048>(m_v); }
     bool is_float()  const { return std::holds_alternative<f2048>(m_v); }
     bool is_string() const { return std::holds_alternative<std::string>(m_v); }
+    bool is_function() const { return std::holds_alternative<std::shared_ptr<dynamic_function>>(m_v); }
     bool is_number() const { return is_int() || is_float(); }
 
     const value_type& raw() const { return m_v; }
@@ -525,7 +618,15 @@ public:
         if (is_char())   return "char";
         if (is_int())    return "int";
         if (is_float())  return "float";
+        if (is_function()) return "function";
         return "string";
+    }
+
+    dynamic call(std::vector<dynamic> args) const {
+        if (!is_function()) fail("a dynamic value of type '" + type_name() + "' cannot be called");
+        const dynamic_function& f = *std::get<std::shared_ptr<dynamic_function>>(m_v);
+        if (args.size() != f.arity) fail("this function takes " + std::to_string(f.arity) + " argument" + (f.arity == 1 ? "" : "s") + " but was called with " + std::to_string(args.size()));
+        return f.body(args);
     }
 
     std::string to_string() const {
@@ -534,6 +635,7 @@ public:
         if (is_char())   return utf8(std::get<char32_t>(m_v));
         if (is_int())    return std::get<i2048>(m_v).to_string();
         if (is_float())  { std::ostringstream os; os << std::get<f2048>(m_v); return os.str(); }
+        if (is_function()) return "function";
         return std::get<std::string>(m_v);
     }
 
@@ -578,6 +680,7 @@ public:
         if (is_char())   return std::get<char32_t>(m_v) != 0;
         if (is_int())    return !std::get<i2048>(m_v).is_zero();
         if (is_float())  return !std::get<f2048>(m_v).is_zero();
+        if (is_function()) return true;
         return !std::get<std::string>(m_v).empty();
     }
 
@@ -653,6 +756,7 @@ public:
         if (a.is_none())   return true;
         if (a.is_bool())   return std::get<bool>(a.m_v) == std::get<bool>(b.m_v);
         if (a.is_char())   return std::get<char32_t>(a.m_v) == std::get<char32_t>(b.m_v);
+        if (a.is_function()) return std::get<std::shared_ptr<dynamic_function>>(a.m_v) == std::get<std::shared_ptr<dynamic_function>>(b.m_v);
         return std::get<std::string>(a.m_v) == std::get<std::string>(b.m_v);
     }
 
@@ -665,6 +769,118 @@ public:
 private:
     value_type m_v;
 };
+
+template <typename T, typename Alloc, typename... A>
+inline T* custom_new(Alloc alloc, A&&... args) {
+    void* memory = alloc(static_cast<long long>(sizeof(T)));
+    if (!memory) fail("operator(new) returned nullptr");
+    return ::new (memory) T(std::forward<A>(args)...);
+}
+
+inline constexpr std::size_t array_header_size = alignof(std::max_align_t) > sizeof(long long) ? alignof(std::max_align_t) : sizeof(long long);
+
+template <typename T, typename Alloc>
+inline T* custom_new_array(long long count, Alloc alloc) {
+    if (count < 0) fail("array size " + std::to_string(count) + " is negative");
+    auto* memory = static_cast<unsigned char*>(alloc(static_cast<long long>(array_header_size + sizeof(T) * static_cast<std::size_t>(count))));
+    if (!memory) fail("operator(new[]) returned nullptr");
+    *reinterpret_cast<long long*>(memory) = count;
+    T* first = reinterpret_cast<T*>(memory + array_header_size);
+    for (long long i = 0; i < count; ++i) ::new (static_cast<void*>(first + i)) T();
+    return first;
+}
+
+template <typename T, typename Release>
+inline void custom_delete(T* p, Release release) {
+    if (!p) return;
+    p->~T();
+    release(static_cast<void*>(p));
+}
+
+template <typename T, typename Release>
+inline void custom_delete_array(T* p, Release release) {
+    if (!p) return;
+    unsigned char* memory = reinterpret_cast<unsigned char*>(p) - array_header_size;
+    const long long count = *reinterpret_cast<long long*>(memory);
+    for (long long i = count; i-- > 0;) p[i].~T();
+    release(static_cast<void*>(memory));
+}
+
+template <typename T>
+inline bool dynamic_is(const dynamic& d) {
+    if constexpr (std::is_same_v<T, bool>) return d.is_bool();
+    else if constexpr (std::is_same_v<T, char32_t>) return d.is_char();
+    else if constexpr (std::is_same_v<T, std::string>) return d.is_string();
+    else if constexpr (is_int_v<T>) return d.is_int();
+    else if constexpr (is_float_v<T>) return d.is_float();
+    else return false;
+}
+
+template <typename T>
+inline T dynamic_as(const dynamic& d, const std::string& name) {
+    if (!dynamic_is<T>(d)) fail("this var holds a value of type '" + d.type_name() + "', not '" + name + "'");
+    return d.template as<T>();
+}
+
+template <typename T, typename... A>
+inline T& variant_as(std::variant<A...>& v, const std::string& name) {
+    if (!std::holds_alternative<T>(v)) fail("this variant does not hold a value of type '" + name + "'");
+    return std::get<T>(v);
+}
+
+template <typename T, typename... A>
+inline const T& variant_as(const std::variant<A...>& v, const std::string& name) {
+    if (!std::holds_alternative<T>(v)) fail("this variant does not hold a value of type '" + name + "'");
+    return std::get<T>(v);
+}
+
+template <typename T, typename... A>
+inline T variant_as(std::variant<A...>&& v, const std::string& name) {
+    if (!std::holds_alternative<T>(v)) fail("this variant does not hold a value of type '" + name + "'");
+    return std::get<T>(std::move(v));
+}
+
+template <typename T, typename U>
+inline bool object_is(const U& u) { return dynamic_cast<const T*>(&u) != nullptr; }
+
+template <typename T, typename U>
+inline T& object_as(U& u, const std::string& name) {
+    T* p = dynamic_cast<T*>(&u);
+    if (!p) fail("this object's real type is not '" + name + "'");
+    return *p;
+}
+
+template <typename T, typename U>
+inline const T& object_as(const U& u, const std::string& name) {
+    const T* p = dynamic_cast<const T*>(&u);
+    if (!p) fail("this object's real type is not '" + name + "'");
+    return *p;
+}
+
+template <typename T, typename U>
+inline bool pointer_is(U* u) { return u && dynamic_cast<const T*>(u) != nullptr; }
+
+template <typename T, typename U>
+inline auto pointer_as(U* u, const std::string& name) -> std::conditional_t<std::is_const_v<U>, const T*, T*> {
+    if (!u) return nullptr;
+    auto* p = dynamic_cast<std::conditional_t<std::is_const_v<U>, const T*, T*>>(u);
+    if (!p) fail("this object's real type is not '" + name + "'");
+    return p;
+}
+
+template <typename R, typename... Ps, typename F, std::size_t... I>
+inline dynamic invoke_dynamic(F& f, std::vector<dynamic>& a, std::index_sequence<I...>) {
+    if constexpr (std::is_void_v<R>) { f(a[I].template as<std::decay_t<Ps>>()...); return dynamic(); }
+    else return dynamic(f(a[I].template as<std::decay_t<Ps>>()...));
+}
+
+template <typename R, typename... Ps, typename F>
+inline dynamic make_dynamic_function(F f) {
+    auto fn = std::make_shared<dynamic_function>();
+    fn->arity = sizeof...(Ps);
+    fn->body = [f](std::vector<dynamic>& a) mutable -> dynamic { return invoke_dynamic<R, Ps...>(f, a, std::index_sequence_for<Ps...>{}); };
+    return dynamic(std::move(fn));
+}
 
 inline dynamic op_add(const dynamic& a, const dynamic& b) { return a + b; }
 inline dynamic op_sub(const dynamic& a, const dynamic& b) { return a - b; }
@@ -685,9 +901,6 @@ inline dynamic  post_dec(dynamic& x) { dynamic o = x; x = x - dynamic(i2048(1));
 
 template <typename To>
 inline To from_dynamic(const dynamic& d) { return d.template as<To>(); }
-
-inline i64 parse_int(const dynamic& d) { return parse_int(d.to_string()); }
-inline f128 parse_float(const dynamic& d) { return parse_float(d.to_string()); }
 
 template <typename T, typename F>
 inline T& compound(T& target, F&& op) {
@@ -711,6 +924,13 @@ inline std::vector<char32_t> decode_utf8(const std::string& s) {
         out.push_back(cp);
     }
 
+    return out;
+}
+
+inline std::vector<dynamic> dynamic_items(const dynamic& d) {
+    if (!d.is_string()) fail("a for-each loop can't go through a var holding a value of type '" + d.type_name() + "'; only strings can be looped over");
+    std::vector<dynamic> out;
+    for (char32_t c : decode_utf8(d.as<std::string>())) out.emplace_back(c);
     return out;
 }
 
@@ -912,64 +1132,6 @@ private:
     alignas(T) unsigned char m_buf[sizeof(T)];
     bool m_live = false;
 };
-
-inline void write_all(std::ostream&) {}
-
-template <typename A, typename... R>
-inline void write_all(std::ostream& os, const A& a, const R&... rest) {
-    os << to_display(a);
-    if constexpr (sizeof...(rest) > 0) { os << ' '; write_all(os, rest...); }
-}
-
-template <typename... A>
-inline void print(const A&... args) { write_all(std::cout, args...); std::cout.flush(); }
-
-template <typename... A>
-inline void println(const A&... args) { write_all(std::cout, args...); std::cout << '\n'; std::cout.flush(); }
-
-inline std::string input() {
-    std::string line;
-    if (!std::getline(std::cin, line)) return std::string();
-    if (!line.empty() && line.back() == '\r') line.pop_back();
-    return line;
-}
-
-inline i64 parse_int(const std::string& s) {
-    std::size_t i = 0;
-    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
-    bool negative = false;
-    if (i < s.size() && (s[i] == '+' || s[i] == '-')) { negative = s[i] == '-'; ++i; }
-    const std::size_t digits_start = i;
-    i2048 value = i2048(0LL);
-    const i2048 ten = i2048(10LL);
-    while (i < s.size() && s[i] >= '0' && s[i] <= '9') { value = value * ten + i2048(static_cast<long long>(s[i] - '0')); ++i; }
-    const std::size_t digits_end = i;
-    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
-    if (digits_start == digits_end || i != s.size()) fail("cannot parse '" + s + "' as an integer");
-    if (negative) value = -value;
-    if (value < i2048(std::numeric_limits<long long>::min()) || i2048(std::numeric_limits<long long>::max()) < value) fail("'" + s + "' does not fit in a long int");
-    return cast<i64>(value);
-}
-
-inline f128 parse_float(const std::string& s) {
-    std::size_t b = 0, e = s.size();
-    while (b < e && (s[b] == ' ' || s[b] == '\t')) ++b;
-    while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t')) --e;
-    const std::string t = s.substr(b, e - b);
-    bool digit = false, ok = !t.empty();
-    for (std::size_t k = 0; k < t.size() && ok; ++k) {
-        const char ch = t[k];
-        if (ch >= '0' && ch <= '9') digit = true;
-        else if (!(ch == '.' || ch == 'e' || ch == 'E' || ((ch == '+' || ch == '-') && (k == 0 || t[k - 1] == 'e' || t[k - 1] == 'E')))) ok = false;
-    }
-    if (!ok || !digit) fail("cannot parse '" + s + "' as a number");
-    f128 v = f128(t);
-    if (v.is_undefined()) fail("cannot parse '" + s + "' as a number");
-    return v;
-}
-
-inline i64 parse_int(const dynamic& d);
-inline f128 parse_float(const dynamic& d);
 
 inline std::vector<std::string> program_args(int argc, char** argv) {
     std::vector<std::string> out;

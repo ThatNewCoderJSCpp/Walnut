@@ -18,6 +18,7 @@ struct FunctionParameter : ASTNode {
     semantics::Symbol* symbol = nullptr; 
     std::vector<semantics::Symbol*> pack_symbols;
     bool expanded_pack = false;
+    bool m_variadic_exact = false;
 
     FunctionParameter(
         std::string_view name,
@@ -42,6 +43,7 @@ struct FunctionParameter : ASTNode {
     std::size_t variadic_length() const { return m_variadic_length; }
     bool is_variadic() const { return m_variadic_length != 0; }
     bool is_infinite_variadic() const { return m_variadic_length == INFINITE_VARIADIC; }
+    bool is_exact_variadic() const { return m_variadic_exact; }
 
     void print(std::ostream& os, std::size_t indent) const;
 
@@ -124,6 +126,7 @@ struct FunctionDeclaration : ASTNode {
     modifiers::FunctionQualifiers m_qualifiers;
     std::vector<parser_types::TemplateArgument*> m_spec_args;
     bool                                         m_is_specialization = false;
+    OverloadableOperator                         m_lowered_operator = OverloadableOperator::None;
     semantics::Symbol* symbol = nullptr; 
 
     FunctionDeclaration(
@@ -308,6 +311,7 @@ struct OperatorFunctionDeclaration : ASTNode {
     modifiers::FunctionQualifiers         m_qualifiers;
     FunctionParameters*                   m_parameters;
     ASTNode*                              m_body;
+    bool                                  m_deleted = false;
     semantics::Symbol* symbol = nullptr; 
 
     OperatorFunctionDeclaration(
@@ -345,10 +349,29 @@ struct OperatorFunctionDeclaration : ASTNode {
     const ASTNode* get_body() const { return m_body; }
     ASTNode* get_body() { return m_body; }
     bool has_body() const { return m_body != nullptr; }
+    bool is_deleted() const { return m_deleted; }
     const modifiers::FunctionQualifiers& qualifiers() const { return m_qualifiers; }
           modifiers::FunctionQualifiers& qualifiers()       { return m_qualifiers; }
     const modifiers::RawModifiers& get_modifiers() const { return m_modifiers; }
     OverloadableOperator get_overload() const { return overload; }
+
+    void print(std::ostream& os, std::size_t indent) const;
+
+    ASTNode* clone_into(Arena& a) const override;
+};
+
+struct TypeQueryOverload : ASTNode {
+    std::string_view                    name;
+    bool                                is_trait = false;
+    parser_types::TypeOp                op       = parser_types::TypeOp::Typeof;
+    parser_types::TypeTrait             trait    = parser_types::TypeTrait::IsSame;
+    std::vector<parser_types::TypeInfo> m_params;
+    parser_types::TypeInfo              m_return_type;
+    ASTNode*                            m_value  = nullptr;
+
+    TypeQueryOverload(std::string_view n, std::uint32_t ln = 0) : ASTNode(Kind::TypeQueryOverload, ln), name(n) {}
+
+    static bool classof(const ASTNode* n) { return n->kind == Kind::TypeQueryOverload; }
 
     void print(std::ostream& os, std::size_t indent) const;
 

@@ -188,7 +188,7 @@ public:
 
     static SemanticError template_unsupported(ErrorReporter& r, FileId f, std::size_t line, std::string_view what);
 
-    static SemanticError static_assert_failed(ErrorReporter& r, FileId f, std::size_t line);
+    static SemanticError static_assert_failed(ErrorReporter& r, FileId f, std::size_t line, std::string_view message = {});
 
     static SemanticError template_arg_out_of_range(ErrorReporter& r, FileId f, std::size_t line, std::size_t index, const std::string& value);
 

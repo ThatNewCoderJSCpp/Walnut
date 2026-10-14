@@ -26,9 +26,8 @@ namespace {
 
 CV cv_from_modifiers(const modifiers::RawModifiers& m) {
     CV cv;
-    cv.is_const     = m.has(modifiers::RawModifiers::Const) || m.has(modifiers::RawModifiers::Constexpr);
+    cv.is_const     = m.has(modifiers::RawModifiers::Const) || m.has(modifiers::RawModifiers::Constexpr) || m.has(modifiers::RawModifiers::Inline);
     cv.is_volatile  = m.has(modifiers::RawModifiers::Volatile);
-    cv.is_immutable = m.has(modifiers::RawModifiers::Immutable);
     return cv;
 }
 

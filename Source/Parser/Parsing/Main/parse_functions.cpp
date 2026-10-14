@@ -6,14 +6,22 @@ namespace parsing {
 nodes::FunctionParameter* Parser::parse_function_parameter() {
     parser_types::TypeInfo type_info = parse_type_info();
     std::size_t variadic_length = 0;
+    bool exact_variadic = false;
 
     if (match(tokenizing::Token::Kind::Ellipsis)) {
         variadic_length = nodes::FunctionParameter::INFINITE_VARIADIC;
         
-        if (match(tokenizing::Token::Kind::LeftSquare)) {
+        if (match(tokenizing::Token::Kind::LessThan)) {
+            if (current_token().kind() != tokenizing::Token::Kind::Integer) { throw ParserError::invalid_expression(reporter, current_token(), "Expected integer for exact variadic count"); }
+            variadic_length = literal_size(current_token());
+            if (variadic_length == 0) { throw ParserError::invalid_expression(reporter, current_token(), "An exact variadic count must be at least 1"); }
+            advance();
+            expect(tokenizing::Token::Kind::GreaterThan, "Expected '>' after exact variadic count");
+            exact_variadic = true;
+        } else if (match(tokenizing::Token::Kind::LeftSquare)) {
             if (current_token().kind() != tokenizing::Token::Kind::Integer) { throw ParserError::invalid_expression(reporter, current_token(), "Expected integer for variadic size"); }
             std::string size_str(current_token().lexeme());
-            variadic_length = std::stoull(size_str);
+            variadic_length = literal_size(current_token());
             advance();
             expect(tokenizing::Token::Kind::RightSquare, "Expected ']' after variadic size");
         }
@@ -40,15 +48,20 @@ nodes::FunctionParameter* Parser::parse_function_parameter() {
     std::string_view param_name = current_token().lexeme();
     advance();
     nodes::ASTNode* default_value = nullptr;
-    if (match(tokenizing::Token::Kind::Equal)) { default_value = parse_expression(); }
-    
-    return make<nodes::FunctionParameter>(
+    if (match(tokenizing::Token::Kind::Equal)) {
+        if (variadic_length == nodes::FunctionParameter::INFINITE_VARIADIC) { throw ParserError::invalid_expression(reporter, current_token(), "A '...' parameter takes any number of arguments, so it can't have a default; give it a limit with '...[N]' or '...<N>' to fill missing ones with a default"); }
+        default_value = parse_expression();
+    }
+
+    auto* param = make<nodes::FunctionParameter>(
         param_name,
         type_info,
         default_value,
         default_value != nullptr,
         variadic_length
     );
+    param->m_variadic_exact = exact_variadic;
+    return param;
 }
 
 nodes::FunctionParameters* Parser::parse_function_parameters() {
@@ -179,11 +192,6 @@ modifiers::FunctionQualifiers Parser::parse_function_qualifiers() {
                 advance();
                 break;
 
-            case tokenizing::Token::Kind::OverloadKeyword:
-                if (quals.has(modifiers::FunctionQualifiers::Overload)) throw ParserError::duplicate_function_qualifiers(reporter, current_token());
-                quals.add(modifiers::FunctionQualifiers::Overload);
-                advance();
-                break;
                 
             default:
                 return quals;
@@ -534,6 +542,15 @@ nodes::ASTNode* Parser::parse_operator_function(
     expect(K::OperatorKeyword, "Expected 'operator' keyword");
     expect(K::LeftParen, "Expected '(' after 'operator'");
 
+    if (lookahead(1).kind() == K::RightParen) {
+        if (current_token().is_one_of(K::TypeofKeyword, K::DecltypeKeyword, K::DiscardConstKeyword)) {
+            throw ParserError::invalid_expression(reporter, current_token(), "'" + std::string(current_token().lexeme()) + "' cannot be overloaded");
+        }
+
+        parser_types::TypeQueryInfo info;
+        if (current_token().is(K::Identifier) && parser_types::find_type_query(current_token().lexeme(), info)) return parse_type_query_overload(info, line_number);
+    }
+
     nodes::OperatorFunctionDeclaration::Form form;
     std::vector<tokenizing::Token::Kind>      op_tokens;
     parser_types::TypeInfo                    conversion_type;
@@ -610,22 +627,95 @@ nodes::ASTNode* Parser::parse_operator_function(
         return_type = conversion_type;
     }
 
-    if (concrete_match(K::LeftCurly)) {
+    bool deleted = false;
+
+    if (match(K::Equal)) {
+        expect(K::DeleteKeyword, "Expected 'delete' after '=' in an operator function");
+
+        if (!concrete_match(K::Semicolon) && !concrete_match(K::DoubleSemicolon)) {
+            throw ParserError::missing_token(reporter, current_token(), K::Semicolon, "A deleted operator function must end with a semicolon");
+        }
+
+        consume_semicolons();
+        deleted = true;
+    } else if (concrete_match(K::LeftCurly)) {
         body = parse_block();
     } else if (concrete_match(K::Semicolon) || concrete_match(K::DoubleSemicolon)) {
         consume_semicolons();
     } else {
-        throw ParserError::unexpected_token(reporter, current_token(), { K::LeftCurly, K::Semicolon }, "Operator function requires a body ('{ ... }') or a terminating ';'");
+        throw ParserError::unexpected_token(reporter, current_token(), { K::LeftCurly, K::Semicolon }, "Operator function requires a body ('{ ... }'), '= delete;' or a terminating ';'");
     }
 
     if (form == nodes::OperatorFunctionDeclaration::Form::Conversion) {
         auto* node = make<nodes::OperatorFunctionDeclaration>(conversion_type, return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);
         node->overload = nodes::OverloadableOperator::Conversion;   
+        node->m_deleted = deleted;
         return node;
     }
 
     auto* node = make<nodes::OperatorFunctionDeclaration>(std::move(op_tokens), return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);
     node->overload = op_kind;
+    node->m_deleted = deleted;
+    return node;
+}
+
+nodes::ASTNode* Parser::parse_type_query_overload(const parser_types::TypeQueryInfo& info, std::size_t line_number) {
+    using K = tokenizing::Token::Kind;
+    const std::string name(info.name);
+    const tokenizing::Token name_token = current_token();
+    advance();
+    expect(K::RightParen, "Expected ')' after '" + name + "'");
+
+    if (info.overload == parser_types::OverloadPolicy::Never) {
+        throw ParserError::invalid_expression(reporter, name_token, "'" + name + "' cannot be overloaded; its answer depends only on how the type is written");
+    }
+
+    auto* node = make<nodes::TypeQueryOverload>(info.name, static_cast<std::uint32_t>(line_number));
+    node->is_trait = info.is_trait;
+    node->op       = info.op;
+    node->trait    = info.trait;
+
+    expect(K::FunctionKeyword, "Expected 'function' after 'operator(" + name + ")'");
+    expect(K::LeftParen, "Expected '(' to start the parameter types of 'operator(" + name + ")'");
+
+    if (!match(K::RightParen)) {
+        do {
+            node->m_params.push_back(parse_type_info());
+        } while (match(K::Comma));
+
+        expect(K::RightParen, "Expected ')' to end the parameter types of 'operator(" + name + ")'");
+    }
+
+    expect(K::SingleRightArrow, "'operator(" + name + ")' needs a result type: '-> <type>'");
+    node->m_return_type = parse_type_info();
+
+    if (!info.is_trait) {
+        if (current_token().is(K::LeftCurly)) {
+            throw ParserError::invalid_expression(reporter, current_token(), "'operator(" + name + ")' has no body; the type after '->' is the result");
+        }
+
+        if (!concrete_match(K::Semicolon) && !concrete_match(K::DoubleSemicolon)) {
+            throw ParserError::missing_token(reporter, current_token(), K::Semicolon, "'operator(" + name + ")' must end with a semicolon");
+        }
+
+        consume_semicolons();
+        return node;
+    }
+
+    if (!current_token().is(K::LeftCurly)) {
+        throw ParserError::invalid_expression(reporter, current_token(), "'operator(" + name + ")' needs a body: '{ return <constant>; }'");
+    }
+
+    const tokenizing::Token body_token = current_token();
+    nodes::ASTNode* body = parse_block();
+    auto* block = body && body->kind == nodes::ASTNode::Kind::BlockStatement ? static_cast<nodes::BlockStatement*>(body) : nullptr;
+
+    if (!block || block->statements.size() != 1 || !block->statements[0] || block->statements[0]->kind != nodes::ASTNode::Kind::ReturnStatement
+        || !static_cast<nodes::ReturnStatement*>(block->statements[0])->get_value()) {
+        throw ParserError::invalid_expression(reporter, body_token, "the body of 'operator(" + name + ")' must be a single 'return <constant>;'");
+    }
+
+    node->m_value = static_cast<nodes::ReturnStatement*>(block->statements[0])->get_value();
     return node;
 }
 

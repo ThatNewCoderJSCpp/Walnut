@@ -31,6 +31,8 @@ struct ExportEntry {
     bool                          has_source   = false;
     nodes::ASTNode*               decl         = nullptr;  // for export function
     std::string_view              module_owner;            // for module NAME {...}
+    FileId                        file         = INVALID_FILE;
+    std::size_t                   line         = 0;
 };
 
 class ImportResolver {
@@ -54,7 +56,7 @@ private:
 
     void import_item(const nodes::ImportExportItem& it, Scope* root, ASTNode* origin);
 
-    void export_item(const nodes::ImportExportItem& it, std::string_view module_owner);
+    void export_item(const nodes::ImportExportItem& it, std::string_view module_owner, const ASTNode* at = nullptr);
 
     void process_import_export(nodes::ImportExportDeclaration* decl, Scope* root, std::string_view module_owner);
 

@@ -20,6 +20,15 @@ public:
     void run(const FrontPass& front);
 
 private:
+    void check_inline_cycles(const FrontPass& front);
+
+    void check_externs(const FrontPass& front);
+
+    std::string native_type_problem(semantics::Type* t, bool is_return);
+
+    bool same_signature(const nodes::FunctionDeclaration* a, const nodes::FunctionDeclaration* b);
+
+private:
     ErrorReporter&             m_reporter;
     WarningReporter&           m_warnings;
     semantics::TypeContext&    m_types;

@@ -91,6 +91,39 @@ Symbol* NameResolver::node_symbol(nodes::ASTNode* n) {
     }
 }
 
+void NameResolver::check_visibility(const std::vector<std::string_view>& parts, bool is_global, const nodes::ASTNode* use) {
+    if (m_quiet || !use) return;
+    check_symbols(resolve_path(m_current, m_root, parts, is_global, use), use);
+}
+
+void NameResolver::check_symbols(const std::vector<Symbol*>& chain, const nodes::ASTNode* use) {
+    if (m_quiet || !use) return;
+
+    for (Symbol* s : chain) {
+        for (Symbol* x : { s, chase(s) }) {
+            if (!x) continue;
+            std::string why;
+
+            if (x->kind == SymbolKind::Function && x->next_overload) {
+                bool any_ok = false;
+                for (Symbol* o = x; o; o = o->next_overload) {
+                    std::string w = visibility_violation(o, m_current, use);
+                    if (w.empty()) { any_ok = true; break; }
+                    if (why.empty()) why = std::move(w);
+                }
+                if (any_ok) why.clear();
+            } else {
+                why = visibility_violation(x, m_current, use);
+            }
+
+            if (!why.empty()) {
+                SemanticError::emit(m_reporter, use->file_id, use->line, "Visibility", why);
+                return;
+            }
+        }
+    }
+}
+
 void NameResolver::error_unresolved(const nodes::ASTNode* use, std::string_view name) {
     if (use && !m_quiet) { SemanticError::unresolved_name(m_reporter, use->file_id, use->line, name); }
 }
@@ -99,6 +132,7 @@ void NameResolver::resolve_type(parser_types::TypeInfo& info, const nodes::ASTNo
     if (info.type && info.type->is_user_defined()) {
         auto* ud = static_cast<parser_types::UserDefinedType*>(info.type);
         Symbol* s = resolve_name(m_current, m_root, ud->parts(), ud->is_global(), use);
+        if (s) check_visibility(ud->parts(), ud->is_global(), use);
 
         if (s) {
             Symbol* c = chase(s);
@@ -114,6 +148,17 @@ void NameResolver::resolve_type(parser_types::TypeInfo& info, const nodes::ASTNo
         
     if (info.type && info.type->is_qualified()) resolve_qualified(info, use);
 
+    if (info.type && info.type->is_variant()) {
+        auto* vt = static_cast<parser_types::VariantType*>(info.type);
+        for (const parser_types::TypeInfo& a : vt->alternatives()) resolve_type(const_cast<parser_types::TypeInfo&>(a), use);
+    }
+
+    if (info.type && info.type->is_computed()) {
+        auto* ct = static_cast<parser_types::ComputedType*>(info.type);
+        if (ct->expr()) walk_expr(ct->expr());
+        for (parser_types::TypeInfo& a : ct->args()) resolve_type(a, use);
+    }
+
     if (info.type && info.type->is_array()) {
         auto* at = static_cast<parser_types::ArrayType*>(info.type);
         resolve_type(at->element_type(), use);
@@ -123,6 +168,7 @@ void NameResolver::resolve_type(parser_types::TypeInfo& info, const nodes::ASTNo
     if (info.type && info.type->is_function_pointer()) {
         auto* fp = static_cast<parser_types::FunctionPointerType*>(info.type);
         for (const parser_types::TypeInfo& pt : fp->param_types()) { resolve_type(const_cast<parser_types::TypeInfo&>(pt), use); }
+        for (const parser_types::FunctionPointerType::ParamExtra& e : fp->extras()) if (e.default_value) walk_expr(e.default_value);
         resolve_type(const_cast<parser_types::TypeInfo&>(fp->return_type()), use);
     }
 
@@ -144,6 +190,7 @@ void NameResolver::resolve_qualified(parser_types::TypeInfo& info, const nodes::
 
     if (last_args == comps.size()) {
         Symbol* s = resolve_name(m_current, m_root, names, qt->is_global(), use);
+        if (s) check_visibility(names, qt->is_global(), use);
         if (s && is_type_symbol(chase(s)->kind)) info.resolved = chase(s);
         else error_unresolved(use, join(names, qt->is_global()));
         return;
@@ -151,6 +198,7 @@ void NameResolver::resolve_qualified(parser_types::TypeInfo& info, const nodes::
 
     std::vector<std::string_view> head(names.begin(), names.begin() + static_cast<std::ptrdiff_t>(last_args + 1));
     Symbol* s = resolve_name(m_current, m_root, head, qt->is_global(), use);
+    if (s) check_visibility(head, qt->is_global(), use);
     Symbol* c = s ? chase(s) : nullptr;
 
     if (!c || c->kind != SymbolKind::Type || last_args + 2 != comps.size()) {
@@ -201,7 +249,7 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
                 break;
             }
             Symbol* s = resolve_lexical_visible(m_current, id->name, id);
-            if (s) { id->resolved = chase(s); }
+            if (s) { check_symbols({ s }, id); id->resolved = chase(s); }
             else   { error_unresolved(id, id->name); }
             break;
         }
@@ -209,7 +257,7 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
         case K::QualifiedIdentifier: {
             auto* q = static_cast<nodes::QualifiedIdentifier*>(e);
             Symbol* s = resolve_name(m_current, m_root, q->parts(), q->is_global(), q);
-            if (s) { q->resolved = chase(s); }
+            if (s) { check_visibility(q->parts(), q->is_global(), q); q->resolved = chase(s); }
             else   { error_unresolved(q, join(q->parts(), q->is_global())); }
             break;
         }
@@ -317,6 +365,7 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
         case K::TypeQuery: {
             auto* q = static_cast<nodes::TypeQueryExpression*>(e);
             resolve_targ(q->operand, q);
+            for (parser_types::TemplateArgument* x : q->extra_operands) resolve_targ(x, q);
             break;
         }
 
@@ -440,6 +489,7 @@ void NameResolver::build(nodes::ASTNode* node) {
         case K::ArrayDeclaration: {
             auto* a = static_cast<nodes::ArrayDeclaration*>(node);
             resolve_type(a->m_element_type, a);
+            resolve_targ(a->m_alignment, a);
             walk_expr(a->m_dimension_expr);
             walk_expr(a->m_initializer);
             break;
@@ -456,8 +506,12 @@ void NameResolver::build(nodes::ASTNode* node) {
             auto* s = static_cast<nodes::IfStatement*>(node);
 
             for (nodes::IfBranch* br : s->get_branches()) {
-                walk_expr(br->condition);
+                Scope* saved = m_current;
+                if (br->scope) { m_current = br->scope; }
+                if (br->condition && br->condition->kind == nodes::ASTNode::Kind::VariableDeclaration) { build(br->condition); }
+                else { walk_expr(br->condition); }
                 build(br->body);
+                m_current = saved;
             }
 
             build(mn(s->get_else()));
@@ -548,6 +602,14 @@ void NameResolver::build(nodes::ASTNode* node) {
             break;
         }
 
+        case K::TypeQueryOverload: {
+            auto* q = static_cast<nodes::TypeQueryOverload*>(node);
+            for (parser_types::TypeInfo& p : q->m_params) resolve_type(p, q);
+            resolve_type(q->m_return_type, q);
+            if (q->m_value) walk_expr(q->m_value);
+            break;
+        }
+
         case K::ConstructorDeclaration: {
             auto* ct = static_cast<nodes::ConstructorDeclaration*>(node);
             Scope* saved = m_current;
@@ -570,11 +632,12 @@ void NameResolver::build(nodes::ASTNode* node) {
 
         case K::RecordDeclaration: {
             auto* rec = static_cast<nodes::RecordDeclaration*>(node);
-                
+            resolve_targ(rec->m_alignment, rec);
+
             if (rec->has_inherits()) {
                 Scope* outer = m_current;
                 if (Scope* rs = inner_of(rec->symbol); rs && rs->parent) { m_current = rs->parent; }
-                resolve_type(const_cast<parser_types::TypeInfo&>(rec->get_inherits()), rec);
+                for (parser_types::TypeInfo* b : rec->all_bases()) resolve_type(*b, rec);
                 m_current = outer;
                 link_base(rec);
             }
@@ -663,6 +726,7 @@ void NameResolver::build(nodes::ASTNode* node) {
                 resolve_type(u->aliased_type, u);                 // typedef <type> X
             } else if (u->is_namespace_alias()) {                 // namespace X = a::b;
                 Symbol* target = resolve_name(m_current, m_root, u->target_parts, u->target_global, u);
+                if (target) check_visibility(u->target_parts, u->target_global, u);
 
                 if (!target) {
                     error_unresolved(u, u->target_name());
@@ -678,6 +742,7 @@ void NameResolver::build(nodes::ASTNode* node) {
                 }
             } else if (u->is_directive()) {                       // using namespace a::b;
                 Symbol* target = resolve_name(m_current, m_root, u->target_parts, u->target_global, u);
+                if (target) check_visibility(u->target_parts, u->target_global, u);
                 if (!target) {
                     error_unresolved(u, u->target_name());
                 } else if (Symbol* c = chase(target); c && c->kind == SymbolKind::Namespace) {
@@ -713,12 +778,18 @@ void NameResolver::resolve_params(nodes::FunctionParameters* params) {
 }
 
 void NameResolver::link_base(nodes::RecordDeclaration* rec) {
-    Symbol* base = rec->get_inherits().resolved;
-    if (!base || !base->inner_scope) { return; }
     Scope* rs = inner_of(rec->symbol);
     if (!rs) { return; }
-    for (Scope* b : rs->bases) { if (b == base->inner_scope) { return; } }
-    rs->bases.push_back(base->inner_scope);
+
+    for (parser_types::TypeInfo* info : rec->all_bases()) {
+        Symbol* base = info->resolved;
+        if (!base || !base->inner_scope) { continue; }
+        if (std::find(rs->bases.begin(), rs->bases.end(), base->inner_scope) != rs->bases.end()) {
+            if (!m_quiet) SemanticError::emit(m_reporter, rec->file_id, rec->line, "Inheritance", "'" + std::string(rec->get_name()) + "' lists '" + std::string(base->name) + "' as a base class more than once");
+            continue;
+        }
+        rs->bases.push_back(base->inner_scope);
+    }
 }
 
 } // namespace semantics

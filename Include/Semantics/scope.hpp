@@ -46,6 +46,7 @@ public:
     Symbol* resolve(std::string_view n) const;
 
     Symbol* find_member(std::string_view n) const;
+    void member_owners(std::string_view n, std::vector<const Scope*>& out, int depth = 0) const;
 };
 
 } // namespace semantics

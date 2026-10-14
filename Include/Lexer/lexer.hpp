@@ -26,6 +26,8 @@ public:
     Token next() noexcept;
 
 private:
+    Token scan() noexcept;
+    Token raw_code(const char* word_start) noexcept;
     Token identifier() noexcept;
     Token number() noexcept;
     Token slash_or_comment() noexcept;
@@ -42,6 +44,9 @@ private:
     ErrorReporter& m_reporter;
     std::uint32_t m_line_number = 1;
     std::size_t m_error_count = 0;
+    Token::Kind m_prev1 = Token::Kind::End;
+    Token::Kind m_prev2 = Token::Kind::End;
+    std::string_view m_prev1_text;
 };
 
 constexpr bool is_space(const char c) noexcept {

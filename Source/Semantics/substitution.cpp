@@ -8,7 +8,6 @@ CV cv_union(CV a, CV b) {
     CV r;
     r.is_const     = a.is_const     || b.is_const;
     r.is_volatile  = a.is_volatile  || b.is_volatile;
-    r.is_immutable = a.is_immutable || b.is_immutable;
     return r;
 }
 
@@ -300,7 +299,7 @@ Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
             std::vector<Type*> params;
             params.reserve(f->params().size());
             for (Type* p : f->params()) params.push_back(subst(p, env, ctx));
-            return ctx.function(subst(f->ret(), env, ctx), std::move(params), f->is_const(), f->ref_qual(), f->is_noexcept());
+            return ctx.function(subst(f->ret(), env, ctx), std::move(params), f->is_const(), f->ref_qual(), f->is_noexcept(), f->param_info());
         }
 
         case TypeKind::Variant: {

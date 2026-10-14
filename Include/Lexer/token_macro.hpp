@@ -26,7 +26,7 @@ namespace tokenizing {
     X(Comment, false, "") X(LongComment, false, "") \
     /* Misc */ \
     X(Pipe, false, "") X(End, false, "") X(Unexpected, false, "") X(NewLine, false, "") X(Backtick, false, "") X(Tilde, false, "") \
-    X(String, false, "") X(ExclamationMark, false, "") X(QuestionMark, false, "") X(AtSymbol, false, "") \
+    X(String, false, "") X(RawCode, false, "") X(ExclamationMark, false, "") X(QuestionMark, false, "") X(AtSymbol, false, "") \
     X(Caret, false, "") X(Percent, false, "") X(BackSlash, false, "") X(MoneySymbol, false, "") X(Ampersand, false, "") X(Underscore, false, "") \
     /* Compound operators */ \
     X(DoublePlus, false, "") X(PlusEqual, false, "") X(DoublePlusEqual, false, "") X(LogicEqual, false, "") \
@@ -95,7 +95,6 @@ namespace tokenizing {
     X(InKeyword, true, "in") \
     X(InlineKeyword, true, "inline") \
     X(InfinityKeyword, true, "infinity", "inf") \
-    X(ImmutableKeyword, true, "immutable") \
     X(ImplicitKeyword, true, "implicit") \
     X(InheritsKeyword, true, "inherits", "inherit") \
     X(IsKeyword, true, "is") \
@@ -109,7 +108,6 @@ namespace tokenizing {
     X(NodiscardKeyword, true, "nodiscard", "no_discard") \
     X(OperatorKeyword, true, "operator") \
     X(OverrideKeyword, true, "override") \
-    X(OverloadKeyword, true, "overload") \
     X(PrivateKeyword, true, "private") \
     X(PublicKeyword, true, "public") \
     X(ProtectedKeyword, true, "protected") \

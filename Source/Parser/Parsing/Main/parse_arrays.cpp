@@ -18,7 +18,7 @@ parser_types::TypeInfo Parser::parse_array_type() {
             std::string size_str(current_token().lexeme());
 
             try {
-                dimension = std::stoull(size_str);
+                dimension = literal_size(current_token());
             } catch (...) {
                 throw ParserError::invalid_literal(reporter, current_token(), "Array size is too large");
             }
@@ -79,7 +79,7 @@ nodes::ASTNode* Parser::parse_array_declaration(const modifiers::RawModifiers& a
             std::string size_str(current_token().lexeme());
 
             try {
-                dimension = std::stoull(size_str);
+                dimension = literal_size(current_token());
             } catch (...) {
                 throw ParserError::invalid_literal(reporter, current_token(), "Array size is too large");
             }
@@ -155,7 +155,7 @@ nodes::ASTNode* Parser::parse_array_declaration(const modifiers::RawModifiers& a
             std::string size_str(current_token().lexeme());
             
             try {
-                dimension = std::stoull(size_str);
+                dimension = literal_size(current_token());
             } catch (...) {
                 throw ParserError::invalid_literal(reporter, current_token(), "Array size is too large");
             }

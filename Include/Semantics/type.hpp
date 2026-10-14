@@ -2,6 +2,7 @@
 #define WALNUT_SEMA_TYPE_HPP
 
 #include <cstdint>
+#include <string>
 #include <vector>
 #include <optional>
 #include <string_view>
@@ -23,8 +24,16 @@ namespace semantics {
 
 class UserConversionTable;
 struct Scope;
+class Type;
 class RecordType;
 class SubstEnv;
+
+struct TypeQueryOverloadResult {
+    bool                        found = false;
+    Type*                       type  = nullptr;
+    std::optional<std::int64_t> value;
+    std::string                 error;
+};
 
 enum class TypeKind : std::uint8_t {
     Builtin = 0, // int, float, bool, char, string, text, void, dynamic
@@ -47,10 +56,9 @@ enum class TypeKind : std::uint8_t {
 struct CV {
     bool is_const     = false;
     bool is_volatile  = false;
-    bool is_immutable = false;
 
     bool operator==(const CV& o) const {
-        return is_const == o.is_const && is_volatile == o.is_volatile && is_immutable == o.is_immutable;
+        return is_const == o.is_const && is_volatile == o.is_volatile;
     }
 
     std::uint8_t bits() const;
@@ -214,11 +222,27 @@ private:
     Symbol* m_decl;
 };
 
+struct FnParamInfo {
+    enum class Pack : std::uint8_t { None = 0, Unbounded, UpTo, Exact };
+
+    Pack            pack = Pack::None;
+    std::size_t     cap = 0;
+    nodes::ASTNode* def = nullptr;
+    std::string     def_key;
+
+    bool is_pack() const { return pack != Pack::None; }
+    bool trivial() const { return pack == Pack::None && !def; }
+    bool operator==(const FnParamInfo& o) const { return pack == o.pack && cap == o.cap && (def != nullptr) == (o.def != nullptr) && def_key == o.def_key; }
+    bool operator!=(const FnParamInfo& o) const { return !(*this == o); }
+};
+
 class FunctionType : public Type {
 public:
-    FunctionType(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept);
+    FunctionType(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept, std::vector<FnParamInfo> info = {});
     Type*                     ret()    const { return m_ret; }
     const std::vector<Type*>& params() const { return m_params; }
+    const std::vector<FnParamInfo>& param_info() const { return m_info; }
+    bool has_param_info() const { return !m_info.empty(); }
     bool    is_const()    const { return m_const; }
     RefQual ref_qual()    const { return m_ref; }
     bool    is_noexcept() const { return m_noexcept; }
@@ -230,6 +254,7 @@ private:
     bool               m_const;
     RefQual            m_ref;
     bool               m_noexcept;
+    std::vector<FnParamInfo> m_info;
 };
 
 class VariantType : public Type {
@@ -352,13 +377,18 @@ public:
 
     Type* pointer(Type* pointee, CV cv = {});
     Type* reference(Type* referent, RefQual rq, CV cv = {});
+
+    Type* without_const(Type* t);
+
+    Type* computed_expr_type(nodes::ASTNode* e, bool decltype_rules);
     Type* array(Type* element, std::optional<std::size_t> extent, CV cv = {});
     Type* dependent_array(Type* element, Symbol* extent_param, CV cv = {});
     Type* closure(nodes::ASTNode* lambda);
     Type* coroutine(Type* value, bool is_generator, CV cv = {});
     Type* record(Symbol* decl, TemplateArgs args, CV cv = {});
     Type* enum_(Symbol* decl, CV cv = {});
-    Type* function(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept);
+    Type* function(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept, std::vector<FnParamInfo> info = {});
+    bool default_key(nodes::ASTNode* e, std::string& key);
     Type* variant(std::vector<Type*> alternatives);
     Type* type_param(Symbol* param, CV cv = {}); 
     Type* dependent_name(Type* base, std::string_view name);
@@ -377,6 +407,10 @@ public:
 
     std::function<bool(nodes::ASTNode*, TemplateArg&)> value_arg_hook;
     std::function<bool(nodes::ASTNode*, TemplateArg&)> value_eval_hook;
+    std::function<void(nodes::ASTNode*)>               expr_walk_hook;
+    std::function<void(const std::string&)>            type_error_hook;
+    std::function<void(Type*)>                         conversions_hook;
+    std::function<TypeQueryOverloadResult(RecordType*, std::string_view, const std::vector<Type*>&)> type_query_overload_hook;
     std::function<int(Symbol*, TemplateArg&)>          value_symbol_hook;
     std::function<Scope*(RecordType*)>                 record_scope_hook;
     std::function<Type*(Symbol*)>                      instance_type_hook;
@@ -418,8 +452,8 @@ private:
     };
 
     struct FuncKey {
-        Type* ret; std::vector<Type*> params; std::uint8_t flags;  
-        bool operator==(const FuncKey& o) const { return ret == o.ret && flags == o.flags && params == o.params; }
+        Type* ret; std::vector<Type*> params; std::uint8_t flags; std::vector<FnParamInfo> info;
+        bool operator==(const FuncKey& o) const { return ret == o.ret && flags == o.flags && params == o.params && info == o.info; }
     };
 
     struct SeqKey {                            

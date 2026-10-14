@@ -71,6 +71,13 @@ ParserError ParserError::invalid_expression(ErrorReporter& reporter, const token
     return make_and_report(reporter, token, ss.str());
 }
 
+ParserError ParserError::invalid_declaration(ErrorReporter& reporter, const tokenizing::Token& token, const std::string& message) {
+    std::stringstream ss;
+    ss << build_error_header(token, "Declaration");
+    ss << message;
+    return make_and_report(reporter, token, ss.str());
+}
+
 ParserError ParserError::missing_token(ErrorReporter& reporter, const tokenizing::Token& token, tokenizing::Token::Kind expected, const std::string& context) {
     std::stringstream ss;
     ss << build_error_header(token, "Syntax");

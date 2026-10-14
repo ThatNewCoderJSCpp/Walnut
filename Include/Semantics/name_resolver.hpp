@@ -69,6 +69,10 @@ private:
 
     void error_unresolved(const nodes::ASTNode* use, std::string_view name);
 
+    void check_visibility(const std::vector<std::string_view>& parts, bool is_global, const nodes::ASTNode* use);
+
+    void check_symbols(const std::vector<Symbol*>& chain, const nodes::ASTNode* use);
+
     void resolve_type(parser_types::TypeInfo& info, const nodes::ASTNode* use, bool allow_value = false);
 
     void resolve_qualified(parser_types::TypeInfo& info, const nodes::ASTNode* use);

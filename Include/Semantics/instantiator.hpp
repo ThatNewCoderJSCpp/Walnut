@@ -35,6 +35,7 @@ public:
         Type*                       type = nullptr;    // RecordType / FunctionType
         std::vector<ParamShape>     fn_shapes;
         bool                        typed = false;     
+        bool                        speculative = false;
     };
 
     enum class ArgCoerce : std::uint8_t {
@@ -79,7 +80,7 @@ public:
     }
 
     template <typename Fn>
-    void for_each(Fn&& fn) const { for (const auto& kv : m_memo) fn(*kv.second); }
+    void for_each(Fn&& fn) const { for (Instantiation* I : m_created) fn(*I); }
 
     Instantiation* for_record(RecordType* rt, nodes::ASTNode* site);
 
@@ -124,6 +125,8 @@ private:
     bool classify_value_arg(nodes::ASTNode* e, TemplateArg& out);
 
     Symbol* call_operator_for(Type* rec, Type* sig);
+
+    TypeQueryOverloadResult type_query_overload(RecordType* rt, std::string_view name, const std::vector<Type*>& others);
 
     std::unordered_set<Type*> m_call_probe;
 
@@ -187,6 +190,7 @@ private:
     ConstEvaluator m_eval;
 
     std::unordered_map<Key, Instantiation*, KeyHash> m_memo;
+    std::vector<Instantiation*>                      m_created;
     std::unordered_map<Scope*, Instantiation*>       m_scope_owner;
     int m_depth = 0;
     static constexpr int kMaxDepth = 256;
