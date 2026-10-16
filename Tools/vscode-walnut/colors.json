@@ -8,7 +8,7 @@
     "built-in operators": "#FF0000",
     "overloaded operators": "#FFFF00",
     "functions": "#FFFF00",
-    "template scopes": "#FFFFFF",
+    "template scopes": "#FFEA00",
     "types": "#FFEA00",
     "built-in types": "#AF00FF",
     "namespaces": "#FFFFFF",

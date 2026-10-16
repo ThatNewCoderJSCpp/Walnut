@@ -23,6 +23,11 @@ WalkPass::WalkPass(ErrorReporter& reporter, WarningReporter& warnings, semantics
     };
 }
 
+WalkPass::~WalkPass() {
+    m_inst.build_scopes = nullptr;
+    m_inst.resolve_names = nullptr;
+}
+
 void WalkPass::run(const FrontPass& front) {
     semantics::ThrowContext throws(m_types);
     semantics::TypeWalker::reset_deferred_bodies();

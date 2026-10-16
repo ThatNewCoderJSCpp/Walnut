@@ -369,6 +369,7 @@ Scope* Instantiator::friend_record_scope(nodes::TemplateDeclaration* tmpl, Insta
 }
 
 auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, nodes::ASTNode* site, bool quiet) -> Instantiation* {
+    if (m_frozen) quiet = true;
     using K = nodes::ASTNode::Kind;
     if (generic && !generic->template_decl) generic = primary_of_instance(generic);
     nodes::TemplateDeclaration* tmpl = generic ? generic->template_decl : nullptr;
@@ -391,6 +392,7 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
     if (!complete_arguments(tmpl, args, site, quiet)) return nullptr;
     Key key{ generic, args };
     if (auto it = m_memo.find(key); it != m_memo.end()) return it->second;
+    if (m_frozen) return nullptr;
 
     if (m_depth >= kMaxDepth) {
         SemanticError::template_depth_exceeded(m_reporter, file_of(site), line_of(site), generic->name);

@@ -1,5 +1,6 @@
 #include "Driver/highlight.hpp"
 #include "Parser/Nodes/node_children.hpp"
+#include "Semantics/const_evaluator.hpp"
 #include "Semantics/scope.hpp"
 #include "Semantics/symbol.hpp"
 
@@ -97,14 +98,165 @@ std::string json_string(std::string_view s) {
     return out + "\"";
 }
 
+std::string type_text(S::Type* t) {
+    return t ? S::type_str_of(t) : std::string();
+}
+
+std::string type_text(const parser_types::TypeInfo& t, S::TypeContext* types = nullptr) {
+    if (t.canonical) return S::type_str_of(t.canonical);
+    if (!t.has_type()) return std::string();
+
+    if (types) {
+        S::Type* c = types->canonicalize(t);
+        const std::string text = type_text(c);
+        if (c && text.find("<error") == std::string::npos) return text;
+    }
+
+    std::ostringstream os;
+    t.write_to(os);
+    return os.str();
+}
+
+std::string string_literal(std::string_view s) {
+    std::string out = "\"";
+
+    for (char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            case '$':  out += "\\$";  break;
+            default:   out += c;
+        }
+    }
+
+    return out + "\"";
+}
+
+unsigned float_bits(S::Type* t) {
+    if (!t || !t->is_builtin()) return 0;
+    const auto* b = static_cast<S::BuiltinType*>(t);
+    if (b->base() != parser_types::PrimitiveType::BaseKind::Float) return 0;
+    return bit_width_of_rank(b->width());
+}
+
+std::string float_text(const WideFloat& f, unsigned bits) {
+    const unsigned binary = bits ? float_digits_of_bits(bits) : 0;
+    const long long most = binary ? static_cast<long long>(binary * 0.30103) + 3 : 17;
+
+    for (long long digits = 1; digits < most; ++digits) {
+        const std::string text = f.to_string(digits);
+        bool ok = false;
+        const WideFloat back = wf_parse(text, ok);
+        if (!ok) continue;
+        WideFloat rounded = back;
+        if (bits && !wf_round_to_width(back, bits, rounded)) rounded = back;
+        if (wf_same_bits(rounded, f)) return text;
+    }
+
+    return f.to_string(most);
+}
+
+std::string value_text(const S::ConstValue& v, S::Type* t) {
+    switch (v.kind) {
+        case S::ConstValue::Kind::Int: {
+            if (!v.i) return std::string();
+            std::string text = v.i->to_string();
+            const std::string ts = type_text(t);
+
+            if ((ts == "char" || ts == "const char") && !v.i->is_negative() && S::ConstTable::fits(*v.i, 7, false)) {
+                const long long code = std::stoll(text);
+                if (code >= 0x20 && code < 0x7F && code != '\'' && code != '\\') return "'" + std::string(1, static_cast<char>(code)) + "' (" + text + ")";
+            }
+
+            return text;
+        }
+        case S::ConstValue::Kind::Float:   return v.f ? float_text(*v.f, float_bits(t)) : std::string();
+        case S::ConstValue::Kind::Bool:    return v.b ? "true" : "false";
+        case S::ConstValue::Kind::Special: return S::special_spelling(v.sp);
+        case S::ConstValue::Kind::String:  return v.s ? string_literal(*v.s) : std::string();
+        case S::ConstValue::Kind::None:    break;
+    }
+
+    return std::string();
+}
+
+std::string joined(const std::vector<std::string_view>& parts) {
+    std::string out;
+
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        if (i) out += "::";
+        out += parts[i];
+    }
+
+    return out;
+}
+
+std::string without_const(std::string t) {
+    if (t.rfind("const ", 0) == 0) t.erase(0, 6);
+    return t;
+}
+
+std::string prefix(const modifiers::RawModifiers& m) {
+    using RM = modifiers::RawModifiers;
+    std::string out;
+    if (m.has(RM::Static))    out += "static ";
+    if (m.has(RM::Inline))    out += "inline ";
+    if (m.has(RM::Lazy))      out += "lazy ";
+    if (m.has(RM::Constexpr)) out += "constexpr ";
+    return out;
+}
+
+std::string signature(const N::FunctionDeclaration* f, S::TypeContext* types = nullptr) {
+    if (f->variable_template) {
+        std::string t = type_text(f->m_return_type, types);
+        if (f->m_modifiers.has(modifiers::RawModifiers::Constexpr)) t = without_const(t);
+        return prefix(f->m_modifiers) + (t.empty() ? std::string() : t + ": ") + joined(f->m_name_parts);
+    }
+
+    std::string out = prefix(f->m_modifiers) + "function " + joined(f->m_name_parts) + "(";
+
+    if (f->m_parameters) {
+        bool first = true;
+
+        for (const N::FunctionParameter* p : f->m_parameters->m_params) {
+            if (!p) continue;
+            if (!first) out += ", ";
+            first = false;
+            out += type_text(p->m_type, types);
+
+            if (p->is_variadic()) {
+                out += "...";
+                if (p->m_variadic_length != static_cast<std::size_t>(-1) && p->m_variadic_length > 1) out += "[" + std::to_string(p->m_variadic_length) + "]";
+            }
+
+            if (!p->m_name.empty()) out += ": " + std::string(p->m_name);
+            if (p->m_initializer) out += " = ...";
+        }
+    }
+
+    out += ")";
+    const std::string ret = type_text(f->m_return_type, types);
+    if (!ret.empty()) out += " -> " + ret;
+    return out;
+}
+
 class Collector {
 public:
-    Collector(const char* begin, std::size_t size) : m_begin(begin), m_end(begin + size) {
+    Collector(const char* begin, std::size_t size, S::ConstEvaluator* eval = nullptr, S::TypeContext* types = nullptr) : m_begin(begin), m_end(begin + size), m_eval(eval), m_types(types) {
         m_line_starts.push_back(0);
         for (std::size_t i = 0; i < size; ++i) if (begin[i] == '\n') m_line_starts.push_back(i + 1);
     }
 
     bool inside(const char* p, std::size_t n = 1) const { return p && p >= m_begin && p + n <= m_end; }
+
+    void walk_instantiation(N::ASTNode* n) {
+        m_in_instantiation = true;
+        walk(n);
+        m_in_instantiation = false;
+    }
 
     void walk(N::ASTNode* n) {
         if (!n || !m_seen.insert(n).second) return;
@@ -112,7 +264,13 @@ public:
         switch (n->kind) {
             case K::Identifier: {
                 auto* id = static_cast<N::Identifier*>(n);
-                if (id->name != "self" && id->name != "this") use(id->name, id->resolved);
+
+                if (id->name != "self" && id->name != "this") {
+                    use(id->name, id->resolved);
+                    describe(id->name, id->resolved, n, 1);
+                } else {
+                    expression_hover(id->name, n, 1);
+                }
                 break;
             }
 
@@ -120,6 +278,7 @@ public:
                 auto* q = static_cast<N::QualifiedIdentifier*>(n);
                 if (q->parts().empty()) break;
                 use(q->parts().back(), q->resolved);
+                describe(q->parts().back(), q->resolved, n, 1);
                 qualifiers(q->parts(), q->parts().size() - 1, q->resolved);
                 break;
             }
@@ -127,12 +286,35 @@ public:
             case K::BinaryExpression: {
                 auto* b = static_cast<N::BinaryExpression*>(n);
                 if (b->resolved) op(b->at, b->op);
+                expression_hover(op_spelling(b->at, b->op), n, 1);
                 break;
             }
 
             case K::UnaryExpression: {
                 auto* u = static_cast<N::UnaryExpression*>(n);
                 if (u->resolved) op(u->at, u->op);
+                expression_hover(op_spelling(u->at, u->op), n, 1);
+                break;
+            }
+
+            case K::TernaryExpression:
+                expression_hover(op_text_at(n->at, "?"), n, 1);
+                break;
+
+            case K::TypeQuery: {
+                auto* t = static_cast<N::TypeQueryExpression*>(n);
+                const std::string_view word = word_at(n->at);
+                std::string denoted;
+
+                if ((t->get_op() == N::TypeQueryExpression::Op::Typeof || t->get_op() == N::TypeQueryExpression::Op::Decltype) && t->get_operand()) {
+                    const parser_types::TemplateArgument* a = t->get_operand();
+                    if (a->is_type()) denoted = type_text(a->type, m_types);
+                    else if (a->value) denoted = type_text(a->value->expr_type.type);
+                }
+
+                if (!denoted.empty()) hover(word, "", denoted, "", "", 1);
+                else expression_hover(word, n, 1);
+                if (t->get_operand() && t->get_operand()->is_type()) type(t->get_operand()->type);
                 break;
             }
 
@@ -151,6 +333,7 @@ public:
             case K::MemberAccessExpression: {
                 auto* m = static_cast<N::MemberAccessExpression*>(n);
                 use(m->m_member, m->resolved);
+                describe(m->m_member, m->resolved, n, 1);
                 if (m->m_op == N::MemberAccessExpression::Op::Arrow && !m->arrow_ops.empty()) op_text(n->at, "->");
 
                 if (m->m_op == N::MemberAccessExpression::Op::Scope && m->m_object && m->m_object->kind == K::TemplateInstantiation) {
@@ -169,13 +352,25 @@ public:
                     auto* id = static_cast<N::Identifier*>(c->m_callee);
                     if (kind_of(c->resolved) != "operator") use(id->name, c->resolved, 2);
                 }
+
+                const std::string_view callee = callee_name(c->m_callee);
+
+                if (!callee.empty()) {
+                    if (c->resolved) describe(callee, c->resolved, nullptr, 2);
+                    hover(callee, "", type_text(n->expr_type.type), "", evaluate(n), 2);
+                }
+
                 targs(c->m_template_args);
                 break;
             }
 
-            case K::TemplateInstantiation:
-                targs(static_cast<N::TemplateInstantiation*>(n)->m_args);
+            case K::TemplateInstantiation: {
+                auto* t = static_cast<N::TemplateInstantiation*>(n);
+                targs(t->m_args);
+                const std::string value = evaluate(n);
+                if (!value.empty()) hover(callee_name(t->m_template), "", type_text(n->expr_type.type), "", value, 2);
                 break;
+            }
 
             case K::CastExpression:
                 type(static_cast<N::CastExpression*>(n)->target);
@@ -189,6 +384,14 @@ public:
                 auto* v = static_cast<N::VariableDeclaration*>(n);
                 type(v->m_type_info);
                 declare(v->m_name, v->symbol, "variable");
+
+                if (v->symbol) {
+                    describe(v->m_name, v->symbol, nullptr, 3);
+                } else {
+                    std::string t = type_text(v->m_type_info, m_types);
+                    if ((t.empty() || t == "auto") && v->m_initializer) t = type_text(v->m_initializer->expr_type.type);
+                    hover(v->m_name, t.empty() ? "" : t + ": " + std::string(v->m_name), "", "", "", 3);
+                }
                 break;
             }
 
@@ -196,6 +399,7 @@ public:
                 auto* a = static_cast<N::ArrayDeclaration*>(n);
                 type(a->m_element_type);
                 declare(a->m_name, a->symbol, "variable");
+                if (a->symbol) describe(a->m_name, a->symbol, nullptr, 3);
                 break;
             }
 
@@ -203,13 +407,25 @@ public:
                 auto* p = static_cast<N::FunctionParameter*>(n);
                 type(p->m_type);
                 declare(p->m_name, nullptr, "parameter");
+                const std::string t = type_text(p->m_type, m_types);
+                if (!t.empty()) hover(p->m_name, t + (p->is_variadic() ? "...: " : ": ") + std::string(p->m_name), "", "", "", 3);
                 break;
             }
 
             case K::FunctionDeclaration: {
                 auto* f = static_cast<N::FunctionDeclaration*>(n);
                 type(f->m_return_type);
-                if (!f->m_name_parts.empty()) declare(f->m_name_parts.back(), f->symbol, "function");
+
+                if (!f->m_name_parts.empty()) {
+                    declare(f->m_name_parts.back(), f->symbol, "function");
+                    std::string value;
+
+                    if (!m_in_instantiation && m_eval && f->symbol && (!f->m_parameters || f->m_parameters->empty()) && f->m_modifiers.has(modifiers::RawModifiers::Constexpr)) {
+                        value = value_text(m_eval->eval_value_function(f->symbol), f->m_return_type.canonical);
+                    }
+
+                    hover(f->m_name_parts.back(), signature(f, m_types), "", "", value, 3);
+                }
                 break;
             }
 
@@ -229,7 +445,10 @@ public:
 
             case K::RecordDeclaration: {
                 auto* r = static_cast<N::RecordDeclaration*>(n);
-                if (!r->m_name_parts.empty()) declare(r->m_name_parts.back(), r->symbol, r->m_form == N::RecordDeclaration::Form::Class ? "class" : "struct");
+                if (!r->m_name_parts.empty()) {
+                    declare(r->m_name_parts.back(), r->symbol, r->m_form == N::RecordDeclaration::Form::Class ? "class" : "struct");
+                    describe(r->m_name_parts.back(), r->symbol, nullptr, 3);
+                }
                 type(r->m_inherits);
                 for (const auto& b : r->m_extra_bases) type(b);
                 targs(r->m_spec_args);
@@ -239,6 +458,7 @@ public:
             case K::EnumDeclaration: {
                 auto* e = static_cast<N::EnumDeclaration*>(n);
                 declare(e->name, e->symbol, "enum");
+                describe(e->name, e->symbol, nullptr, 3);
                 type(e->underlying_type);
                 break;
             }
@@ -263,6 +483,7 @@ public:
                 auto* f = static_cast<N::ForEachStatement*>(n);
                 type(f->m_element_type);
                 declare(f->m_var_name, nullptr, "variable");
+                if (const std::string t = type_text(f->m_element_type, m_types); !t.empty()) hover(f->m_var_name, t + ": " + std::string(f->m_var_name), "", "", "", 3);
                 break;
             }
 
@@ -292,7 +513,7 @@ public:
         N::for_each_child<true>(n, [this](N::ASTNode* c) { walk(c); });
     }
 
-    std::string json(const ErrorReporter& errors, const WarningReporter& warnings, FileId main, const SourceManager& sources, bool semantic) const {
+    std::string json(const ErrorReporter& errors, const WarningReporter& warnings, FileId main, const SourceManager& sources, bool semantic, std::size_t error_limit = static_cast<std::size_t>(-1), std::size_t warning_limit = static_cast<std::size_t>(-1)) const {
         std::ostringstream out;
         out << "{\"semantic\":" << (semantic ? "true" : "false") << ",\"tokens\":[";
         bool first = true;
@@ -338,8 +559,48 @@ public:
             out << "{\"severity\":\"" << severity << "\",\"line\":" << l << ",\"col\":" << c << ",\"len\":" << n << ",\"message\":" << json_string(text) << "}";
         };
 
-        for (const CompilerError& e : errors.errors()) diagnostic("error", e.file_id, e.line, e.message, e.at, e.width);
-        for (const CompilerWarning& w : warnings.warnings()) diagnostic("warning", w.file_id, w.line, w.message, nullptr, 0);
+        const auto& error_list = errors.errors();
+        const auto& warning_list = warnings.warnings();
+        const std::size_t error_count = std::min<std::size_t>(error_list.size(), error_limit);
+        const std::size_t warning_count = std::min<std::size_t>(warning_list.size(), warning_limit);
+
+        for (std::size_t i = 0; i < error_count; ++i) {
+            const CompilerError& e = error_list[i];
+            diagnostic("error", e.file_id, e.line, e.message, e.at, e.width);
+        }
+
+        for (std::size_t i = 0; i < warning_count; ++i) {
+            const CompilerWarning& w = warning_list[i];
+            diagnostic("warning", w.file_id, w.line, w.message, nullptr, 0);
+        }
+        out << "],\"hovers\":[";
+        first = true;
+
+        const auto list = [&out](const char* key, const std::vector<std::string>& items) {
+            if (items.empty()) return;
+            out << ",\"" << key << "\":[";
+
+            for (std::size_t i = 0; i < items.size(); ++i) {
+                if (i) out << ",";
+                out << json_string(items[i]);
+            }
+
+            out << "]";
+        };
+
+        for (const auto& [at, h] : m_hovers) {
+            if (h.code.empty() && h.types.empty() && h.values.empty() && h.results.empty()) continue;
+            if (!first) out << ",";
+            first = false;
+            const Position p = position(at, h.len);
+            out << "{\"line\":" << p.line << ",\"col\":" << p.col << ",\"len\":" << p.len;
+            if (!h.code.empty()) out << ",\"code\":" << json_string(h.code);
+            list("types", h.types);
+            list("values", h.values);
+            list("results", h.results);
+            out << "}";
+        }
+
         out << "]}\n";
         return out.str();
     }
@@ -364,6 +625,171 @@ private:
     std::map<std::size_t, Entry>         m_tokens;
     std::set<std::size_t>                m_template_qualifiers;
     std::unordered_set<const N::ASTNode*> m_seen;
+    S::ConstEvaluator*                   m_eval = nullptr;
+    S::TypeContext*                      m_types = nullptr;
+    bool                                 m_in_instantiation = false;
+
+    struct Hover {
+        std::uint32_t            len  = 0;
+        int                      rank = 0;
+        std::string              code;
+        std::vector<std::string> types;
+        std::vector<std::string> values;
+        std::vector<std::string> results;
+    };
+
+    std::map<std::size_t, Hover> m_hovers;
+
+    static constexpr std::size_t max_alternatives = 6;
+
+    static void remember(std::vector<std::string>& list, const std::string& text) {
+        if (text.empty() || list.size() >= max_alternatives) return;
+        if (std::find(list.begin(), list.end(), text) == list.end()) list.push_back(text);
+    }
+
+    void hover(std::string_view at, const std::string& code, const std::string& type, const std::string& value, const std::string& result, int rank) {
+        if (at.empty() || !inside(at.data(), at.size())) return;
+        if (code.empty() && type.empty() && value.empty() && result.empty()) return;
+        Hover& h = m_hovers[offset(at.data())];
+        if (h.len == 0) h.len = static_cast<std::uint32_t>(at.size());
+
+        if (!code.empty() && (h.code.empty() || rank > h.rank)) {
+            h.code = code;
+            h.rank = rank;
+        }
+
+        remember(h.types, type);
+        remember(h.values, value);
+        remember(h.results, result);
+    }
+
+    std::string evaluate(N::ASTNode* e) {
+        if (!m_eval || !e) return std::string();
+        S::Type* t = e->expr_type.type;
+        if (t && t->is_dependent()) return std::string();
+        const S::ConstValue v = m_eval->eval(e);
+        if (!v.ok()) return std::string();
+        return value_text(v, t);
+    }
+
+    void expression_hover(std::string_view at, N::ASTNode* e, int rank) {
+        if (at.empty() || !e) return;
+        hover(at, "", type_text(e->expr_type.type), evaluate(e), "", rank);
+    }
+
+    static std::string qualified_name(const S::Symbol* s) {
+        if (!s) return std::string();
+        std::vector<std::string_view> parts{ s->name };
+        const S::Scope* sc = s->owner;
+
+        for (int guard = 0; sc && guard < 32; ++guard, sc = sc->parent) {
+            const S::Symbol* o = sc->owner_symbol;
+            if (!o || o == s || o->name.empty()) continue;
+            if (o->kind != S::SymbolKind::Namespace && o->kind != S::SymbolKind::Module && o->kind != S::SymbolKind::Type && o->kind != S::SymbolKind::Enum) continue;
+            parts.insert(parts.begin(), o->name);
+        }
+
+        return joined(parts);
+    }
+
+    std::string symbol_type(const S::Symbol* s, const N::ASTNode* use) const {
+        std::string t;
+        if (s->type) t = type_text(*s->type, m_types);
+
+        if (t.empty() || t == "auto" || t.find("typeof(") != std::string::npos || t.find("decltype(") != std::string::npos) {
+            if (use && use->expr_type.type) t = type_text(use->expr_type.type);
+            else if (s->decl && s->decl->kind == K::VariableDeclaration) {
+                const auto* v = static_cast<const N::VariableDeclaration*>(s->decl);
+                if (v->m_initializer && v->m_initializer->expr_type.type) t = type_text(v->m_initializer->expr_type.type);
+            }
+        }
+
+        return t;
+    }
+
+    void describe(std::string_view at, const S::Symbol* original, N::ASTNode* use, int rank) {
+        const S::Symbol* s = follow(original);
+        if (!s || at.empty()) return;
+        std::string code;
+        std::string type;
+        std::string value;
+
+        switch (s->kind) {
+            case S::SymbolKind::Variable: {
+                std::string mods;
+                if (s->decl && s->decl->kind == K::VariableDeclaration) mods = prefix(static_cast<const N::VariableDeclaration*>(s->decl)->get_type_info().modifiers);
+                const std::string t = symbol_type(s, use);
+                const std::string shown = mods.find("constexpr") != std::string::npos ? without_const(t) : t;
+                code = mods + (shown.empty() ? std::string() : shown + ": ") + qualified_name(s);
+                if (m_eval) value = value_text(m_eval->value_of(const_cast<S::Symbol*>(s)), s->type ? s->type->canonical : nullptr);
+                break;
+            }
+
+            case S::SymbolKind::Parameter: {
+                const std::string t = symbol_type(s, use);
+                code = (t.empty() ? std::string() : t + ": ") + std::string(s->name);
+                break;
+            }
+
+            case S::SymbolKind::Function:
+                if (s->decl && s->decl->kind == K::FunctionDeclaration) code = signature(static_cast<const N::FunctionDeclaration*>(s->decl), m_types);
+                break;
+
+            case S::SymbolKind::Type:
+                if (s->decl && s->decl->kind == K::RecordDeclaration && static_cast<const N::RecordDeclaration*>(s->decl)->m_form != N::RecordDeclaration::Form::Class) code = "struct " + qualified_name(s);
+                else code = "class " + qualified_name(s);
+                break;
+
+            case S::SymbolKind::TypeAlias: {
+                code = "using " + qualified_name(s);
+                const std::string t = s->type ? type_text(*s->type, m_types) : std::string();
+                if (!t.empty()) code += " = " + t;
+                break;
+            }
+
+            case S::SymbolKind::Enum:          code = "enum " + qualified_name(s); break;
+            case S::SymbolKind::EnumConstant:
+                code = qualified_name(s);
+                if (m_eval) value = value_text(m_eval->value_of(const_cast<S::Symbol*>(s)), nullptr);
+                break;
+            case S::SymbolKind::Namespace:
+            case S::SymbolKind::Module:        code = "namespace " + qualified_name(s); break;
+            case S::SymbolKind::Concept:       code = "concept " + qualified_name(s); break;
+            case S::SymbolKind::TemplateParam: code = "template parameter " + std::string(s->name); break;
+            case S::SymbolKind::Import:        break;
+        }
+
+        if (use && (s->kind == S::SymbolKind::Variable || s->kind == S::SymbolKind::Parameter || s->kind == S::SymbolKind::TemplateParam)) {
+            if (value.empty()) value = evaluate(use);
+            if (s->kind == S::SymbolKind::TemplateParam || m_in_instantiation) type = type_text(use->expr_type.type);
+        }
+
+        hover(at, code, type, value, "", rank);
+    }
+
+    std::string_view word_at(const char* at) const {
+        if (!inside(at) || !word_start(*at)) return {};
+        const char* e = at;
+        while (e < m_end && (word_start(*e) || (*e >= '0' && *e <= '9'))) ++e;
+        return std::string_view(at, static_cast<std::size_t>(e - at));
+    }
+
+    std::string_view op_text_at(const char* at, std::string_view text) const {
+        if (!inside(at, text.size()) || std::string_view(at, text.size()) != text) return {};
+        return std::string_view(at, text.size());
+    }
+
+    std::string_view callee_name(N::ASTNode* callee) const {
+        if (!callee) return {};
+        if (callee->kind == K::Identifier) return static_cast<N::Identifier*>(callee)->name;
+        if (callee->kind == K::QualifiedIdentifier) {
+            auto* q = static_cast<N::QualifiedIdentifier*>(callee);
+            return q->parts().empty() ? std::string_view() : q->parts().back();
+        }
+        if (callee->kind == K::MemberAccessExpression) return static_cast<N::MemberAccessExpression*>(callee)->m_member;
+        if (callee->kind == K::TemplateInstantiation) return callee_name(static_cast<N::TemplateInstantiation*>(callee)->m_template);
+        return {};
+    }
 
     std::size_t offset(const char* p) const { return static_cast<std::size_t>(p - m_begin); }
 
@@ -428,8 +854,8 @@ private:
         else it->second.mods |= Overloaded;
     }
 
-    void op(const char* at, tokenizing::Token::Kind kind) {
-        if (!inside(at)) return;
+    std::string_view op_spelling(const char* at, tokenizing::Token::Kind kind) const {
+        if (!inside(at)) return {};
         const tokenizing::Token t(kind, 0);
         std::string_view best;
 
@@ -449,6 +875,12 @@ private:
             }
         }
 
+        if (best.empty()) best = word_at(at);
+        return best.empty() ? std::string_view() : std::string_view(at, best.size());
+    }
+
+    void op(const char* at, tokenizing::Token::Kind kind) {
+        const std::string_view best = op_spelling(at, kind);
         if (!best.empty()) op_text(at, best);
     }
 
@@ -488,7 +920,14 @@ private:
 
             if (!parts.empty() && t.resolved) {
                 use(parts.back(), t.resolved);
-                qualifiers(parts, parts.size() - 1, t.resolved);
+                describe(parts.back(), t.resolved, nullptr, 1);
+                const S::Symbol* r = follow(t.resolved);
+
+                if (t.canonical && r) {
+                    const std::string full = type_text(t.canonical);
+                    const bool alias_says_it = r->kind == S::SymbolKind::TypeAlias && r->type && type_text(*r->type, m_types) == full;
+                    if (full != qualified_name(r) && full != r->name && !alias_says_it) hover(parts.back(), "", full, "", "", 1);
+                }
             }
         }
 
@@ -508,17 +947,23 @@ std::string highlight_json(CompilerPipeline& compiler) {
         return empty.json(compiler.get_reporter(), compiler.get_warnings(), INVALID_FILE, sources, false);
     }
 
-    Collector c(sources.data(*main), sources.size(*main));
+    const std::size_t error_limit = compiler.get_reporter().errors().size();
+    const std::size_t warning_limit = compiler.get_warnings().warnings().size();
+    S::Instantiator& instantiator = compiler.mutable_instantiator();
+    const bool was_frozen = instantiator.frozen();
+    instantiator.freeze();
+    Collector c(sources.data(*main), sources.size(*main), semantic ? &instantiator.evaluator() : nullptr, semantic ? &compiler.mutable_types() : nullptr);
 
     for (const CompilerPipeline::AnalyzedUnit& u : compiler.analyzed_units()) {
         if (u.file == *main && u.ast) c.walk(u.ast);
     }
 
     compiler.get_instantiator().for_each([&c](const S::Instantiator::Instantiation& I) {
-        if (I.decl) c.walk(I.decl);
+        if (I.decl) c.walk_instantiation(I.decl);
     });
 
-    return c.json(compiler.get_reporter(), compiler.get_warnings(), *main, sources, semantic);
+    instantiator.freeze(was_frozen);
+    return c.json(compiler.get_reporter(), compiler.get_warnings(), *main, sources, semantic, error_limit, warning_limit);
 }
 
 } // namespace driver

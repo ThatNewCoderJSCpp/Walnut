@@ -78,6 +78,9 @@ public:
     std::function<bool(nodes::TemplateDeclaration*, const SubstEnv&, nodes::ASTNode*, bool)> check_constraints;
     std::size_t constraint_failures = 0;
 
+    void freeze(bool frozen = true) { m_frozen = frozen; }
+    bool frozen() const { return m_frozen; }
+
     Instantiation* instantiate(Symbol* generic, std::vector<Arg> args, nodes::ASTNode* site) {
         return instantiate_impl(generic, std::move(args), site, false);
     }
@@ -208,6 +211,7 @@ private:
     ErrorReporter& m_reporter;
     WarningReporter& m_warnings;
     ConstEvaluator m_eval;
+    bool           m_frozen = false;
 
     std::unordered_map<Key, Instantiation*, KeyHash> m_memo;
     std::vector<Instantiation*>                      m_created;

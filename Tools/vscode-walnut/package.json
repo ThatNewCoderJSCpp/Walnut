@@ -1,8 +1,8 @@
 {
     "name": "walnut-language",
     "displayName": "Walnut",
-    "description": "Coloring, error underlines, bracket matching and comment toggling for the Walnut language (.wal and .walh files)",
-    "version": "0.4.0",
+    "description": "Coloring, error underlines, hover info, bracket matching and comment toggling for the Walnut language (.wal and .walh files)",
+    "version": "0.5.0",
     "publisher": "walnut",
     "engines": {
         "vscode": "^1.75.0"
@@ -111,6 +111,11 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Underline the compiler's errors and warnings."
+                },
+                "walnut.hover": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show what a name, call or operator is when the mouse is over it: its declaration, its type, and its value when the compiler can work it out at compile time."
                 },
                 "walnut.highlightDelay": {
                     "type": "number",

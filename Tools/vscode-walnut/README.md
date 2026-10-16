@@ -1,13 +1,33 @@
 # Walnut for Visual Studio Code
 
-Coloring and error underlines for Walnut (`.wal` and `.walh` files), plus `Ctrl+/` comment toggling, bracket matching and auto-closing quotes.
+Coloring, error underlines and hover info for Walnut (`.wal` and `.walh` files), plus `Ctrl+/` comment toggling, bracket matching and auto-closing quotes.
 
 The coloring works in two layers:
 
 - **The grammar** (`syntaxes/walnut.tmLanguage.json`) colors the text as soon as a file opens, from its shape alone: keywords, strings and `${}` interpolation, numbers, comments, declarations (`int: total`), calls, `self`, the name after `end function` and so on.
 - **The compiler** fills in what only the type checker knows. A moment after you stop typing, the extension runs `walnut highlight` on the file (unsaved changes included). The compiler says what every name really is (a variable, a parameter, a field, a type, a namespace, an enum member, a function) and which operators call an operator function you wrote, such as the `+` in `a + b` for two `Mesh` values. The same run underlines the compiler's errors and warnings, and lists them in the **Problems** panel.
 
-Without the compiler, the grammar still colors everything; only the exact coloring and the underlines are missing.
+Without the compiler, the grammar still colors everything; only the exact coloring, the underlines and the hover info are missing.
+
+The compiler only runs when VS Code asks for semantic coloring, which some color themes turn off. If there are no underlines or hovers, add `"editor.semanticHighlighting.enabled": true` to your settings.
+
+## Hovers
+
+Hold the mouse over code to see what the compiler knows about it:
+
+| Over | Shows |
+|---|---|
+| A variable, parameter or field | Its declaration with the real type (`auto` and `typeof(...)` are worked out), and its value if it's `const`, `constexpr` or `inline` with a constant initializer |
+| A function name | Its signature |
+| A call | The signature, the type the call gives, and the result if the call can run at compile time, as in `fib(12)` |
+| A `constexpr` function with no parameters, where it's declared | Its result |
+| A variable template, as in `factorial<5>` | Its value |
+| An operator | The type of that expression, and its value if it's constant, as in the `+` of `2 + 3 * 4` |
+| `sizeof`, `countof`, `alignof`, `typeid` | The value |
+| `typeof`, `decltype` | The type it stands for |
+| A type, alias or enum member | What it is: `using Name = string`, `struct geo::Point`, `Color::Blue` with its value |
+
+Inside a template, a name or operator lists the type it has in each instantiation, such as `int, float`. Turn hovers off with the `walnut.hover` setting.
 
 ## Installing
 

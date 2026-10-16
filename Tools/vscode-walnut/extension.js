@@ -439,6 +439,72 @@ function publishDiagnostics(document, result) {
     setErrorLines(document, Array.from(lines));
 }
 
+const hoverResults = new Map();
+const maxHoverText = 400;
+
+function storeHovers(document, result) {
+    const key = document.uri.toString();
+    if (!Array.isArray(result.hovers)) return;
+    if (!result.semantic && hoverResults.has(key)) return;
+    const byLine = new Map();
+
+    for (const h of result.hovers) {
+        if (!h || typeof h.line !== 'number' || h.line >= document.lineCount || !(h.len > 0)) continue;
+        const range = new vscode.Range(h.line, h.col, h.line, h.col + h.len);
+        const entry = { range, text: document.getText(range), hover: h };
+        if (!byLine.has(h.line)) byLine.set(h.line, []);
+        byLine.get(h.line).push(entry);
+    }
+
+    hoverResults.set(key, byLine);
+}
+
+function shorten(text) {
+    return text.length > maxHoverText ? text.slice(0, maxHoverText) + '…' : text;
+}
+
+function inlineCode(text) {
+    text = shorten(text);
+    const runs = text.match(/`+/g) || [];
+    const fence = '`'.repeat(runs.reduce((most, r) => Math.max(most, r.length), 0) + 1);
+    const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
+    return fence + pad + text + pad + fence;
+}
+
+function hoverMarkdown(h) {
+    const md = new vscode.MarkdownString();
+    if (h.code) md.appendCodeblock(shorten(h.code), 'walnut');
+    const lines = [];
+
+    const add = (one, many, items) => {
+        if (!Array.isArray(items) || !items.length) return;
+        lines.push(`**${items.length > 1 ? many : one}:** ` + items.map(inlineCode).join(', '));
+    };
+
+    add('Type', 'Types', h.types);
+    add('Value', 'Values', h.values);
+    add('Result', 'Results', h.results);
+    if (lines.length) md.appendMarkdown(lines.join('  \n'));
+    return md;
+}
+
+const hoverProvider = {
+    provideHover(document, position) {
+        if (!settings().get('hover', true)) return null;
+        const byLine = hoverResults.get(document.uri.toString());
+        const entries = byLine && byLine.get(position.line);
+        if (!entries) return null;
+
+        for (const e of entries) {
+            if (position.character < e.range.start.character || position.character >= e.range.end.character) continue;
+            if (document.getText(e.range) !== e.text) continue;
+            return new vscode.Hover(hoverMarkdown(e.hover), e.range);
+        }
+
+        return null;
+    }
+};
+
 function scanNames(text) {
     const names = [];
     const n = text.length;
@@ -603,6 +669,7 @@ const provider = {
 
         if (cancel.isCancellationRequested || document.version !== version) throw new vscode.CancellationError();
         publishDiagnostics(document, result);
+        storeHovers(document, result);
 
         if (!result.semantic && lastResults.has(key)) throw new vscode.CancellationError();
         addUnresolved(document, result);
@@ -623,7 +690,8 @@ function activate(context) {
         diagnostics,
         tokensChanged,
         vscode.languages.registerDocumentSemanticTokensProvider({ language: 'walnut' }, provider, legend),
-        vscode.workspace.onDidCloseTextDocument(doc => { diagnostics.delete(doc.uri); lastResults.delete(doc.uri.toString()); errorLines.delete(doc.uri.toString()); }),
+        vscode.languages.registerHoverProvider({ language: 'walnut' }, hoverProvider),
+        vscode.workspace.onDidCloseTextDocument(doc => { diagnostics.delete(doc.uri); lastResults.delete(doc.uri.toString()); errorLines.delete(doc.uri.toString()); hoverResults.delete(doc.uri.toString()); }),
         vscode.window.onDidChangeVisibleTextEditors(showErrorLines),
         vscode.workspace.onDidSaveTextDocument(doc => {
             if (watchedColorsFile && doc.uri.scheme === 'file' && path.resolve(doc.uri.fsPath) === path.resolve(watchedColorsFile)) applyColors(true);

@@ -17,6 +17,11 @@ public:
     WalkPass(ErrorReporter& reporter, WarningReporter& warnings, semantics::TypeContext& types, Arena& arena, semantics::Instantiator& inst) noexcept
 ;
 
+    ~WalkPass();
+
+    WalkPass(const WalkPass&) = delete;
+    WalkPass& operator=(const WalkPass&) = delete;
+
     void run(const FrontPass& front);
 
 private:
