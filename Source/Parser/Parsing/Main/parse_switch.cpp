@@ -61,8 +61,6 @@ nodes::ASTNode* Parser::parse_switch_statement() {
 
             if (!block->get_statements().empty()) {
                 const auto* last = block->get_statements().back();
-                // Cannot easily detect fallthrough inside a block,
-                // so check for an explicit fallthrough after the block
             }
         } else {
             while (
@@ -91,7 +89,10 @@ nodes::ASTNode* Parser::parse_switch_statement() {
                     break;
                 }
 
+                const std::size_t mark = m_spliced.size();
                 switch_case->add_statement(parse_statement());
+                for (std::size_t i = mark; i < m_spliced.size(); ++i) switch_case->add_statement(m_spliced[i]);
+                m_spliced.resize(mark);
             }
         }
 

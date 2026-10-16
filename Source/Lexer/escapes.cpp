@@ -85,7 +85,7 @@ bool decode_escape(std::string_view s, std::size_t& i, std::uint32_t& cp, Escape
         case 'v':  cp = 0x0B; return true;
         case 'e':  cp = 0x1B; return true;   
         case '0':  cp = 0x00; return true;
-        case '\\': case '\'': case '"': case '?': case '`':
+        case '\\': case '\'': case '"': case '?': case '`': case '$':
             cp = std::uint32_t(static_cast<unsigned char>(e)); return true;
 
         case 'x': {

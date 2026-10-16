@@ -18,11 +18,26 @@ TypeWalker::TypeWalker(
     };
 
     m_eval.concept_value = [this](nodes::TemplateInstantiation* t) { return concept_id_value(t); };
+    m_eval.variable_template_value = [this](nodes::TemplateInstantiation* t) { return variable_template_value(t); };
+    m_eval.scoped_member_value = [this](nodes::MemberAccessExpression* m) { return scoped_member_value(m); };
 
     m_saved_walk_hook = m_types.expr_walk_hook;
     m_saved_error_hook = m_types.type_error_hook;
     m_saved_conversions_hook = m_types.conversions_hook;
     m_types.conversions_hook = [this](Type* t) { ensure_conversions(t); };
+    m_saved_member_value_hook = m_types.member_value_hook;
+    m_types.member_value_hook = [this](Type* rec, std::string_view name, TemplateArg& out) {
+        if (!member_value(rec, name, out)) return false;
+        m_types.member_value_memo[{ rec, std::string(name) }] = out;
+        return true;
+    };
+    m_types.template_conversion_hook = [this](Symbol* generic, Type* target) -> Symbol* {
+        if (!m_inst) return nullptr;
+        Instantiator::Instantiation* I = m_inst->instantiate_for_conversion(generic, target, m_site);
+        if (!I || !I->sym) return nullptr;
+        ensure_typed(I);
+        return I->sym;
+    };
     m_types.expr_walk_hook = [this](nodes::ASTNode* e) {
         nodes::ASTNode* saved = m_site;
         walk_expr(e);
@@ -45,6 +60,12 @@ TypeWalker::TypeWalker(
     };
 
     if (m_inst) {
+        m_saved_concept_value = m_inst->evaluator().concept_value;
+        m_saved_variable_template_value = m_inst->evaluator().variable_template_value;
+        m_saved_scoped_member_value = m_inst->evaluator().scoped_member_value;
+        m_inst->evaluator().concept_value = [this](nodes::TemplateInstantiation* t) { return concept_id_value(t); };
+        m_inst->evaluator().variable_template_value = [this](nodes::TemplateInstantiation* t) { return variable_template_value(t); };
+        m_inst->evaluator().scoped_member_value = [this](nodes::MemberAccessExpression* m) { return scoped_member_value(m); };
         m_inst->check_constraints = [this](nodes::TemplateDeclaration* tmpl, const SubstEnv& env, nodes::ASTNode* site, bool quiet) {
             std::string failed;
             if (constraints_satisfied(tmpl, env, failed)) return true;
@@ -72,8 +93,70 @@ void TypeWalker::run(nodes::BlockStatement* program) {
     for (nodes::ASTNode* s : program->get_statements()) build(s);
 }
 
+TypeWalker::ControlContextGuard::~ControlContextGuard() {
+    w.resolve_gotos();
+    w.m_loop_depth = loops;
+    w.m_switch_depth = switches;
+    w.m_loop_labels.swap(labels);
+    w.m_stmt_path.swap(path);
+    w.m_jump_labels.swap(jump_labels);
+    w.m_jumps.swap(jumps);
+}
+
+void TypeWalker::build_list(const std::vector<nodes::ASTNode*>& stmts) {
+    for (std::size_t i = 0; i < stmts.size(); ++i) {
+        m_stmt_path.emplace_back(&stmts, i);
+        build(stmts[i]);
+        m_stmt_path.pop_back();
+    }
+}
+
+void TypeWalker::resolve_gotos() {
+    for (auto& [g, gpath] : m_jumps) {
+        const std::pair<nodes::SingleStatement*, StmtPath>* target = nullptr;
+        for (const auto& l : m_jump_labels) if (l.first->label == g->label) { target = &l; break; }
+
+        if (!target) {
+            SemanticError::emit(m_reporter, file_of(g), g->line, "Name", "there is no 'label " + std::string(g->label) + ";' in this function for 'goto " + std::string(g->label) + ";' to jump to");
+            continue;
+        }
+
+        const StmtPath& lpath = target->second;
+        if (lpath.empty() || gpath.empty()) continue;
+        const std::size_t k = lpath.size() - 1;
+        bool reachable = gpath.size() > k && gpath[k].first == lpath[k].first;
+        for (std::size_t i = 0; reachable && i < k; ++i) reachable = gpath[i] == lpath[i];
+
+        if (!reachable) {
+            SemanticError::emit(m_reporter, file_of(g), g->line, "Jump", "'goto " + std::string(g->label) + ";' would jump into a block that it isn't inside; a goto can only reach a label in its own block or in a block around it (line " + std::to_string(target->first->line) + ")");
+            continue;
+        }
+
+        const std::size_t from = gpath[k].second;
+        const std::size_t to = lpath[k].second;
+        const std::vector<nodes::ASTNode*>& list = *lpath[k].first;
+
+        for (std::size_t j = from + 1; j < to && j < list.size(); ++j) {
+            nodes::ASTNode* s = list[j];
+            std::string_view name;
+            if (s && s->kind == K::VariableDeclaration) name = static_cast<nodes::VariableDeclaration*>(s)->get_name();
+            else if (s && s->kind == K::ArrayDeclaration) name = static_cast<nodes::ArrayDeclaration*>(s)->m_name;
+            else continue;
+            SemanticError::emit(m_reporter, file_of(g), g->line, "Jump", "'goto " + std::string(g->label) + ";' jumps over the declaration of '" + std::string(name) + "' (line " + std::to_string(s->line) + "), which would leave it uninitialized; declare it before the goto, or put it and its uses in their own { } block");
+            break;
+        }
+    }
+
+    m_jumps.clear();
+    m_jump_labels.clear();
+}
+
 TypeWalker::ControlContextGuard::ControlContextGuard(TypeWalker& tw) : w(tw), loops(tw.m_loop_depth), switches(tw.m_switch_depth) {
     w.m_loop_depth = w.m_switch_depth = 0;
+    labels.swap(w.m_loop_labels);
+    path.swap(w.m_stmt_path);
+    jump_labels.swap(w.m_jump_labels);
+    jumps.swap(w.m_jumps);
 }
 
 Symbol* TypeWalker::record_symbol_of(Type* t) {
@@ -130,6 +213,16 @@ void TypeWalker::ensure_typed(Instantiator::Instantiation* I) {
     if (!I || I->typed || !I->decl) return;
     I->typed = true;                       
     I->speculative = false;
+
+    if (m_typing_depth >= 200) {
+        if (!m_typing_depth_reported) {
+            m_typing_depth_reported = true;
+            SemanticError::template_depth_exceeded(m_reporter, file_of(I->decl), I->decl->line, I->generic ? I->generic->name : std::string_view("template"));
+        }
+        return;
+    }
+
+    struct DepthGuard { int& d; explicit DepthGuard(int& x) : d(x) { ++d; } ~DepthGuard() { --d; } } depth_guard(m_typing_depth);
     m_types.push_subst(&I->env);
     Scope* saved = m_current;
     const bool saved_const = m_in_const_method;
@@ -188,7 +281,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
             auto* b = static_cast<nodes::BlockStatement*>(node);
             Scope* saved = m_current;
             if (b->scope) m_current = b->scope;
-            for (nodes::ASTNode* s : b->get_statements()) build(s);
+            build_list(b->get_statements());
             m_current = saved;
             break;
         }
@@ -226,6 +319,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
             if (!(v->symbol && v->symbol->owner && v->symbol->owner->kind == Scope::Kind::Record)) check_not_abstract(declared, v);
             if (!v->has_initializer() && declared && !declared->is_reference() && record_symbol_of(declared) && !declared->is_dependent() && !(v->symbol && v->symbol->owner && v->symbol->owner->kind == Scope::Kind::Record)) resolve_construction(declared, {}, v);
             if (!v->has_initializer() && !m_returns.empty() && v->symbol && v->symbol->owner && v->symbol->owner->kind != Scope::Kind::Record && v->symbol->owner->kind != Scope::Kind::Module && v->symbol->owner->kind != Scope::Kind::Namespace && is_trivial_scalar(declared)) m_unassigned.insert(v->symbol);
+            if (declared && v->m_initializer && v->m_initializer->kind == K::BraceInitializerList) check_brace_init(static_cast<nodes::BraceInitializerList*>(v->m_initializer), declared, v);
             if (declared && init && !is_dynamic_t(declared)) check_binding(v->m_initializer, init, declared, v);
             else if (declared && init && !init->is_error() && !init->is_dependent() && rank_conversion(init, declared, m_types) == ConversionRank::None) report_not_dynamic(init, v);
             check_constant_init(v, declared);
@@ -245,6 +339,10 @@ void TypeWalker::build(nodes::ASTNode* node) {
         case K::FunctionDeclaration: {
             auto* fn = static_cast<nodes::FunctionDeclaration*>(node);
             check_signature_defaults(fn->symbol, fn->get_parameters(), fn);
+            if (defer_member_body(fn, fn->symbol, fn->has_body(), fn->qualifiers().has_any(modifiers::FunctionQualifiers::Virtual | modifiers::FunctionQualifiers::Override) || fn->m_lowered_operator != nodes::OverloadableOperator::None)) {
+                fn->lazy_untyped = true;
+                break;
+            }
             Scope* saved = m_current;
             ControlContextGuard ctx(*this);
             if (Scope* fs = inner_of(fn->symbol)) m_current = fs;
@@ -264,6 +362,10 @@ void TypeWalker::build(nodes::ASTNode* node) {
         case K::OperatorFunctionDeclaration: {
             auto* op = static_cast<nodes::OperatorFunctionDeclaration*>(node);
             check_operator_signature(op, op->symbol);
+            if (defer_member_body(op, op->symbol, op->has_body(), op->qualifiers().has_any(modifiers::FunctionQualifiers::Virtual | modifiers::FunctionQualifiers::Override) || op->is_conversion() || op->get_overload() == nodes::OverloadableOperator::Assign)) {
+                op->lazy_untyped = true;
+                break;
+            }
             Scope* saved = m_current;
             ControlContextGuard ctx(*this);
             if (Scope* fs = inner_of(op->symbol)) m_current = fs;
@@ -349,6 +451,16 @@ void TypeWalker::build(nodes::ASTNode* node) {
             for (nodes::RecordDeclaration::Member m : r->get_members()) build(m.node);
             m_current = saved;
             if (r->is_union()) check_union(r);
+
+            for (const nodes::RecordDeclaration::Member& m : r->get_members()) {
+                if (!m.node || m.node->kind != K::FunctionDeclaration) continue;
+                auto* fd = static_cast<nodes::FunctionDeclaration*>(m.node);
+                const auto& q = fd->qualifiers();
+                if (fd->has_body() || !q.has(modifiers::FunctionQualifiers::Virtual) || q.has(modifiers::FunctionQualifiers::Abstract) || fd->get_modifiers().has(modifiers::RawModifiers::Friend)) continue;
+                static std::set<std::pair<std::uint32_t, std::uint32_t>> warned;
+                if (!warned.insert({ file_of(fd), fd->line }).second) continue;
+                SemanticWarning::emit(m_warnings, file_of(fd), fd->line, "Abstract", "'" + std::string(fd->get_name()) + "' is virtual with no body and isn't defined outside the class, so '" + std::string(r->get_name()) + "' is abstract; write 'abstract' after its parameters to say that on purpose, or give it a body");
+            }
 
             {
                 using OO = nodes::OverloadableOperator;
@@ -456,7 +568,31 @@ void TypeWalker::build(nodes::ASTNode* node) {
                     if (val && !(is_void_t(val) || is_dynamic_t(val))) SemanticError::return_value_in_void(m_reporter, file_of(rs), rs->line);
                 } else if (val) {
                     check_binding(rs->get_value(), val, want, rs);
+                } else if (rs->get_value() && rs->get_value()->kind == K::BraceInitializerList) {
+                    check_brace_init(static_cast<nodes::BraceInitializerList*>(const_cast<nodes::ASTNode*>(rs->get_value())), want, rs);
                 }
+            }
+
+            break;
+        }
+
+        case K::InvalidateStatement: {
+            auto* inv = static_cast<nodes::InvalidateStatement*>(node);
+
+            for (nodes::ASTNode* t : inv->targets) {
+                walk_expr(t);
+                Symbol* s = nullptr;
+                if (t->kind == K::Identifier) s = static_cast<nodes::Identifier*>(t)->resolved;
+                else if (t->kind == K::MemberAccessExpression && !static_cast<nodes::MemberAccessExpression*>(t)->is_scope()) s = static_cast<nodes::MemberAccessExpression*>(t)->resolved;
+
+                if (!s) continue;
+                if (!is_lazy_field(s)) {
+                    SemanticError::emit(m_reporter, file_of(t), t->line, "Lazy", "'invalidate' works on lazy fields, and '" + std::string(s->name) + "' isn't one");
+                    continue;
+                }
+
+                const std::string why = lazy_write_problem(t);
+                if (!why.empty()) SemanticError::emit(m_reporter, file_of(t), t->line, "Lazy", why);
             }
 
             break;
@@ -524,7 +660,9 @@ void TypeWalker::build(nodes::ASTNode* node) {
             walk_expr(mn(s->get_condition()));
             check_condition(mn(s->get_condition()));
             ++m_loop_depth;
+            m_loop_labels.push_back(s->label);
             build(mn(s->get_body()));
+            m_loop_labels.pop_back();
             --m_loop_depth;
             break;
         }
@@ -532,7 +670,9 @@ void TypeWalker::build(nodes::ASTNode* node) {
         case K::DoWhileStatement: {
             auto* s = static_cast<nodes::DoWhileStatement*>(node);
             ++m_loop_depth;
+            m_loop_labels.push_back(s->label);
             build(mn(s->get_body()));
+            m_loop_labels.pop_back();
             --m_loop_depth;
             walk_expr(mn(s->get_condition()));
             check_condition(mn(s->get_condition()));
@@ -548,7 +688,9 @@ void TypeWalker::build(nodes::ASTNode* node) {
             if (s->condition) { walk_expr(s->condition); check_condition(s->condition); }
             walk_expr(s->increment);
             ++m_loop_depth;
+            m_loop_labels.push_back(s->label);
             build(s->body);
+            m_loop_labels.pop_back();
             --m_loop_depth;
             m_current = saved;
             break;
@@ -559,7 +701,9 @@ void TypeWalker::build(nodes::ASTNode* node) {
             walk_expr(s->m_container);
             type_for_each(s);
             ++m_loop_depth;
+            m_loop_labels.push_back(s->label);
             build(s->m_body);
+            m_loop_labels.pop_back();
             --m_loop_depth;
             break;
         }
@@ -575,8 +719,8 @@ void TypeWalker::build(nodes::ASTNode* node) {
 
             for (nodes::SwitchCase* c : s->get_cases()) {
                 walk_expr(c->value);
-                if (c->value && ct && !is_dynamic_t(ct)) { if (Type* lv = type_of(c->value)) check_convertible(lv, ct, c); }
-                for (nodes::ASTNode* stmt : c->body) build(stmt);
+                if (c->value && ct && !is_dynamic_t(ct)) { if (Type* lv = type_of(c->value); lv && !(operand_class(lv) == OperandClass::String && operand_class(ct) == OperandClass::String)) check_convertible(lv, ct, c); }
+                build_list(c->body);
             }
 
             --m_switch_depth;
@@ -625,6 +769,37 @@ void TypeWalker::build(nodes::ASTNode* node) {
         case K::SingleStatement: {
             auto* ss = static_cast<nodes::SingleStatement*>(node);
             using V = nodes::SingleStatement::Variant;
+
+            if (ss->variant == V::Goto || ss->variant == V::Label) {
+                if (m_returns.empty()) {
+                    SemanticError::emit(m_reporter, file_of(ss), ss->line, "Jump", std::string("'") + (ss->variant == V::Goto ? "goto" : "label") + "' can only be used inside a function");
+                    break;
+                }
+
+                if (ss->variant == V::Goto) {
+                    m_jumps.emplace_back(ss, m_stmt_path);
+                    break;
+                }
+
+                bool duplicate = false;
+                for (const auto& l : m_jump_labels) {
+                    if (l.first->label != ss->label) continue;
+                    SemanticError::emit(m_reporter, file_of(ss), ss->line, "Name", "'label " + std::string(ss->label) + ";' is already used on line " + std::to_string(l.first->line) + " in this function");
+                    duplicate = true;
+                    break;
+                }
+                if (!duplicate) m_jump_labels.emplace_back(ss, m_stmt_path);
+                break;
+            }
+
+            if (!ss->label.empty()) {
+                bool known = false;
+                for (std::string_view l : m_loop_labels) known = known || l == ss->label;
+                if (!known) {
+                    SemanticError::emit(m_reporter, file_of(ss), ss->line, "Name", "there is no loop labelled '" + std::string(ss->label) + "' around this statement; label a loop as '" + std::string(ss->label) + ": while (...)' or '" + std::string(ss->label) + ": for (...)'");
+                    break;
+                }
+            }
 
             switch (ss->variant) {
                 case V::Break:
@@ -709,11 +884,19 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                 }
             }
 
+            if (id->resolved && in_friend_body() && (is_instance_field(id->resolved) || (is_member_function(id->resolved) && !is_static_member_function(id->resolved)))) {
+                std::string_view rec = id->resolved->owner && id->resolved->owner->owner_symbol ? id->resolved->owner->owner_symbol->name : std::string_view{"the class"};
+                SemanticError::emit(m_reporter, file_of(id), id->line, "Name", "'" + std::string(id->name) + "' belongs to an object of '" + std::string(rec) + "', but a friend function isn't a member, so it has no object of its own; write it through a parameter, as in 'obj." + std::string(id->name) + "'");
+                assign_typed(e, m_types.error_(), VC::RValue);
+                break;
+            }
+
             note_read(id->resolved, e);
             VC vc = symbol_is_object(id->resolved) ? VC::LValue : VC::RValue;
             Type* t = decay_ref(symbol_type(id->resolved), vc);
             if (symbol_is_object(id->resolved)) vc = VC::LValue;
             if (m_in_const_method && is_instance_field(id->resolved)) t = add_const(t);
+            if (lazy_blocked(id->resolved, false)) t = add_const(t);
             if (vc == VC::LValue && captured_const(id->resolved)) t = add_const(t);
             assign_typed(e, t, vc);
             break;
@@ -721,6 +904,38 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
         case K::QualifiedIdentifier: {
             auto* q = static_cast<nodes::QualifiedIdentifier*>(e);
+            if (!q->resolved && q->dependent_head) {
+                Type* ht = q->dependent_head->kind == SymbolKind::TypeAlias
+                         ? m_types.strip_cv(m_types.canonicalize(*q->dependent_head->type))
+                         : m_types.strip_cv(m_types.apply_subst(m_types.type_param(q->dependent_head, CV{})));
+                if (!ht || ht->is_dependent()) { assign_typed(e, nullptr, VC::RValue); break; }
+                Symbol* found = nullptr;
+                if (ht->is_record()) {
+                    auto* rt = static_cast<RecordType*>(ht);
+                    Scope* sc = nullptr;
+                    if (rt->is_instantiation() && m_inst) {
+                        if (Instantiator::Instantiation* I = m_inst->for_record(rt, q)) {
+                            ensure_typed(I);
+                            if (I->sym) sc = I->sym->inner_scope;
+                        }
+                    }
+                    if (!sc && rt->decl()) sc = rt->decl()->inner_scope;
+                    for (std::size_t i = 1; sc && i < q->parts().size(); ++i) {
+                        found = sc->find_member(q->parts()[i]);
+                        if (!found) break;
+                        sc = i + 1 < q->parts().size() ? found->inner_scope : nullptr;
+                    }
+                }
+                if (!found) {
+                    std::string full(q->dependent_head->name);
+                    for (std::size_t i = 1; i < q->parts().size(); ++i) { full += "::"; full += std::string(q->parts()[i]); }
+                    SemanticError::emit(m_reporter, file_of(q), q->line, "Name", "'" + type_str(ht) + "' has no member named '" + full.substr(full.find("::") + 2) + "', so '" + full + "' can't be used");
+                    assign_typed(e, m_types.error_(), VC::RValue);
+                    break;
+                }
+                q->resolved = found;
+            }
+            rebind_inherited(q);
             VC vc = symbol_is_object(q->resolved) ? VC::LValue : VC::RValue;
             Type* t = decay_ref(symbol_type(q->resolved), vc);
             if (symbol_is_object(q->resolved)) vc = VC::LValue;
@@ -743,6 +958,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             Symbol* op = nullptr;
             Type* t = decay_ref(type_binary(b, op), vc);
             b->resolved = op;                            
+            ensure_member_body(op);
             assign_typed(e, t, vc);
             break;
         }
@@ -756,6 +972,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             Symbol* op = nullptr;
             Type* t = decay_ref(type_unary(u, op), vc);
             u->resolved = op;
+            ensure_member_body(op);
             assign_typed(e, t, vc);
             break;
         }
@@ -812,13 +1029,34 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
         case K::CallExpression: {
             auto* c = static_cast<nodes::CallExpression*>(e);
-            walk_expr(c->m_callee);
+            nodes::ASTNode* pre_walked = nullptr;
+
+            if (c->m_callee && c->m_callee->kind == K::MemberAccessExpression && !static_cast<nodes::MemberAccessExpression*>(c->m_callee)->is_scope()) {
+                auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
+                walk_expr(m->m_object);
+
+                if (rewrite_extension_call(c)) {
+                    pre_walked = c->m_arguments.empty() ? nullptr : c->m_arguments.front();
+                    walk_expr(c->m_callee);
+                } else if (is_builtin_method_call(c)) {
+                    std::vector<Type*> args;
+                    for (nodes::ASTNode* a : c->m_arguments) { walk_expr(a); args.push_back(type_of(a)); }
+                    assign_typed(e, type_builtin_method(c, args), VC::RValue);
+                    break;
+                } else {
+                    SiteGuard callee_guard(m_site, m);
+                    finish_member_access(m, true);
+                }
+            } else {
+                walk_expr(c->m_callee);
+            }
+
             expand_pack_arguments(c);
             std::vector<Type*> args;
             args.reserve(c->m_arguments.size());
             for (nodes::ASTNode* a : c->m_arguments) {
                 if (a && a->kind == K::Identifier) m_unassigned.erase(static_cast<nodes::Identifier*>(a)->resolved);
-                walk_expr(a);
+                if (a != pre_walked) walk_expr(a);
                 args.push_back(type_of(a));
             }
             VC vc = VC::RValue;
@@ -835,9 +1073,30 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             VC vc = VC::RValue;
             Type* el = nullptr;
 
+            if (nodes::VariableDeclaration* group = pack_field_group(s->m_array)) {
+                const ConstValue iv = m_eval.eval(s->m_index);
+                if (!iv.ok() || !iv.is_int()) {
+                    SemanticError::emit(m_reporter, file_of(s), s->line, "Type", "the fields in the pack '" + std::string(group->get_name()) + "' have different types, so the index in '" + std::string(group->get_name()) + "[...]' must be a constant");
+                    assign_typed(e, nullptr, vc);
+                    break;
+                }
+                const long long k = iv.i->is_negative() ? -1 : static_cast<long long>(iv.i->get_lowest_bits());
+                if (k < 0 || static_cast<std::size_t>(k) >= group->pack_elements.size() || !group->pack_elements[static_cast<std::size_t>(k)]) {
+                    SemanticError::emit(m_reporter, file_of(s), s->line, "Type", "index " + iv.i->to_string() + " is out of range for the pack '" + std::string(group->get_name()) + "', which has " + std::to_string(group->pack_elements.size()) + " fields");
+                    assign_typed(e, nullptr, vc);
+                    break;
+                }
+                s->pack_element = group->pack_elements[static_cast<std::size_t>(k)];
+                el = symbol_type(s->pack_element);
+                if (el && el->is_reference()) el = static_cast<ReferenceType*>(el)->referent();
+                if (el && arr && type_is_const(arr)) { CV c = el->cv(); c.is_const = true; el = m_types.with_cv(el, c); }
+                assign_typed(e, el, VC::LValue);
+                break;
+            }
+
             if (record_symbol_of(arr)) {
                 OpResult res = resolve_operator(nodes::OverloadableOperator::Subscript, { arr, type_of(s->m_index) });
-                if (res.status == SelectStatus::Ok)             { s->resolved = res.chosen; el = decay_ref(res.type, vc); }
+                if (res.status == SelectStatus::Ok)             { s->resolved = res.chosen; el = decay_ref(res.type, vc); ensure_member_body(res.chosen); }
                 else if (res.status == SelectStatus::Ambiguous) SemanticError::ambiguous_call(m_reporter, file_of(s), s->line, "[]");
                 else                                            SemanticError::no_matching_overload(m_reporter, file_of(s), s->line, "[]");
             } else if (arr && arr->is_array()) { el = static_cast<ArrayType*>(arr)->element();  vc = VC::LValue; }
@@ -849,12 +1108,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
         case K::MemberAccessExpression: {
             auto* m = static_cast<nodes::MemberAccessExpression*>(e);
             walk_expr(m->m_object);
-            Type* raw = type_member_access(m);               
-            VC vc = symbol_is_object(m->resolved) ? VC::LValue : VC::RValue;
-            if (vc == VC::LValue && m->is_dot() && !is_lvalue(m->m_object)) vc = VC::RValue;
-            Type* t = decay_ref(raw, vc);                   
-            if (raw && raw->is_reference() && symbol_is_object(m->resolved)) vc = VC::LValue;
-            assign_typed(e, t, vc);                          
+            finish_member_access(m);
             break;
         }
 
@@ -865,6 +1119,14 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
             if (c->get_cast_kind() == nodes::CastExpression::CastKind::Is || c->get_cast_kind() == nodes::CastExpression::CastKind::As) {
                 type_type_test(c);
+                break;
+            }
+
+            if (c->interpolation) {
+                if (!text_displayable(src)) {
+                    SemanticError::emit(m_reporter, file_of(c), c->line, "Type", "a value of type '" + type_str(m_types.strip_cv(src && src->is_reference() ? static_cast<ReferenceType*>(src)->referent() : src)) + "' can't be written into a text literal with '${...}'; give the class an 'operator(string)' or 'operator(text)' conversion");
+                }
+                assign_typed(c, m_types.builtin(parser_types::PrimitiveType::BaseKind::Text), VC::RValue);
                 break;
             }
 
@@ -879,6 +1141,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
         case K::NewExpression: {
             auto* n = static_cast<nodes::NewExpression*>(e);
             if (n->array_size) walk_expr(n->array_size);
+            expand_pack_list(n->args);
             for (nodes::ASTNode* a : n->args) walk_expr(a);
             Type* allocated = m_types.canonicalize(n->type);
 
@@ -1096,6 +1359,19 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             q->pack_count = -1;
 
             if (q->operand && q->op == nodes::TypeQueryExpression::Op::Countof) {
+                nodes::ASTNode* target = q->operand->is_value() ? q->operand->value : nullptr;
+                if (target && target->kind == K::MemberAccessExpression) walk_expr(target);
+                nodes::VariableDeclaration* group = target ? pack_field_group(target) : nullptr;
+                if (!group && q->operand->is_type()) group = pack_field_group_of(q->operand->type.resolved);
+
+                if (group) {
+                    q->pack_count = static_cast<long long>(group->pack_elements.size());
+                    assign_typed(e, m_types.builtin(parser_types::PrimitiveType::BaseKind::Int), VC::RValue);
+                    break;
+                }
+            }
+
+            if (q->operand && q->op == nodes::TypeQueryExpression::Op::Countof) {
                 Symbol* ps = nullptr;
                 if (q->operand->is_value() && q->operand->value && q->operand->value->kind == K::Identifier) ps = static_cast<nodes::Identifier*>(q->operand->value)->resolved;
                 else if (q->operand->is_type()) ps = q->operand->type.resolved;
@@ -1135,7 +1411,8 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                     SemanticError::emit(m_reporter, file_of(q), q->line, "Type", "countof requires an array, a string or an enum, not '" + type_str(qv) + "'");
                 }
                 long long size = 0, alignment = 0;
-                if (q->op != QOp::Countof && qv && !qv->is_error() && !qv->is_dependent() && !m_eval.layout_of(qv, size, alignment)) {
+                m_eval.layout_hit_native = false;
+                if (q->op != QOp::Countof && qv && !qv->is_error() && !qv->is_dependent() && !m_eval.layout_of(qv, size, alignment) && !m_eval.layout_hit_native) {
                     SemanticError::emit(m_reporter, file_of(q), q->line, "Type", std::string(q->op_name()) + " is not defined for '" + type_str(qv) + "' because it has no fixed size");
                 }
                 assign_typed(e, m_types.builtin(parser_types::PrimitiveType::BaseKind::Int), VC::RValue);
@@ -1206,12 +1483,19 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             walk_expr(t->m_template);
             Type* result = nullptr;
 
-            if (Symbol* g = callee_symbol(t->m_template); g && g->kind == SymbolKind::Concept) {
+            if (Symbol* g = callee_symbol(t->m_template); g && (g->kind == SymbolKind::Concept || (g->kind == SymbolKind::Import && g->import_target && g->import_target->kind == SymbolKind::Concept))) {
+                t->concept_result = concept_id_value(t);
                 assign_typed(e, m_types.bool_(), VC::RValue);
                 break;
             }
 
-            if (Symbol* g = callee_symbol(t->m_template); g && m_inst) {
+            if (Symbol* g = callee_symbol(t->m_template); g && g->kind == SymbolKind::TypeAlias && g->template_decl && g->type) {
+                parser_types::TypeInfo use;
+                use.resolved = g;
+                use.template_args = t->m_args;
+                Type* at = m_types.canonicalize(use);
+                if (at && !at->is_error()) result = m_types.strip_cv(at);
+            } else if (Symbol* g = callee_symbol(t->m_template); g && m_inst) {
                 bool ok = true;
                 std::vector<Instantiator::Arg> args = m_inst->canon_args(t->m_args, ok);
                     
@@ -1219,6 +1503,10 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                     if (auto* I = m_inst->instantiate(g, std::move(args), t)) {
                         if (I->decl && I->decl->kind == K::FunctionDeclaration) ensure_typed(I);   // functions: eager
                         result = I->type;                                                          // records: lazy members
+                        if (is_variable_template(g)) {
+                            t->var_instance = I->sym;
+                            result = (I->type && I->type->kind() == TypeKind::Function) ? static_cast<FunctionType*>(I->type)->ret() : nullptr;
+                        }
                     }
                 }
             }
@@ -1233,6 +1521,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
         case K::BraceInitializerList: {
             auto* b = static_cast<nodes::BraceInitializerList*>(e);
+            expand_pack_list(b->m_elements);
             for (nodes::ASTNode* el : b->m_elements) walk_expr(el);
             assign_typed(e, nullptr, VC::RValue);   
             break;
@@ -1374,16 +1663,30 @@ void TypeWalker::collect_member_ops(
 ) {
     Scope* ms = member_scope_of(recv);
     if (!ms) return;
+    std::unordered_set<const Scope*> visited;
+    Type* recv_value = recv && recv->is_reference() ? static_cast<ReferenceType*>(recv)->referent() : recv;
+    const bool recv_const = recv_value && recv_value->cv().is_const;
 
-    for (Symbol* o = ms->find_member("operator"); o; o = o->next_overload) {
-        if (!o->decl || o->decl->kind != K::OperatorFunctionDeclaration) continue;
-        if (static_cast<nodes::OperatorFunctionDeclaration*>(o->decl)->get_overload() != want) continue;
-        EnvGuard g(m_types, env_of_symbol(o));
-        CandidateMatch m = match_arguments(shapes_of(o), explicit_args, m_types);
-        if (!m.viable) continue;
-        m.ranks.insert(m.ranks.begin(), ConversionRank::Exact);   
-        matches.push_back(std::move(m)); cands.push_back(o); member.push_back(true);
-    }
+    std::function<void(const Scope*, int)> scan = [&](const Scope* s, int depth) {
+        if (!s || depth > 64 || !visited.insert(s).second) return;
+        bool declared_here = false;
+
+        for (Symbol* o = s->find_local("operator"); o; o = o->next_overload) {
+            if (!o->decl || o->decl->kind != K::OperatorFunctionDeclaration) continue;
+            if (static_cast<nodes::OperatorFunctionDeclaration*>(o->decl)->get_overload() != want) continue;
+            declared_here = true;
+            EnvGuard g(m_types, env_of_symbol(o));
+            CandidateMatch m = match_arguments(shapes_of(o), explicit_args, m_types);
+            if (!m.viable) continue;
+            m.ranks.insert(m.ranks.begin(), is_const_method(o) == recv_const ? ConversionRank::Exact : ConversionRank::Promotion);
+            matches.push_back(std::move(m)); cands.push_back(o); member.push_back(true);
+        }
+
+        if (declared_here) return;
+        for (const Scope* b : s->bases) scan(b, depth + 1);
+    };
+
+    scan(ms, 0);
 
     nodes::ASTNode* site = m_operator_site ? m_operator_site : m_site;
     if (!m_inst || !site) return;
@@ -1505,6 +1808,53 @@ bool TypeWalker::is_async_function(const Symbol* fn) {
     return false;
 }
 
+Type* TypeWalker::record_iteration(nodes::ForEachStatement* s, Type* container) {
+    if (!m_inst) return nullptr;
+    Type* c = container;
+    if (c && c->is_reference()) c = static_cast<ReferenceType*>(c)->referent();
+    if (!c || !record_symbol_of(c)) return nullptr;
+    Scope* ms = member_scope_of(c);
+    if (!ms || !ms->find_member("begin") || !ms->find_member("end")) return nullptr;
+
+    static long long counter = 0;
+    const std::string id = std::to_string(counter++);
+    const std::uint32_t line = s->line;
+    s->range_sym = synthetic_symbol("walnut_range_" + id, m_types.reference(c, is_lvalue(s->m_container) ? RefQual::LValue : RefQual::RValue), s);
+
+    auto member_call = [&](std::string_view name) -> nodes::ASTNode* {
+        auto* m = make_in<nodes::MemberAccessExpression>(m_inst->arena(), ident_for(s->range_sym, line), name, nodes::MemberAccessExpression::Op::Dot, line);
+        auto* call = make_in<nodes::CallExpression>(m_inst->arena(), m, line);
+        m->file_id = call->file_id = s->file_id;
+        walk_expr(call);
+        return call;
+    };
+
+    s->begin_call = member_call("begin");
+    s->end_call = member_call("end");
+    Type* it = type_of(s->begin_call);
+    Type* et = type_of(s->end_call);
+    if (it && it->is_reference()) it = static_cast<ReferenceType*>(it)->referent();
+    if (et && et->is_reference()) et = static_cast<ReferenceType*>(et)->referent();
+    if (!it || it->is_error() || !et || et->is_error()) return m_types.error_();
+    it = m_types.strip_cv(it);
+    et = m_types.strip_cv(et);
+
+    s->it_sym = synthetic_symbol("walnut_it_" + id, it, s);
+    s->end_sym = synthetic_symbol("walnut_end_" + id, et, s);
+    s->iter_cond = binary_node(ident_for(s->it_sym, line), tokenizing::Token::Kind::NotEqual, ident_for(s->end_sym, line), line);
+    auto* next = make_in<nodes::UnaryExpression>(m_inst->arena(), ident_for(s->it_sym, line), tokenizing::Token::Kind::DoublePlus, true, line);
+    auto* get = make_in<nodes::DereferenceExpression>(m_inst->arena(), ident_for(s->it_sym, line), line);
+    next->file_id = get->file_id = s->iter_cond->file_id = s->file_id;
+    s->iter_next = next;
+    s->iter_get = get;
+    walk_expr(s->iter_cond);
+    walk_expr(s->iter_next);
+    walk_expr(s->iter_get);
+    Type* el = type_of(s->iter_get);
+    if (el && el->is_reference()) el = static_cast<ReferenceType*>(el)->referent();
+    return el ? el : m_types.error_();
+}
+
 Type* TypeWalker::iterated_element(Type* container) {
     Type* c = container;
     if (c && c->is_reference()) c = static_cast<ReferenceType*>(c)->referent();
@@ -1555,6 +1905,7 @@ void TypeWalker::type_for_each(nodes::ForEachStatement* s) {
     Type* ct = type_of(s->m_container);
     if (!ct || ct->is_error()) return;
     Type* el = iterated_element(ct);
+    if (!el) el = record_iteration(s, ct);
 
     if (!el) {
         SemanticError::emit(m_reporter, file_of(s), s->line, "Type", "type '" + type_str(ct) + "' cannot be iterated by a for-each loop");
@@ -1570,12 +1921,22 @@ void TypeWalker::type_for_each(nodes::ForEachStatement* s) {
     parser_types::TypeInfo& ti = s->m_element_type;
 
     if (prim_is(ti, parser_types::PrimitiveType::BaseKind::Auto)) {
-        ti.canonical = ti.indirection.empty() ? el : m_types.canonicalize(ti);
+        if (ti.indirection.empty()) {
+            ti.canonical = el;
+        } else if (ti.has_reference() && !ti.has_pointer()) {
+            Type* b = el;
+            const bool is_const = ti.modifiers.has(modifiers::RawModifiers::Const) || s->m_modifiers.has(modifiers::RawModifiers::Const);
+            if (is_const) { CV cv = b->cv(); cv.is_const = true; b = m_types.with_cv(b, cv); }
+            ti.canonical = m_types.reference(b, RefQual::LValue);
+        } else {
+            ti.canonical = m_types.canonicalize(ti);
+        }
         return;
     }
 
     Type* declared = m_types.canonicalize(ti);
     if (!declared || declared->is_error() || is_dynamic_t(declared)) return;
+
     if (rank_conversion(el, declared, m_types) == ConversionRank::None && !is_dynamic_t(el)) {
         SemanticError::emit(m_reporter, file_of(s), s->line, "Type", "no implicit conversion from '" + type_str(el) + "' to '" + type_str(declared) + "' in for-each loop");
     }
@@ -1679,6 +2040,38 @@ Symbol* TypeWalker::find_pack_ref(nodes::ASTNode* n) {
     return found;
 }
 
+void TypeWalker::substitute_pack_types(nodes::ASTNode* n, const std::vector<Symbol*>& pks, std::size_t k) {
+    if (!n || pks.empty()) return;
+    const SubstEnv* active = m_types.active_subst();
+    if (!active) return;
+    SubstEnv one;
+    for (Symbol* pk : pks) {
+        const std::vector<Type*>* elems = active->lookup_pack(pk);
+        if (!elems || k >= elems->size()) return;
+        one.types[pk] = (*elems)[k];
+    }
+
+    auto fix = [&](std::vector<parser_types::TemplateArgument*>& args) {
+        for (parser_types::TemplateArgument* t : args) {
+            if (!t || !t->is_type() || t->is_pack) continue;
+            Type* pattern = m_types.canonicalize(t->type);
+            std::vector<Symbol*> found;
+            collect_pack_params(pattern, found);
+            bool mentions = false;
+            for (Symbol* s : found) mentions = mentions || std::find(pks.begin(), pks.end(), s) != pks.end();
+            if (!mentions) continue;
+            m_types.push_subst(&one);
+            Type* concrete = m_types.apply_subst(pattern);
+            m_types.pop_subst();
+            if (concrete && !concrete->is_error()) t->type.canonical = concrete;
+        }
+    };
+
+    if (n->kind == K::CallExpression) fix(static_cast<nodes::CallExpression*>(n)->m_template_args);
+    if (n->kind == K::TemplateInstantiation) fix(static_cast<nodes::TemplateInstantiation*>(n)->m_args);
+    nodes::for_each_child(n, [&](nodes::ASTNode* c) { substitute_pack_types(c, pks, k); });
+}
+
 void TypeWalker::substitute_symbol(nodes::ASTNode* n, Symbol* from, Symbol* to) {
     if (!n) return;
     if (n->kind == K::Identifier && static_cast<nodes::Identifier*>(n)->resolved == from) static_cast<nodes::Identifier*>(n)->resolved = to;
@@ -1721,7 +2114,7 @@ void TypeWalker::record_fields(Scope* sc, std::vector<Symbol*>& out, int depth) 
         if (!n) continue;
         if (n->kind == K::VariableDeclaration) {
             auto* v = static_cast<nodes::VariableDeclaration*>(n);
-            if (!v->get_type_info().modifiers.has(modifiers::RawModifiers::Static) && v->symbol) out.push_back(v->symbol);
+            if (!v->get_type_info().modifiers.has(modifiers::RawModifiers::Static) && !v->get_type_info().modifiers.has(modifiers::RawModifiers::Lazy) && v->symbol) out.push_back(v->symbol);
         } else if (n->kind == K::ArrayDeclaration) {
             auto* a = static_cast<nodes::ArrayDeclaration*>(n);
             if (!a->get_array_modifiers().has(modifiers::RawModifiers::Static) && a->symbol) out.push_back(a->symbol);
@@ -1876,12 +2269,16 @@ bool TypeWalker::is_pack_spread(const nodes::ASTNode* a) {
 }
 
 void TypeWalker::expand_pack_arguments(nodes::CallExpression* c) {
+    expand_pack_list(c->m_arguments);
+}
+
+void TypeWalker::expand_pack_list(std::vector<nodes::ASTNode*>& items) {
     bool any = false;
-    for (nodes::ASTNode* a : c->m_arguments) any = any || is_pack_spread(a);
+    for (nodes::ASTNode* a : items) any = any || is_pack_spread(a);
     if (!any) return;
     std::vector<nodes::ASTNode*> out;
 
-    for (nodes::ASTNode* a : c->m_arguments) {
+    for (nodes::ASTNode* a : items) {
         if (!is_pack_spread(a)) { out.push_back(a); continue; }
         nodes::ASTNode* pattern = static_cast<nodes::UnaryExpression*>(a)->operand;
         Symbol* pack = find_pack_ref(pattern);
@@ -1890,9 +2287,10 @@ void TypeWalker::expand_pack_arguments(nodes::CallExpression* c) {
         if (p) collect_pack_params(m_types.canonicalize(p->get_type()), pks);
 
         if (p && p->expanded_pack && m_inst) {
-            for (Symbol* es : p->pack_symbols) {
+            for (std::size_t k = 0; k < p->pack_symbols.size(); ++k) {
                 nodes::ASTNode* clone = clone_resolved(pattern);
-                substitute_symbol(clone, pack, es);
+                substitute_symbol(clone, pack, p->pack_symbols[k]);
+                substitute_pack_types(clone, pks, k);
                 out.push_back(clone);
             }
             continue;
@@ -1902,7 +2300,7 @@ void TypeWalker::expand_pack_arguments(nodes::CallExpression* c) {
         out.push_back(a);
     }
 
-    c->m_arguments = std::move(out);
+    items = std::move(out);
 }
 
 void TypeWalker::type_fold(nodes::FoldExpression* f) {
@@ -2022,6 +2420,10 @@ Type* TypeWalker::type_of_literal(nodes::Literal* lit) {
         case TK::Integer: {
             const tokenizing::NumericLiteral n = tokenizing::parse_numeric_literal(lit->value);
 
+            if (n.base == 10 && !n.is_float && n.digits.size() > 1 && n.digits[0] == '0') {
+                SemanticWarning::emit(m_warnings, file_of(lit), lit->line, "Literal", "'" + std::string(lit->value) + "' is read as the decimal number " + n.digits.substr(n.digits.find_first_not_of('0') == std::string::npos ? n.digits.size() - 1 : n.digits.find_first_not_of('0')) + "; a leading 0 doesn't make an octal number in Walnut, so write '0o" + n.digits.substr(1) + "' if you meant octal");
+            }
+
             if (n.has_suffix && n.error.empty() && !n.digits.empty()) {
                 Type* t = m_types.builtin_ranked(n.type_is_float ? BK::Float : BK::Int, n.rank, n.is_unsigned);
                 const WideInt* raw = m_types.consts().parse(n.digits, n.base);
@@ -2055,14 +2457,22 @@ Type* TypeWalker::type_of_literal(nodes::Literal* lit) {
 
             return t;
         }
-        case TK::InfinityKeyword: return m_types.builtin(BK::Float);   
+        case TK::InfinityKeyword:
+        case TK::NanKeyword:
+        case TK::UndefinedKeyword:
+        case TK::IndeterminateKeyword: return m_types.special_value();
         case TK::String:          return m_types.builtin(BK::String);
         case TK::TextLiteral:     return m_types.builtin(BK::Text);
         case TK::Character:       return m_types.builtin(BK::Char);
         case TK::True:
         case TK::False:           return m_types.bool_();
         case TK::NullptrKeyword:  return m_types.null_();
-        case TK::ThisKeyword:     return this_type();
+        case TK::ThisKeyword:
+            if (in_friend_body()) {
+                SemanticError::emit(m_reporter, file_of(lit), lit->line, "Name", "a friend function isn't a member of the class, so it has no 'this'; take the object as a parameter instead");
+                return m_types.error_();
+            }
+            return this_type();
         default:                  return m_types.dynamic_();
     }
 }
@@ -2146,6 +2556,14 @@ Type* TypeWalker::type_binary(nodes::BinaryExpression* b, Symbol*& resolved_op) 
     const tokenizing::Token::Kind op = b->op;
     if (op == tokenizing::Token::Kind::Comma) return r;
 
+    if (is_assignment_op(op)) {
+        const std::string why = lazy_write_problem(b->left);
+        if (!why.empty()) {
+            SemanticError::emit(m_reporter, file_of(b), b->line, "Lazy", why);
+            return l;
+        }
+    }
+
     if (record_symbol_of(l) || record_symbol_of(r)) {
         const nodes::OverloadableOperator want = nodes::classify_single_operator(op);
         m_operator_site = b;
@@ -2209,6 +2627,7 @@ Type* TypeWalker::type_binary(nodes::BinaryExpression* b, Symbol*& resolved_op) 
             if (b->op == TKind::Equal) check_binding(b->right, r, l, b);
             else if (lv && lv->is_pointer() && (b->op == TKind::PlusEqual || b->op == TKind::MinusEqual) && (r_integer || is_dynamic_t(rv))) {}
             else if ((b->op == TKind::ShiftLeftEqual || b->op == TKind::ShiftRightEqual) && r_integer) {}
+            else if ((b->op == TKind::PlusEqual || b->op == TKind::MinusEqual) && r_integer && lv && lv->is_builtin() && static_cast<BuiltinType*>(lv)->base() == parser_types::PrimitiveType::BaseKind::Char) {}
             else if (b->op == TKind::PlusEqual && lv && lv->is_builtin() && (static_cast<BuiltinType*>(lv)->base() == parser_types::PrimitiveType::BaseKind::String || static_cast<BuiltinType*>(lv)->base() == parser_types::PrimitiveType::BaseKind::Text)
                      && rv && rv->is_builtin() && static_cast<BuiltinType*>(rv)->base() == parser_types::PrimitiveType::BaseKind::Char) {}
             else if (!constant_fits(b->right, r, l)) check_convertible(r, l, b);
@@ -2230,6 +2649,12 @@ Type* TypeWalker::type_binary(nodes::BinaryExpression* b, Symbol*& resolved_op) 
         if (operand_class(r) == OperandClass::String) return m_types.strip_cv(r->is_reference() ? static_cast<ReferenceType*>(r)->referent() : r);
     }
 
+    if ((op == tokenizing::Token::Kind::Plus || op == tokenizing::Token::Kind::Minus) && l && r) {
+        const OperandClass lc = operand_class(l), rc = operand_class(r);
+        if (lc == OperandClass::Char && rc == OperandClass::Int) return m_types.builtin(parser_types::PrimitiveType::BaseKind::Char);
+        if (op == tokenizing::Token::Kind::Plus && lc == OperandClass::Int && rc == OperandClass::Char) return m_types.builtin(parser_types::PrimitiveType::BaseKind::Char);
+    }
+
     if (l && r) {
         if (Type* adapted = adapt_literal(b->right, r, l)) return adapted;
         if (Type* adapted = adapt_literal(b->left, l, r)) return adapted;
@@ -2242,6 +2667,8 @@ Type* TypeWalker::type_binary(nodes::BinaryExpression* b, Symbol*& resolved_op) 
     }
 
     if (l && r) {
+        auto plain = [this](Type* t) { return m_types.strip_cv(t->is_reference() ? static_cast<ReferenceType*>(t)->referent() : t); };
+        if (plain(l)->is_special_value() && plain(r)->is_special_value()) return m_types.builtin(parser_types::PrimitiveType::BaseKind::Float);
         if (rank_conversion(r, l, m_types) != ConversionRank::None) return l;
         if (rank_conversion(l, r, m_types) != ConversionRank::None) return r;
     }
@@ -2296,7 +2723,7 @@ Type* TypeWalker::type_unary(nodes::UnaryExpression* u, Symbol*& resolved_op) {
         return nullptr;
     }
 
-    if (u->op == K::Minus && t && !is_numeric_t(t) && !is_dynamic_t(t)) SemanticError::bad_operand(m_reporter, file_of(u), u->line, "-", type_str(t));
+    if (u->op == K::Minus && t && !is_numeric_t(t) && !is_dynamic_t(t) && !m_types.strip_cv(t->is_reference() ? static_cast<ReferenceType*>(t)->referent() : t)->is_special_value()) SemanticError::bad_operand(m_reporter, file_of(u), u->line, "-", type_str(t));
 
     if (u->op == K::Minus && u->operand && u->operand->kind == nodes::ASTNode::Kind::Literal && static_cast<nodes::Literal*>(u->operand)->get_kind() == K::Integer) {
         const tokenizing::NumericLiteral n = tokenizing::parse_numeric_literal(static_cast<nodes::Literal*>(u->operand)->value);
@@ -2330,6 +2757,79 @@ void TypeWalker::walk_param_defaults(const nodes::FunctionParameters* ps) {
     }
 }
 
+void TypeWalker::refine_by_value_category(std::vector<CandidateMatch>& matches, const std::vector<std::vector<ParamShape>>& shapes_list, const std::vector<nodes::ASTNode*>& args, std::size_t offset) {
+    for (std::size_t k = 0; k < matches.size() && k < shapes_list.size(); ++k) {
+        if (!matches[k].viable) continue;
+        const std::vector<ParamShape>& shapes = shapes_list[k];
+        for (std::size_t j = 0; j < shapes.size() && j < args.size(); ++j) {
+            if (shapes[j].is_pack || !is_lvalue(args[j])) continue;
+            Type* at = type_of(args[j]);
+            Type* pt = shapes[j].element;
+            if (!at || !pt || rank_conversion(at, pt, m_types) != ConversionRank::UserDefined) continue;
+            Symbol* via = nullptr;
+            Type* want = pt->is_reference() ? static_cast<ReferenceType*>(pt)->referent() : pt;
+            if (rank_user_defined(at, m_types.strip_cv(want), m_types, false, &via) != ConversionRank::None && rvalue_only_conversion(via)) { matches[k].viable = false; break; }
+        }
+    }
+
+    if (matches.size() > 1) {
+        std::vector<CandidateMatch> by_category = matches;
+        bool any = false;
+
+        for (std::size_t k = 0; k < by_category.size(); ++k) {
+            if (!by_category[k].viable) continue;
+            const std::vector<ParamShape>& shapes = shapes_list[k];
+
+            for (std::size_t j = 0; j < shapes.size() && j < args.size(); ++j) {
+                if (shapes[j].is_pack) break;
+                Type* pt = shapes[j].element;
+                if (!pt || !pt->is_reference()) continue;
+                auto* rt = static_cast<ReferenceType*>(pt);
+                const bool lvalue_arg = is_lvalue(args[j]);
+                if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const && !lvalue_arg) by_category[k].viable = false;
+                if (rt->ref_qual() == RefQual::RValue && lvalue_arg) by_category[k].viable = false;
+            }
+
+
+            any = any || by_category[k].viable;
+        }
+
+        if (any) {
+            for (std::size_t j = 0; j < args.size(); ++j) {
+                if (is_lvalue(args[j])) continue;
+                bool rvalue_ref_here = false;
+                std::vector<Type*> rvalue_referents;
+
+                for (std::size_t k = 0; k < by_category.size(); ++k) {
+                    if (!by_category[k].viable || j >= shapes_list[k].size() || shapes_list[k][j].is_pack) continue;
+                    Type* pt = shapes_list[k][j].element;
+                    if (pt && pt->is_reference() && static_cast<ReferenceType*>(pt)->ref_qual() == RefQual::RValue) {
+                        rvalue_ref_here = true;
+                        rvalue_referents.push_back(m_types.strip_cv(static_cast<ReferenceType*>(pt)->referent()));
+                    }
+                }
+
+                if (!rvalue_ref_here) continue;
+
+                for (std::size_t k = 0; k < by_category.size(); ++k) {
+                    if (!by_category[k].viable || j >= shapes_list[k].size() || shapes_list[k][j].is_pack || j + offset >= by_category[k].ranks.size()) continue;
+                    Type* pt = shapes_list[k][j].element;
+                    if (!pt || !pt->is_reference() || static_cast<ReferenceType*>(pt)->ref_qual() != RefQual::LValue) continue;
+                    ConversionRank& r = by_category[k].ranks[j + offset];
+                    Type* referent = m_types.strip_cv(static_cast<ReferenceType*>(pt)->referent());
+                    const bool same_target = std::find(rvalue_referents.begin(), rvalue_referents.end(), referent) != rvalue_referents.end();
+                    if (r == ConversionRank::Exact) r = ConversionRank::Promotion;
+                    else if (same_target && r == ConversionRank::Promotion) r = ConversionRank::Conversion;
+                    else if (same_target && r == ConversionRank::Conversion) r = ConversionRank::UserDefined;
+                    else if (same_target && r == ConversionRank::UserDefined) by_category[k].viable = false;
+                }
+            }
+
+            matches = std::move(by_category);
+        }
+    }
+}
+
 bool TypeWalker::is_template_instance(Symbol* s) {
     if (!s || !m_inst || s->kind != SymbolKind::Function) return false;
     Instantiator::Instantiation* I = m_inst->owning(s);
@@ -2357,6 +2857,13 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
         return constructed;
     }
 
+    struct BraceHook {
+        TypeContext& t; std::function<ConversionRank(std::size_t, Type*)> saved;
+        BraceHook(TypeContext& c, std::function<ConversionRank(std::size_t, Type*)> f) : t(c), saved(c.brace_arg_rank) { c.brace_arg_rank = std::move(f); }
+        ~BraceHook() { t.brace_arg_rank = saved; }
+    };
+    BraceHook brace_hook(m_types, [this, c](std::size_t a, Type* p) { return a < c->m_arguments.size() ? rank_brace_arg(c->m_arguments[a], p) : ConversionRank::None; });
+
     if (callee_sym && callee_sym->kind == SymbolKind::Function) {
         const std::size_t constraint_failures_before = m_inst ? m_inst->constraint_failures : 0;
         std::vector<CandidateMatch>                 matches;
@@ -2367,7 +2874,10 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
         for (Symbol* o = callee_sym; o; o = o->next_overload) {
             if (o->template_decl) {                         
                 if (!m_inst) continue;
-                auto* I = m_inst->instantiate_for_call(o, c->get_template_args(), args, c);
+                std::vector<bool> lvalues;
+                lvalues.reserve(c->m_arguments.size());
+                for (nodes::ASTNode* a : c->m_arguments) lvalues.push_back(a && is_lvalue(a));
+                auto* I = m_inst->instantiate_for_call(o, c->get_template_args(), args, c, &lvalues);
                 if (!I) continue;                           
                 matches.push_back(match_with_constants(c, I->fn_shapes, args));
                 cand_syms.push_back(I->sym);
@@ -2388,44 +2898,52 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
             cand_inst.push_back(owner);
         }
 
-        if (matches.size() > 1) {
-            std::vector<CandidateMatch> by_category = matches;
-            bool any = false;
+        {
+            const int obj_const = call_object_constness(c);
 
-            for (std::size_t k = 0; k < by_category.size(); ++k) {
-                if (!by_category[k].viable) continue;
-                const std::vector<ParamShape>& shapes = cand_shapes[k];
-
-                for (std::size_t j = 0; j < shapes.size() && j < c->m_arguments.size(); ++j) {
-                    if (shapes[j].is_pack) break;
-                    Type* pt = shapes[j].element;
-                    if (!pt || !pt->is_reference()) continue;
-                    auto* rt = static_cast<ReferenceType*>(pt);
-                    const bool lvalue_arg = is_lvalue(c->m_arguments[j]);
-                    if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const && !lvalue_arg) by_category[k].viable = false;
-                    if (rt->ref_qual() == RefQual::RValue && lvalue_arg) by_category[k].viable = false;
+            for (std::size_t k = 0; k < matches.size(); ++k) {
+                ConversionRank object_rank = ConversionRank::Exact;
+                Symbol* cs = cand_syms[k];
+                if (obj_const >= 0 && is_member_function(cs) && !is_static_member_function(cs) && is_const_method(cs) != (obj_const == 1)) {
+                    object_rank = ConversionRank::Promotion;
                 }
-
-                any = any || by_category[k].viable;
+                matches[k].ranks.insert(matches[k].ranks.begin(), object_rank);
             }
+        }
 
-            if (any) matches = std::move(by_category);
+        refine_by_value_category(matches, cand_shapes, c->m_arguments, 1);
+
+        {
+            std::size_t viable = 0;
+            for (const CandidateMatch& m : matches) if (m.viable) ++viable;
+
+            if (viable > 1) {
+                for (std::size_t k = 0; k < matches.size(); ++k) {
+                    if (!matches[k].viable || !cand_inst[k] || cand_inst[k]->sym != cand_syms[k]) continue;
+                    for (std::size_t j : cand_inst[k]->forwarded_args) {
+                        if (j + 1 < matches[k].ranks.size() && matches[k].ranks[j + 1] == ConversionRank::Exact) matches[k].ranks[j + 1] = ConversionRank::Promotion;
+                    }
+                }
+            }
         }
 
         std::vector<bool> from_template;
         for (Symbol* s : cand_syms) from_template.push_back(is_template_instance(s));
-        Selection sel = select_overload(matches, from_template);
+        std::vector<std::size_t> fixed_params;
+        for (Symbol* s : cand_syms) fixed_params.push_back(fixed_parameter_count(s));
+        Selection sel = select_overload(matches, from_template, fixed_params);
 
         if (sel.status == SelectStatus::NoMatch) {
             if (m_inst && m_inst->constraint_failures != constraint_failures_before) {
                 SemanticError::constraints_not_satisfied(m_reporter, file_of(c), c->line, callee_name(c->m_callee), m_last_constraint_failure);
             } else {
-                SemanticError::no_matching_overload(m_reporter, file_of(c), c->line, callee_name(c->m_callee));
+                SemanticError::no_matching_overload(m_reporter, file_of(c), c->line, callee_name(c->m_callee), candidate_notes(callee_sym, args, &c->m_arguments, callee_name(c->m_callee)));
             }
             return nullptr;
         }
         if (sel.status == SelectStatus::Ambiguous) { SemanticError::ambiguous_call(m_reporter, file_of(c), c->line, callee_name(c->m_callee)); return nullptr; }
         Symbol* chosen = cand_syms[sel.index];
+        ensure_member_body(chosen);
         c->resolved = chosen;
         check_const_call(chosen, c);
         auto note_rvalue = [c](Type* ret) {
@@ -2510,19 +3028,32 @@ bool TypeWalker::is_friend_of(Scope* record_scope) {
     if (!record_scope || !record_scope->node || record_scope->node->kind != K::RecordDeclaration) return false;
     auto* rd = static_cast<nodes::RecordDeclaration*>(record_scope->node);
     std::string_view fn_name;
+    nodes::OverloadableOperator site_op = nodes::OverloadableOperator::None;
 
     for (auto it = m_returns.rbegin(); it != m_returns.rend(); ++it) {
-        if (it->site && it->site->kind == K::FunctionDeclaration) { fn_name = static_cast<nodes::FunctionDeclaration*>(it->site)->get_name(); break; }
+        if (!it->site) continue;
+        if (it->site->kind == K::FunctionDeclaration) {
+            auto* fd = static_cast<nodes::FunctionDeclaration*>(it->site);
+            if (fd->m_lowered_operator != nodes::OverloadableOperator::None) site_op = fd->m_lowered_operator;
+            else fn_name = fd->get_name();
+            break;
+        }
+        if (it->site->kind == K::OperatorFunctionDeclaration) {
+            site_op = static_cast<nodes::OperatorFunctionDeclaration*>(it->site)->get_overload();
+            break;
+        }
     }
 
     for (const auto& member : rd->get_members()) {
         nodes::ASTNode* n = member.node;
+        if (n && n->kind == K::TemplateDeclaration) n = static_cast<nodes::TemplateDeclaration*>(n)->m_declaration;
         if (!n) continue;
         using RM = modifiers::RawModifiers;
 
         if (n->kind == K::FunctionDeclaration) {
             auto* f = static_cast<nodes::FunctionDeclaration*>(n);
             if (f->get_modifiers().has(RM::Friend) && !fn_name.empty() && f->get_name() == fn_name) return true;
+            if (f->get_modifiers().has(RM::Friend) && site_op != nodes::OverloadableOperator::None && f->m_lowered_operator == site_op) return true;
         } else if (n->kind == K::RecordDeclaration) {
             auto* r = static_cast<nodes::RecordDeclaration*>(n);
             if (!r->get_modifiers().has(RM::Friend)) continue;
@@ -2530,11 +3061,8 @@ bool TypeWalker::is_friend_of(Scope* record_scope) {
                 if (sc->kind == Scope::Kind::Record && sc->owner_symbol && sc->owner_symbol->name == r->get_name()) return true;
             }
         } else if (n->kind == K::OperatorFunctionDeclaration) {
-            if (static_cast<nodes::OperatorFunctionDeclaration*>(n)->get_modifiers().has(RM::Friend)) {
-                for (auto it = m_returns.rbegin(); it != m_returns.rend(); ++it) {
-                    if (it->site && it->site->kind == K::OperatorFunctionDeclaration) return true;
-                }
-            }
+            auto* o = static_cast<nodes::OperatorFunctionDeclaration*>(n);
+            if (o->get_modifiers().has(RM::Friend) && site_op != nodes::OverloadableOperator::None && o->get_overload() == site_op) return true;
         }
     }
 
@@ -2556,6 +3084,262 @@ void TypeWalker::check_member_access(Symbol* found, nodes::ASTNode* site) {
     if (is_friend_of(owner)) return;
     std::string_view rec = owner->owner_symbol ? owner->owner_symbol->name : std::string_view{"<record>"};
     SemanticError::inaccessible_member(m_reporter, file_of(site), site->line, found->name, is_private, rec);
+}
+
+void TypeWalker::finish_member_access(nodes::MemberAccessExpression* m, bool as_callee) {
+    Type* raw = type_member_access(m);
+    if (!as_callee && m->resolved && m->resolved->kind == SymbolKind::Function) for (Symbol* o = m->resolved; o; o = o->next_overload) ensure_member_body(o);
+    VC vc = symbol_is_object(m->resolved) ? VC::LValue : VC::RValue;
+    if (vc == VC::LValue && m->is_dot() && !is_lvalue(m->m_object)) vc = VC::RValue;
+    Type* t = decay_ref(raw, vc);
+    if (raw && raw->is_reference() && symbol_is_object(m->resolved)) vc = VC::LValue;
+    assign_typed(m, t, vc);
+}
+
+namespace {
+
+using BMK = parser_types::PrimitiveType::BaseKind;
+
+bool is_text_like(Type* t) {
+    return t && t->is_builtin() && (static_cast<BuiltinType*>(t)->base() == BMK::String || static_cast<BuiltinType*>(t)->base() == BMK::Text);
+}
+
+bool is_char_t(Type* t) {
+    return t && t->is_builtin() && static_cast<BuiltinType*>(t)->base() == BMK::Char;
+}
+
+constexpr std::string_view kAnyMethods[]   = { "sizeof", "alignof", "to_string", "to_text" };
+constexpr std::string_view kTextMethods[]  = { "length", "size", "countof", "empty", "substr", "find", "contains", "starts_with", "ends_with", "to_upper", "to_lower", "trim" };
+constexpr std::string_view kArrayMethods[] = { "length", "size", "countof", "empty", "find", "contains" };
+
+template <std::size_t N>
+bool in_list(const std::string_view (&list)[N], std::string_view name) {
+    for (std::string_view s : list) if (s == name) return true;
+    return false;
+}
+
+} // namespace
+
+std::string TypeWalker::candidate_notes(Symbol* head, const std::vector<Type*>& args, const std::vector<nodes::ASTNode*>* arg_nodes, std::string_view shown) {
+    if (!head) return {};
+    std::vector<std::string> lines;
+    std::size_t total = 0;
+    auto plural = [](std::size_t n, const char* word) { return std::to_string(n) + " " + word + (n == 1 ? "" : "s"); };
+
+    for (Symbol* o = head; o; o = o->next_overload) {
+        if (!o->decl) continue;
+        if (o->decl->kind == K::ConstructorDeclaration && static_cast<nodes::ConstructorDeclaration*>(o->decl)->is_deleted()) continue;
+        ++total;
+        if (lines.size() >= 6) continue;
+        Instantiator::Instantiation* owner = m_inst ? m_inst->owning(o) : nullptr;
+        EnvGuard g(m_types, owner ? &owner->env : nullptr);
+        const std::vector<ParamShape> shapes = shapes_of(o);
+        std::string sig = std::string(shown) + "(";
+
+        for (std::size_t i = 0; i < shapes.size(); ++i) {
+            if (i) sig += ", ";
+            sig += shapes[i].element ? type_str(shapes[i].element) : std::string("?");
+            if (shapes[i].is_pack) sig += "...";
+            if (shapes[i].has_default) sig += " = ...";
+        }
+
+        sig += ")";
+
+        if (o->template_decl) {
+            lines.push_back("template " + sig + ": its template arguments can't be worked out from these arguments, or its 'requires' clause isn't met");
+            continue;
+        }
+
+        std::size_t required = 0;
+        bool open_ended = false;
+        for (const ParamShape& s : shapes) {
+            if (s.is_pack) { if (s.unbounded) open_ended = true; continue; }
+            if (!s.has_default) ++required;
+        }
+
+        std::string why;
+        if (args.size() < required) {
+            why = "needs " + std::string(required == shapes.size() ? "" : "at least ") + plural(required, "argument") + ", but " + std::to_string(args.size()) + (args.size() == 1 ? " was" : " were") + " given";
+        } else if (!open_ended && args.size() > shapes.size()) {
+            why = "takes " + std::string(required == shapes.size() ? "" : "at most ") + plural(shapes.size(), "argument") + ", but " + std::to_string(args.size()) + (args.size() == 1 ? " was" : " were") + " given";
+        } else {
+            for (std::size_t j = 0; j < args.size() && why.empty(); ++j) {
+                const std::size_t k = j < shapes.size() ? j : shapes.size() - 1;
+                if (shapes.empty() || !args[j] || !shapes[k].element || args[j]->is_error()) continue;
+                Type* want = shapes[k].element;
+                if (is_dynamic_t(want) || want->is_dependent()) continue;
+                if (rank_conversion(args[j], want, m_types) == ConversionRank::None) {
+                    why = "argument " + std::to_string(j + 1) + " is '" + type_str(args[j]) + "', which can't be converted to '" + type_str(want) + "'";
+                    continue;
+                }
+                if (want->is_reference() && arg_nodes && j < arg_nodes->size()) {
+                    auto* rt = static_cast<ReferenceType*>(want);
+                    const bool lv = is_lvalue((*arg_nodes)[j]);
+                    if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const && !lv) why = "argument " + std::to_string(j + 1) + " is a temporary value, and a temporary can't be passed to '" + type_str(want) + "' (make the parameter 'const " + type_str(rt->referent()) + "&', or store the value in a variable first)";
+                    else if (rt->ref_qual() == RefQual::RValue && lv) why = "argument " + std::to_string(j + 1) + " is a variable, and '" + type_str(want) + "' only takes temporaries (pass 'std::core::move(...)' to give it away)";
+                    else if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const && args[j]->cv().is_const) why = "argument " + std::to_string(j + 1) + " is const, but '" + type_str(want) + "' could change it";
+                }
+            }
+        }
+
+        lines.push_back(sig + (why.empty() ? std::string(": doesn't accept these arguments") : ": " + why));
+    }
+
+    if (lines.empty()) return {};
+    std::string given = "(";
+    for (std::size_t j = 0; j < args.size(); ++j) given += (j ? ", " : "") + (args[j] ? type_str(args[j]) : std::string("?"));
+    given += ")";
+    std::string out = " with arguments " + given + "\n" + (total == 1 ? "The candidate is:" : "The candidates are:");
+    for (const std::string& l : lines) out += "\n  - " + l;
+    if (total > lines.size()) out += "\n  - ... and " + std::to_string(total - lines.size()) + " more";
+    return out;
+}
+
+bool TypeWalker::rewrite_extension_call(nodes::CallExpression* c) {
+    auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
+    if (!m->qualifier.empty() || m->is_arrow() || !m_inst) return false;
+    Type* obj = type_of(m->m_object);
+    if (!obj || obj->is_error()) return false;
+    if (obj->is_reference()) obj = static_cast<ReferenceType*>(obj)->referent();
+    obj = m_types.strip_cv(obj);
+    if (!obj || obj->is_dependent() || !(is_text_like(obj) || is_char_t(obj))) return false;
+    const std::string_view name = m->get_member();
+    if (name == "sizeof" || name == "alignof" || name == "countof" || in_list(kAnyMethods, name)) return false;
+    if (is_text_like(obj) && in_list(kTextMethods, name)) return false;
+    const std::vector<std::string_view> parts{ "std", "strings", name };
+    Symbol* fn = nullptr;
+    for (Scope* s = m_current; s && !fn; s = s->parent) {
+        Symbol* found = descend(s, parts, 0);
+        if (found && found->kind == SymbolKind::Function) fn = found;
+    }
+    if (!fn) return false;
+    auto* id = make_in<nodes::Identifier>(m_inst->arena(), fn->name, c->line);
+    id->resolved = fn;
+    id->file_id = c->file_id;
+    id->order = c->order;
+    c->m_arguments.insert(c->m_arguments.begin(), m->m_object);
+    c->m_callee = id;
+    return true;
+}
+
+bool TypeWalker::is_builtin_method_call(nodes::CallExpression* c) {
+    auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
+    if (!m->qualifier.empty()) return false;
+    Type* obj = type_of(m->m_object);
+    if (!obj || obj->is_error()) return false;
+    if (obj->is_reference()) obj = static_cast<ReferenceType*>(obj)->referent();
+    if (m->is_arrow()) {
+        if (!obj->is_pointer()) return false;
+        obj = static_cast<PointerType*>(obj)->pointee();
+    }
+    obj = m_types.strip_cv(obj);
+    if (!obj || obj->is_dependent() || is_dynamic_t(obj)) return false;
+
+    const std::string_view name = m->get_member();
+    if (name == "sizeof" || name == "alignof" || name == "countof") return true;
+    if (obj->is_record()) return false;
+    if (in_list(kAnyMethods, name)) return true;
+    if (is_text_like(obj)) return in_list(kTextMethods, name);
+    if (obj->is_array()) return in_list(kArrayMethods, name);
+    if (obj->is_builtin() || obj->is_enum() || obj->is_pointer()) {
+        const bool stringy = is_text_like(obj) || is_char_t(obj);
+        const std::string hint = stringy ? "; more methods for strings and characters, such as split, replace, join, pad_left and is_digit, come from 'import module.strings'" : std::string();
+        SemanticError::emit(m_reporter, file_of(m), m->line, "Type", "'" + type_str(obj) + "' has no built-in method '" + std::string(name) + "'" + hint);
+        c->builtin_method = name;
+        return true;
+    }
+    return false;
+}
+
+Type* TypeWalker::type_builtin_method(nodes::CallExpression* c, const std::vector<Type*>& args) {
+    auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
+    if (!c->builtin_method.empty()) return m_types.error_();
+
+    Type* obj = type_of(m->m_object);
+    if (obj->is_reference()) obj = static_cast<ReferenceType*>(obj)->referent();
+    if (m->is_arrow()) obj = static_cast<PointerType*>(obj)->pointee();
+    Type* plain = m_types.strip_cv(obj);
+    const std::string_view name = m->get_member();
+    c->builtin_method = name;
+
+    const std::uint32_t file = file_of(c);
+    const std::string where = "'" + type_str(plain) + "." + std::string(name) + "()'";
+    Type* int_t  = m_types.builtin(BMK::Int);
+    Type* bool_t = m_types.builtin(BMK::Bool);
+
+    auto arity = [&](std::size_t lo, std::size_t hi) {
+        if (args.size() >= lo && args.size() <= hi) return true;
+        std::string want = lo == hi ? std::to_string(lo) : std::to_string(lo) + " or " + std::to_string(hi);
+        SemanticError::emit(m_reporter, file, c->line, "Call", where + " takes " + want + " argument" + (hi == 1 && lo == hi ? "" : "s") + ", but " + std::to_string(args.size()) + (args.size() == 1 ? " was" : " were") + " given");
+        return false;
+    };
+
+    auto arg_plain = [&](std::size_t k) {
+        Type* t = args[k];
+        if (t && t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+        return m_types.strip_cv(t);
+    };
+
+    auto need_integral = [&](std::size_t k) {
+        Type* t = arg_plain(k);
+        if (known_t(t) && !is_int_type(t) && !is_dynamic_t(t)) SemanticError::emit(m_reporter, file, c->line, "Type", "argument " + std::to_string(k + 1) + " of " + where + " must be an integer, not '" + type_str(t) + "'");
+    };
+
+    auto need_text = [&](std::size_t k) {
+        Type* t = arg_plain(k);
+        if (known_t(t) && !is_text_like(t) && !is_char_t(t) && !is_dynamic_t(t)) SemanticError::emit(m_reporter, file, c->line, "Type", "argument " + std::to_string(k + 1) + " of " + where + " must be a string, text or char, not '" + type_str(t) + "'");
+    };
+
+    if (name == "to_string") { arity(0, 0); return m_types.builtin(BMK::String); }
+    if (name == "to_text")   { arity(0, 0); return m_types.builtin(BMK::Text); }
+
+    if (name == "sizeof" || name == "alignof") {
+        arity(0, 0);
+        long long size = 0, alignment = 0;
+        if (plain->is_dependent()) return int_t;
+        if (m_eval.layout_of(plain, size, alignment)) {
+            c->builtin_size = name == "sizeof" ? size : alignment;
+            return int_t;
+        }
+        if (name == "sizeof" && is_text_like(plain)) return int_t;
+        if (name == "sizeof" && plain->is_array()) {
+            Type* el = m_types.strip_cv(static_cast<ArrayType*>(plain)->element());
+            if (m_eval.layout_of(el, size, alignment)) { c->builtin_size = size; c->builtin_method = "sizeof[]"; return int_t; }
+        }
+        SemanticError::emit(m_reporter, file, c->line, "Type", where + " is not defined because '" + type_str(plain) + "' has no fixed size");
+        return int_t;
+    }
+
+    if (name == "countof" && !is_text_like(plain) && !plain->is_array()) {
+        arity(0, 0);
+        if (plain->is_enum()) {
+            if (std::optional<std::size_t> n = enumerator_count(plain)) c->builtin_size = static_cast<long long>(*n);
+            return int_t;
+        }
+        SemanticError::emit(m_reporter, file, c->line, "Type", "countof requires an array, a string or an enum, not '" + type_str(plain) + "'");
+        return int_t;
+    }
+
+    if (name == "length" || name == "size" || name == "countof") { arity(0, 0); return int_t; }
+    if (name == "empty") { arity(0, 0); return bool_t; }
+
+    if (is_text_like(plain)) {
+        Type* same = m_types.builtin(static_cast<BuiltinType*>(plain)->base());
+        if (name == "substr") { if (arity(1, 2)) for (std::size_t k = 0; k < args.size(); ++k) need_integral(k); return same; }
+        if (name == "find")   { if (arity(1, 1)) need_text(0); return int_t; }
+        if (name == "contains" || name == "starts_with" || name == "ends_with") { if (arity(1, 1)) need_text(0); return bool_t; }
+        arity(0, 0);
+        return same;
+    }
+
+    if (arity(1, 1)) {
+        Type* el = static_cast<ArrayType*>(plain)->element();
+        Type* a  = arg_plain(0);
+        if (known_t(a) && known_t(el) && rank_conversion(a, m_types.strip_cv(el), m_types) == ConversionRank::None) {
+            SemanticError::emit(m_reporter, file, c->line, "Type", "argument 1 of " + where + " must be convertible to '" + type_str(el) + "', not '" + type_str(a) + "'");
+        }
+    }
+    return name == "find" ? int_t : bool_t;
 }
 
 Type* TypeWalker::type_member_access(nodes::MemberAccessExpression* m) {
@@ -2593,13 +3377,29 @@ Type* TypeWalker::type_member_access(nodes::MemberAccessExpression* m) {
         if (!members && rt->decl()) members = rt->decl()->inner_scope;
     }
 
+    if (!m->qualifier.empty()) {
+        Scope* via = (members && m->qualifier_symbol) ? qualified_base_scope(members, m->qualifier_symbol, 0) : nullptr;
+
+        if (!via) {
+            if (obj && !obj->is_error() && m->qualifier_symbol) {
+                std::string q;
+                for (std::string_view p : m->qualifier) { if (!q.empty()) q += "::"; q += p; }
+                SemanticError::emit(m_reporter, file_of(m), m->line, "Name", "'" + q + "' isn't '" + type_str(s) + "' or one of its base classes, so '" + q + "::" + std::string(m->get_member()) + "' can't be used on it");
+            }
+            return nullptr;
+        }
+
+        m->qualifier_scope = via;
+        members = via;
+    }
+
     Symbol* found = members ? members->find_member(m->get_member()) : nullptr;
     if (found) check_member_ambiguity(members, m->get_member(), m);
     m->resolved = found;
     check_member_access(found, m);
         
     if (!found) {
-        if (obj && !is_dynamic_t(obj) && !obj->is_error()) SemanticError::unresolved_name(m_reporter, file_of(m), m->line, m->get_member());
+        if (obj && !is_dynamic_t(obj) && !obj->is_error()) SemanticError::emit(m_reporter, file_of(m), m->line, "Name", "'" + type_str(s) + "' has no member named '" + std::string(m->get_member()) + "'" + suggest_similar(members, m->get_member(), true));
         return nullptr;
     }
 
@@ -2607,7 +3407,340 @@ Type* TypeWalker::type_member_access(nodes::MemberAccessExpression* m) {
     Type* ft = symbol_type(found);
     Type* ov = obj && obj->is_reference() ? static_cast<ReferenceType*>(obj)->referent() : obj;
     if (ov && ov->cv().is_const && is_instance_field(found)) ft = add_const(ft);
+    if (lazy_blocked(found, ov && ov->cv().is_const)) ft = add_const(ft);
     return ft;
+}
+
+std::size_t TypeWalker::fixed_parameter_count(const Symbol* fn) {
+    if (!fn || !fn->decl) return 0;
+    const nodes::FunctionParameters* ps = nullptr;
+    if (fn->decl->kind == K::FunctionDeclaration) ps = static_cast<const nodes::FunctionDeclaration*>(fn->decl)->get_parameters();
+    else if (fn->decl->kind == K::OperatorFunctionDeclaration) ps = static_cast<const nodes::OperatorFunctionDeclaration*>(fn->decl)->get_parameters();
+    else if (fn->decl->kind == K::ConstructorDeclaration) ps = static_cast<const nodes::ConstructorDeclaration*>(fn->decl)->get_parameters();
+    if (!ps) return 1;
+    std::size_t n = 0;
+    bool variadic = false;
+    for (const nodes::FunctionParameter* p : ps->m_params) {
+        if (!p->is_variadic() && !p->expanded_pack) ++n;
+        else variadic = true;
+    }
+    return n * 2 + (variadic ? 0 : 1);
+}
+
+nodes::VariableDeclaration* TypeWalker::pack_field_group_of(Symbol* s) {
+    if (!s || !s->bound_type || !s->decl || s->decl->kind != K::VariableDeclaration) return nullptr;
+    auto* v = static_cast<nodes::VariableDeclaration*>(s->decl);
+    return v->pack_field && v->symbol == s ? v : nullptr;
+}
+
+nodes::VariableDeclaration* TypeWalker::pack_field_group(nodes::ASTNode* e) {
+    if (!e) return nullptr;
+    if (e->kind == K::Identifier) return pack_field_group_of(static_cast<nodes::Identifier*>(e)->resolved);
+    if (e->kind == K::MemberAccessExpression) return pack_field_group_of(static_cast<nodes::MemberAccessExpression*>(e)->resolved);
+    return nullptr;
+}
+
+bool TypeWalker::defer_member_body(nodes::ASTNode* node, Symbol* sym, bool has_body, bool eager) {
+    const Symbol* owner = sym && sym->owner ? sym->owner->owner_symbol : nullptr;
+    const bool native = owner && owner->decl && owner->decl->kind == K::RecordDeclaration && static_cast<nodes::RecordDeclaration*>(owner->decl)->m_native;
+    auto used_flag = [](nodes::ASTNode* n) -> bool* {
+        if (n && n->kind == K::FunctionDeclaration) return &static_cast<nodes::FunctionDeclaration*>(n)->native_used;
+        if (n && n->kind == K::OperatorFunctionDeclaration) return &static_cast<nodes::OperatorFunctionDeclaration*>(n)->native_used;
+        return nullptr;
+    };
+    bool* node_used = used_flag(node);
+    bool* sym_used  = sym ? used_flag(sym->decl) : nullptr;
+    if ((node_used && *node_used) || (sym_used && *sym_used)) {
+        if (node_used) *node_used = true;
+        return false;
+    }
+    if (eager || !(has_body || native) || !sym || !m_inst || node == m_force_node) return false;
+    if (!is_member_function(sym) || m_requested.count(sym)) return false;
+    Instantiator::Instantiation* I = m_inst->owning(sym);
+    if (!I || !I->decl || I->decl->kind != K::RecordDeclaration) return false;
+    m_deferred[sym] = DeferredBody{ node, m_current, I };
+    return true;
+}
+
+void TypeWalker::ensure_member_body(Symbol* sym) {
+    if (!sym) return;
+    if (sym->decl && sym->decl->kind == K::FunctionDeclaration) static_cast<nodes::FunctionDeclaration*>(sym->decl)->native_used = true;
+    if (sym->decl && sym->decl->kind == K::OperatorFunctionDeclaration) static_cast<nodes::OperatorFunctionDeclaration*>(sym->decl)->native_used = true;
+    auto it = m_deferred.find(sym);
+    if (it == m_deferred.end()) {
+        if (m_inst && is_member_function(sym)) m_requested.insert(sym);
+        return;
+    }
+    const DeferredBody d = it->second;
+    m_deferred.erase(it);
+    if (d.node->kind == K::FunctionDeclaration) static_cast<nodes::FunctionDeclaration*>(d.node)->lazy_untyped = false;
+    if (d.node->kind == K::OperatorFunctionDeclaration) static_cast<nodes::OperatorFunctionDeclaration*>(d.node)->lazy_untyped = false;
+    if (d.inst) m_types.push_subst(&d.inst->env);
+    Scope* saved = m_current;
+    const bool saved_const = m_in_const_method;
+    nodes::ASTNode* saved_force = m_force_node;
+    const auto saved_catch = m_catch_depth;
+    nodes::ASTNode* saved_site = m_site;
+    m_current = d.scope;
+    m_force_node = d.node;
+    m_catch_depth = 0;
+    build(d.node);
+    m_site = saved_site;
+    m_catch_depth = saved_catch;
+    m_force_node = saved_force;
+    m_in_const_method = saved_const;
+    m_current = saved;
+    if (d.inst) m_types.pop_subst();
+}
+
+int TypeWalker::call_object_constness(nodes::CallExpression* c) {
+    if (!c || !c->m_callee) return -1;
+    if (c->m_callee->kind == K::Identifier) return m_in_const_method ? 1 : 0;
+    if (c->m_callee->kind != K::MemberAccessExpression) return -1;
+    auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
+    if (m->is_scope()) return m_in_const_method ? 1 : 0;
+    Type* o = type_of(m->m_object);
+    if (o && o->is_reference()) o = static_cast<ReferenceType*>(o)->referent();
+    if (o && m->is_arrow() && o->is_pointer()) o = static_cast<PointerType*>(o)->pointee();
+    return o && o->cv().is_const ? 1 : 0;
+}
+
+Type* TypeWalker::init_list_element(Type* t) {
+    if (t && t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+    t = m_types.strip_cv(t);
+    if (!t || !t->is_record()) return nullptr;
+    auto* rt = static_cast<RecordType*>(t);
+    Symbol* d = rt->decl();
+    if (!d || d->name != "initializer_list" || rt->args().size() != 1 || !rt->args()[0].is_type) return nullptr;
+    if (!d->owner || !d->owner->owner_symbol || d->owner->owner_symbol->name != "std") return nullptr;
+    return rt->args()[0].type;
+}
+
+bool TypeWalker::element_converts(nodes::ASTNode* el, Type* to) {
+    if (!el || !to) return false;
+    if (el->kind == K::BraceInitializerList) return rank_brace_arg(el, to) != ConversionRank::None;
+    Type* from = type_of(el);
+    if (!from) return false;
+    return rank_conversion(from, to, m_types) != ConversionRank::None || constant_fits(el, from, to);
+}
+
+Symbol* TypeWalker::init_list_constructor(Type* rec, const std::vector<nodes::ASTNode*>& els, Type*& il_type, nodes::ASTNode* site) {
+    il_type = nullptr;
+    Type* t = m_types.strip_cv(rec);
+    if (!t || !t->is_record() || els.empty() || init_list_element(t)) return nullptr;
+    auto* rt = static_cast<RecordType*>(t);
+    Symbol* owner = rt->decl();
+    Instantiator::Instantiation* I = nullptr;
+
+    if (rt->is_instantiation() && m_inst) {
+        I = m_inst->for_record(rt, site);
+        if (!I || !I->sym) return nullptr;
+        ensure_typed(I);
+        owner = I->sym;
+    }
+
+    if (!owner || !owner->inner_scope) return nullptr;
+    EnvGuard g(m_types, I ? &I->env : nullptr);
+
+    for (Symbol* o = owner->inner_scope->find_member("constructor"); o; o = o->next_overload) {
+        if (o->template_decl || !o->decl || o->decl->kind != K::ConstructorDeclaration) continue;
+        if (static_cast<nodes::ConstructorDeclaration*>(o->decl)->is_deleted()) continue;
+        const std::vector<ParamShape> shapes = shapes_of(o);
+        if (shapes.size() != 1 || shapes[0].is_pack) continue;
+        Type* p = shapes[0].element;
+        if (p && p->is_reference() && static_cast<ReferenceType*>(p)->ref_qual() == RefQual::LValue && !static_cast<ReferenceType*>(p)->referent()->cv().is_const) continue;
+        Type* e = init_list_element(p);
+        if (!e) continue;
+        bool all = true;
+        for (nodes::ASTNode* el : els) all = all && element_converts(el, e);
+        if (!all) continue;
+        Type* lt = p->is_reference() ? static_cast<ReferenceType*>(p)->referent() : p;
+        il_type = m_types.strip_cv(lt);
+        return o;
+    }
+
+    return nullptr;
+}
+
+ConversionRank TypeWalker::rank_brace_arg(nodes::ASTNode* arg, Type* param) {
+    if (!arg || arg->kind != K::BraceInitializerList || !param) return ConversionRank::None;
+    auto* list = static_cast<nodes::BraceInitializerList*>(arg);
+    Type* p = param;
+
+    if (p->is_reference()) {
+        auto* r = static_cast<ReferenceType*>(p);
+        if (r->ref_qual() == RefQual::LValue && !r->referent()->cv().is_const) return ConversionRank::None;
+        p = r->referent();
+    }
+
+    p = m_types.strip_cv(p);
+    if (!p || p->is_error() || p->is_dependent()) return ConversionRank::None;
+
+    if (Type* e = init_list_element(p)) {
+        for (nodes::ASTNode* el : list->m_elements) if (!element_converts(el, e)) return ConversionRank::None;
+        return ConversionRank::Exact;
+    }
+
+    if (p->is_record()) {
+        Type* il = nullptr;
+        if (init_list_constructor(p, list->m_elements, il, arg)) return ConversionRank::UserDefined;
+        std::vector<Type*> els;
+        for (nodes::ASTNode* el : list->m_elements) {
+            Type* et = el->kind == K::BraceInitializerList ? nullptr : type_of(el);
+            if (!et && el->kind != K::BraceInitializerList) return ConversionRank::None;
+            els.push_back(et);
+        }
+        auto* rt = static_cast<RecordType*>(p);
+        Symbol* owner = rt->decl();
+        Instantiator::Instantiation* I = nullptr;
+        if (rt->is_instantiation() && m_inst) {
+            I = m_inst->for_record(rt, arg);
+            if (!I || !I->sym) return ConversionRank::None;
+            ensure_typed(I);
+            owner = I->sym;
+        }
+        if (!owner || !owner->inner_scope) return ConversionRank::None;
+        EnvGuard g(m_types, I ? &I->env : nullptr);
+        Symbol* bucket = owner->inner_scope->find_member("constructor");
+        if (!bucket) return ConversionRank::UserDefined;
+        for (Symbol* o = bucket; o; o = o->next_overload) {
+            if (o->template_decl || !o->decl || o->decl->kind != K::ConstructorDeclaration) continue;
+            if (static_cast<nodes::ConstructorDeclaration*>(o->decl)->is_deleted()) continue;
+            if (static_cast<nodes::ConstructorDeclaration*>(o->decl)->m_qualifiers.has(modifiers::FunctionQualifiers::Explicit)) continue;
+            if (match_arguments(shapes_of(o), els, m_types).viable) return ConversionRank::UserDefined;
+        }
+        return ConversionRank::None;
+    }
+
+    if (list->m_elements.empty()) return ConversionRank::Exact;
+    if (list->m_elements.size() != 1 || list->m_elements[0]->kind == K::BraceInitializerList) return ConversionRank::None;
+    Type* et = type_of(list->m_elements[0]);
+    if (!et) return ConversionRank::None;
+    if (constant_fits(list->m_elements[0], et, p)) return ConversionRank::Exact;
+    return rank_conversion(et, p, m_types);
+}
+
+void TypeWalker::bind_brace_args(const std::vector<nodes::ASTNode*>* nodes, const std::vector<ParamShape>& shapes, nodes::ASTNode* site) {
+    if (!nodes) return;
+    std::size_t i = 0;
+    for (const ParamShape& p : shapes) {
+        if (p.is_pack || i >= nodes->size()) break;
+        nodes::ASTNode* a = (*nodes)[i++];
+        if (a && a->kind == K::BraceInitializerList) check_brace_init(static_cast<nodes::BraceInitializerList*>(a), p.element, site);
+    }
+}
+
+void TypeWalker::check_brace_init(nodes::BraceInitializerList* list, Type* target, nodes::ASTNode* site) {
+    Type* t = target;
+    if (t && t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+    t = m_types.strip_cv(t);
+    if (!t || t->is_dependent() || t->is_error() || t->is_array() || is_dynamic_t(t)) return;
+
+    if (record_symbol_of(t)) {
+        Type* il = nullptr;
+        if (Symbol* via = list->parens ? nullptr : init_list_constructor(t, list->m_elements, il, site)) {
+            Type* e = init_list_element(il);
+            std::vector<Type*> args;
+            for (nodes::ASTNode* el : list->m_elements) {
+                if (el->kind == K::BraceInitializerList) {
+                    check_brace_init(static_cast<nodes::BraceInitializerList*>(el), e, site);
+                    args.push_back(e);
+                } else {
+                    args.push_back(type_of(el));
+                }
+            }
+            list->ctor = via;
+            list->init_list_type = il;
+            m_ctor_arg_nodes = &list->m_elements;
+            list->init_list_ctor = resolve_construction(il, args, site);
+            m_ctor_arg_nodes = nullptr;
+            return;
+        }
+
+        Scope* ms = member_scope_of(t);
+        if (!ms || !ms->find_member("constructor")) return;
+        std::vector<Type*> args;
+        for (nodes::ASTNode* el : list->m_elements) {
+            Type* at = type_of(el);
+            if (!at) return;
+            args.push_back(at);
+        }
+        m_ctor_arg_nodes = &list->m_elements;
+        list->ctor = resolve_construction(t, args, site);
+        m_ctor_arg_nodes = nullptr;
+        return;
+    }
+
+    if (list->m_elements.size() > 1) {
+        SemanticError::emit(m_reporter, file_of(site), site->line, "Initialization", "'" + type_str(t) + "' holds a single value, so its initializer can have at most one, but " + std::to_string(list->m_elements.size()) + " were given");
+        return;
+    }
+
+    if (list->m_elements.size() == 1) {
+        nodes::ASTNode* el = list->m_elements.front();
+        if (Type* et = type_of(el)) check_binding(el, et, t, site);
+    }
+}
+
+Scope* TypeWalker::qualified_base_scope(Scope* rs, Symbol* q, int depth) {
+    if (!rs || depth > 32) return nullptr;
+    Symbol* owner = rs->owner_symbol;
+    if (owner && (owner == q || (m_types.instance_primary_hook && m_types.instance_primary_hook(owner) == q))) return rs;
+    for (Scope* b : rs->bases) if (Scope* f = qualified_base_scope(b, q, depth + 1)) return f;
+    return nullptr;
+}
+
+bool TypeWalker::in_friend_body() const {
+    for (auto it = m_returns.rbegin(); it != m_returns.rend(); ++it) {
+        if (!it->site) continue;
+        if (it->site->kind == K::FunctionDeclaration) return static_cast<const nodes::FunctionDeclaration*>(it->site)->hoisted_friend;
+        if (it->site->kind == K::OperatorFunctionDeclaration) return static_cast<const nodes::OperatorFunctionDeclaration*>(it->site)->hoisted_friend;
+        if (it->site->kind == K::ConstructorDeclaration || it->site->kind == K::DestructorDeclaration) return false;
+    }
+    return false;
+}
+
+bool TypeWalker::is_static_member_function(const Symbol* fn) {
+    if (!fn || !fn->decl) return false;
+    if (fn->decl->kind == K::FunctionDeclaration) return static_cast<const nodes::FunctionDeclaration*>(fn->decl)->get_modifiers().has(modifiers::RawModifiers::Static);
+    return false;
+}
+
+bool TypeWalker::is_lazy_field(const Symbol* s) {
+    if (!s || s->kind != SymbolKind::Variable || !s->owner || s->owner->kind != Scope::Kind::Record || !s->decl) return false;
+    return s->decl->kind == K::VariableDeclaration && static_cast<const nodes::VariableDeclaration*>(s->decl)->get_type_info().modifiers.has(modifiers::RawModifiers::Lazy);
+}
+
+bool TypeWalker::lazy_blocked(const Symbol* s, bool object_const) {
+    if (!is_lazy_field(s)) return false;
+    for (Scope* sc = m_current; sc; sc = sc->parent) if (sc->kind == Scope::Kind::Record && sc == s->owner) return false;
+    if (is_friend_of(s->owner)) return false;
+    if (!static_cast<const nodes::VariableDeclaration*>(s->decl)->get_type_info().modifiers.lazy_public()) return true;
+    return object_const;
+}
+
+std::string TypeWalker::lazy_write_problem(nodes::ASTNode* target) {
+    Symbol* s = nullptr;
+    bool object_const = false;
+
+    if (target && target->kind == K::Identifier) {
+        s = static_cast<nodes::Identifier*>(target)->resolved;
+    } else if (target && target->kind == K::MemberAccessExpression) {
+        auto* m = static_cast<nodes::MemberAccessExpression*>(target);
+        if (m->is_scope()) return {};
+        s = m->resolved;
+        Type* ot = type_of(m->m_object);
+        if (ot && ot->is_reference()) ot = static_cast<ReferenceType*>(ot)->referent();
+        if (m->is_arrow() && ot && ot->is_pointer()) ot = static_cast<PointerType*>(ot)->pointee();
+        object_const = ot && ot->cv().is_const;
+    }
+
+    if (!lazy_blocked(s, object_const)) return {};
+    std::string_view rec = s->owner && s->owner->owner_symbol ? s->owner->owner_symbol->name : std::string_view{"its class"};
+    if (!static_cast<const nodes::VariableDeclaration*>(s->decl)->get_type_info().modifiers.lazy_public()) {
+        return "'" + std::string(s->name) + "' is a lazy field, so only '" + std::string(rec) + "' can assign or invalidate it; declare it 'public lazy' to allow that from outside the class";
+    }
+    return "'" + std::string(s->name) + "' belongs to a const '" + std::string(rec) + "', so it can't be assigned or invalidated here";
 }
 
 bool TypeWalker::is_instance_field(const Symbol* s) {
@@ -2615,7 +3748,7 @@ bool TypeWalker::is_instance_field(const Symbol* s) {
     using RM = modifiers::RawModifiers;
     if (s->decl->kind == K::VariableDeclaration) {
         const auto& mods = static_cast<const nodes::VariableDeclaration*>(s->decl)->get_type_info().modifiers;
-        return !mods.has(RM::Static) && !mods.has(RM::Mutable);
+        return !mods.has(RM::Static) && !mods.has(RM::Mutable) && !mods.has(RM::Lazy);
     }
     if (s->decl->kind == K::ArrayDeclaration) {
         const auto& mods = static_cast<const nodes::ArrayDeclaration*>(s->decl)->get_array_modifiers();
@@ -2643,7 +3776,9 @@ bool TypeWalker::is_const_method(const Symbol* fn) {
 }
 
 bool TypeWalker::is_member_function(const Symbol* fn) const {
-    return fn && fn->owner && fn->owner->kind == Scope::Kind::Record && fn->decl
+    const Scope* owner = fn ? fn->owner : nullptr;
+    while (owner && owner->kind == Scope::Kind::Template) owner = owner->parent;
+    return fn && owner && owner->kind == Scope::Kind::Record && fn->decl
         && (fn->decl->kind == K::FunctionDeclaration || fn->decl->kind == K::OperatorFunctionDeclaration);
 }
 
@@ -2676,6 +3811,7 @@ Type* TypeWalker::arrow_target(Type* obj, std::vector<Symbol*>* chain) {
         Type* ret = resolve_member_operator(obj, nodes::OverloadableOperator::Arrow, {}, &op);
         if (!ret) break;
         if (chain && op) chain->push_back(op);
+        ensure_member_body(op);
         if (ret->is_reference()) ret = static_cast<ReferenceType*>(ret)->referent();
         if (ret->is_pointer()) return static_cast<PointerType*>(ret)->pointee();
         obj = ret;
@@ -2708,6 +3844,7 @@ Type* TypeWalker::deduce_auto(Type* init) {
     if (!init) return nullptr;
     Type* t = init;
     if (t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+    if (m_types.strip_cv(t)->is_special_value()) return m_types.builtin(parser_types::PrimitiveType::BaseKind::Float);
     return m_types.strip_cv(t);
 }
 
@@ -2876,7 +4013,46 @@ void TypeWalker::check_union(nodes::RecordDeclaration* r) {
     }
 }
 
+bool TypeWalker::text_displayable(Type* t) {
+    using BK = parser_types::PrimitiveType::BaseKind;
+    if (!t) return true;
+    if (t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+    t = m_types.strip_cv(t);
+    if (t->is_error() || t->is_dependent() || is_dynamic_t(t)) return true;
+    if (t->is_pointer() || t->is_null() || t->is_enum() || t->is_special_value()) return true;
+
+    if (t->is_builtin()) {
+        const BK b = static_cast<BuiltinType*>(t)->base();
+        return b != BK::Void && b != BK::Auto;
+    }
+
+    if (Type* held = special_held_type(t)) {
+        Type* h = m_types.strip_cv(held);
+        return h->is_builtin() && text_displayable(h);
+    }
+
+    if (t->is_record()) {
+        ensure_conversions(t);
+        return rank_user_defined(t, m_types.builtin(BK::String), m_types, false, nullptr) != ConversionRank::None
+            || rank_user_defined(t, m_types.builtin(BK::Text), m_types, false, nullptr) != ConversionRank::None;
+    }
+
+    return false;
+}
+
+void TypeWalker::type_special_test(nodes::CastExpression* c) {
+    static const char* const names[] = { "", "inf", "nan", "undefined", "indeterminate" };
+    Type* src = type_of(c->operand);
+    Type* sv = m_types.strip_cv(src && src->is_reference() ? static_cast<ReferenceType*>(src)->referent() : src);
+    assign_typed(c, m_types.bool_(), VC::RValue);
+    if (!sv || sv->is_error() || sv->is_dependent() || is_dynamic_t(sv) || sv->is_special_value() || special_held_type(sv)) return;
+    using BK = parser_types::PrimitiveType::BaseKind;
+    if (sv->is_builtin() && (static_cast<BuiltinType*>(sv)->base() == BK::Int || static_cast<BuiltinType*>(sv)->base() == BK::Float)) return;
+    SemanticError::emit(m_reporter, file_of(c), c->line, "Type", "'is " + std::string(names[c->special_test < 5 ? c->special_test : 0]) + "' works on numbers, special(T) values and 'var' values, not on '" + type_str(sv) + "'; to let this value be " + names[c->special_test < 5 ? c->special_test : 0] + ", give it the type special(" + type_str(sv) + ")");
+}
+
 void TypeWalker::type_type_test(nodes::CastExpression* c) {
+    if (c->special_test) { type_special_test(c); return; }
     const bool is_test = c->get_cast_kind() == nodes::CastExpression::CastKind::Is;
     const std::string op = is_test ? "is" : "as";
     Type* src = type_of(c->operand);
@@ -2948,6 +4124,12 @@ void TypeWalker::check_convertible(Type* from, Type* to, nodes::ASTNode* site) {
     Type* t = m_types.strip_cv(to->is_reference() ? static_cast<ReferenceType*>(to)->referent() : to);
     using BK = parser_types::PrimitiveType::BaseKind;
     auto numeric = [](Type* x) { return x && x->is_builtin() && (static_cast<BuiltinType*>(x)->base() == BK::Int || static_cast<BuiltinType*>(x)->base() == BK::Float); };
+
+    if (f && f->is_special_value() && t) {
+        SemanticError::emit(m_reporter, file_of(site), site->line, "Type",
+            "a special value (inf, nan, undefined or indeterminate) can only go into a number type or a special(T); declare this as 'special(" + type_str(t) + ")' to allow it");
+        return;
+    }
 
     if (numeric(f) && numeric(t) && !static_cast<BuiltinType*>(f)->is_unsigned() && static_cast<BuiltinType*>(t)->is_unsigned()) {
         SemanticError::emit(m_reporter, file_of(site), site->line, "Type",
@@ -3034,6 +4216,23 @@ void TypeWalker::check_binding(nodes::ASTNode* expr, Type* from, Type* to, nodes
         }
     }
 
+    struct SourceGuard {
+        TypeContext& t; bool saved;
+        SourceGuard(TypeContext& c, bool lv) : t(c), saved(c.conversion_source_lvalue) { c.conversion_source_lvalue = lv; }
+        ~SourceGuard() { t.conversion_source_lvalue = saved; }
+    } source_guard(m_types, expr && is_lvalue(expr));
+
+    if (m_types.conversion_source_lvalue && !from->is_error() && !to->is_error() && rank_conversion(from, to, m_types) == ConversionRank::None) {
+        m_types.conversion_source_lvalue = false;
+        Symbol* via = nullptr;
+        const bool moved_ok = rank_user_defined(from, to, m_types, false, &via) != ConversionRank::None && rvalue_only_conversion(via);
+        m_types.conversion_source_lvalue = true;
+        if (moved_ok) {
+            SemanticError::emit(m_reporter, file_of(site), site->line, "Type", "'" + type_str(from) + "' can only be converted to '" + type_str(to) + "' by moving it, because the conversion takes the value over; write 'std::core::move(...)' around it");
+            return;
+        }
+    }
+
     check_copy_or_move(expr, from, to, site);
 
     check_convertible(from, to, site);
@@ -3064,6 +4263,7 @@ bool TypeWalker::concept_satisfied(Symbol* cept, const TemplateArgs& args) {
         if      (a.is_type)  env.types  [ps[i]->symbol] = a.type;
         else if (a.value)    env.values [ps[i]->symbol] = a.value;
         else if (a.fvalue)   env.fvalues[ps[i]->symbol] = a.fvalue;
+        else if (a.svalue)   env.svalues[ps[i]->symbol] = a.svalue;
         else return false;
     }
 
@@ -3081,6 +4281,7 @@ bool TypeWalker::concept_satisfied(Symbol* cept, const TemplateArgs& args) {
 
 bool TypeWalker::concept_args(nodes::TemplateInstantiation* t, Symbol*& cept, TemplateArgs& args) {
     cept = callee_symbol(t->m_template);
+    if (cept && cept->kind == SymbolKind::Import && cept->import_target) cept = cept->import_target;
     if (!cept || cept->kind != SymbolKind::Concept || !m_inst) return false;
     bool ok = true;
     std::vector<Instantiator::Arg> raw = m_inst->canon_args(t->m_args, ok);
@@ -3093,6 +4294,98 @@ bool TypeWalker::concept_args(nodes::TemplateInstantiation* t, Symbol*& cept, Te
     }
 
     return true;
+}
+
+void TypeWalker::rebind_inherited(nodes::QualifiedIdentifier* q) {
+    Symbol* s = q->resolved;
+    if (!s || !s->owner || s->owner->kind != Scope::Kind::Record) return;
+    const auto& parts = q->parts();
+    if (parts.size() < 2) return;
+    std::vector<std::string_view> prefix(parts.begin(), parts.end() - 1);
+    Symbol* rec = resolve_name(m_current, m_root, prefix, q->is_global(), q);
+    if (rec && rec->kind == SymbolKind::Import && rec->import_target) rec = rec->import_target;
+    if (!rec || rec->kind != SymbolKind::Type || !rec->inner_scope || rec->inner_scope == s->owner) return;
+    if (rec->decl && rec->decl->kind == K::RecordDeclaration) rebase_on_instance(static_cast<nodes::RecordDeclaration*>(rec->decl));
+    if (Symbol* found = rec->inner_scope->find_member(parts.back()); found && found != s) q->resolved = found;
+}
+
+bool TypeWalker::member_value(Type* rec, std::string_view name, TemplateArg& out) {
+    if (!rec || !rec->is_record() || !m_inst) return false;
+    auto* rt = static_cast<RecordType*>(rec);
+    Scope* sc = nullptr;
+    if (rt->is_instantiation()) {
+        auto* I = m_inst->for_record(rt, nullptr);
+        if (!I || !I->sym) return false;
+        ensure_typed(I);
+        sc = I->sym->inner_scope;
+    } else if (rt->decl()) {
+        if (rt->decl()->decl && rt->decl()->decl->kind == K::RecordDeclaration) rebase_on_instance(static_cast<nodes::RecordDeclaration*>(rt->decl()->decl));
+        sc = rt->decl()->inner_scope;
+    }
+    Symbol* found = sc ? sc->find_member(name) : nullptr;
+    if (!found) return false;
+    auto* owner = m_inst->owning(found);
+    if (owner) m_types.push_subst(&owner->env);
+    ConstValue v = m_eval.eval_named(found);
+    if (owner) m_types.pop_subst();
+
+    switch (v.kind) {
+        case ConstValue::Kind::Int:    out = TemplateArg::of_int(v.i); return true;
+        case ConstValue::Kind::Float:  out = TemplateArg::of_float(v.f); return true;
+        case ConstValue::Kind::Bool:   out = TemplateArg::of_int(m_types.consts().from(std::uint64_t(v.b ? 1 : 0))); return true;
+        case ConstValue::Kind::String: out = TemplateArg::of_string(v.s); return true;
+        default: return false;
+    }
+}
+
+ConstValue TypeWalker::scoped_member_value(nodes::MemberAccessExpression* m) {
+    if (!m_inst || !m->m_object || m->m_object->kind != K::TemplateInstantiation) return {};
+    auto* t = static_cast<nodes::TemplateInstantiation*>(m->m_object);
+    Symbol* g = callee_symbol(t->m_template);
+    if (g && g->kind == SymbolKind::Import && g->import_target) g = g->import_target;
+    if (!g || g->kind != SymbolKind::Type || !g->template_decl) return {};
+    bool ok = true;
+    std::vector<Instantiator::Arg> args = m_inst->canon_args(t->m_args, ok);
+    if (!ok) return {};
+
+    for (const Instantiator::Arg& a : args) {
+        if (a.is_type && (!a.type || a.type->is_dependent())) return {};
+        if (a.is_dependent_value()) return {};
+    }
+
+    auto* I = m_inst->instantiate(g, std::move(args), m);
+    if (!I || !I->sym || !I->sym->inner_scope) return {};
+    ensure_typed(I);
+    Symbol* found = I->sym->inner_scope->find_member(m->get_member());
+    if (!found) return {};
+    auto* owner = m_inst->owning(found);
+    if (owner) m_types.push_subst(&owner->env);
+    ConstValue v = m_eval.eval_named(found);
+    if (owner) m_types.pop_subst();
+    return v;
+}
+
+bool TypeWalker::is_variable_template(Symbol* g) {
+    if (!g || !g->decl || g->decl->kind != K::FunctionDeclaration) return false;
+    return static_cast<nodes::FunctionDeclaration*>(g->decl)->variable_template;
+}
+
+ConstValue TypeWalker::variable_template_value(nodes::TemplateInstantiation* t) {
+    Symbol* g = callee_symbol(t->m_template);
+    if (!is_variable_template(g) || !m_inst) return {};
+    bool ok = true;
+    std::vector<Instantiator::Arg> args = m_inst->canon_args(t->m_args, ok);
+    if (!ok) return {};
+
+    for (const Instantiator::Arg& a : args) {
+        if (a.is_type && (!a.type || a.type->is_dependent())) return {};
+        if (a.is_dependent_value()) return {};
+    }
+
+    auto* I = m_inst->instantiate(g, std::move(args), t);
+    if (!I || !I->sym) return {};
+    ensure_typed(I);
+    return m_eval.eval_value_function(I->sym);
 }
 
 int TypeWalker::concept_id_value(nodes::TemplateInstantiation* t) {
@@ -3193,6 +4486,34 @@ bool TypeWalker::constraint_holds(nodes::ASTNode* e, std::string& failed) {
                     if (args[i].is_type && args[i].type) args[i].type->write_to(os);
                     else if (args[i].value)  os << *args[i].value;
                     else if (args[i].fvalue) os << *args[i].fvalue;
+                    else if (args[i].svalue) os << '"' << *args[i].svalue << '"';
+                }
+                os << '>';
+                failed = os.str();
+                return false;
+            }
+
+            if (is_variable_template(callee_symbol(t->m_template)) && m_inst) {
+                ConstValue v = variable_template_value(t);
+                bool ok = false;
+                const bool holds = ConstEvaluator::truthy(v, ok);
+                if (ok && holds) return true;
+                std::ostringstream os;
+                if (t->m_template->kind == K::QualifiedIdentifier) {
+                    const auto& parts = static_cast<nodes::QualifiedIdentifier*>(t->m_template)->parts();
+                    for (std::size_t i = 0; i < parts.size(); ++i) os << (i ? "::" : "") << parts[i];
+                } else if (Symbol* g = callee_symbol(t->m_template)) {
+                    os << g->name;
+                }
+                bool aok = true;
+                std::vector<Instantiator::Arg> raw = m_inst->canon_args(t->m_args, aok);
+                os << '<';
+                for (std::size_t i = 0; aok && i < raw.size(); ++i) {
+                    if (i) os << ", ";
+                    if (raw[i].is_type && raw[i].type) raw[i].type->write_to(os);
+                    else if (raw[i].value)  os << *raw[i].value;
+                    else if (raw[i].fvalue) os << *raw[i].fvalue;
+                    else if (raw[i].svalue) os << '"' << *raw[i].svalue << '"';
                 }
                 os << '>';
                 failed = os.str();
@@ -3245,6 +4566,7 @@ bool TypeWalker::constraints_satisfied(nodes::TemplateDeclaration* tmpl, const S
         if (!ok) break;
         if (!p->is_constrained() || !p->symbol || p->is_pack()) continue;
         Symbol* cs = p->get_constraint().resolved;
+        if (cs && cs->kind == SymbolKind::Import && cs->import_target) cs = cs->import_target;
         if (!cs || cs->kind != SymbolKind::Concept) continue;
         TemplateArgs args;
         if      (Type* t = env.lookup_type(p->symbol))           args.push_back(TemplateArg::of_type(t));
@@ -3326,6 +4648,7 @@ void TypeWalker::check_arg_bindings(nodes::CallExpression* c, const std::vector<
     for (const ParamShape& p : shapes) {
         if (p.is_pack || i >= c->m_arguments.size()) break;
         nodes::ASTNode* a = c->m_arguments[i++];
+        if (a && a->kind == K::BraceInitializerList) { check_brace_init(static_cast<nodes::BraceInitializerList*>(a), p.element, c); continue; }
         if (binds_nonconst_lvalue_ref_to_rvalue(a, type_of(a), p.element))
             SemanticError::bad_reference_binding(m_reporter, file_of(a), a->line, type_str(p.element), true);
         check_copy_or_move(a, type_of(a), p.element, c);
@@ -3364,6 +4687,7 @@ auto TypeWalker::operand_class(Type* t) -> OperandClass {
     t = m_types.strip_cv(t);
     if (t->is_pointer() || t->is_array()) return OperandClass::Pointer;
     if (t->is_null()) return OperandClass::Null;
+    if (t->is_special_value()) return OperandClass::Special;
     if (t->is_enum()) return OperandClass::Enum;
     if (!t->is_builtin()) return OperandClass::Unknown;
 
@@ -3402,14 +4726,15 @@ bool TypeWalker::builtin_operands_ok(tokenizing::Token::Kind op, OperandClass a,
     using OC = OperandClass;
     if (a == OC::Unknown || b == OC::Unknown) return true;
 
-    auto numeric  = [](OC c) { return c == OC::Int || c == OC::Char || c == OC::Float; };
-    auto integral = [](OC c) { return c == OC::Int || c == OC::Char; };
-    auto same_family = [](OC x, OC y) { return (x == OC::Char) == (y == OC::Char); };
+    auto numeric  = [](OC c) { return c == OC::Int || c == OC::Char || c == OC::Float || c == OC::Special; };
+    auto integral = [](OC c) { return c == OC::Int || c == OC::Char || c == OC::Special; };
+    auto same_family = [](OC x, OC y) { return (x == OC::Char || y == OC::Char) ? (x == OC::Char && y == OC::Char) : true; };
     auto arith    = [&](OC x, OC y) { return numeric(x) && numeric(y) && same_family(x, y); };
+    auto int_pair = [&](OC x, OC y) { return integral(x) && integral(y) && same_family(x, y) && !(x == OC::Special && y == OC::Special); };
     auto bitwise  = [&](OC x, OC y) {
         if (x == OC::Bool || y == OC::Bool) return x == OC::Bool && y == OC::Bool;
         if (x == OC::Enum || y == OC::Enum) return x == OC::Enum && y == OC::Enum;
-        return integral(x) && integral(y) && same_family(x, y);
+        return int_pair(x, y);
     };
     auto ordered  = [&](OC x, OC y) {
         return arith(x, y)
@@ -3422,12 +4747,13 @@ bool TypeWalker::builtin_operands_ok(tokenizing::Token::Kind op, OperandClass a,
     switch (op) {
         case TK::Plus:
             return arith(a, b)
+                || (a == OC::Char && b == OC::Int) || (a == OC::Int && b == OC::Char)
                 || (a == OC::Pointer && b == OC::Int) || (a == OC::Int && b == OC::Pointer)
                 || (a == OC::String && (b == OC::String || b == OC::Char))
                 || (a == OC::Char && b == OC::String);
 
         case TK::Minus:
-            return arith(a, b) || (a == OC::Pointer && (b == OC::Int || b == OC::Pointer));
+            return arith(a, b) || (a == OC::Char && b == OC::Int) || (a == OC::Pointer && (b == OC::Int || b == OC::Pointer));
 
         case TK::Asterisk:
         case TK::Slash:
@@ -3435,7 +4761,7 @@ bool TypeWalker::builtin_operands_ok(tokenizing::Token::Kind op, OperandClass a,
             return arith(a, b);
 
         case TK::Percent:
-            return integral(a) && integral(b) && same_family(a, b);
+            return int_pair(a, b);
 
         case TK::Ampersand:
         case TK::Pipe:
@@ -3444,7 +4770,7 @@ bool TypeWalker::builtin_operands_ok(tokenizing::Token::Kind op, OperandClass a,
 
         case TK::DoubleLessThan:
         case TK::DoubleGreaterThan:
-            return (integral(a) || a == OC::Enum) && (integral(b) || b == OC::Enum);
+            return (integral(a) || a == OC::Enum) && (integral(b) || b == OC::Enum) && !(a == OC::Special && b == OC::Special);
 
         case TK::LessThan:
         case TK::GreaterThan:
@@ -3481,10 +4807,31 @@ void TypeWalker::ensure_conversions(Type* t) {
     if (!m_types.user_conversions().mark_if_new(key)) return;     
     Symbol* decl = static_cast<RecordType*>(key)->decl();
     nodes::ASTNode*     node = decl ? decl->decl : nullptr;       
+    Instantiator::Instantiation* inst = nullptr;
+
+    if (static_cast<RecordType*>(key)->is_instantiation() && m_inst) {
+        inst = m_inst->for_record(static_cast<RecordType*>(key), nullptr);
+        if (inst && inst->decl) node = inst->decl;
+    }
+
     if (!node || node->kind != K::RecordDeclaration) return;
     auto* rd = static_cast<nodes::RecordDeclaration*>(node);
+    EnvGuard env_guard(m_types, inst ? &inst->env : nullptr);
+
+    std::vector<Type*> own;
 
     for (const nodes::RecordDeclaration::Member& m : rd->get_members()) {
+        if (m.node && m.node->kind == K::TemplateDeclaration) {
+            nodes::ASTNode* inner = static_cast<nodes::TemplateDeclaration*>(m.node)->m_declaration;
+            if (inner && inner->kind == K::FunctionDeclaration && static_cast<nodes::FunctionDeclaration*>(inner)->m_lowered_operator == nodes::OverloadableOperator::Conversion) {
+                auto* fd = static_cast<nodes::FunctionDeclaration*>(inner);
+                UserConversion uc;
+                uc.generic   = fd->symbol;
+                uc.explicit_ = fd->qualifiers().has(modifiers::FunctionQualifiers::Explicit);
+                if (uc.generic) m_types.user_conversions().add(key, uc);
+            }
+            continue;
+        }
         if (!m.node || m.node->kind != K::OperatorFunctionDeclaration) continue;
         auto* op = static_cast<nodes::OperatorFunctionDeclaration*>(m.node);
         if (!op->is_conversion() || op->is_deleted()) continue;   
@@ -3493,6 +4840,21 @@ void TypeWalker::ensure_conversions(Type* t) {
         uc.op        = op->symbol;
         uc.explicit_ = op->qualifiers().has(modifiers::FunctionQualifiers::Explicit);
         m_types.user_conversions().add(key, uc);
+        own.push_back(uc.dst);
+    }
+
+    for (parser_types::TypeInfo* info : rd->all_bases()) {
+        Type* base = m_types.strip_cv(m_types.canonicalize(*info));
+        if (!base || !base->is_record()) continue;
+        ensure_conversions(base);
+        const auto* inherited = m_types.user_conversions().find(base);
+        if (!inherited) continue;
+
+        for (const UserConversion& uc : *inherited) {
+            if (std::find(own.begin(), own.end(), uc.dst) != own.end()) continue;
+            m_types.user_conversions().add(key, uc);
+            own.push_back(uc.dst);
+        }
     }
 }
 
@@ -3539,7 +4901,8 @@ void TypeWalker::check_type_query_overload(nodes::TypeQueryOverload* q) {
 }
 
 void TypeWalker::check_operator_signature(nodes::OperatorFunctionDeclaration* od, Symbol* sym) {
-    bool is_member = m_current && m_current->node && m_current->node->kind == K::RecordDeclaration;
+    const bool is_friend = od->get_modifiers().has(modifiers::RawModifiers::Friend);
+    bool is_member = !is_friend && m_current && m_current->node && m_current->node->kind == K::RecordDeclaration;
     nodes::OverloadableOperator op = od->get_overload();
     std::size_t n = od->get_parameters() ? od->get_parameters()->size() : 0;
     const char* why = nullptr;
@@ -3691,6 +5054,11 @@ bool TypeWalker::memberwise_equality(Type* t, int depth) {
         rd->equality_failure = "unions cannot be compared member by member";
         return false;
     }
+    if (rd->m_native) {
+        rd->equality_state   = 2;
+        rd->equality_failure = "a C++ class is only compared with an operator(==) declared in its extern block";
+        return false;
+    }
     if (rd->equality_state == 1 || rd->equality_state == 3) return true;
     if (rd->equality_state == 2) return false;
     rd->equality_state = 3;
@@ -3755,7 +5123,7 @@ bool TypeWalker::memberwise_equality(Type* t, int depth) {
 
         if (m.node->kind == K::VariableDeclaration) {
             auto* v = static_cast<nodes::VariableDeclaration*>(m.node);
-            if (v->get_type_info().modifiers.has(RM::Static)) continue;
+            if (v->get_type_info().modifiers.has(RM::Static) || v->get_type_info().modifiers.has(RM::Lazy)) continue;
             ok = add_step(v, m_types.canonicalize(v->get_type_info()));
         } else if (m.node->kind == K::ArrayDeclaration) {
             auto* a = static_cast<nodes::ArrayDeclaration*>(m.node);
@@ -3954,6 +5322,69 @@ void TypeWalker::check_member_initialization(nodes::ConstructorDeclaration* ct, 
     }
 }
 
+bool TypeWalker::prefer_rvalue_ref_for_temporaries(std::vector<CandidateMatch>& matches, const std::vector<Symbol*>& cands, const std::vector<bool>& member, const std::vector<Type*>& operands) {
+    auto plain = [this](Type* t) -> Type* {
+        if (t && t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+        return m_types.strip_cv(t);
+    };
+
+    std::vector<std::vector<Type*>> params(cands.size());
+    for (std::size_t k = 0; k < cands.size(); ++k) {
+        if (!matches[k].viable || !cands[k] || !cands[k]->decl) continue;
+        const nodes::FunctionParameters* ps = nullptr;
+        if (cands[k]->decl->kind == K::FunctionDeclaration) ps = static_cast<nodes::FunctionDeclaration*>(cands[k]->decl)->get_parameters();
+        else if (cands[k]->decl->kind == K::OperatorFunctionDeclaration) ps = static_cast<nodes::OperatorFunctionDeclaration*>(cands[k]->decl)->get_parameters();
+        if (!ps) continue;
+        EnvGuard g(m_types, env_of_symbol(cands[k]));
+        for (const nodes::FunctionParameter* p : ps->m_params) params[k].push_back(m_types.canonicalize(p->get_type()));
+    }
+    bool changed = false;
+    nodes::ASTNode* operand_nodes[2] = { nullptr, nullptr };
+    if (m_operator_site && m_operator_site->kind == K::BinaryExpression) {
+        operand_nodes[0] = static_cast<nodes::BinaryExpression*>(m_operator_site)->left;
+        operand_nodes[1] = static_cast<nodes::BinaryExpression*>(m_operator_site)->right;
+    }
+
+    for (std::size_t k = 0; k < cands.size(); ++k) {
+        if (!matches[k].viable) continue;
+        const std::size_t off = member[k] ? 1 : 0;
+
+        for (std::size_t j = 0; j < params[k].size() && j + off < operands.size(); ++j) {
+            Type* pt = params[k][j];
+            if (!pt || !pt->is_reference()) continue;
+            auto* rt = static_cast<ReferenceType*>(pt);
+            nodes::ASTNode* on = j + off < 2 ? operand_nodes[j + off] : nullptr;
+            if (rt->ref_qual() == RefQual::RValue && on && is_lvalue(on) && plain(operands[j + off]) == m_types.strip_cv(rt->referent())) {
+                matches[k].viable = false;
+                changed = true;
+                break;
+            }
+            if (rt->ref_qual() != RefQual::LValue || !rt->referent()->cv().is_const) continue;
+            Type* target = m_types.strip_cv(rt->referent());
+            nodes::ASTNode* node = j + off < 2 ? operand_nodes[j + off] : nullptr;
+            const bool temporary = plain(operands[j + off]) != target || (node && !is_lvalue(node));
+            if (!temporary) continue;
+
+            for (std::size_t l = 0; l < cands.size(); ++l) {
+                if (l == k || !matches[l].viable || params[l].size() != params[k].size() || member[l] != member[k]) continue;
+                bool twin = true;
+
+                for (std::size_t i = 0; i < params[k].size() && twin; ++i) {
+                    if (i != j) { twin = params[l][i] == params[k][i]; continue; }
+                    Type* q = params[l][i];
+                    twin = q && q->is_reference() && static_cast<ReferenceType*>(q)->ref_qual() == RefQual::RValue && m_types.strip_cv(static_cast<ReferenceType*>(q)->referent()) == target;
+                }
+
+                if (twin) { matches[k].viable = false; changed = true; break; }
+            }
+
+            if (!matches[k].viable) break;
+        }
+    }
+
+    return changed;
+}
+
 auto TypeWalker::resolve_operator(nodes::OverloadableOperator want, const std::vector<Type*>& operands) -> OpResult {
     std::vector<CandidateMatch> matches;
     std::vector<Symbol*>        cands;
@@ -3970,10 +5401,12 @@ auto TypeWalker::resolve_operator(nodes::OverloadableOperator want, const std::v
     std::vector<bool> from_template;
     for (Symbol* s : cands) from_template.push_back(is_template_instance(s));
     Selection sel = select_overload(matches, from_template);
+    if (sel.status == SelectStatus::Ambiguous && prefer_rvalue_ref_for_temporaries(matches, cands, member, operands)) sel = select_overload(matches, from_template);
     res.status = sel.status;
     if (sel.status != SelectStatus::Ok) return res;
     Symbol* pick   = cands[sel.index];
     if (from_template[sel.index]) if (Instantiator::Instantiation* I = m_inst->owning(pick)) ensure_typed(I);
+    ensure_member_body(pick);
     res.chosen     = pick;
     res.via_member = member[sel.index];
     report_if_deleted(pick);
@@ -4272,11 +5705,24 @@ Type* TypeWalker::constructed_type(nodes::ASTNode* callee, Symbol* callee_sym, n
         if (Type* t = template_param_type(callee_sym)) return t;
     }
 
+    if (callee_sym && callee_sym->kind == SymbolKind::TypeAlias && callee_sym->type) {
+        parser_types::TypeInfo use;
+        use.resolved = callee_sym;
+        if (call) use.template_args = call->m_template_args;
+        Type* t = m_types.canonicalize(use);
+        if (t && !t->is_error()) return m_types.strip_cv(t);
+    }
+
+    if (callee_sym && callee_sym->kind == SymbolKind::Type && !callee_sym->template_decl && call && (!call->m_template_args.empty() || call->has_angle_args) && m_inst) {
+        Symbol* primary = m_inst->primary_of_instance(callee_sym);
+        if (primary && primary != callee_sym && primary->template_decl) callee_sym = primary;
+    }
+
     if (callee_sym && callee_sym->kind == SymbolKind::Type && callee_sym->decl && callee_sym->decl->kind == K::RecordDeclaration && !callee_sym->template_decl) {
         return record_type_of(callee_sym);
     }
 
-    if (callee_sym && callee_sym->kind == SymbolKind::Type && callee_sym->template_decl && call && !call->m_template_args.empty() && m_inst) {
+    if (callee_sym && callee_sym->kind == SymbolKind::Type && callee_sym->template_decl && call && (!call->m_template_args.empty() || call->has_angle_args) && m_inst) {
         bool ok = true;
         std::vector<Instantiator::Arg> args = m_inst->canon_args(call->m_template_args, ok);
         if (!ok) return nullptr;
@@ -4477,34 +5923,115 @@ Symbol* TypeWalker::resolve_constructor(Symbol* rec, const std::vector<Type*>& a
 
     if (!bucket) {
         if (args.size() == 1 && is_copy_source(rec, args[0])) { implicit_copy(); return nullptr; }
-        if (!args.empty()) SemanticError::no_matching_overload(m_reporter, file_of(site), site->line, "constructor");
+        if (!args.empty()) SemanticError::emit(m_reporter, file_of(site), site->line, "Overload", "'" + std::string(rec->name) + "' has no constructor that takes " + std::to_string(args.size()) + (args.size() == 1 ? " argument" : " arguments") + ": it declares no constructors, so it can only be made empty or copied from another '" + std::string(rec->name) + "'; add one such as 'constructor(int: value) { ... }', or fill its fields with a brace list like '" + std::string(rec->name) + "{...}'");
         else check_default();
         return nullptr;
     }
 
     std::vector<CandidateMatch> matches;
     std::vector<Symbol*>        cands;
+    std::vector<Instantiator::Instantiation*> cand_inst;
     Type* self = record_type_of(rec);
+    std::vector<bool> lvalues;
+    const std::vector<nodes::ASTNode*>* arg_nodes = m_ctor_arg_nodes;
+    m_ctor_arg_nodes = nullptr;
+    if (!arg_nodes && site && site->kind == K::CallExpression) arg_nodes = &static_cast<nodes::CallExpression*>(site)->m_arguments;
+    if (!arg_nodes && site && site->kind == K::NewExpression) arg_nodes = &static_cast<nodes::NewExpression*>(site)->args;
+    if (!arg_nodes && site && site->kind == K::BraceConstructExpression && static_cast<nodes::BraceConstructExpression*>(site)->m_init) arg_nodes = &static_cast<nodes::BraceConstructExpression*>(site)->m_init->m_elements;
+    if (arg_nodes) for (nodes::ASTNode* a : *arg_nodes) lvalues.push_back(a && is_lvalue(a));
+    struct CtorBraceHook {
+        TypeContext& t; std::function<ConversionRank(std::size_t, Type*)> saved;
+        CtorBraceHook(TypeContext& c, std::function<ConversionRank(std::size_t, Type*)> f) : t(c), saved(c.brace_arg_rank) { c.brace_arg_rank = std::move(f); }
+        ~CtorBraceHook() { t.brace_arg_rank = saved; }
+    } ctor_brace_hook(m_types, [this, arg_nodes](std::size_t a, Type* p) { return arg_nodes && a < arg_nodes->size() ? rank_brace_arg((*arg_nodes)[a], p) : ConversionRank::None; });
 
     for (Symbol* o = bucket; o; o = o->next_overload) {
+        if (o->template_decl) {
+            if (!m_inst) continue;
+            auto* I = m_inst->instantiate_for_call(o, {}, args, site, lvalues.size() == args.size() ? &lvalues : nullptr);
+            if (!I || !I->sym) continue;
+            matches.push_back(match_arguments(I->fn_shapes, args, m_types));
+            cands.push_back(I->sym);
+            cand_inst.push_back(I);
+            continue;
+        }
         if (!o->decl || o->decl->kind != K::ConstructorDeclaration) continue;
         auto* cd = static_cast<nodes::ConstructorDeclaration*>(o->decl);
         if (cd->is_deleted() && self_ref_kind(cd->get_parameters(), self) == 2) continue;
         matches.push_back(match_arguments(shapes_of(o), args, m_types));
         cands.push_back(o);
+        cand_inst.push_back(nullptr);
     }
+
+    bool has_template_ctor = false;
+    for (Symbol* o = bucket; o; o = o->next_overload) has_template_ctor = has_template_ctor || o->template_decl != nullptr;
 
     if (cands.empty()) {
         if (args.size() == 1 && is_copy_source(rec, args[0])) { implicit_copy(); return nullptr; }
-        if (!args.empty()) SemanticError::no_matching_overload(m_reporter, file_of(site), site->line, "constructor");
+        if (args.empty() && has_template_ctor && site) {
+            SemanticError::emit(m_reporter, file_of(site), site->line, "Initialization", "'" + type_str(m_types.strip_cv(self)) + "' has no constructor that takes no arguments: declaring a template constructor removes the automatic one, so add 'constructor() { }' or pass arguments");
+            return nullptr;
+        }
+        if (!args.empty()) SemanticError::emit(m_reporter, file_of(site), site->line, "Overload", "no constructor of '" + std::string(rec->name) + "' takes these arguments" + candidate_notes(bucket, args, arg_nodes, rec->name));
         else check_default();
         return nullptr;
     }
 
-    Selection sel = select_overload(matches);
+    std::vector<std::size_t> fixed_params;
+    for (Symbol* s : cands) fixed_params.push_back(fixed_parameter_count(s));
+    std::vector<bool> from_template;
+    for (Instantiator::Instantiation* I : cand_inst) from_template.push_back(I != nullptr);
+
+    if (arg_nodes && arg_nodes->size() == args.size()) {
+        std::vector<std::vector<ParamShape>> cand_shapes;
+        for (std::size_t k = 0; k < cands.size(); ++k) cand_shapes.push_back(cand_inst[k] ? cand_inst[k]->fn_shapes : shapes_of(cands[k]));
+        refine_by_value_category(matches, cand_shapes, *arg_nodes, 0);
+    }
+
+    {
+        std::size_t viable = 0;
+        for (const CandidateMatch& m : matches) if (m.viable) ++viable;
+
+        if (viable > 1) {
+            for (std::size_t k = 0; k < matches.size(); ++k) {
+                if (!matches[k].viable || !cand_inst[k]) continue;
+                for (std::size_t j : cand_inst[k]->forwarded_args) {
+                    if (j < matches[k].ranks.size() && matches[k].ranks[j] == ConversionRank::Exact) matches[k].ranks[j] = ConversionRank::Promotion;
+                }
+            }
+        }
+    }
+
+    Selection sel = select_overload(matches, from_template, fixed_params);
     if (sel.status == SelectStatus::NoMatch && args.size() == 1 && is_copy_source(rec, args[0])) { implicit_copy(); return nullptr; }
-    if (sel.status == SelectStatus::NoMatch)   { SemanticError::no_matching_overload(m_reporter, file_of(site), site->line, "constructor"); return nullptr; }
+    if (sel.status == SelectStatus::NoMatch)   { SemanticError::emit(m_reporter, file_of(site), site->line, "Overload", "no constructor of '" + std::string(rec->name) + "' takes these arguments" + candidate_notes(bucket, args, arg_nodes, rec->name)); return nullptr; }
     if (sel.status == SelectStatus::Ambiguous) { SemanticError::ambiguous_call(m_reporter, file_of(site), site->line, "constructor"); return nullptr; }
+
+    if (cand_inst[sel.index] && args.size() == 1 && cand_inst[sel.index]->fn_shapes.size() == 1 && is_copy_source(rec, args[0])) {
+        Type* p = cand_inst[sel.index]->fn_shapes[0].element;
+        Type* a = args[0] && args[0]->is_reference() ? static_cast<ReferenceType*>(args[0])->referent() : args[0];
+        Type* pv = p && p->is_reference() ? static_cast<ReferenceType*>(p)->referent() : p;
+        const bool same = a && pv && m_types.strip_cv(a) == m_types.strip_cv(self) && m_types.strip_cv(pv) == m_types.strip_cv(self);
+        const bool implicit_shape = p && (!p->is_reference()
+            || (static_cast<ReferenceType*>(p)->ref_qual() == RefQual::LValue && pv->cv().is_const && !pv->cv().is_volatile)
+            || (static_cast<ReferenceType*>(p)->ref_qual() == RefQual::RValue && pv->cv().bits() == 0));
+        if (same && implicit_shape) { implicit_copy(); return nullptr; }
+    }
+
+    if (cand_inst[sel.index]) {
+        ensure_typed(cand_inst[sel.index]);
+        if (site && site->kind == K::CallExpression) {
+            auto* call = static_cast<nodes::CallExpression*>(site);
+            std::size_t i = 0;
+            for (const ParamShape& p : cand_inst[sel.index]->fn_shapes) {
+                if (p.is_pack || i >= call->m_arguments.size()) break;
+                nodes::ASTNode* a = call->m_arguments[i++];
+                check_copy_or_move(a, type_of(a), p.element, call);
+            }
+        }
+        bind_brace_args(arg_nodes, cand_inst[sel.index]->fn_shapes, site);
+        return cands[sel.index];
+    }
 
     if (static_cast<nodes::ConstructorDeclaration*>(cands[sel.index]->decl)->is_deleted()) {
         if (args.size() == 1 && is_copy_source(rec, args[0])) implicit_copy();
@@ -4522,6 +6049,7 @@ Symbol* TypeWalker::resolve_constructor(Symbol* rec, const std::vector<Type*>& a
         }
     }
 
+    bind_brace_args(arg_nodes, shapes_of(cands[sel.index]), site);
     return cands[sel.index];
 }
 
@@ -4592,7 +6120,10 @@ bool TypeWalker::is_bool_testable(Type* t) {
         switch (b->base()) { case BK::Int: case BK::Float: case BK::Char: return true; default: return false; }
     }
 
-    if (t->is_record()) { return rank_user_defined(t, m_types.bool_(), m_types, true, nullptr) != ConversionRank::None; }
+    if (t->is_record()) {
+        ensure_conversions(t);
+        return rank_user_defined(t, m_types.bool_(), m_types, true, nullptr) != ConversionRank::None;
+    }
     return false;
 }
 
@@ -4615,7 +6146,7 @@ bool TypeWalker::terminates(const nodes::ASTNode* s) {
         case K::SingleStatement: {
             using V = nodes::SingleStatement::Variant;
             const auto v = static_cast<const nodes::SingleStatement*>(s)->variant;
-            return v == V::Break || v == V::Continue || v == V::Repeat;
+            return v == V::Break || v == V::Continue || v == V::Repeat || v == V::Goto;
         }
 
         case K::ExpressionStatement:
@@ -4854,6 +6385,18 @@ ConstValue TypeWalker::eval_checked(nodes::ASTNode* e, bool required) {
 
         case ConstValue::Fail::Wrapped:
             SemanticWarning::emit(m_warnings, file_of(e), e->line, "Constant", "constant expression wrapped around its type: " + std::string(fail_message(v.fail)));
+            break;
+
+        case ConstValue::Fail::Undefined:
+            if (v.is_special()) SemanticWarning::emit(m_warnings, file_of(e), e->line, "Constant", "this constant expression is undefined (for example, a division by zero), so its value is 'undefined'");
+            break;
+
+        case ConstValue::Fail::Indeterminate:
+            if (v.is_special()) SemanticWarning::emit(m_warnings, file_of(e), e->line, "Constant", "this constant expression is an indeterminate form (such as 0/0, inf - inf or 0 ** 0), so its value is 'indeterminate'");
+            break;
+
+        case ConstValue::Fail::Domain:
+            if (v.is_special()) SemanticWarning::emit(m_warnings, file_of(e), e->line, "Constant", "this constant expression has no real value (its result would be complex), so its value is 'nan'");
             break;
 
         default:

@@ -138,8 +138,23 @@ modifiers::FunctionQualifiers Parser::parse_function_qualifiers() {
                 break;
 
             case tokenizing::Token::Kind::VirtualKeyword:
-                if (quals.has(modifiers::FunctionQualifiers::Virtual)) throw ParserError::duplicate_function_qualifiers(reporter, current_token());
+                if (quals.has(modifiers::FunctionQualifiers::Virtual) && !quals.has(modifiers::FunctionQualifiers::Abstract)) throw ParserError::duplicate_function_qualifiers(reporter, current_token());
                 quals.add(modifiers::FunctionQualifiers::Virtual);
+                advance();
+                break;
+
+            case tokenizing::Token::Kind::AbstractKeyword:
+                if (quals.has(modifiers::FunctionQualifiers::Abstract)) throw ParserError::duplicate_function_qualifiers(reporter, current_token());
+                quals.add(modifiers::FunctionQualifiers::Abstract);
+                quals.add(modifiers::FunctionQualifiers::Virtual);
+                advance();
+                break;
+
+            case tokenizing::Token::Kind::LogicAnd:
+                if (quals.has(modifiers::FunctionQualifiers::LValueRef) || quals.has(modifiers::FunctionQualifiers::RValueRef)) {
+                    throw ParserError::duplicate_function_qualifiers(reporter, current_token());
+                }
+                quals.add(modifiers::FunctionQualifiers::RValueRef);
                 advance();
                 break;
 
@@ -229,7 +244,8 @@ nodes::ASTNode* Parser::parse_function_declaration(
         advance();
     }
 
-    if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+    take_keyword_as_name(false);
+    if (current_token().kind() != tokenizing::Token::Kind::Identifier && current_token().kind() != tokenizing::Token::Kind::EndKeyword) {
         throw ParserError::unexpected_token(
             reporter,
             current_token(),
@@ -245,7 +261,8 @@ nodes::ASTNode* Parser::parse_function_declaration(
     while (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
         advance();
 
-        if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+        take_keyword_as_name(false);
+    if (current_token().kind() != tokenizing::Token::Kind::Identifier && current_token().kind() != tokenizing::Token::Kind::EndKeyword) {
             throw ParserError::unexpected_token(
                 reporter,
                 current_token(),
@@ -273,10 +290,16 @@ nodes::ASTNode* Parser::parse_function_declaration(
     nodes::ASTNode* body = nullptr;
     bool has_arrow = match(tokenizing::Token::Kind::SingleRightArrow) || match(tokenizing::Token::Kind::DoubleRightArrow);
 
+    std::string_view native_as;
+
     if (has_arrow) {
         return_type = parse_return_type();
+        if (m_native_record_depth > 0 && match(tokenizing::Token::Kind::AsKeyword)) native_as = parse_native_name("Expected the name of the C++ method or function in quotes after 'as'");
 
         if (concrete_match(tokenizing::Token::Kind::LeftCurly)) {
+            if (quals.has(modifiers::FunctionQualifiers::Abstract)) {
+                throw ParserError::invalid_declaration(reporter, current_token(), "An 'abstract' method has no body; end it with ';' instead, or remove 'abstract' to give it one");
+            }
             body = parse_block();
         } else if (concrete_match(tokenizing::Token::Kind::Semicolon) || concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
             consume_semicolons();
@@ -295,7 +318,7 @@ nodes::ASTNode* Parser::parse_function_declaration(
                     reporter,
                     current_token(),
                     tokenizing::Token::Kind::EndKeyword,
-                    "Expected 'end' to close function body"
+                    "A function body is closed with '} end function " + std::string(name_parts.back()) + "'"
                 );
             }
 
@@ -310,7 +333,8 @@ nodes::ASTNode* Parser::parse_function_declaration(
 
             std::vector<std::string_view> closing_parts;
 
-            if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+            take_keyword_as_name(false);
+    if (current_token().kind() != tokenizing::Token::Kind::Identifier && current_token().kind() != tokenizing::Token::Kind::EndKeyword) {
                 throw ParserError::unexpected_token(
                     reporter,
                     current_token(),
@@ -325,7 +349,8 @@ nodes::ASTNode* Parser::parse_function_declaration(
             while (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
                 advance(); 
 
-                if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+                take_keyword_as_name(false);
+    if (current_token().kind() != tokenizing::Token::Kind::Identifier && current_token().kind() != tokenizing::Token::Kind::EndKeyword) {
                     throw ParserError::unexpected_token(
                         reporter,
                         current_token(),
@@ -389,7 +414,12 @@ nodes::ASTNode* Parser::parse_function_declaration(
         );
 
         if (is_specialization) { decl->set_specialization(std::move(spec_args)); }
+        decl->native_name = native_as;
         return decl;
+    }
+
+    if (m_native_record_depth > 0) {
+        throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::SingleRightArrow, "A method of a C++ class in an extern block needs a result type after '->'");
     }
 
     return_type.type = parser_types::PrimitiveType::make_dynamic(arena);
@@ -418,7 +448,7 @@ nodes::ASTNode* Parser::parse_function_declaration(
                 reporter,
                 current_token(),
                 tokenizing::Token::Kind::EndKeyword,
-                "Expected 'end' to close function body"
+                "A function body is closed with '} end function " + std::string(name_parts.back()) + "'"
             );
         }
 
@@ -432,6 +462,7 @@ nodes::ASTNode* Parser::parse_function_declaration(
         }
 
         std::vector<std::string_view> closing_parts;
+        take_keyword_as_name(false);
 
         if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
             throw ParserError::unexpected_token(
@@ -610,8 +641,15 @@ nodes::ASTNode* Parser::parse_operator_function(
     }
 
     expect(K::FunctionKeyword, "Expected 'function' after the operator specifier");
+    std::vector<std::string_view> owner;
+    bool owner_global = false;
+    parse_owner_name(owner, owner_global);
     nodes::FunctionParameters*   parameters = parse_function_parameters();
     modifiers::FunctionQualifiers quals     = parse_function_qualifiers();
+
+    if (quals.has(modifiers::FunctionQualifiers::Abstract)) {
+        throw ParserError::invalid_declaration(reporter, current_token(), "Only methods can be 'abstract'; an operator can be 'virtual' with no body instead");
+    }
     parser_types::TypeInfo return_type;
     nodes::ASTNode*        body = nullptr;
 
@@ -628,6 +666,8 @@ nodes::ASTNode* Parser::parse_operator_function(
     }
 
     bool deleted = false;
+    std::string_view native_as;
+    if (m_native_record_depth > 0 && match(K::AsKeyword)) native_as = parse_native_name("Expected the name of the C++ method or function in quotes after 'as'");
 
     if (match(K::Equal)) {
         expect(K::DeleteKeyword, "Expected 'delete' after '=' in an operator function");
@@ -650,12 +690,18 @@ nodes::ASTNode* Parser::parse_operator_function(
         auto* node = make<nodes::OperatorFunctionDeclaration>(conversion_type, return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);
         node->overload = nodes::OverloadableOperator::Conversion;   
         node->m_deleted = deleted;
+        node->native_name = native_as;
+        node->owner_parts = std::move(owner);
+        node->owner_global = owner_global;
         return node;
     }
 
     auto* node = make<nodes::OperatorFunctionDeclaration>(std::move(op_tokens), return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);
     node->overload = op_kind;
     node->m_deleted = deleted;
+    node->native_name = native_as;
+    node->owner_parts = std::move(owner);
+    node->owner_global = owner_global;
     return node;
 }
 
@@ -741,6 +787,18 @@ bool Parser::template_value_ahead() {
         case K::DoubleAsteriskEqual: case K::PipeEqual: case K::AmpersandEqual:
         case K::CaretEqual: case K::ShiftLeftEqual: case K::ShiftRightEqual:
         case K::Dot: case K::SingleRightArrow: case K::LeftCurly:
+        case K::FunctionKeyword: case K::OperatorKeyword:
+        case K::ConstructorKeyword: case K::DestructorKeyword:
+        case K::ClassKeyword: case K::StructKeyword:
+        case K::ConstexprKeyword: case K::ConstevalKeyword:
+        case K::FriendKeyword: case K::InlineKeyword:
+        case K::StaticKeyword: case K::VirtualKeyword:
+        case K::TemplateKeyword: case K::ConceptKeyword:
+        case K::NamespaceKeyword: case K::UsingKeyword:
+        case K::EnumKeyword: case K::UnionKeyword: case K::TypedefKeyword:
+        case K::ExternKeyword: case K::HiddenKeyword: case K::LocalKeyword: case K::GlobalKeyword:
+        case K::PublicKeyword: case K::PrivateKeyword: case K::ProtectedKeyword:
+        case K::EndKeyword:
             return true;
         default:
             return false;

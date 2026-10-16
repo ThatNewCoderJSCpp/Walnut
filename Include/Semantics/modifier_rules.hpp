@@ -27,7 +27,7 @@ inline constexpr std::uint16_t kValidFunctionMods =
 inline constexpr std::uint16_t kValidVariableMods =
     RM::Const | RM::Constexpr | RM::Constinit | RM::Hoisted | RM::Inline |
     RM::Static | RM::Hidden | RM::Local | RM::Global | RM::Extern |
-    RM::Volatile | RM::ThreadLocal | RM::Mutable | RM::Friend;
+    RM::Volatile | RM::ThreadLocal | RM::Mutable | RM::Friend | RM::Lazy | RM::LazyThreadsafe;
 
 inline constexpr std::uint16_t kValidEnumMods =
     RM::Hoisted | RM::Local | RM::Global | RM::Hidden;
@@ -52,6 +52,15 @@ inline constexpr ExclusiveGroup kModExclusive[] = {
     { RM::Inline    | RM::Volatile                },
     { RM::Inline    | RM::ThreadLocal             },
     { RM::Inline    | RM::Constinit               },
+    { RM::Lazy      | RM::Const                   },
+    { RM::Lazy      | RM::Constexpr               },
+    { RM::Lazy      | RM::Constinit               },
+    { RM::Lazy      | RM::Static                  },
+    { RM::Lazy      | RM::Extern                  },
+    { RM::Lazy      | RM::Inline                  },
+    { RM::Lazy      | RM::ThreadLocal             },
+    { RM::Lazy      | RM::Mutable                 },
+    { RM::Lazy      | RM::Volatile                },
 };
 
 inline constexpr RequiresRule kModRequires[] = {

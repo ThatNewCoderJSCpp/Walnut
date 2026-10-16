@@ -1,0 +1,85 @@
+{
+    "name": "Walnut Dark+",
+    "type": "dark",
+    "include": "./base-dark-plus.json",
+    "colors": {
+        "editorError.foreground": "#FF0000",
+        "editorWarning.foreground": "#FFFF00"
+    },
+    "tokenColors": [
+        {
+            "name": "Walnut self",
+            "scope": "variable.language.self.walnut",
+            "settings": {
+                "foreground": "#F44747"
+            }
+        },
+        {
+            "name": "Walnut casts",
+            "scope": "keyword.operator.cast.walnut",
+            "settings": {
+                "foreground": "#F44747"
+            }
+        },
+        {
+            "name": "Walnut built-in operators",
+            "scope": [
+                "keyword.operator.walnut",
+                "keyword.operator.arrow.walnut"
+            ],
+            "settings": {
+                "foreground": "#F44747"
+            }
+        },
+        {
+            "name": "Walnut overloaded operator declarations",
+            "scope": "entity.name.function.operator.walnut",
+            "settings": {
+                "foreground": "#DCDCAA"
+            }
+        },
+        {
+            "name": "Walnut variable declarations",
+            "scope": "meta.declaration.variable.name.walnut",
+            "settings": {
+                "foreground": "#FFFFFF"
+            }
+        },
+        {
+            "name": "Walnut variable uses",
+            "scope": "variable.other.readwrite.walnut",
+            "settings": {
+                "foreground": "#9CDCFE"
+            }
+        },
+        {
+            "name": "Walnut template names",
+            "scope": "entity.name.function.template.walnut",
+            "settings": {
+                "foreground": "#DCDCAA"
+            }
+        }
+    ],
+    "semanticHighlighting": true,
+    "semanticTokenColors": {
+        "variable.declaration:walnut": "#FFFFFF",
+        "parameter.declaration:walnut": "#FFFFFF",
+        "property.declaration:walnut": "#FFFFFF",
+        "variable:walnut": "#9CDCFE",
+        "parameter:walnut": "#9CDCFE",
+        "property:walnut": "#9CDCFE",
+        "unresolved:walnut": "#FFFFFF",
+        "operator.overloaded:walnut": "#DCDCAA",
+        "function:walnut": "#DCDCAA",
+        "method:walnut": "#DCDCAA",
+        "*.templateQualifier:walnut": "#DCDCAA",
+        "class:walnut": "#4EC9B0",
+        "struct:walnut": "#4EC9B0",
+        "enum:walnut": "#4EC9B0",
+        "type:walnut": "#4EC9B0",
+        "typeParameter:walnut": "#4EC9B0",
+        "concept:walnut": "#4EC9B0",
+        "namespace:walnut": "#4EC9B0",
+        "enumMember:walnut": "#4FC1FF"
+    }
+}

@@ -19,6 +19,8 @@ const char* RawModifiers::flag_name(Flag f) noexcept {
         case Flag::ThreadLocal: return "threadlocal";
         case Flag::Mutable:     return "mutable";
         case Flag::Friend:      return "friend";
+        case Flag::Lazy:        return "lazy";
+        case Flag::LazyThreadsafe: return "threadsafe";
         case Flag::None:        return "none";
     }
     return "unknown";
@@ -47,9 +49,12 @@ void RawModifiers::write_to(std::ostream& os) const {
         { Flag::Mutable,     "mutable "     },
         { Flag::Constinit,   "constinit "   },
         { Flag::ThreadLocal, "threadlocal " },
-        { Flag::Friend,      "friend "      }
+        { Flag::Friend,      "friend "      },
+        { Flag::Lazy,        "lazy "        },
+        { Flag::LazyThreadsafe, "threadsafe " }
     };
 
+    if (m_lazy_public) os << "public ";
     for (auto&& entry : table) { if (has(entry.flag)) { os << entry.text; }}
     if (m_linkage == Linkage::C) os << "\"C\" ";
     else if (m_linkage == Linkage::Cpp) os << "\"C++\" ";
@@ -73,6 +78,7 @@ void FunctionQualifiers::write_to(std::ostream& os) const {
         { Flag::Override,  "override "  },
         { Flag::RValueRef, "&& "        },
         { Flag::Virtual,   "virtual "   },
+        { Flag::Abstract,  "abstract "  },
         { Flag::Async,     "async "     },
         { Flag::Mutable,   "mutable "   }
     };
@@ -95,6 +101,7 @@ const char* FunctionQualifiers::flag_name(Flag f) noexcept {
         case Flag::Override:  return "override";
         case Flag::RValueRef: return "&&";
         case Flag::Virtual:   return "virtual";
+        case Flag::Abstract:  return "abstract";
         case Flag::Async:     return "async";
         case Flag::Mutable:   return "mutable";
         case Flag::Nodiscard: return "nodiscard";

@@ -1,0 +1,337 @@
+import module.colors
+import module.windows
+import module.graphics
+import module.input
+import module.time
+
+namespace std {
+    namespace errors {
+        class game_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class game_error
+    } end namespace errors
+
+    namespace game {
+        using std::colors::Color;
+        using std::windows::Window;
+        using std::windows::WindowEvent;
+        using std::graphics::Renderer;
+        using std::graphics::Backend;
+        using std::graphics::Texture;
+        using std::graphics::Sprite;
+        using std::graphics::Paint;
+        using std::graphics::Path;
+        using std::graphics::Camera;
+        using std::graphics::Filter;
+        using std::graphics::Wrap;
+        using std::images::Image;
+        using std::typography::TextStyle;
+
+        extern "C++" from "<walnut_game.hpp>" {
+            class Assets as "walnut_rt::gfx::assets" {
+                function native_load_image(const string&: name) -> Image as "load_image";
+                function native_load_texture(const string&: name, long int: filter, long int: wrap) -> Texture as "load_texture";
+                function native_text_ok(const string&: name) -> bool as "text_ok";
+                function native_text(const string&: name) -> string as "text";
+                function native_add_root(const string&: folder, bool: first) -> void as "add_root";
+                function native_stat(long int: which) const -> long int as "stat";
+
+            public:
+                constructor();
+
+                function add_folder(const string&: folder, bool: search_first = false) -> void {
+                    native_add_root(folder, search_first);
+                } end function add_folder
+
+                function clear_folders() -> void as "clear_roots";
+
+                function image(const string&: name) -> Image {
+                    Image: img = native_load_image(name);
+                    if (img.is_empty()) then {
+                        throw std::errors::image_error(static_cast<string>(`can't load the image '${name}': ${last_error()}`));
+                    }
+                    return img;
+                } end function image
+
+                function texture(const string&: name, Filter: filter = Filter::nearest, Wrap: wrap = Wrap::clamp) -> Texture {
+                    Texture: t = native_load_texture(name, static_cast<long int>(filter), static_cast<long int>(wrap));
+                    if (!t.valid()) then {
+                        throw std::errors::image_error(static_cast<string>(`can't load the texture '${name}': ${last_error()}`));
+                    }
+                    return t;
+                } end function texture
+
+                function read_text(const string&: name) -> string {
+                    if (!native_text_ok(name)) then {
+                        throw std::errors::game_error(static_cast<string>(`can't read the text file '${name}': ${last_error()}`));
+                    }
+                    return native_text(name);
+                } end function read_text
+
+                function loaded(const string&: name) const -> bool;
+                function unload(const string&: name) -> bool;
+                function collect() -> long int;
+                function clear() -> void;
+                function last_error() const -> string;
+                function enable_hot_reload() -> void;
+                function disable_hot_reload() -> void;
+                function check_reloads() -> long int;
+
+                function image_count() const -> long int {
+                    return native_stat(0);
+                } end function image_count
+
+                function text_count() const -> long int {
+                    return native_stat(1);
+                } end function text_count
+
+                function image_bytes() const -> long int {
+                    return native_stat(2);
+                } end function image_bytes
+
+                function reload_count() const -> long int {
+                    return native_stat(3);
+                } end function reload_count
+            } end class Assets
+
+            class Node as "walnut_rt::gfx::scene_node" {
+                function native_add_shape(long int: kind, float: w, float: h, float: r, const Paint&: p, const string&: name) -> Node as "add_shape";
+                function native_add_group(const string&: name) -> Node as "add_group";
+                function native_add_sprite(const Texture&: t, const string&: name) -> Node as "add_sprite";
+                function native_add_path(const Path&: p, const Paint&: paint, const string&: name) -> Node as "add_path";
+                function native_add_text(const string&: s, const TextStyle&: style, const string&: name) -> Node as "add_text";
+                function native_get_text() const -> string as "get_text";
+
+                function checked() const -> void {
+                    if (!valid()) then {
+                        throw std::errors::game_error("this scene node was removed");
+                    }
+                } end function checked
+
+            public:
+                constructor();
+
+                function valid() const -> bool;
+
+                function add_group(const string&: name = "") -> Node {
+                    checked();
+                    return native_add_group(name);
+                } end function add_group
+
+                function add_sprite(const Texture&: texture, const string&: name = "") -> Node {
+                    checked();
+                    return native_add_sprite(texture, name);
+                } end function add_sprite
+
+                function add_rect(float: w, float: h, const Paint&: paint, const string&: name = "") -> Node {
+                    checked();
+                    return native_add_shape(0, w, h, 0.0, paint, name);
+                } end function add_rect
+
+                function add_rounded_rect(float: w, float: h, float: radius, const Paint&: paint, const string&: name = "") -> Node {
+                    checked();
+                    return native_add_shape(1, w, h, radius, paint, name);
+                } end function add_rounded_rect
+
+                function add_ellipse(float: w, float: h, const Paint&: paint, const string&: name = "") -> Node {
+                    checked();
+                    return native_add_shape(2, w, h, 0.0, paint, name);
+                } end function add_ellipse
+
+                function add_path(const Path&: path, const Paint&: paint, const string&: name = "") -> Node {
+                    checked();
+                    return native_add_path(path, paint, name);
+                } end function add_path
+
+                function add_text(const string&: s, const TextStyle&: style, const string&: name = "") -> Node {
+                    checked();
+                    return native_add_text(s, style, name);
+                } end function add_text
+
+                function name() const -> string;
+                function set_name(const string&: n) -> void;
+                function x() const -> float;
+                function y() const -> float;
+                function set_position(float: x, float: y) -> void;
+                function move(float: dx, float: dy) -> void;
+                function rotation() const -> float;
+                function set_rotation(float: degrees) -> void;
+                function rotate(float: degrees) -> void;
+                function scale_x() const -> float;
+                function scale_y() const -> float;
+                function set_scale(float: sx, float: sy) -> void;
+                function set_origin(float: ox, float: oy) -> void;
+                function z_order() const -> long int;
+                function set_z_order(long int: z) -> void;
+                function visible() const -> bool;
+                function set_visible(bool: on) -> void;
+                function active() const -> bool;
+                function set_active(bool: on) -> void;
+                function opacity() const -> float;
+                function set_opacity(float: opacity) -> void;
+                function world_x() const -> float;
+                function world_y() const -> float;
+                function world_rotation() const -> float;
+                function hit(float: wx, float: wy) const -> bool;
+                function child_count() const -> long int;
+                function child(long int: index) const -> Node;
+                function parent() const -> Node;
+                function find(const string&: name) const -> Node;
+                function reparent(const Node&: new_parent) -> bool;
+                function remove() -> void;
+                function sprite() const -> Sprite as "get_sprite";
+                function set_sprite(const Sprite&: s) -> void;
+                function set_paint(const Paint&: p) -> void;
+                function set_size(float: w, float: h) -> void;
+                function set_text(const string&: s) -> void;
+                function set_style(const TextStyle&: style) -> void;
+
+                function set_scale(float: s) -> void {
+                    set_scale(s, s);
+                } end function set_scale
+
+                function text_value() const -> string {
+                    return native_get_text();
+                } end function text_value
+            } end class Node
+
+            class Scene as "walnut_rt::gfx::scene" {
+                function native_draw_camera(Renderer&: r, float: x, float: y, float: zoom, float: rotation) -> void as "draw_camera";
+
+            public:
+                constructor();
+
+                function root() const -> Node;
+                function update(float: dt) -> void;
+                function draw(Renderer&: renderer) -> void;
+                function pick(float: x, float: y) -> Node;
+
+                function draw(Renderer&: renderer, const Camera&: camera) -> void {
+                    native_draw_camera(renderer, camera.x, camera.y, camera.zoom, camera.rotation);
+                } end function draw
+            } end class Scene
+        } end extern
+
+        class Game {
+        public:
+            Window: window;
+            Renderer: renderer;
+            Color: clear_color = Color(0, 0, 0);
+            bool: auto_clear = true;
+            float: max_fps = 0.0;
+
+        private:
+            bool: running = false;
+            float: delta = 0.0;
+            float: current_fps = 0.0;
+            float: average_fps = 0.0;
+            float: total_seconds = 0.0;
+            long int: frames = 0;
+
+            function start_frame(std::time::Instant&: last) -> void {
+                const std::time::Instant: now = std::time::Instant::now();
+                delta = (now - last).as_seconds();
+                last = now;
+                if (delta > 0.25) then {
+                    delta = 0.25;
+                }
+                total_seconds = total_seconds + delta;
+                if (delta > 0.0) then {
+                    current_fps = 1.0 / delta;
+                    average_fps = average_fps == 0.0 ? current_fps : average_fps * 0.95 + current_fps * 0.05;
+                }
+            } end function start_frame
+
+            function finish_frame(const std::time::Instant&: frame_start) -> void {
+                frames = frames + 1;
+                if (max_fps > 0.0) then {
+                    const float: budget = 1.0 / max_fps;
+                    const float: used = frame_start.elapsed().as_seconds();
+                    if (used < budget) then {
+                        std::time::sleep(std::time::Duration(static_cast<long int>((budget - used) * 1000000000.0)));
+                    }
+                }
+            } end function finish_frame
+
+        public:
+            constructor(const string&: title, long int: width, long int: height, Backend: backend = Backend::best, bool: vsync = true) : window = Window::open(title, width, height), renderer = Renderer::make(window, backend, vsync) { }
+
+            function quit() -> void {
+                running = false;
+            } end function quit
+
+            function is_running() const -> bool {
+                return running && window.is_open();
+            } end function is_running
+
+            function delta_seconds() const -> float {
+                return delta;
+            } end function delta_seconds
+
+            function fps() const -> float {
+                return current_fps;
+            } end function fps
+
+            function fps_average() const -> float {
+                return average_fps;
+            } end function fps_average
+
+            function elapsed_seconds() const -> float {
+                return total_seconds;
+            } end function elapsed_seconds
+
+            function frame_count() const -> long int {
+                return frames;
+            } end function frame_count
+
+            function width() const -> long int {
+                return window.width();
+            } end function width
+
+            function height() const -> long int {
+                return window.height();
+            } end function height
+
+            template <typename Update, typename Draw, typename OnEvent>
+            function run(Update: update, Draw: draw, OnEvent: on_event) -> void {
+                running = true;
+                std::time::Instant: last = std::time::Instant::now();
+                while (running && window.poll()) {
+                    const std::time::Instant: frame_start = std::time::Instant::now();
+                    WindowEvent: e;
+                    while (window.next_event(e)) {
+                        on_event(e);
+                    }
+                    if (!running || !window.is_open()) then {
+                        break;
+                    }
+                    start_frame(last);
+                    update(delta);
+                    if (!running) then {
+                        break;
+                    }
+                    renderer.begin_frame();
+                    if (auto_clear) then {
+                        renderer.clear(clear_color);
+                    }
+                    draw(renderer);
+                    renderer.present();
+                    finish_frame(frame_start);
+                }
+                running = false;
+            } end function run
+
+            template <typename Update, typename Draw>
+            function run(Update: update, Draw: draw) -> void {
+                run(update, draw, [](const WindowEvent&: e) -> void { });
+            } end function run
+        } end class Game
+    } end namespace game
+} end namespace std

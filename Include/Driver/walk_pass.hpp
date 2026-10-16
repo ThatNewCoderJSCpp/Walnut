@@ -24,7 +24,7 @@ private:
 
     void check_externs(const FrontPass& front);
 
-    std::string native_type_problem(semantics::Type* t, bool is_return);
+    std::string native_type_problem(semantics::Type* t, bool is_return, bool cpp);
 
     bool same_signature(const nodes::FunctionDeclaration* a, const nodes::FunctionDeclaration* b);
 

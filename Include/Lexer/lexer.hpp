@@ -33,6 +33,8 @@ private:
     Token slash_or_comment() noexcept;
     Token atom(Token::Kind) noexcept;
     Token string_literal() noexcept;
+    bool skip_interpolation() noexcept;
+    bool skip_quoted(char quote) noexcept;
     void report_error(const std::string& message) noexcept;
     char peek() const noexcept { return *m_beg; }
 

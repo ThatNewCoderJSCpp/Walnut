@@ -27,6 +27,8 @@ struct AnalysisContext {
     AnalysisContext(Arena& a, ErrorReporter& r) noexcept : arena(a), reporter(r) {}
 };
 
+void attach_orphan_specializations(ErrorReporter& reporter);
+
 class ScopeBuilder {
 public:
     explicit ScopeBuilder(AnalysisContext& ctx) noexcept : m_ctx(ctx), m_arena(ctx.arena), m_reporter(ctx.reporter) {}
@@ -48,6 +50,8 @@ private:
     std::uint64_t    m_order   = 0;  
 
 private:
+    std::vector<std::string_view> namespace_path() const;
+
     Scope* push_scope(Scope::Kind kind) {
         Scope* s  = make_in<Scope>(m_arena, kind, m_current);
         m_current = s;
@@ -81,10 +85,14 @@ private:
             SemanticError::modifier_rule_violation(m_reporter, site->file_id, site->line, kind, "fields cannot be 'inline'; use 'static constexpr' for a constant shared by every object");
         }
 
+        if (mods.has(modifiers::RawModifiers::Lazy)) check_lazy_field(mods, site, in_record);
+
         if (mods.has(modifiers::RawModifiers::Inline) && site->kind == ASTNode::Kind::ArrayDeclaration) {
             SemanticError::modifier_rule_violation(m_reporter, site->file_id, site->line, kind, "arrays cannot be 'inline'; pasting a whole array at every use would copy it each time");
         }
     }
+
+    void check_lazy_field(const modifiers::RawModifiers& mods, const ASTNode* site, bool in_record);
 
     void build(ASTNode* node);
 

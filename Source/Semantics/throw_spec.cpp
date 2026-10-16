@@ -122,7 +122,7 @@ ThrowInfo ThrowAnalyzer::of_expr(nodes::ASTNode* e) {
             auto* n = static_cast<nodes::NewExpression*>(e);
             for (nodes::ASTNode* a : n->args) info.merge(of_expr(a));
             info.merge(of_expr(n->array_size));
-            info.unknown = true;            // allocation failure — set your policy here
+            info.unknown = true;            
             return info;
         }
 

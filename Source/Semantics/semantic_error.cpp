@@ -1,5 +1,6 @@
 #include "Semantics/semantic_error.hpp"
 #include "Preprocessor/native_headers.hpp"
+#include "Parser/Types/type_ops.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -78,12 +79,15 @@ SemanticError SemanticError::unresolved_name(
     ErrorReporter& reporter,
     FileId file_id,
     std::size_t line,
-    std::string_view name
+    std::string_view name,
+    const std::string& suggestion
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Name");
-    ss << "use of undeclared identifier '" << name << "'";
-    if (name == "move") ss << "; 'move' is part of the core library, so write 'std::move'";
+    ss << "use of undeclared identifier '" << name << "'" << suggestion;
+    if (name == "move") ss << "; 'move' is part of the core library, so write 'std::core::move'";
+    if (parser_types::find_type_op(name)) ss << "; type operations are alias templates in std::traits, so write 'std::traits::" << name << "<T>'";
+    if (parser_types::find_type_trait(name)) ss << "; type traits are variable templates in std::traits, so write 'std::traits::" << name << "<T>'";
     if (const std::string why = native::skipped_reason(name); !why.empty()) ss << "; " << why;
     return make_and_report(reporter, file_id, line, ss.str());
 }
@@ -107,12 +111,21 @@ SemanticError SemanticError::no_matching_overload(
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
+SemanticError SemanticError::no_matching_overload(
+    ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name, const std::string& details
+) {
+    std::stringstream ss;
+    ss << build_error_header(line, "Overload");
+    ss << "no matching overload for call to '" << name << "'" << details;
+    return make_and_report(reporter, file_id, line, ss.str());
+}
+
 SemanticError SemanticError::ambiguous_call(
     ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Overload");
-    ss << "ambiguous call to '" << name << "'; no single overload is the best match";
+    ss << "ambiguous call to '" << name << "': more than one overload matches equally well; make an argument's type match one of them exactly (for example with 'static_cast<int>(value)') to pick it";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -126,13 +139,41 @@ SemanticError SemanticError::invalid_cast(
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
+namespace {
+
+bool is_number_name(const std::string& t) {
+    return t == "int" || t == "float" || t == "char" || t == "bool"
+        || t.find(" int") != std::string::npos || t.find(" float") != std::string::npos
+        || t.rfind("unsigned", 0) == 0 || t.rfind("long", 0) == 0 || t.rfind("short", 0) == 0;
+}
+
+bool is_string_name(const std::string& t) { return t == "string" || t == "text" || t == "const string" || t == "const text"; }
+
+} // namespace
+
+std::string SemanticError::conversion_hint(const std::string& from, const std::string& to) {
+    if (is_string_name(from) && is_number_name(to)) return "; to read a number from a string, use 'std::io::parse_int(...)' or 'std::io::parse_float(...)' from 'import module.io'";
+    if (is_number_name(from) && is_string_name(to)) return "; to turn a value into a string, write 'value.to_string()' (or '`${value}`' for text)";
+    if ((from == "string" && to == "text") || (from == "text" && to == "string")) return "; write 'static_cast<" + to + ">(value)' to convert between string and text";
+    if (is_number_name(from) && is_number_name(to)) return "; if losing precision or range is fine, write 'static_cast<" + to + ">(value)'";
+    return {};
+}
+
+std::string SemanticError::operands_hint(std::string_view op, const std::string& lhs, const std::string& rhs) {
+    const bool ls = is_string_name(lhs), rs = is_string_name(rhs);
+    if (op == "+" && (ls != rs) && (is_number_name(ls ? rhs : lhs))) return "; '+' joins strings with strings and characters, so turn the number into a string first with '.to_string()'";
+    if ((lhs == "char" && rhs == "char") && (op == "*" || op == "/" || op == "%")) return "; characters only support '+' and '-' with whole numbers; cast to 'int' first to do other arithmetic";
+    if ((lhs == "char" || rhs == "char") && is_number_name(lhs) && is_number_name(rhs) && (op == "*" || op == "/" || op == "%")) return "; cast the character to 'int' first, as in 'static_cast<int>(c)'";
+    return {};
+}
+
 SemanticError SemanticError::not_convertible(
     ErrorReporter& reporter, FileId file_id, std::size_t line,
     const std::string& from, const std::string& to
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Type");
-    ss << "no implicit conversion from '" << from << "' to '" << to << "'";
+    ss << "no implicit conversion from '" << from << "' to '" << to << "'" << conversion_hint(from, to);
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -142,7 +183,7 @@ SemanticError SemanticError::no_common_type(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Type");
-    ss << "ternary operands have no common type ('" << a << "' and '" << b << "')";
+    ss << "the two results of '? :' have different types ('" << a << "' and '" << b << "') that can't be combined; convert one so both are the same type";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -151,14 +192,14 @@ SemanticError SemanticError::not_assignable(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Type");
-    if (is_const) ss << "cannot " << what << " a const expression";
-    else          ss << "cannot " << what << "; operand is not a modifiable lvalue";
+    if (is_const) ss << "cannot " << what << " a const value; remove 'const' from its declaration if it should change";
+    else          ss << "cannot " << what << " this expression: it is a temporary value, not a variable or other object that can be changed";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
 SemanticError SemanticError::not_addressable(ErrorReporter& reporter, FileId file_id, std::size_t line) {
     std::stringstream ss;
-    ss << build_error_header(line, "Type") << "cannot take the address of a non-lvalue expression";
+    ss << build_error_header(line, "Type") << "'&' needs a variable or other object to point at; a temporary value has no address (store it in a variable first)";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -167,7 +208,7 @@ SemanticError SemanticError::condition_not_bool(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Type")
-       << "condition of type '" << type << "' is not contextually convertible to 'bool'";
+       << "a condition must be a 'bool' (or a number, pointer, or class with 'operator(bool)'), not '" << type << "'";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -214,7 +255,7 @@ SemanticError SemanticError::bad_binary_operands(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Type")
-       << "operator '" << op << "' cannot be applied to operands of type '" << lhs << "' and '" << rhs << "'";
+       << "operator '" << op << "' cannot be applied to operands of type '" << lhs << "' and '" << rhs << "'" << operands_hint(op, lhs, rhs);
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -223,8 +264,8 @@ SemanticError SemanticError::bad_reference_binding(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Type");
-    if (to_rvalue) ss << "cannot bind non-const lvalue reference of type '" << ref << "' to an rvalue";
-    else           ss << "cannot bind rvalue reference of type '" << ref << "' to an lvalue";
+    if (to_rvalue) ss << "a temporary value can't be bound to '" << ref << "', because that reference could change it; use 'const " << ref << "' or store the value in a variable first";
+    else           ss << "'" << ref << "' only binds to temporary values, but this is a variable; write 'std::core::move(...)' to hand it over";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -242,7 +283,7 @@ SemanticError SemanticError::auto_needs_initializer(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Type")
-       << "declaration of '" << name << "' with deduced type 'auto' requires an initializer";
+       << "'" << name << "' is declared 'auto', so it needs an initializer to work out its type, as in 'auto: " << name << " = 0;'";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -287,7 +328,7 @@ SemanticError SemanticError::missing_return_value(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Return")
-       << "non-void function must return a value of type '" << type << "'";
+       << "this function returns '" << type << "', so 'return' needs a value, as in 'return result;'";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -296,7 +337,7 @@ SemanticError SemanticError::return_value_in_void(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Return")
-       << "a void function must not return a value";
+       << "this function returns 'void', so 'return' can't have a value; write just 'return;' or change the return type";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 
@@ -315,7 +356,7 @@ SemanticError SemanticError::switch_not_integral(
 ) {
     std::stringstream ss;
     ss << build_error_header(line, "Type")
-       << "switch condition of type '" << type << "' must be of integral or enum type";
+       << "a switch can't test a value of type '" << type << "'; the condition must be an integer, char, bool, enum or string (use an if / else if chain to compare other types)";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 

@@ -1,0 +1,613 @@
+import module.collections
+import module.optional
+import module.colors
+import module.images
+import module.input
+
+namespace std {
+    namespace errors {
+        class window_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class window_error
+    } end namespace errors
+
+    namespace windows {
+        using std::colors::Color;
+        using std::images::Image;
+        using std::input::Key;
+        using std::input::MouseButton;
+        using std::input::Modifiers;
+        using std::input::PointerType;
+        using std::input::GamepadButton;
+        using std::input::GamepadAxis;
+
+        enum EventType { mouse_move, mouse_click, mouse_release, mouse_scroll, mouse_double_click, key_press, key_release, window_resize, window_close, window_focus, window_blur, window_expose, window_render_request, text_input, text_editing, touch_down, touch_move, touch_up, touch_cancel, pen_down, pen_move, pen_up, gesture, files_dropped, drag_enter, drag_over, drag_leave, window_move, window_minimize, window_maximize, window_restore, dpi_changed, monitors_changed, gamepad_connected, gamepad_disconnected, gamepad_button_down, gamepad_button_up, gamepad_axis_motion, no_event }
+
+        enum Cursor { arrow, ibeam, hand, crosshair, wait, progress, not_allowed, move, resize_horizontal, resize_vertical, resize_nwse, resize_nesw, help }
+
+        enum WindowMode { windowed, borderless, fullscreen }
+
+        struct WindowEvent {
+            EventType: type = EventType::no_event;
+            long int: x = 0;
+            long int: y = 0;
+            long int: dx = 0;
+            long int: dy = 0;
+            MouseButton: button = MouseButton::no_button;
+            Key: key = Key::unknown;
+            Key: logical_key = Key::unknown;
+            string: key_name = "";
+            Modifiers: modifiers;
+            bool: repeat_press = false;
+            string: text_value = "";
+            float: scroll_x = 0.0;
+            float: scroll_y = 0.0;
+            float: precise_x = 0.0;
+            float: precise_y = 0.0;
+            PointerType: pointer = PointerType::mouse;
+            long int: pointer_id = 0;
+            float: pressure = 0.0;
+            long int: window_x = 0;
+            long int: window_y = 0;
+            float: dpi_scale = 1.0;
+            long int: gamepad = -1;
+            long int: gamepad_button = 0;
+            long int: gamepad_axis = 0;
+            float: axis_value = 0.0;
+            std::collections::Vector<string>: paths;
+
+            constructor() { }
+
+            function width() const -> long int {
+                return x;
+            } end function width
+
+            function height() const -> long int {
+                return y;
+            } end function height
+
+            function is_key(Key: k) const -> bool {
+                return (type == EventType::key_press || type == EventType::key_release) && key == k;
+            } end function is_key
+
+            function is_mouse() const -> bool {
+                return type == EventType::mouse_move || type == EventType::mouse_click || type == EventType::mouse_release || type == EventType::mouse_scroll || type == EventType::mouse_double_click;
+            } end function is_mouse
+
+            function is_keyboard() const -> bool {
+                return type == EventType::key_press || type == EventType::key_release || type == EventType::text_input;
+            } end function is_keyboard
+
+            function to_string() const -> string {
+                return static_cast<string>(`WindowEvent(${static_cast<long int>(type)}, x ${x}, y ${y})`);
+            } end function to_string
+        } end struct WindowEvent
+
+        struct Monitor {
+            string: name = "";
+            long int: x = 0;
+            long int: y = 0;
+            long int: width = 0;
+            long int: height = 0;
+            long int: work_x = 0;
+            long int: work_y = 0;
+            long int: work_width = 0;
+            long int: work_height = 0;
+            float: refresh_rate = 0.0;
+            float: scale = 1.0;
+            float: dpi = 96.0;
+            bool: primary = false;
+
+            constructor() { }
+
+            function to_string() const -> string {
+                return static_cast<string>(`${name} (${width} by ${height} at ${x}, ${y})`);
+            } end function to_string
+        } end struct Monitor
+
+        namespace detail {
+            extern "C++" from "<walnut_graphics.hpp>" {
+                class NativeEvent as "walnut_rt::gfx::event" {
+                public:
+                    constructor();
+                    function type() const -> long int;
+                    function x() const -> long int;
+                    function y() const -> long int;
+                    function dx() const -> long int;
+                    function dy() const -> long int;
+                    function button() const -> long int;
+                    function key() const -> long int;
+                    function logical_key() const -> long int;
+                    function key_name() const -> string;
+                    function modifiers() const -> long int;
+                    function repeat() const -> bool;
+                    function typed() const -> string as "text";
+                    function scroll_x() const -> float;
+                    function scroll_y() const -> float;
+                    function fx() const -> float;
+                    function fy() const -> float;
+                    function pressure() const -> float;
+                    function pointer() const -> long int;
+                    function pointer_id() const -> long int;
+                    function window_x() const -> long int;
+                    function window_y() const -> long int;
+                    function dpi_scale() const -> float;
+                    function gamepad() const -> long int;
+                    function gamepad_button() const -> long int;
+                    function gamepad_axis() const -> long int;
+                    function axis_value() const -> float;
+                    function path_count() const -> long int;
+                    function path(long int: index) const -> string;
+                } end class NativeEvent
+
+                class NativeMonitor as "walnut_rt::gfx::monitor" {
+                public:
+                    constructor();
+                    function name() const -> string;
+                    function x() const -> long int;
+                    function y() const -> long int;
+                    function width() const -> long int;
+                    function height() const -> long int;
+                    function work_x() const -> long int;
+                    function work_y() const -> long int;
+                    function work_width() const -> long int;
+                    function work_height() const -> long int;
+                    function refresh_rate() const -> float;
+                    function scale() const -> float;
+                    function dpi() const -> float;
+                    function primary() const -> bool;
+                } end class NativeMonitor
+
+                class Native as "walnut_rt::gfx::windows_api" {
+                public:
+                    static function monitor_count() -> long int as "walnut_rt::gfx::monitor_count";
+                    static function monitor_at(long int: index) -> NativeMonitor as "walnut_rt::gfx::monitor_at";
+                    static function primary_monitor() -> NativeMonitor as "walnut_rt::gfx::primary_monitor";
+                    static function dialogs_available() -> bool as "walnut_rt::gfx::dialogs_available";
+                    static function open_file(const string&: title, const string&: start, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> string as "walnut_rt::gfx::open_file";
+                    static function open_files(const string&: title, const string&: start, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> std::collections::Vector<string> as "walnut_rt::gfx::open_files";
+                    static function save_file(const string&: title, const string&: start, const string&: name, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> string as "walnut_rt::gfx::save_file";
+                    static function select_folder(const string&: title, const string&: start) -> string as "walnut_rt::gfx::select_folder";
+                    static function message_box(const string&: title, const string&: message, long int: buttons, long int: icon) -> long int as "walnut_rt::gfx::message_box";
+                } end class Native
+            } end extern
+
+            function event_of(const NativeEvent&: n) -> WindowEvent {
+                WindowEvent: e;
+                e.type = static_cast<EventType>(n.type());
+                e.x = n.x();
+                e.y = n.y();
+                e.dx = n.dx();
+                e.dy = n.dy();
+                const long int: b = n.button();
+                e.button = b >= 0 && b <= 5 ? static_cast<MouseButton>(b) : MouseButton::no_button;
+                e.key = std::input::key_from_index(n.key());
+                e.logical_key = std::input::key_from_index(n.logical_key());
+                e.key_name = n.key_name();
+                e.modifiers = Modifiers(n.modifiers());
+                e.repeat_press = n.repeat();
+                e.text_value = n.typed();
+                e.scroll_x = n.scroll_x();
+                e.scroll_y = n.scroll_y();
+                e.precise_x = n.fx();
+                e.precise_y = n.fy();
+                const long int: p = n.pointer();
+                e.pointer = p >= 0 && p <= 2 ? static_cast<PointerType>(p) : PointerType::mouse;
+                e.pointer_id = n.pointer_id();
+                e.pressure = n.pressure();
+                e.window_x = n.window_x();
+                e.window_y = n.window_y();
+                e.dpi_scale = n.dpi_scale();
+                e.gamepad = n.gamepad();
+                e.gamepad_button = n.gamepad_button();
+                e.gamepad_axis = n.gamepad_axis();
+                e.axis_value = n.axis_value();
+                for (long int: k = 0; k < n.path_count(); k++) {
+                    e.paths.push_back(n.path(k));
+                }
+                return e;
+            } end function event_of
+
+            function monitor_of(const NativeMonitor&: n) -> Monitor {
+                Monitor: m;
+                m.name = n.name();
+                m.x = n.x();
+                m.y = n.y();
+                m.width = n.width();
+                m.height = n.height();
+                m.work_x = n.work_x();
+                m.work_y = n.work_y();
+                m.work_width = n.work_width();
+                m.work_height = n.work_height();
+                m.refresh_rate = n.refresh_rate();
+                m.scale = n.scale();
+                m.dpi = n.dpi();
+                m.primary = n.primary();
+                return m;
+            } end function monitor_of
+        } end namespace detail
+
+        extern "C++" from "<walnut_graphics.hpp>" {
+            class Gamepad as "walnut_rt::gfx::gamepad" {
+                function native_button(long int: b) const -> bool as "button";
+                function native_pressed(long int: b) const -> bool as "pressed";
+                function native_released(long int: b) const -> bool as "released";
+                function native_axis(long int: a) const -> float as "axis";
+                function native_raw_axis(long int: a) const -> float as "raw_axis";
+
+            public:
+                constructor();
+
+                function slot() const -> long int;
+                function connected() const -> bool;
+                function mapped() const -> bool;
+                function name() const -> string;
+                function guid() const -> string;
+                function set_deadzones(float: stick, float: trigger) -> void;
+                function has_rumble() const -> bool;
+                function rumble(float: low_frequency, float: high_frequency, long int: milliseconds) -> bool;
+                function stop_rumble() -> bool;
+
+                function button(GamepadButton: b) const -> bool {
+                    return native_button(static_cast<long int>(b));
+                } end function button
+
+                function pressed(GamepadButton: b) const -> bool {
+                    return native_pressed(static_cast<long int>(b));
+                } end function pressed
+
+                function released(GamepadButton: b) const -> bool {
+                    return native_released(static_cast<long int>(b));
+                } end function released
+
+                function axis(GamepadAxis: a) const -> float {
+                    return native_axis(static_cast<long int>(a));
+                } end function axis
+
+                function raw_axis(GamepadAxis: a) const -> float {
+                    return native_raw_axis(static_cast<long int>(a));
+                } end function raw_axis
+            } end class Gamepad
+
+            class Window as "walnut_rt::gfx::window" {
+                function valid() const -> bool;
+                function has_event() const -> bool;
+                function native_next() -> detail::NativeEvent as "next_event";
+                function native_set_background(long int: rgba) -> void as "set_background";
+                function native_background() const -> long int as "background";
+                function native_set_mode(long int: mode, long int: monitor) -> bool as "set_mode";
+                function native_mode() const -> long int as "mode";
+                function native_set_cursor(long int: cursor) -> bool as "set_cursor";
+                function native_set_cursor_image(const Image&: img, long int: hx, long int: hy) -> bool as "set_cursor_image";
+                function native_key_down(long int: k) const -> bool as "key_down";
+                function native_key_pressed(long int: k) const -> bool as "key_pressed";
+                function native_key_released(long int: k) const -> bool as "key_released";
+                function native_key_double_pressed(long int: k) const -> bool as "key_double_pressed";
+                function native_key_held_for(long int: k) const -> float as "key_held_for";
+                function native_logical_key_down(long int: k) const -> bool as "logical_key_down";
+                function native_modifiers() const -> long int as "modifiers";
+                function native_mouse_down(long int: b) const -> bool as "mouse_down";
+                function native_mouse_pressed(long int: b) const -> bool as "mouse_pressed";
+                function native_mouse_released(long int: b) const -> bool as "mouse_released";
+                function native_mouse_double_clicked(long int: b) const -> bool as "mouse_double_clicked";
+                function native_gamepad_count() const -> long int as "walnut_rt::gfx::gamepad_count";
+                function native_gamepad_slots() const -> long int as "walnut_rt::gfx::gamepad_slots";
+                function native_gamepad(long int: slot) const -> Gamepad as "walnut_rt::gfx::gamepad_at";
+                function native_primary_gamepad() const -> long int as "walnut_rt::gfx::primary_gamepad";
+                function native_any_gamepad_button(long int: b) const -> bool as "walnut_rt::gfx::any_gamepad_button";
+                function native_add_gamepad_mappings(const string&: text_value) const -> long int as "walnut_rt::gfx::add_gamepad_mappings";
+                function native_load_gamepad_mappings(const string&: path) const -> long int as "walnut_rt::gfx::load_gamepad_mappings";
+
+            public:
+                constructor();
+                constructor(const string&: title, long int: width, long int: height, long int: background);
+
+                static function open(const string&: title, long int: width, long int: height, const Color&: background = Color(0, 0, 0)) -> Window {
+                    if (width <= 0 || height <= 0) then {
+                        throw std::errors::window_error(static_cast<string>(`a window needs a width and height above 0, not ${width} by ${height}`));
+                    }
+                    Window: w = Window(title, width, height, background.packed());
+                    if (!w.valid()) then {
+                        throw std::errors::window_error(static_cast<string>(`can't open the window '${title}'; is a display available?`));
+                    }
+                    return w;
+                } end function open
+
+                function is_open() const -> bool;
+                function poll() -> bool;
+                function close() -> void;
+                function clear_events() -> void;
+
+                function next_event(WindowEvent&: event) -> bool {
+                    if (!has_event()) then {
+                        return false;
+                    }
+                    event = detail::event_of(native_next());
+                    return true;
+                } end function next_event
+
+                function events() -> std::collections::Vector<WindowEvent> {
+                    std::collections::Vector<WindowEvent>: out;
+                    while (has_event()) {
+                        out.push_back(detail::event_of(native_next()));
+                    }
+                    return out;
+                } end function events
+
+                function width() const -> long int;
+                function height() const -> long int;
+                function title() const -> string;
+                function set_title(const string&: title) -> void;
+                function set_size(long int: width, long int: height) -> bool;
+                function set_min_size(long int: width, long int: height) -> void;
+                function set_resizable(bool: resizable) -> void;
+                function set_position(long int: x, long int: y) -> bool;
+                function x() const -> long int;
+                function y() const -> long int;
+                function minimize() -> void;
+                function maximize() -> void;
+                function restore() -> void;
+                function focus() -> void;
+                function set_fullscreen(bool: on) -> bool;
+                function fullscreen() const -> bool;
+                function set_borderless(bool: on) -> bool;
+                function dpi_scale() const -> float;
+                function monitor_index() const -> long int;
+                function set_cursor_visible(bool: visible) -> void;
+                function cursor_visible() const -> bool;
+                function set_cursor_locked(bool: locked) -> bool;
+                function cursor_locked() const -> bool;
+                function set_relative_mouse(bool: on) -> bool;
+                function clipboard() -> string;
+                function set_clipboard(const string&: text_value) -> bool;
+                function set_drop_enabled(bool: on) -> void;
+                function start_text_input() -> void;
+                function stop_text_input() -> void;
+                function text_input_active() const -> bool;
+                function typed_text() const -> string;
+                function mouse_x() const -> long int;
+                function mouse_y() const -> long int;
+                function mouse_dx() const -> long int;
+                function mouse_dy() const -> long int;
+                function scroll_x() const -> float;
+                function scroll_y() const -> float;
+
+                function set_background(const Color&: c) -> void {
+                    native_set_background(c.packed());
+                } end function set_background
+
+                function background() const -> Color {
+                    return Color::from_packed(native_background());
+                } end function background
+
+                function set_mode(WindowMode: mode, long int: monitor = -1) -> bool {
+                    return native_set_mode(static_cast<long int>(mode), monitor);
+                } end function set_mode
+
+                function mode() const -> WindowMode {
+                    return static_cast<WindowMode>(native_mode());
+                } end function mode
+
+                function set_cursor(Cursor: cursor) -> bool {
+                    return native_set_cursor(static_cast<long int>(cursor));
+                } end function set_cursor
+
+                function set_cursor(const Image&: img) -> bool {
+                    return native_set_cursor_image(img, 0, 0);
+                } end function set_cursor
+
+                function set_cursor(const Image&: img, long int: hot_x, long int: hot_y) -> bool {
+                    return native_set_cursor_image(img, hot_x, hot_y);
+                } end function set_cursor
+
+                function key_down(Key: k) const -> bool {
+                    return native_key_down(static_cast<long int>(k));
+                } end function key_down
+
+                function key_pressed(Key: k) const -> bool {
+                    return native_key_pressed(static_cast<long int>(k));
+                } end function key_pressed
+
+                function key_released(Key: k) const -> bool {
+                    return native_key_released(static_cast<long int>(k));
+                } end function key_released
+
+                function key_double_pressed(Key: k) const -> bool {
+                    return native_key_double_pressed(static_cast<long int>(k));
+                } end function key_double_pressed
+
+                function key_held_for(Key: k) const -> float {
+                    return native_key_held_for(static_cast<long int>(k));
+                } end function key_held_for
+
+                function logical_key_down(Key: k) const -> bool {
+                    return native_logical_key_down(static_cast<long int>(k));
+                } end function logical_key_down
+
+                function modifiers() const -> Modifiers {
+                    return Modifiers(native_modifiers());
+                } end function modifiers
+
+                function mouse_down(MouseButton: b = MouseButton::left) const -> bool {
+                    return native_mouse_down(static_cast<long int>(b));
+                } end function mouse_down
+
+                function mouse_pressed(MouseButton: b = MouseButton::left) const -> bool {
+                    return native_mouse_pressed(static_cast<long int>(b));
+                } end function mouse_pressed
+
+                function mouse_released(MouseButton: b = MouseButton::left) const -> bool {
+                    return native_mouse_released(static_cast<long int>(b));
+                } end function mouse_released
+
+                function mouse_double_clicked(MouseButton: b = MouseButton::left) const -> bool {
+                    return native_mouse_double_clicked(static_cast<long int>(b));
+                } end function mouse_double_clicked
+
+                function gamepad_count() const -> long int {
+                    return native_gamepad_count();
+                } end function gamepad_count
+
+                function gamepad(long int: slot) const -> Gamepad {
+                    if (slot < 0 || slot >= native_gamepad_slots()) then {
+                        throw std::errors::window_error(static_cast<string>(`there is no gamepad in slot ${slot}`));
+                    }
+                    return native_gamepad(slot);
+                } end function gamepad
+
+                function gamepads() const -> std::collections::Vector<Gamepad> {
+                    std::collections::Vector<Gamepad>: out;
+                    for (long int: k = 0; k < native_gamepad_slots(); k++) {
+                        Gamepad: g = native_gamepad(k);
+                        if (g.connected()) then {
+                            out.push_back(g);
+                        }
+                    }
+                    return out;
+                } end function gamepads
+
+                function has_gamepad() const -> bool {
+                    return native_primary_gamepad() >= 0;
+                } end function has_gamepad
+
+                function primary_gamepad() const -> Gamepad {
+                    const long int: slot = native_primary_gamepad();
+                    if (slot < 0) then {
+                        throw std::errors::window_error("no gamepad is connected; check has_gamepad() first");
+                    }
+                    return native_gamepad(slot);
+                } end function primary_gamepad
+
+                function any_gamepad_button(GamepadButton: b) const -> bool {
+                    return native_any_gamepad_button(static_cast<long int>(b));
+                } end function any_gamepad_button
+
+                function add_gamepad_mappings(const string&: mappings) const -> long int {
+                    return native_add_gamepad_mappings(mappings);
+                } end function add_gamepad_mappings
+
+                function load_gamepad_mappings(const string&: path) const -> long int {
+                    return native_load_gamepad_mappings(path);
+                } end function load_gamepad_mappings
+            } end class Window
+        } end extern
+
+        function monitors() -> std::collections::Vector<Monitor> {
+            std::collections::Vector<Monitor>: out;
+            const long int: n = detail::Native::monitor_count();
+            for (long int: k = 0; k < n; k++) {
+                out.push_back(detail::monitor_of(detail::Native::monitor_at(k)));
+            }
+            return out;
+        } end function monitors
+
+        function primary_monitor() -> Monitor {
+            return detail::monitor_of(detail::Native::primary_monitor());
+        } end function primary_monitor
+
+        namespace dialogs {
+            enum Buttons { ok, ok_cancel, yes_no, yes_no_cancel, retry_cancel }
+
+            enum Icon { info, warning, error, question }
+
+            enum Answer { ok, cancel, yes, no, retry }
+
+            struct FileFilter {
+                string: name = "";
+                string: patterns = "";
+
+                constructor() { }
+
+                constructor(const string&: n, const string&: p) : name = n, patterns = p { }
+            } end struct FileFilter
+
+            namespace detail {
+                function names_of(const std::collections::Vector<FileFilter>&: filters) -> std::collections::Vector<string> {
+                    std::collections::Vector<string>: out;
+                    for (const FileFilter&: f in filters) {
+                        out.push_back(f.name);
+                    }
+                    return out;
+                } end function names_of
+
+                function patterns_of(const std::collections::Vector<FileFilter>&: filters) -> std::collections::Vector<string> {
+                    std::collections::Vector<string>: out;
+                    for (const FileFilter&: f in filters) {
+                        out.push_back(f.patterns);
+                    }
+                    return out;
+                } end function patterns_of
+
+                function some_or_none(const string&: s) -> std::optional::Optional<string> {
+                    if (s.size() == 0) then {
+                        return std::optional::nothing<string>();
+                    }
+                    return std::optional::Optional<string>(s);
+                } end function some_or_none
+            } end namespace detail
+
+            function available() -> bool {
+                return std::windows::detail::Native::dialogs_available();
+            } end function available
+
+            function message_box(const string&: title, const string&: message, Buttons: buttons = Buttons::ok, Icon: icon = Icon::info) -> Answer {
+                return static_cast<Answer>(std::windows::detail::Native::message_box(title, message, static_cast<long int>(buttons), static_cast<long int>(icon)));
+            } end function message_box
+
+            function show_info(const string&: title, const string&: message) -> void {
+                message_box(title, message, Buttons::ok, Icon::info);
+            } end function show_info
+
+            function show_warning(const string&: title, const string&: message) -> void {
+                message_box(title, message, Buttons::ok, Icon::warning);
+            } end function show_warning
+
+            function show_error(const string&: title, const string&: message) -> void {
+                message_box(title, message, Buttons::ok, Icon::error);
+            } end function show_error
+
+            function ask_yes_no(const string&: title, const string&: message) -> bool {
+                return message_box(title, message, Buttons::yes_no, Icon::question) == Answer::yes;
+            } end function ask_yes_no
+
+            function open_file(const string&: title, const string&: start, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::optional::Optional<string> {
+                return detail::some_or_none(std::windows::detail::Native::open_file(title, start, detail::names_of(filters), detail::patterns_of(filters)));
+            } end function open_file
+
+            function open_file(const string&: title = "") -> std::optional::Optional<string> {
+                return open_file(title, "");
+            } end function open_file
+
+            function open_files(const string&: title, const string&: start, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::collections::Vector<string> {
+                return std::windows::detail::Native::open_files(title, start, detail::names_of(filters), detail::patterns_of(filters));
+            } end function open_files
+
+            function open_files(const string&: title = "") -> std::collections::Vector<string> {
+                return open_files(title, "");
+            } end function open_files
+
+            function save_file(const string&: title, const string&: start, const string&: name, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::optional::Optional<string> {
+                return detail::some_or_none(std::windows::detail::Native::save_file(title, start, name, detail::names_of(filters), detail::patterns_of(filters)));
+            } end function save_file
+
+            function save_file(const string&: title = "") -> std::optional::Optional<string> {
+                return save_file(title, "", "");
+            } end function save_file
+
+            function select_folder(const string&: title, const string&: start) -> std::optional::Optional<string> {
+                return detail::some_or_none(std::windows::detail::Native::select_folder(title, start));
+            } end function select_folder
+
+            function select_folder(const string&: title = "") -> std::optional::Optional<string> {
+                return select_folder(title, "");
+            } end function select_folder
+        } end namespace dialogs
+    } end namespace windows
+} end namespace std

@@ -1,0 +1,247 @@
+namespace std {
+    namespace errors {
+        class optional_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class optional_error
+    } end namespace errors
+
+    namespace optional {
+        struct None;
+
+        extern "C++" from "<walnut_optional.hpp>" {
+            template <typename T>
+            class Optional as "walnut_rt::opt::optional" {
+                function unchecked() -> T& as "walnut_rt::opt::get";
+                function unchecked() const -> const T& as "walnut_rt::opt::get";
+                function put(const T&: value) -> void as "walnut_rt::opt::assign";
+                function put_moved(T&&: value) -> void as "walnut_rt::opt::assign";
+                function take_unchecked() -> T as "walnut_rt::opt::take";
+                function address() -> T* as "walnut_rt::opt::pointer";
+                function address() const -> const T* as "walnut_rt::opt::pointer";
+
+            public:
+                constructor();
+                constructor(const T&: value);
+                constructor(T&&: value);
+                constructor(const None&: nothing) as "walnut_rt::opt::from_none<T>";
+
+                function has_value() const -> bool;
+                function reset() -> void;
+
+                function empty() const -> bool {
+                    return !has_value();
+                } end function empty
+
+                function is_some() const -> bool {
+                    return has_value();
+                } end function is_some
+
+                function is_none() const -> bool {
+                    return !has_value();
+                } end function is_none
+
+                operator(bool) function() const explicit {
+                    return has_value();
+                }
+
+                function value() -> T& {
+                    if (!has_value()) then {
+                        throw std::errors::optional_error("value() on an empty Optional");
+                    }
+                    return unchecked();
+                } end function value
+
+                function value() const -> const T& {
+                    if (!has_value()) then {
+                        throw std::errors::optional_error("value() on an empty Optional");
+                    }
+                    return unchecked();
+                } end function value
+
+                function expect(const string&: message) const -> const T& {
+                    if (!has_value()) then {
+                        throw std::errors::optional_error(message);
+                    }
+                    return unchecked();
+                } end function expect
+
+                operator(*) function() -> T& {
+                    return value();
+                }
+
+                operator(*) function() const -> const T& {
+                    return value();
+                }
+
+                function get() -> T* {
+                    return address();
+                } end function get
+
+                function get() const -> const T* {
+                    return address();
+                } end function get
+
+                function value_or(const T&: fallback) const -> T {
+                    if (has_value()) then {
+                        return unchecked();
+                    }
+                    return fallback;
+                } end function value_or
+
+                template <typename F>
+                function value_or_else(F: make) const -> T {
+                    if (has_value()) then {
+                        return unchecked();
+                    }
+                    return make();
+                } end function value_or_else
+
+                function set(const T&: value) -> void {
+                    put(value);
+                } end function set
+
+                function set(T&&: value) -> void {
+                    put_moved(std::core::move(value));
+                } end function set
+
+                function emplace(const T&: value) -> T& {
+                    put(value);
+                    return unchecked();
+                } end function emplace
+
+                function take() -> T {
+                    if (!has_value()) then {
+                        throw std::errors::optional_error("take() on an empty Optional");
+                    }
+                    return take_unchecked();
+                } end function take
+
+                function take_or(const T&: fallback) -> T {
+                    if (!has_value()) then {
+                        return fallback;
+                    }
+                    return take_unchecked();
+                } end function take_or
+
+                function replace(const T&: value) -> Optional {
+                    Optional: old = *this;
+                    put(value);
+                    return old;
+                } end function replace
+
+                function contains(const T&: value) const -> bool {
+                    return has_value() && unchecked() == value;
+                } end function contains
+
+                template <typename F>
+                function map(F: func) const -> Optional<std::traits::decay<std::traits::return_type<F>>> {
+                    if (has_value()) then {
+                        return Optional<std::traits::decay<std::traits::return_type<F>>>(func(unchecked()));
+                    }
+                    return Optional<std::traits::decay<std::traits::return_type<F>>>();
+                } end function map
+
+                template <typename F>
+                function and_then(F: func) const -> std::traits::decay<std::traits::return_type<F>> {
+                    if (has_value()) then {
+                        return func(unchecked());
+                    }
+                    return std::traits::decay<std::traits::return_type<F>>();
+                } end function and_then
+
+                template <typename F>
+                function or_else(F: func) const -> Optional {
+                    if (has_value()) then {
+                        return *this;
+                    }
+                    return func();
+                } end function or_else
+
+                template <typename Pred>
+                function filter(Pred: pred) const -> Optional {
+                    if (has_value() && pred(unchecked())) then {
+                        return *this;
+                    }
+                    return Optional();
+                } end function filter
+
+                template <typename F>
+                function if_present(F: func) -> void {
+                    if (has_value()) then {
+                        func(unchecked());
+                    }
+                } end function if_present
+
+                function or_value(const Optional&: other) const -> Optional {
+                    if (has_value()) then {
+                        return *this;
+                    }
+                    return other;
+                } end function or_value
+
+                function swap(Optional&: other) -> void;
+
+                function to_string() const -> string {
+                    if (!has_value()) then {
+                        return "none";
+                    }
+                    return std::core::to_string(unchecked());
+                } end function to_string
+
+                operator(==) function(const Optional&: other) const -> bool {
+                    if (has_value() != other.has_value()) then {
+                        return false;
+                    }
+                    return !has_value() || unchecked() == other.unchecked();
+                }
+
+                operator(!=) function(const Optional&: other) const -> bool {
+                    return !(*this == other);
+                }
+
+                operator(==) function(const None&: nothing) const -> bool {
+                    return !has_value();
+                }
+
+                operator(!=) function(const None&: nothing) const -> bool {
+                    return has_value();
+                }
+            } end class Optional
+        } end extern
+
+        struct None {
+            template <typename T>
+            operator(Optional<T>) function() const {
+                return Optional<T>();
+            }
+
+            operator(==) function(const None&: other) const -> bool {
+                return true;
+            }
+        } end struct None
+
+        const None: none = None{};
+
+        template <typename T>
+        function some(const T&: value) -> Optional<T> {
+            return Optional<T>(value);
+        } end function some
+
+        template <typename T>
+        function make_optional(const T&: value) -> Optional<T> {
+            return Optional<T>(value);
+        } end function make_optional
+
+        template <typename T>
+        function nothing() -> Optional<T> {
+            return Optional<T>();
+        } end function nothing
+    } end namespace optional
+} end namespace std

@@ -85,6 +85,7 @@ struct ASTNode {
         TypeQueryOverload,
         ForEachStatement,
         CoReturnStatement,
+        InvalidateStatement,
         ConceptDeclaration,
         StaticAssertDeclaration,
         NativeCodeBlock,
@@ -105,6 +106,7 @@ struct ASTNode {
     std::uint32_t file_id = static_cast<std::uint32_t>(-1);
     std::uint32_t order   = 0; 
     ExprType      expr_type;
+    const char*   at      = nullptr;
 
     virtual ASTNode* clone_into(Arena& arena) const = 0;
 
@@ -113,6 +115,7 @@ protected:
         c->line = line; 
         c->file_id = file_id; 
         c->order = order; 
+        c->at = at;
     }
 
     ASTNode(Kind k, std::uint32_t ln = 0) : kind(k), line(ln) {}

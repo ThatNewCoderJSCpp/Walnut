@@ -2,6 +2,7 @@
 #include "Parser/Nodes/node_children.hpp"
 #include "Lexer/numeric_literal.hpp"
 #include "Common/file_kind.hpp"
+#include "Common/source_manager.hpp"
 
 namespace walnut {
 namespace codegen {
@@ -11,6 +12,10 @@ CppEmitter::CppEmitter(semantics::TypeContext& types, semantics::Instantiator& i
     m_eval.env_of = [this](Sym* s) -> const semantics::SubstEnv* {
         Inst* I = m_inst.owning(s);
         return I ? &I->env : nullptr;
+    };
+    m_eval.variable_template_value = [this](nodes::TemplateInstantiation* t) -> semantics::ConstValue {
+        auto& hook = m_inst.evaluator().variable_template_value;
+        return hook ? hook(t) : semantics::ConstValue{};
     };
 }
 
@@ -23,11 +28,13 @@ bool CppEmitter::emit(const std::vector<CodegenUnit>& units, std::ostream& out) 
     }
 
     std::ostringstream records, protos, globals, defs, init, native_decls, native_wrappers, equality;
+    m_track_globals = true;
     emit_records(records);
     emit_prototypes(protos);
     emit_native_externs(native_decls, native_wrappers);
-    emit_globals(globals);
     emit_definitions(defs);
+    finish_global_usage();
+    emit_globals(globals);
     emit_init(init);
     emit_equality_helpers(equality);
     if (m_failed) return false;
@@ -55,6 +62,7 @@ std::string CppEmitter::main_function_code() {
     std::ostringstream out;
     out << "int main(int argc, char** argv) {\n";
     out << "    return walnut_rt::run_program([&]() -> int {\n";
+    if (unbuffered) out << "        walnut_rt::io_native::unbuffered_request() = true;\n";
     out << "        wlu::walnut_init();\n";
 
     if (m_main_fn) {
@@ -97,17 +105,20 @@ bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram&
         return groups.back().second;
     };
 
+    m_track_globals = true;
     emit_records(records);
     emit_prototypes(protos);
     emit_native_externs(native_decls, native_wrappers);
-    emit_globals(globals_extern, true);
-    emit_globals(globals);
     for (RecordInfo* r : m_record_order) emit_record_definitions(group_for(r->decl->file_id), r);
 
     for (const FuncInfo& f : m_functions) {
         if (needs_header_body(f)) emit_function_body(header_defs, f);
         else emit_function_body(group_for(f.decl->file_id), f);
     }
+
+    finish_global_usage();
+    emit_globals(globals_extern, true);
+    emit_globals(globals);
 
     emit_init(init);
     emit_equality_helpers(equality);
@@ -175,6 +186,7 @@ void CppEmitter::collect_record(nodes::RecordDeclaration* rd, Inst* inst, Inst* 
     info->inst = inst;
     info->env  = inst ? inst : env;
     info->cname = unique_global(std::string("R_") + sanitize(qualified_name(sym)) + (inst ? "_" + mangle_args(inst->args) : ""));
+    info->native = rd->m_native;
     RecordInfo* raw = info.get();
     m_records.push_back(std::move(info));
     m_record_by_sym[sym] = raw;
@@ -186,13 +198,13 @@ void CppEmitter::collect_record(nodes::RecordDeclaration* rd, Inst* inst, Inst* 
         switch (n->kind) {
             case K::FunctionDeclaration: {
                 auto* f = static_cast<nodes::FunctionDeclaration*>(n);
-                if (f->get_modifiers().has(RM::Friend)) break;
+                if (f->get_modifiers().has(RM::Friend) || f->lazy_untyped) break;
                 if (f->has_body() && f->symbol) m_functions.push_back(FuncInfo{ n, f->symbol, raw->env, raw });
                 break;
             }
             case K::OperatorFunctionDeclaration: {
                 auto* f = static_cast<nodes::OperatorFunctionDeclaration*>(n);
-                if (f->get_modifiers().has(RM::Friend)) break;
+                if (f->get_modifiers().has(RM::Friend) || f->lazy_untyped) break;
                 if (f->has_body() && f->symbol) m_functions.push_back(FuncInfo{ n, f->symbol, raw->env, raw });
                 break;
             }
@@ -258,6 +270,7 @@ void CppEmitter::collect_decl(nodes::ASTNode* n, bool top_level) {
             if (n->kind == K::VariableDeclaration && static_cast<nodes::VariableDeclaration*>(n)->get_type_info().modifiers.has(RM::Extern)) break;
             m_global_decls.push_back(n);
             m_script.push_back(n);
+            if (prunable_global(n)) m_prunable.insert(static_cast<nodes::VariableDeclaration*>(n)->symbol);
             break;
 
         case K::TemplateDeclaration:
@@ -274,6 +287,16 @@ void CppEmitter::collect_decl(nodes::ASTNode* n, bool top_level) {
             else unsupported(n, "a statement inside a namespace");
             break;
     }
+}
+
+bool CppEmitter::signature_failed(semantics::Type* t) {
+    if (!t) return false;
+    if (t->is_error()) return true;
+    if (t->kind() != semantics::TypeKind::Function) return false;
+    auto* f = static_cast<semantics::FunctionType*>(t);
+    if (f->ret() && f->ret()->is_error()) return true;
+    for (semantics::Type* p : f->params()) if (p && p->is_error()) return true;
+    return false;
 }
 
 void CppEmitter::collect(const std::vector<CodegenUnit>& units) {
@@ -298,7 +321,13 @@ void CppEmitter::collect(const std::vector<CodegenUnit>& units) {
             continue;
         } else if (I->decl->kind == K::FunctionDeclaration) {
             auto* f = static_cast<nodes::FunctionDeclaration*>(I->decl);
+            if (signature_failed(I->type)) continue;
             if (f->has_body() && I->sym) m_functions.push_back(FuncInfo{ I->decl, I->sym, I, owner_record_of(I->sym) });
+        } else if (I->decl->kind == K::ConstructorDeclaration) {
+            if (signature_failed(I->type) || !I->sym || !owner_record_of(I->sym)) continue;
+            if (static_cast<nodes::ConstructorDeclaration*>(I->decl)->m_special != nodes::ConstructorDeclaration::Special::None) continue;
+            if (ctor_instance_self_kind(I) == 1) continue;
+            m_ctor_insts.push_back(I);
         }
     }
 
@@ -317,6 +346,8 @@ void CppEmitter::collect(const std::vector<CodegenUnit>& units) {
             if (member.node->kind == K::DestructorDeclaration) collect_locals(static_cast<nodes::DestructorDeclaration*>(member.node)->m_body, r->env);
         }
     }
+
+    for (Inst* I : m_ctor_insts) collect_locals(static_cast<nodes::ConstructorDeclaration*>(I->decl)->m_body, I);
 
     order_records();
 }
@@ -344,6 +375,7 @@ auto CppEmitter::owner_record_of(Sym* s) -> RecordInfo* {
             return it == m_record_by_sym.end() ? nullptr : it->second;
         }
         if (sc->kind == semantics::Scope::Kind::Function) return nullptr;
+        if (sc->kind == semantics::Scope::Kind::Template && sc->node && sc->node->kind == K::TemplateDeclaration) return nullptr;
     }
     return nullptr;
 }
@@ -361,11 +393,41 @@ void CppEmitter::order_records() {
             if (RecordInfo* b = record_info_of(m_types.canonicalize(*info))) visit(b);
         }
 
+        if (r->native && r->inst) {
+            for (const semantics::TemplateArg& a : r->inst->args) {
+                if (a.is_type && a.type) for (RecordInfo* dep : value_dependencies(a.type)) visit(dep);
+            }
+        }
+
         for (const auto& member : r->decl->get_members()) {
             if (!member.node || member.node->kind != K::VariableDeclaration) continue;
             auto* v = static_cast<nodes::VariableDeclaration*>(member.node);
             if (v->get_type_info().modifiers.has(RM::Static)) continue;
             for (RecordInfo* dep : value_dependencies(m_types.canonicalize(v->get_type_info()))) visit(dep);
+        }
+
+        if (r->native) {
+            auto soft = [&](Type* t) {
+                t = m_types.strip_cv(t);
+                if (t && t->is_reference()) t = m_types.strip_cv(static_cast<semantics::ReferenceType*>(t)->referent());
+                for (RecordInfo* dep : value_dependencies(t)) {
+                    if (dep != r && state[dep] == 0) visit(dep);
+                }
+            };
+            for (const auto& member : r->decl->get_members()) {
+                nodes::ASTNode* n = member.node;
+                if (!n || (n->kind != K::FunctionDeclaration && n->kind != K::OperatorFunctionDeclaration)) continue;
+                Sym* fs = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->symbol : static_cast<nodes::OperatorFunctionDeclaration*>(n)->symbol;
+                const bool lazy = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->lazy_untyped : static_cast<nodes::OperatorFunctionDeclaration*>(n)->lazy_untyped;
+                const bool used = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->native_used : static_cast<nodes::OperatorFunctionDeclaration*>(n)->native_used;
+                if (!fs || lazy || !used) continue;
+                soft(return_type_of(fs));
+                if (const nodes::FunctionParameters* ps = params_of(n)) {
+                    for (nodes::FunctionParameter* p : ps->m_params) {
+                        if (p) soft(m_types.canonicalize(p->get_type()));
+                    }
+                }
+            }
         }
 
         st = 2;
@@ -445,6 +507,11 @@ std::string CppEmitter::mangle_args(const std::vector<semantics::TemplateArg>& a
         if (a.is_type) out += type_mangle(a.type);
         else if (a.value) out += "v" + sanitize(a.value->to_string());
         else if (a.fvalue) { std::ostringstream os; os << *a.fvalue; out += "f" + sanitize(os.str()); }
+        else if (a.svalue) {
+            static const char* hex = "0123456789abcdef";
+            out += "s";
+            for (unsigned char c : *a.svalue) { out += hex[c >> 4]; out += hex[c & 15]; }
+        }
     }
     return out;
 }
@@ -541,6 +608,7 @@ std::string CppEmitter::function_name(const Sym* fn) {
 }
 
 std::string CppEmitter::global_var_name(const Sym* s) {
+    if (m_track_globals && s) m_used_globals.insert(s);
     if (auto it = m_name_cache.find(s); it != m_name_cache.end()) return it->second;
     std::string n = unique_global("g_" + sanitize(qualified_name(s)));
     m_name_cache[s] = n;
@@ -603,6 +671,7 @@ std::string CppEmitter::cpp_type(Type* t, const nodes::ASTNode* at) {
         }
         case semantics::TypeKind::Enum:      return cv + enum_name(static_cast<semantics::EnumType*>(t)->decl());
         case semantics::TypeKind::Null:      return "std::nullptr_t";
+        case semantics::TypeKind::SpecialValue: return "walnut_rt::special_value";
         case semantics::TypeKind::Closure:   return "auto";
         case semantics::TypeKind::Coroutine: {
             auto* c = static_cast<semantics::CoroutineType*>(t);
@@ -617,7 +686,7 @@ std::string CppEmitter::cpp_type(Type* t, const nodes::ASTNode* at) {
         }
         case semantics::TypeKind::Variant: {
             auto* v = static_cast<semantics::VariantType*>(t);
-            std::string s = "std::variant<";
+            std::string s = cv + "std::variant<";
             for (std::size_t i = 0; i < v->alternatives().size(); ++i) { if (i) s += ", "; s += cpp_type(v->alternatives()[i], at); }
             return s + ">";
         }
@@ -652,6 +721,8 @@ std::string CppEmitter::convert(const std::string& code, Type* from, Type* to, c
 
     auto* fb = as_builtin(f);
     auto* tb = as_builtin(t);
+
+    if (f->is_special_value() && tb) return "walnut_rt::cast<" + cpp_type(t, at) + ">(" + code + ")";
 
     if (fb && tb) {
         if ((fb->base() == BK::String || fb->base() == BK::Text) && (tb->base() == BK::String || tb->base() == BK::Text)) return code;
@@ -761,6 +832,7 @@ std::string CppEmitter::folded_or(nodes::VariableDeclaration* v, Type* t, bool p
 }
 
 std::string CppEmitter::conv(nodes::ASTNode* n, Type* to, const nodes::ASTNode* at) {
+    if (n && n->kind == K::BraceInitializerList) return brace_list(static_cast<nodes::BraceInitializerList*>(n), to, at);
     Type* t = value_type(to);
     auto* tb = as_builtin(t);
 
@@ -827,7 +899,26 @@ std::string CppEmitter::constant_value_code(const semantics::ConstValue& v, Type
         os << *v.f;
         return float_literal(os.str(), vt, at);
     }
+    if (v.is_special()) {
+        if (vt && vt->is_builtin()) return "walnut_rt::cast<" + cpp_type(vt, at) + ">(" + special_code(v.sp) + ")";
+        return special_code(v.sp);
+    }
+    if (v.is_string()) {
+        if (vt && vt->is_builtin() && as_builtin(vt)->base() == BK::Text) return cpp_type(vt, at) + "(" + cpp_string_literal(*v.s) + ")";
+        return cpp_string_literal(*v.s);
+    }
     return "0";
+}
+
+std::string CppEmitter::special_code(semantics::SpecialKind k) {
+    switch (k) {
+        case semantics::SpecialKind::PosInf:        return "walnut_rt::special_value(walnut_rt::special_kind::pos_inf)";
+        case semantics::SpecialKind::NegInf:        return "walnut_rt::special_value(walnut_rt::special_kind::neg_inf)";
+        case semantics::SpecialKind::Nan:           return "walnut_rt::special_value(walnut_rt::special_kind::nan)";
+        case semantics::SpecialKind::Undefined:     return "walnut_rt::special_value(walnut_rt::special_kind::undefined)";
+        case semantics::SpecialKind::Indeterminate: return "walnut_rt::special_value(walnut_rt::special_kind::indeterminate)";
+    }
+    return "walnut_rt::special_value()";
 }
 
 std::string CppEmitter::literal(nodes::Literal* lit) {
@@ -841,7 +932,10 @@ std::string CppEmitter::literal(nodes::Literal* lit) {
             return int_literal(*v.i, t, lit);
         }
         case TK::Float:          return float_literal(tokenizing::parse_numeric_literal(lit->value).body, t, lit);
-        case TK::InfinityKeyword: return "walnut_rt::cast<" + cpp_type(t, lit) + ">(walnut_rt::f2048(std::string(\"inf\")))";
+        case TK::InfinityKeyword:      return special_code(semantics::SpecialKind::PosInf);
+        case TK::NanKeyword:           return special_code(semantics::SpecialKind::Nan);
+        case TK::UndefinedKeyword:     return special_code(semantics::SpecialKind::Undefined);
+        case TK::IndeterminateKeyword: return special_code(semantics::SpecialKind::Indeterminate);
         case TK::True:           return "true";
         case TK::False:          return "false";
         case TK::NullptrKeyword: return "nullptr";
@@ -888,6 +982,7 @@ std::string CppEmitter::symbol_ref(Sym* s, const nodes::ASTNode* at) {
                 const bool is_static = (s->decl && s->decl->kind == K::VariableDeclaration && static_cast<nodes::VariableDeclaration*>(s->decl)->get_type_info().modifiers.has(RM::Static))
                                     || (s->decl && s->decl->kind == K::ArrayDeclaration && static_cast<nodes::ArrayDeclaration*>(s->decl)->get_array_modifiers().has(RM::Static));
                 if (is_static && r) return r->cname + "::" + local_name(s->name);
+                if (is_lazy_field(s)) return "this->lz_" + local_name(s->name) + "()";
                 return "this->" + local_name(s->name);
             }
 
@@ -991,7 +1086,14 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
             Type* to = type_of(e);
             using CK = nodes::CastExpression::CastKind;
             if (c->cast_kind == CK::Is || c->cast_kind == CK::As) return type_test(c);
-            if (c->cast_kind == CK::Reinterpret) return "reinterpret_cast<" + cpp_type(to, e) + ">(" + expr(c->operand) + ")";
+            if (c->interpolation) return interpolated_text(c);
+            if (c->cast_kind == CK::Reinterpret) {
+                Type* from_t = value_type(type_of(c->operand));
+                Type* to_t = value_type(to);
+                if (from_t && from_t->is_pointer() && to_t && to_t->is_builtin()) return "walnut_rt::from_native<" + cpp_type(to_t, e) + ">(static_cast<long long>(reinterpret_cast<std::intptr_t>(" + expr(c->operand) + ")))";
+                if (to_t && to_t->is_pointer() && from_t && from_t->is_builtin()) return "reinterpret_cast<" + cpp_type(to, e) + ">(static_cast<std::intptr_t>(walnut_rt::to_native<long long>(" + expr(c->operand) + ")))";
+                return "reinterpret_cast<" + cpp_type(to, e) + ">(" + expr(c->operand) + ")";
+            }
             if (c->cast_kind == CK::Const)       return "const_cast<" + cpp_type(m_types.canonicalize(c->get_target()), e) + ">(" + expr(c->operand) + ")";
             if (c->cast_kind == CK::Dynamic)     return "dynamic_cast<" + cpp_type(m_types.canonicalize(c->get_target()), e) + ">(" + expr(c->operand) + ")";
             if (c->cast_kind == CK::Static) {
@@ -1082,6 +1184,11 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
             semantics::ConstValue v = m_eval.eval(e);
             if (v.ok()) return constant_value_code(v, type_of(e), e);
 
+            if ((q->op == nodes::TypeQueryExpression::Op::Sizeof || q->op == nodes::TypeQueryExpression::Op::Alignof) && q->queried) {
+                Type* qt = m_types.strip_cv(m_types.apply_subst(q->queried));
+                if (qt && !qt->is_dependent()) return "walnut_rt::from_native<" + cpp_type(value_type(type_of(e)), e) + ">(" + (q->op == nodes::TypeQueryExpression::Op::Sizeof ? "sizeof(" : "alignof(") + cpp_type(qt, e) + "))";
+            }
+
             if (q->op == nodes::TypeQueryExpression::Op::Countof && q->operand) {
                 std::string target;
                 if (q->operand->is_value()) target = expr(q->operand->value);
@@ -1096,6 +1203,11 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
         case K::TemplateInstantiation: {
             semantics::ConstValue v = m_eval.eval(e);
             if (v.ok()) return constant_value_code(v, type_of(e), e);
+            if (const int cr = static_cast<nodes::TemplateInstantiation*>(e)->concept_result; cr >= 0) return cr ? "true" : "false";
+            if (Sym* vi = static_cast<nodes::TemplateInstantiation*>(e)->var_instance) {
+                if (RecordInfo* r = owner_record_of(vi)) return r->cname + "::" + function_name(vi) + "()";
+                return function_name(vi) + "()";
+            }
             unsupported(e, "a template instantiation used as a value");
             return "0";
         }
@@ -1279,6 +1391,35 @@ bool CppEmitter::has_effects(const nodes::ASTNode* n) {
     }
 }
 
+bool CppEmitter::is_temporary_value(nodes::ASTNode* e) {
+    if (!e) return false;
+    if (e->kind != K::CallExpression && e->kind != K::BinaryExpression && e->kind != K::CastExpression) return false;
+    Type* t = type_of(e);
+    return t && !t->is_reference() && (value_type(t) && (value_type(t)->is_record() || value_type(t)->is_array()));
+}
+
+int CppEmitter::borrow_bit(nodes::ASTNode* e) {
+    nodes::ASTNode* at = e;
+
+    for (int depth = 0; at && depth < 64; ++depth) {
+        nodes::ASTNode* object = nullptr;
+        if (at->kind == K::SubscriptExpression) object = static_cast<nodes::SubscriptExpression*>(at)->m_array;
+        else if (at->kind == K::MemberAccessExpression && !static_cast<nodes::MemberAccessExpression*>(at)->is_arrow() && !static_cast<nodes::MemberAccessExpression*>(at)->is_scope()) object = static_cast<nodes::MemberAccessExpression*>(at)->m_object;
+        else if (at->kind == K::CallExpression && static_cast<nodes::CallExpression*>(at)->m_callee && static_cast<nodes::CallExpression*>(at)->m_callee->kind == K::MemberAccessExpression) {
+            auto* m = static_cast<nodes::MemberAccessExpression*>(static_cast<nodes::CallExpression*>(at)->m_callee);
+            if (m->is_arrow() || m->is_scope()) return 0;
+            Type* rt = type_of(at);
+            if (!rt || !rt->is_reference()) return 0;
+            object = m->m_object;
+        }
+        if (!object) return 0;
+        if (is_temporary_value(object)) return 8;
+        at = object;
+    }
+
+    return 0;
+}
+
 std::string CppEmitter::invoke(const std::string& target, const std::vector<std::string>& codes, const std::vector<int>& classes) {
     std::size_t impure = 0, reads = 0;
     for (int c : classes) { if ((c & 3) == 2) ++impure; if ((c & 3) >= 1) ++reads; }
@@ -1296,7 +1437,7 @@ std::string CppEmitter::invoke(const std::string& target, const std::vector<std:
 
     for (std::size_t i = 0; i < codes.size(); ++i) {
         const std::string name = "walnut_a" + std::to_string(m_temp++);
-        const bool by_ref = i < classes.size() && (classes[i] & 4);
+        const bool by_ref = i < classes.size() && (classes[i] & 4) && !(classes[i] & 8);
         if (i) call += ", ";
 
         if (by_ref) {
@@ -1357,13 +1498,26 @@ std::string CppEmitter::call_operator_symbol(Sym* op, const std::vector<nodes::A
 }
 
 std::string CppEmitter::pass_arg(nodes::ASTNode* arg, Type* param, const nodes::ASTNode* at) {
+    if (arg && arg->kind == K::BraceInitializerList) return brace_list(static_cast<nodes::BraceInitializerList*>(arg), param, at);
     if (param && param->is_reference()) {
         auto* r = static_cast<semantics::ReferenceType*>(param);
         Type* referent = m_types.strip_cv(r->referent());
         Type* from = value_type(type_of(arg));
-        if (from == referent) return expr(arg);
+
+        if (from == referent) {
+            std::string code = expr(arg);
+            const bool pooled = code.size() > 2 && code.compare(0, 2, "k_") == 0 && code.find_first_not_of("0123456789", 2) == std::string::npos;
+            if (pooled && r->ref_qual() == semantics::RefQual::RValue) return cpp_type(referent, at) + "(" + code + ")";
+            return code;
+        }
+
         if (referent && referent->is_array() && !static_cast<semantics::ArrayType*>(referent)->extent()) return expr(arg);
-        if (from && referent && from->is_record() && referent->is_record()) return expr(arg);
+        if (from && referent && from->is_record() && referent->is_record()) {
+            Sym* chosen = nullptr;
+            const bool derived = semantics::rank_conversion(m_types.pointer(from, semantics::CV{}), m_types.pointer(referent, semantics::CV{}), m_types) != semantics::ConversionRank::None;
+            if (!derived && semantics::rank_user_defined(from, referent, m_types, true, &chosen) != semantics::ConversionRank::None && chosen) return convert(expr(arg), from, referent, at);
+            return expr(arg);
+        }
         return convert(expr(arg), from, referent, at);
     }
     return conv(arg, param, at);
@@ -1403,6 +1557,9 @@ std::string CppEmitter::binary(nodes::BinaryExpression* b) {
 
     if (b->op == TK::Equal) {
         Type* lt = type_of(b->left);
+        Sym* ls = b->left && b->left->kind == K::Identifier ? static_cast<nodes::Identifier*>(b->left)->resolved
+                : b->left && b->left->kind == K::MemberAccessExpression && !static_cast<nodes::MemberAccessExpression*>(b->left)->is_scope() ? static_cast<nodes::MemberAccessExpression*>(b->left)->resolved : nullptr;
+        if (is_lazy_field(ls)) return "(" + lazy_prefix(b->left) + "lz_set_" + local_name(ls->name) + "(" + conv(b->right, value_type(lt), b) + "))";
         return "(" + expr(b->left) + " = " + conv(b->right, lt, b) + ")";
     }
 
@@ -1472,6 +1629,10 @@ std::string CppEmitter::unary(nodes::UnaryExpression* u) {
 }
 
 std::string CppEmitter::subscript(nodes::SubscriptExpression* s) {
+    if (s->pack_element) {
+        if (s->m_array && s->m_array->kind == K::MemberAccessExpression) return member_object(static_cast<nodes::MemberAccessExpression*>(s->m_array)) + local_name(s->pack_element->name);
+        return symbol_ref(s->pack_element, s);
+    }
     if (s->resolved) return call_operator_symbol(s->resolved, { s->m_array, s->m_index }, s);
     Type* at = value_type(type_of(s->m_array));
     if (is_string_t(at)) return "walnut_rt::char_at(" + expr(s->m_array) + ", " + expr(s->m_index) + ")";
@@ -1497,7 +1658,15 @@ std::string CppEmitter::member_access(nodes::MemberAccessExpression* m) {
         if (RecordInfo* r = owner_record_of(s)) return r->cname + "::" + local_name(s->name);
     }
 
+    if (is_lazy_field(s)) return lazy_prefix(m) + "lz_" + local_name(s->name) + "()";
+    if (RecordInfo* q = qualifier_record(m)) return member_object(m) + q->cname + "::" + local_name(s->name);
     return member_object(m) + local_name(s->name);
+}
+
+auto CppEmitter::qualifier_record(const nodes::MemberAccessExpression* m) -> RecordInfo* {
+    if (!m->qualifier_scope || !m->qualifier_scope->owner_symbol) return nullptr;
+    auto it = m_record_by_sym.find(m->qualifier_scope->owner_symbol);
+    return it == m_record_by_sym.end() ? nullptr : it->second;
 }
 
 std::string CppEmitter::member_object(nodes::MemberAccessExpression* m) {
@@ -1519,7 +1688,7 @@ void CppEmitter::call_arg_parts(Sym* fn, const std::vector<nodes::ASTNode*>& arg
     for (std::size_t i = 0; i < n; ++i) {
         if (i < args.size()) {
             codes.push_back(i < params.size() ? pass_arg(args[i], params[i], at) : expr(args[i]));
-            classes.push_back(effect_class(args[i]) | ((i < params.size() && params[i] && params[i]->is_reference()) ? 4 : 0));
+            classes.push_back(effect_class(args[i]) | ((i < params.size() && params[i] && params[i]->is_reference()) ? 4 : 0) | borrow_bit(args[i]));
         } else if (ps && i < ps->m_params.size() && ps->m_params[i]->has_initializer()) {
             nodes::ASTNode* d = const_cast<nodes::ASTNode*>(ps->m_params[i]->get_initializer());
             codes.push_back(conv(d, params[i], at));
@@ -1591,7 +1760,7 @@ void CppEmitter::grouped_arg_parts(const std::vector<ParamSlot>& slots, const st
 
         if (took && a < args.size()) {
             codes.push_back(pass_arg(args[a], s.type, at));
-            classes.push_back(effect_class(args[a]) | ((s.type && s.type->is_reference()) ? 4 : 0));
+            classes.push_back(effect_class(args[a]) | ((s.type && s.type->is_reference()) ? 4 : 0) | borrow_bit(args[a]));
             ++a;
         } else if (s.param && s.param->has_initializer()) {
             nodes::ASTNode* d = const_cast<nodes::ASTNode*>(s.param->get_initializer());
@@ -1652,7 +1821,7 @@ void CppEmitter::function_value_args(const semantics::FunctionType* ft, const st
 
         if (took && a < args.size()) {
             codes.push_back(pass_arg(args[a], pt, at));
-            classes.push_back(effect_class(args[a]) | ((pt && pt->is_reference()) ? 4 : 0));
+            classes.push_back(effect_class(args[a]) | ((pt && pt->is_reference()) ? 4 : 0) | borrow_bit(args[a]));
             ++a;
         } else if (def) {
             codes.push_back(default_code(def, pt, at));
@@ -1686,7 +1855,7 @@ std::string CppEmitter::aggregate_args(Type* t, const std::vector<nodes::ASTNode
         for (const auto& member : r->decl->get_members()) {
             if (!member.node || member.node->kind != K::VariableDeclaration) continue;
             auto* v = static_cast<nodes::VariableDeclaration*>(member.node);
-            if (v->get_type_info().modifiers.has(RM::Static)) continue;
+            if (v->get_type_info().modifiers.has(RM::Static) || is_lazy_decl(v)) continue;
             fields.push_back(m_types.canonicalize(v->get_type_info()));
         }
     }
@@ -1699,7 +1868,24 @@ std::string CppEmitter::aggregate_args(Type* t, const std::vector<nodes::ASTNode
     return out;
 }
 
+std::string CppEmitter::builtin_method_call(nodes::CallExpression* c) {
+    auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
+    const std::string_view name = c->builtin_method;
+    std::string obj = expr(m->m_object);
+    if (m->is_arrow()) obj = "(*" + obj + ")";
+
+    if (name == "sizeof[]") return "walnut_rt::bm::byte_size(" + obj + ", " + std::to_string(c->builtin_size) + "LL)";
+    if (c->builtin_size >= 0) return "walnut_rt::i32(" + std::to_string(c->builtin_size) + "LL)";
+    if (name == "sizeof") return "walnut_rt::bm::byte_size(" + obj + ")";
+    if (name == "to_string" || name == "to_text") return "walnut_rt::to_display(" + obj + ")";
+
+    std::string out = "walnut_rt::bm::" + std::string(name) + "(" + obj;
+    for (nodes::ASTNode* a : c->m_arguments) out += ", " + expr(a);
+    return out + ")";
+}
+
 std::string CppEmitter::call(nodes::CallExpression* c) {
+    if (!c->builtin_method.empty()) return builtin_method_call(c);
     Sym* fn = c->resolved;
 
     if (fn && fn->decl && fn->decl->kind == K::ConstructorDeclaration) {
@@ -1719,7 +1905,7 @@ std::string CppEmitter::call(nodes::CallExpression* c) {
             Sym* cs = nullptr;
             if (c->m_callee->kind == K::Identifier) cs = static_cast<nodes::Identifier*>(c->m_callee)->resolved;
             if (c->m_callee->kind == K::QualifiedIdentifier) cs = static_cast<nodes::QualifiedIdentifier*>(c->m_callee)->resolved;
-            if (!cs || cs->kind == SK::Type || cs->kind == SK::TemplateParam || c->m_callee->kind == K::TemplateInstantiation) {
+            if (!cs || cs->kind == SK::Type || cs->kind == SK::TemplateParam || cs->kind == SK::TypeAlias || c->m_callee->kind == K::TemplateInstantiation) {
                 std::vector<std::string> codes;
                 std::vector<int> classes;
                 for (nodes::ASTNode* a : c->m_arguments) { codes.push_back(conv(a, t, c)); classes.push_back(effect_class(a)); }
@@ -1737,7 +1923,7 @@ std::string CppEmitter::call(nodes::CallExpression* c) {
             for (std::size_t i = 0; i < c->m_arguments.size(); ++i) {
                 Type* pt = (ps && i < ps->m_params.size()) ? m_types.canonicalize(ps->m_params[i]->get_type()) : nullptr;
                 codes.push_back(pt ? pass_arg(c->m_arguments[i], pt, c) : expr(c->m_arguments[i]));
-                classes.push_back(effect_class(c->m_arguments[i]) | ((pt && pt->is_reference()) ? 4 : 0));
+                classes.push_back(effect_class(c->m_arguments[i]) | ((pt && pt->is_reference()) ? 4 : 0) | borrow_bit(c->m_arguments[i]));
             }
             return invoke("(" + expr(c->m_callee) + ")", codes, classes);
         }
@@ -1756,8 +1942,13 @@ std::string CppEmitter::call(nodes::CallExpression* c) {
         }
 
         if (ct && (ct->kind() == semantics::TypeKind::Function || is_record_t(ct))) {
+            const std::vector<Type*>* pts = ct->kind() == semantics::TypeKind::Function ? &static_cast<semantics::FunctionType*>(ct)->params() : nullptr;
             std::string out = "(" + expr(c->m_callee) + ")(";
-            for (std::size_t i = 0; i < c->m_arguments.size(); ++i) { if (i) out += ", "; out += expr(c->m_arguments[i]); }
+            for (std::size_t i = 0; i < c->m_arguments.size(); ++i) {
+                if (i) out += ", ";
+                Type* pt = (pts && i < pts->size()) ? (*pts)[i] : nullptr;
+                out += (pt && !pt->is_dependent() && !is_dynamic(pt)) ? pass_arg(c->m_arguments[i], pt, c) : expr(c->m_arguments[i]);
+            }
             return out + ")";
         }
 
@@ -1780,12 +1971,24 @@ std::string CppEmitter::call(nodes::CallExpression* c) {
     if (owner) {
         const bool is_static = fn->decl && fn->decl->kind == K::FunctionDeclaration && static_cast<nodes::FunctionDeclaration*>(fn->decl)->get_modifiers().has(RM::Static);
 
+        std::string_view qualifier;
+        if (c->m_callee->kind == K::QualifiedIdentifier) {
+            const auto& parts = static_cast<nodes::QualifiedIdentifier*>(c->m_callee)->parts();
+            if (parts.size() >= 2) qualifier = parts[parts.size() - 2];
+        } else if (c->m_callee->kind == K::MemberAccessExpression) {
+            auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
+            if (m->is_scope() && m->m_object && m->m_object->kind == K::Identifier) qualifier = static_cast<nodes::Identifier*>(m->m_object)->get_name();
+        }
+        RecordInfo* via = is_static ? nullptr : named_direct_base(m_current_record, qualifier);
+        const std::string scope_name = via ? via->cname : owner->cname;
+
         if (c->m_callee->kind == K::MemberAccessExpression) {
             auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
-            if (m->is_scope() || is_static) target = owner->cname + "::" + function_name(fn);
+            if (m->is_scope() || is_static) target = scope_name + "::" + function_name(fn);
+            else if (RecordInfo* q = qualifier_record(m)) target = member_object(m) + q->cname + "::" + function_name(fn);
             else target = member_object(m) + function_name(fn);
         } else if (is_static || c->m_callee->kind == K::QualifiedIdentifier) {
-            target = owner->cname + "::" + function_name(fn);
+            target = scope_name + "::" + function_name(fn);
         } else {
             target = "this->" + function_name(fn);
         }
@@ -1853,6 +2056,8 @@ std::string CppEmitter::lambda(nodes::LambdaExpression* l) {
     m_indent = 0;
     std::vector<LoopLabel> saved_loops;
     saved_loops.swap(m_loops);
+    LoopLabel* saved_next_loop = m_next_loop;
+    m_next_loop = nullptr;
     const bool async = l->get_qualifiers().has(FQ::Async);
     Type* body_ret = ret;
     if (async && value_type(ret) && value_type(ret)->kind() == semantics::TypeKind::Coroutine) body_ret = static_cast<semantics::CoroutineType*>(value_type(ret))->value();
@@ -1867,6 +2072,7 @@ std::string CppEmitter::lambda(nodes::LambdaExpression* l) {
     }
 
     m_loops.swap(saved_loops);
+    m_next_loop = saved_next_loop;
     m_indent = saved_indent;
     m_current_return = saved;
     m_yield_type = saved_yield;
@@ -1874,14 +2080,43 @@ std::string CppEmitter::lambda(nodes::LambdaExpression* l) {
 }
 
 void CppEmitter::loop_body(std::ostream& os, nodes::ASTNode* body) {
-    m_loops.push_back(LoopLabel{ "walnut_redo_" + std::to_string(m_temp++) });
+    LoopLabel entry;
+    entry.name = "walnut_redo_" + std::to_string(m_temp++);
+    LoopLabel* origin = m_next_loop;
+    m_next_loop = nullptr;
+
+    if (origin) {
+        entry.label = origin->label;
+        entry.cont  = origin->cont;
+        entry.brk   = origin->brk;
+    }
+
+    m_loops.push_back(entry);
     std::ostringstream tmp;
     block(tmp, body);
     LoopLabel done = m_loops.back();
     m_loops.pop_back();
     std::string text = tmp.str();
     if (done.used) text.insert(2, pad() + "    " + done.name + ":;\n");
+    if (done.cont_used) text = "{ " + text + " " + done.cont + ":; }";
+    if (origin) origin->brk_used = done.brk_used;
     os << text;
+}
+
+std::string_view CppEmitter::loop_label_of(const nodes::ASTNode* s) {
+    if (!s) return {};
+    switch (s->kind) {
+        case K::WhileStatement:   return static_cast<const nodes::WhileStatement*>(s)->label;
+        case K::DoWhileStatement: return static_cast<const nodes::DoWhileStatement*>(s)->label;
+        case K::ForStatement:     return static_cast<const nodes::ForStatement*>(s)->label;
+        case K::ForEachStatement: return static_cast<const nodes::ForEachStatement*>(s)->label;
+        default:                  return {};
+    }
+}
+
+CppEmitter::LoopLabel* CppEmitter::labelled_loop(std::string_view label) {
+    for (auto it = m_loops.rbegin(); it != m_loops.rend(); ++it) if (it->label == label) return &*it;
+    return nullptr;
 }
 
 bool CppEmitter::is_hoisted_function(const nodes::ASTNode* s) {
@@ -1909,20 +2144,30 @@ std::string CppEmitter::param_type_list(const nodes::FunctionParameters* ps, con
 }
 
 void CppEmitter::nested_function(std::ostream& os, nodes::FunctionDeclaration* fd) {
-    Sym* fs = fd->symbol;
-    if (!fs || !fd->has_body()) return;
     if (fd->get_modifiers().has(RM::Static) || fd->qualifiers().has_any(FQ::Virtual | FQ::Override)) { fail_at(fd, "a function declared inside another function cannot be static or virtual"); return; }
+    nested_callable(os, fd, fd->symbol, fd->get_parameters(), fd->has_body() ? fd->get_body() : nullptr, fd->qualifiers().has(FQ::Async));
+}
+
+void CppEmitter::nested_operator(std::ostream& os, nodes::OperatorFunctionDeclaration* od) {
+    if (od->is_conversion()) { fail_at(od, "a conversion operator can't be declared inside a function"); return; }
+    nested_callable(os, od, od->symbol, od->get_parameters(), od->has_body() ? od->get_body() : nullptr, od->qualifiers().has(FQ::Async));
+}
+
+void CppEmitter::nested_callable(std::ostream& os, nodes::ASTNode* at, Sym* fs, const nodes::FunctionParameters* params, nodes::ASTNode* body, bool async) {
+    if (!fs || !body) return;
     const std::string name = function_name(fs);
     Type* ret = return_type_of(fs);
-    const bool async = fd->qualifiers().has(FQ::Async);
-    const std::string rt = async ? "walnut_rt::task<" + cpp_type(ret, fd) + ">" : cpp_type(ret, fd);
-    os << pad() << "std::function<" << rt << "(" << param_type_list(fd->get_parameters(), fd) << ")> " << name << ";\n";
-    os << pad() << name << " = [&](" << param_list(fd->get_parameters(), fd) << ") -> " << rt << " ";
+    const std::string rt = async ? "walnut_rt::task<" + cpp_type(ret, at) + ">" : cpp_type(ret, at);
+    os << pad() << "std::function<" << rt << "(" << param_type_list(params, at) << ")> " << name << ";\n";
+    os << pad() << name << " = [&](" << param_list(params, at) << ") -> " << rt << " ";
     std::vector<LoopLabel> saved_loops;
     saved_loops.swap(m_loops);
-    callable_body(os, fd->get_body(), ret, async, "=", false);
+    LoopLabel* saved_next_loop = m_next_loop;
+    m_next_loop = nullptr;
+    callable_body(os, body, ret, async, "=", false);
     os << ";\n";
     m_loops.swap(saved_loops);
+    m_next_loop = saved_next_loop;
 }
 
 void CppEmitter::block(std::ostream& os, nodes::ASTNode* b) {
@@ -1947,7 +2192,7 @@ void CppEmitter::field_names(RecordInfo* r, std::vector<std::string>& out, int d
     for (const auto& member : r->decl->get_members()) {
         nodes::ASTNode* n = member.node;
         if (!n) continue;
-        if (n->kind == K::VariableDeclaration && !static_cast<nodes::VariableDeclaration*>(n)->get_type_info().modifiers.has(RM::Static)) out.push_back(local_name(static_cast<nodes::VariableDeclaration*>(n)->get_name()));
+        if (n->kind == K::VariableDeclaration && !static_cast<nodes::VariableDeclaration*>(n)->get_type_info().modifiers.has(RM::Static) && !is_lazy_decl(n)) out.push_back(local_name(static_cast<nodes::VariableDeclaration*>(n)->get_name()));
         if (n->kind == K::ArrayDeclaration && !static_cast<nodes::ArrayDeclaration*>(n)->get_array_modifiers().has(RM::Static)) out.push_back(local_name(static_cast<nodes::ArrayDeclaration*>(n)->m_name));
     }
 }
@@ -2014,7 +2259,28 @@ std::string CppEmitter::brace_list(nodes::BraceInitializerList* list, Type* targ
     Type* t = value_type(target);
     Type* el = nullptr;
     if (t && t->is_array()) el = static_cast<semantics::ArrayType*>(t)->element();
+    if (t && t->is_record() && !el && list->ctor && list->init_list_type) {
+        Type* il = list->init_list_type;
+        Type* item = nullptr;
+        if (il->is_record() && static_cast<semantics::RecordType*>(il)->args().size() == 1) item = static_cast<semantics::RecordType*>(il)->args()[0].type;
+        std::string inner;
+        if (list->init_list_ctor) {
+            inner = invoke_with_args(cpp_type(il, at), list->init_list_ctor, list->m_elements, at);
+        } else {
+            inner = cpp_type(il, at) + "(std::vector<" + cpp_type(item, at) + ">{";
+            for (std::size_t i = 0; i < list->m_elements.size(); ++i) {
+                if (i) inner += ", ";
+                nodes::ASTNode* x = list->m_elements[i];
+                inner += x->kind == K::BraceInitializerList ? brace_list(static_cast<nodes::BraceInitializerList*>(x), item, at) : conv(x, item, at);
+            }
+            inner += "})";
+        }
+        return cpp_type(t, at) + "(" + inner + ")";
+    }
+    if (t && t->is_record() && !el && list->ctor) return invoke_with_args(cpp_type(t, at), list->ctor, list->m_elements, at);
     if (t && t->is_record() && !el) return cpp_type(t, at) + "{" + aggregate_args(t, list->m_elements, at) + "}";
+    if (t && !t->is_array() && !is_dynamic(t) && list->m_elements.size() == 1 && list->m_elements.front()->kind != K::BraceInitializerList) return conv(list->m_elements.front(), t, at);
+    if (t && !t->is_array() && !is_dynamic(t) && list->m_elements.empty()) return cpp_type(t, at) + "{}";
     const bool fixed = t && t->is_array() && static_cast<semantics::ArrayType*>(t)->extent();
     std::string out = fixed ? "{{" : "{";
     for (std::size_t i = 0; i < list->m_elements.size(); ++i) {
@@ -2171,6 +2437,25 @@ void CppEmitter::line_reset(std::ostream& os) {
 }
 
 void CppEmitter::statement(std::ostream& os, nodes::ASTNode* s) {
+    const std::string_view label = loop_label_of(s);
+
+    if (label.empty()) {
+        statement_body(os, s);
+        return;
+    }
+
+    const std::string id = std::to_string(m_temp++);
+    LoopLabel names;
+    names.label = label;
+    names.cont  = "walnut_continue_" + id;
+    names.brk   = "walnut_break_" + id;
+    m_next_loop = &names;
+    statement_body(os, s);
+    m_next_loop = nullptr;
+    if (names.brk_used) os << pad() << names.brk << ":;\n";
+}
+
+void CppEmitter::statement_body(std::ostream& os, nodes::ASTNode* s) {
     if (!s) return;
     line_marker(os, s);
 
@@ -2199,6 +2484,15 @@ void CppEmitter::statement(std::ostream& os, nodes::ASTNode* s) {
 
         case K::CoReturnStatement:
             os << pad() << "co_return;\n";
+            break;
+
+        case K::InvalidateStatement:
+            for (nodes::ASTNode* t : static_cast<nodes::InvalidateStatement*>(s)->targets) {
+                Sym* ts = t->kind == K::Identifier ? static_cast<nodes::Identifier*>(t)->resolved
+                        : t->kind == K::MemberAccessExpression ? static_cast<nodes::MemberAccessExpression*>(t)->resolved : nullptr;
+                if (!is_lazy_field(ts)) { fail_at(t, "'invalidate' needs a lazy field"); continue; }
+                os << pad() << lazy_prefix(t) << local_name(ts->name) << ".reset(\"" << ts->name << "\");\n";
+            }
             break;
 
         case K::ReturnStatement: {
@@ -2247,6 +2541,40 @@ void CppEmitter::statement(std::ostream& os, nodes::ASTNode* s) {
 
         case K::ForEachStatement: {
             auto* f = static_cast<nodes::ForEachStatement*>(s);
+
+            if (f->range_sym && f->it_sym && f->end_sym) {
+                Type* et = m_types.canonicalize(f->m_element_type);
+                const bool by_ref = et && et->is_reference();
+                const std::string tmp = "walnut_item_" + std::to_string(m_temp++);
+                Type* el = value_type(type_of(f->iter_get));
+                os << pad() << "{\n";
+                ++m_indent;
+                os << pad() << "auto&& " << local_name(f->range_sym->name) << " = " << expr(f->m_container) << ";\n";
+                os << pad() << "auto " << local_name(f->it_sym->name) << " = " << expr(f->begin_call) << ";\n";
+                os << pad() << "auto " << local_name(f->end_sym->name) << " = " << expr(f->end_call) << ";\n";
+                os << pad() << "for (; " << truthy(f->iter_cond) << "; " << expr(f->iter_next) << ") {\n";
+                ++m_indent;
+                os << pad() << "auto&& " << tmp << " = " << expr(f->iter_get) << ";\n";
+
+                if (f->is_structured_binding()) {
+                    const bool is_const = f->m_modifiers.has(RM::Const) || f->m_element_type.modifiers.has(RM::Const);
+                    os << pad() << binding_block(f->binding_source, f->binding_by_ref, is_const, tmp, f->binding_symbols, f) << "\n";
+                } else {
+                    if (!et) et = el;
+                    if (by_ref) os << pad() << cpp_type(et, f) << " " << local_name(f->m_var_name) << " = " << tmp << ";\n";
+                    else os << pad() << cpp_type(et, f) << " " << local_name(f->m_var_name) << " = " << (el ? convert(tmp, el, et, f) : tmp) << ";\n";
+                }
+
+                os << pad();
+                loop_body(os, f->m_body);
+                os << "\n";
+                --m_indent;
+                os << pad() << "}\n";
+                --m_indent;
+                os << pad() << "}\n";
+                break;
+            }
+
             Type* et = m_types.canonicalize(f->m_element_type);
             const bool by_ref = et && et->is_reference();
             const std::string tmp = "walnut_item_" + std::to_string(m_temp++);
@@ -2289,10 +2617,26 @@ void CppEmitter::statement(std::ostream& os, nodes::ASTNode* s) {
 
         case K::SingleStatement: {
             using V = nodes::SingleStatement::Variant;
-            switch (static_cast<nodes::SingleStatement*>(s)->variant) {
+            auto* single = static_cast<nodes::SingleStatement*>(s);
+
+            if (single->variant == V::Goto)  { os << pad() << "goto walnut_label_" << local_name(single->label) << ";\n"; break; }
+            if (single->variant == V::Label) { os << pad() << "walnut_label_" << local_name(single->label) << ":;\n"; break; }
+
+            if (!single->label.empty() && single->variant != V::Fallthrough) {
+                LoopLabel* target = labelled_loop(single->label);
+                if (!target) { fail_at(s, "no loop labelled '" + std::string(single->label) + "' around this statement"); break; }
+                if (single->variant == V::Break)    { target->brk_used = true;  os << pad() << "goto " << target->brk << ";\n"; }
+                if (single->variant == V::Continue) { target->cont_used = true; os << pad() << "goto " << target->cont << ";\n"; }
+                if (single->variant == V::Repeat)   { target->used = true;      os << pad() << "goto " << target->name << ";\n"; }
+                break;
+            }
+
+            switch (single->variant) {
                 case V::Break:       os << pad() << "break;\n"; break;
                 case V::Continue:    os << pad() << "continue;\n"; break;
                 case V::Fallthrough: break;
+                case V::Goto:
+                case V::Label:       break;
                 case V::Repeat:
                     if (m_loops.empty()) { fail_at(s, "'repeat' outside a loop"); break; }
                     m_loops.back().used = true;
@@ -2331,6 +2675,10 @@ void CppEmitter::statement(std::ostream& os, nodes::ASTNode* s) {
             nested_function(os, static_cast<nodes::FunctionDeclaration*>(s));
             break;
 
+        case K::OperatorFunctionDeclaration:
+            nested_operator(os, static_cast<nodes::OperatorFunctionDeclaration*>(s));
+            break;
+
         case K::RecordDeclaration:
         case K::EnumDeclaration:
             break;
@@ -2360,13 +2708,48 @@ std::string CppEmitter::native_type(Type* t, bool c_linkage) {
     auto* b = as_builtin(t);
     if (!b) return "void";
 
+    const unsigned bits = bit_width_of_rank(b->width());
+    if (!c_linkage && b->base() == BK::Int && bits > 64) return builtin_cpp(b, nullptr);
+    if (!c_linkage && b->base() == BK::Float && bits != 32 && bits != 64) return builtin_cpp(b, nullptr);
+
     switch (b->base()) {
-        case BK::Int:    return std::string(b->is_unsigned() ? "std::uint" : "std::int") + std::to_string(bit_width_of_rank(b->width())) + "_t";
-        case BK::Float:  return bit_width_of_rank(b->width()) == 32 ? "float" : "double";
+        case BK::Int:    return std::string(b->is_unsigned() ? "std::uint" : "std::int") + std::to_string(bits) + "_t";
+        case BK::Float:  return bits == 32 ? "float" : "double";
         case BK::Bool:   return "bool";
         case BK::Char:   return "char32_t";
         case BK::String: return c_linkage ? "const char*" : "std::string";
         default:         return "void";
+    }
+}
+
+void CppEmitter::add_native_headers(const modifiers::RawModifiers& mods, std::uint32_t file_id, std::vector<std::string>& headers) {
+    if (!mods.native_file_count()) return;
+    const bool c_linkage = mods.linkage() == modifiers::RawModifiers::Linkage::C;
+
+    for (std::uint8_t i = 0; i < mods.native_file_count(); ++i) {
+        const std::string_view file = mods.native_file(i);
+        std::string include;
+
+        if (is_system_header(file)) {
+            include = std::string(file);
+        } else {
+            if (!source_path) continue;
+            const std::filesystem::path base = std::filesystem::path(source_path(FileId(file_id))).parent_path();
+            std::error_code ec;
+            std::filesystem::path full = std::filesystem::weakly_canonical(base / std::filesystem::path(std::string(file)), ec);
+            if (ec) full = base / std::filesystem::path(std::string(file));
+            const std::string path = full.generic_string();
+
+            if (!is_native_header(classify_file(path))) {
+                if (std::find(m_native_files.begin(), m_native_files.end(), path) == m_native_files.end()) m_native_files.push_back(path);
+                continue;
+            }
+
+            include = "\"" + path + "\"";
+        }
+
+        const std::string line = c_linkage ? "extern \"C\" {\n#include " + include + "\n}\n" : "#include " + include + "\n";
+        if (std::find(headers.begin(), headers.end(), line) == headers.end()) headers.push_back(line);
     }
 }
 
@@ -2375,27 +2758,11 @@ void CppEmitter::emit_native_externs(std::ostream& decls, std::ostream& wrappers
 
     for (const Sym* s : m_native_externs) {
         auto* f = static_cast<nodes::FunctionDeclaration*>(s->decl);
-        const modifiers::RawModifiers& mods = f->get_modifiers();
-        if (!mods.native_file_count() || !source_path) continue;
-        const std::filesystem::path base = std::filesystem::path(source_path(FileId(f->file_id))).parent_path();
+        add_native_headers(f->get_modifiers(), f->file_id, headers);
+    }
 
-        for (std::uint8_t i = 0; i < mods.native_file_count(); ++i) {
-            const std::string_view file = mods.native_file(i);
-            std::error_code ec;
-            std::filesystem::path full = std::filesystem::weakly_canonical(base / std::filesystem::path(std::string(file)), ec);
-            if (ec) full = base / std::filesystem::path(std::string(file));
-            const std::string path = full.generic_string();
-            const FileKind kind = classify_file(path);
-
-            if (is_native_header(kind)) {
-                const std::string line = mods.linkage() == modifiers::RawModifiers::Linkage::C
-                    ? "extern \"C\" {\n#include \"" + path + "\"\n}\n"
-                    : "#include \"" + path + "\"\n";
-                if (std::find(headers.begin(), headers.end(), line) == headers.end()) headers.push_back(line);
-            } else if (std::find(m_native_files.begin(), m_native_files.end(), path) == m_native_files.end()) {
-                m_native_files.push_back(path);
-            }
-        }
+    for (const auto& r : m_records) {
+        if (r->native) add_native_headers(r->decl->m_mods, r->decl->file_id, headers);
     }
 
     for (const std::string& h : headers) decls << h;
@@ -2660,7 +3027,217 @@ void CppEmitter::emit_enums() {
     if (!done.empty()) m_enums << "\n";
 }
 
+std::string CppEmitter::native_record_type(RecordInfo* r) {
+    std::string name;
+
+    if (!r->decl->m_native_name.empty()) {
+        name = std::string(r->decl->m_native_name);
+    } else {
+        std::vector<std::string> ns;
+        for (const semantics::Scope* sc = r->sym ? r->sym->owner : nullptr; sc; sc = sc->parent) {
+            if (sc->owner_symbol && sc->kind == semantics::Scope::Kind::Namespace) ns.insert(ns.begin(), std::string(sc->owner_symbol->name));
+        }
+        name = "::";
+        for (const std::string& part : ns) name += part + "::";
+        name += std::string(r->decl->get_name());
+    }
+
+    if (!r->inst) return name;
+    name += "<";
+
+    for (std::size_t i = 0; i < r->inst->args.size(); ++i) {
+        const semantics::TemplateArg& a = r->inst->args[i];
+        if (i) name += ", ";
+        if (a.is_type && a.type) name += cpp_type(a.type, r->decl);
+        else if (a.value) name += a.value->to_string();
+        else fail_at(r->decl, "the C++ class '" + std::string(r->decl->get_name()) + "' can only take types and integers as template arguments");
+    }
+
+    return name + " >";
+}
+
+std::string CppEmitter::native_template_name(std::string_view name, RecordInfo* r) {
+    if (name.find('<') == std::string_view::npos || !r || !r->inst || !r->inst->source) return std::string(name);
+    const auto& params = r->inst->source->params();
+    if (params.size() != r->inst->args.size()) return std::string(name);
+    std::string out;
+    std::size_t i = 0;
+
+    while (i < name.size()) {
+        const char c = name[i];
+        const bool word = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+        if (!word) { out += c; ++i; continue; }
+        std::size_t j = i;
+        while (j < name.size() && ((name[j] >= 'a' && name[j] <= 'z') || (name[j] >= 'A' && name[j] <= 'Z') || (name[j] >= '0' && name[j] <= '9') || name[j] == '_')) ++j;
+        const std::string_view ident = name.substr(i, j - i);
+        bool replaced = false;
+
+        for (std::size_t k = 0; k < params.size(); ++k) {
+            if (!params[k] || params[k]->m_name != ident) continue;
+            const semantics::TemplateArg& a = r->inst->args[k];
+            if (a.is_type && a.type) { out += cpp_type(a.type, r->decl); replaced = true; }
+            else if (a.value) { out += a.value->to_string(); replaced = true; }
+            break;
+        }
+
+        if (!replaced) out += std::string(ident);
+        i = j;
+    }
+
+    return out;
+}
+
+bool CppEmitter::declared_is_param(const parser_types::TypeInfo& info) {
+    std::vector<const semantics::SubstEnv*> saved = m_types.suspend_subst();
+    Type* t = value_type(m_types.canonicalize(info));
+    m_types.resume_subst(std::move(saved));
+    return t && t->kind() == semantics::TypeKind::TypeParam;
+}
+
+std::string CppEmitter::native_args(const nodes::FunctionParameters* ps) {
+    std::string out;
+    if (!ps) return out;
+
+    for (const nodes::FunctionParameter* p : ps->m_params) {
+        if (p->expanded_pack) {
+            for (Sym* es : p->pack_symbols) { if (!out.empty()) out += ", "; out += local_name(es->name); }
+            continue;
+        }
+
+        if (!out.empty()) out += ", ";
+        const std::string name = local_name(p->get_name());
+
+        if (p->is_variadic()) {
+            out += name;
+            continue;
+        }
+
+        Type* pt = m_types.canonicalize(p->get_type());
+        Type* vt = value_type(pt);
+        RecordInfo* rr = record_info_of(vt);
+        auto* b = as_builtin(vt);
+        const bool moved = pt && pt->is_reference() && static_cast<semantics::ReferenceType*>(pt)->ref_qual() == semantics::RefQual::RValue;
+
+        if (rr && rr->native && !declared_is_param(p->get_type())) {
+            out += moved ? "std::move(" + name + ".native)" : name + ".native";
+        } else if (b && (b->base() == BK::Int || b->base() == BK::Float || b->base() == BK::Bool || b->base() == BK::Char) && !declared_is_param(p->get_type())) {
+            out += "walnut_rt::to_native<" + native_type(vt, false) + ">(" + name + ")";
+        } else {
+            out += moved ? "std::move(" + name + ")" : name;
+        }
+    }
+
+    return out;
+}
+
+std::string CppEmitter::native_body(const FuncInfo& f, const std::string& native_name) {
+    const nodes::FunctionParameters* ps = params_of(f.decl);
+    const std::string args = native_args(ps);
+    const modifiers::RawModifiers& mods = f.decl->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(f.decl)->get_modifiers() : static_cast<nodes::OperatorFunctionDeclaration*>(f.decl)->get_modifiers();
+    const bool is_static = mods.has(RM::Static);
+    std::string_view as = f.decl->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(f.decl)->native_name : static_cast<nodes::OperatorFunctionDeclaration*>(f.decl)->native_name;
+    std::string call;
+
+    if (f.decl->kind == K::OperatorFunctionDeclaration && as.empty()) {
+        auto* od = static_cast<nodes::OperatorFunctionDeclaration*>(f.decl);
+
+        if (od->is_conversion()) {
+            Type* ct = m_types.canonicalize(od->get_conversion_type());
+            Type* cv = value_type(ct);
+            auto* b = as_builtin(cv);
+            const bool plain = b && (b->base() == BK::Int || b->base() == BK::Float || b->base() == BK::Bool || b->base() == BK::Char) && !declared_is_param(od->get_conversion_type());
+            call = "static_cast<" + (plain ? native_type(cv, false) : cpp_type(ct, f.decl)) + ">(native)";
+        } else {
+            const std::string op = nodes::overloadable_operator_name(od->get_overload());
+            const std::size_t n = ps ? ps->m_params.size() : 0;
+            if (op == "[]") call = "native[" + args + "]";
+            else if (op == "()") call = "native(" + args + ")";
+            else if (op == "++" || op == "--") call = n == 0 ? "(" + op + "native)" : "(native" + op + ")";
+            else if (n == 0) call = "(" + op + "native)";
+            else call = "(native " + op + " " + args + ")";
+        }
+    } else {
+        const std::string name = as.empty() ? std::string(f.sym->name) : native_template_name(as, f.owner);
+
+        if (name.find("::") != std::string::npos) call = name + "(" + (is_static ? args : (args.empty() ? std::string("native") : "native, " + args)) + ")";
+        else if (is_static) call = native_name + "::" + name + "(" + args + ")";
+        else call = "native." + name + "(" + args + ")";
+    }
+
+    Type* ret = return_type_of(f.sym);
+    if (!ret || is_void(ret)) return call + ";";
+    Type* rv = value_type(ret);
+    RecordInfo* rr = record_info_of(rv);
+    const parser_types::TypeInfo* declared = nullptr;
+    if (f.decl->kind == K::FunctionDeclaration) declared = &static_cast<nodes::FunctionDeclaration*>(f.decl)->get_return_type();
+    else if (!static_cast<nodes::OperatorFunctionDeclaration*>(f.decl)->is_conversion()) declared = &static_cast<nodes::OperatorFunctionDeclaration*>(f.decl)->get_return_type();
+    else declared = &static_cast<nodes::OperatorFunctionDeclaration*>(f.decl)->get_conversion_type();
+
+    if (rr && rr->native && !declared_is_param(*declared)) {
+        if (!ret->is_reference()) return "return " + rr->cname + "(walnut_rt::native_tag{}, " + call + ");";
+        if (rr == f.owner && !is_static) return call + "; return *this;";
+        fail_at(f.decl, "a method of a C++ class can only return a reference to its own class or to a template parameter");
+        return call + ";";
+    }
+
+    if (ret->is_pointer() && !is_static) return "return walnut_rt::native_ptr<" + cpp_type(ret, f.decl) + ">(native, " + call + ");";
+    auto* b = as_builtin(rv);
+    if (!ret->is_reference() && b && !declared_is_param(*declared)) return "return walnut_rt::from_native<" + cpp_type(rv, f.decl) + ">(" + call + ");";
+    return "return " + call + ";";
+}
+
+void CppEmitter::emit_native_record(std::ostream& os, RecordInfo* r) {
+    EnvScope env(m_types, r->env ? &r->env->env : nullptr);
+    RecordInfo* saved = m_current_record;
+    m_current_record = r;
+    const std::string nt = native_record_type(r);
+    bool has_ctor = false;
+
+    os << "struct " << r->cname << " {\n";
+    os << "    " << nt << " native;\n";
+    os << "    template <typename N_> " << r->cname << "(walnut_rt::native_tag, N_&& n) : native(std::forward<N_>(n)) {}\n";
+
+    for (const auto& member : r->decl->get_members()) {
+        nodes::ASTNode* n = member.node;
+        if (!n) continue;
+
+        if (n->kind == K::ConstructorDeclaration) {
+            auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
+            has_ctor = true;
+            const bool forwarded = c->m_special != nodes::ConstructorDeclaration::Special::Delete && !c->m_body;
+            os << "    " << (forwarded ? "template <int W_ = 0> " : "") << (c->m_qualifiers.has(FQ::Explicit) ? "explicit " : "") << r->cname << "(" << param_list(c->get_parameters(), c, true) << ")";
+            if (c->m_special == nodes::ConstructorDeclaration::Special::Delete) os << " = delete;\n";
+            else if (c->m_body) os << ";\n";
+            else if (!c->native_name.empty()) os << " : native(" << native_template_name(c->native_name, r) << "(" << native_args(c->get_parameters()) << ")) {}\n";
+            else os << " : native(" << native_args(c->get_parameters()) << ") {}\n";
+            continue;
+        }
+
+        if (n->kind != K::FunctionDeclaration && n->kind != K::OperatorFunctionDeclaration) continue;
+        Sym* fs = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->symbol : static_cast<nodes::OperatorFunctionDeclaration*>(n)->symbol;
+        const bool lazy = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->lazy_untyped : static_cast<nodes::OperatorFunctionDeclaration*>(n)->lazy_untyped;
+        if (!fs || lazy) continue;
+        if (n->kind == K::OperatorFunctionDeclaration && static_cast<nodes::OperatorFunctionDeclaration*>(n)->m_deleted) continue;
+        FuncInfo f{ n, fs, r->env, r };
+        const bool has_body = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->has_body() : static_cast<nodes::OperatorFunctionDeclaration*>(n)->has_body();
+        const bool used = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->native_used : (static_cast<nodes::OperatorFunctionDeclaration*>(n)->native_used || static_cast<nodes::OperatorFunctionDeclaration*>(n)->is_conversion());
+        if (has_body) os << "    " << function_header(f, false, true) << ";\n";
+        else if (!used) continue;
+        else os << "    template <int W_ = 0> " << function_header(f, false, true) << " { " << native_body(f, nt) << " }\n";
+    }
+
+    for (const FuncInfo& f : m_functions) {
+        if (f.owner != r || !f.inst || f.inst->sym != f.sym || f.inst == r->env) continue;
+        os << "    " << function_header(f, false, true) << ";\n";
+    }
+
+    if (!has_ctor) os << "    " << r->cname << "() = default;\n";
+    os << "};\n\n";
+    m_current_record = saved;
+}
+
 void CppEmitter::emit_record(std::ostream& os, RecordInfo* r) {
+    if (r->native) { emit_native_record(os, r); return; }
     EnvScope env(m_types, r->env ? &r->env->env : nullptr);
     RecordInfo* saved = m_current_record;
     m_current_record = r;
@@ -2715,6 +3292,7 @@ void CppEmitter::emit_record(std::ostream& os, RecordInfo* r) {
         switch (n->kind) {
             case K::VariableDeclaration: {
                 auto* v = static_cast<nodes::VariableDeclaration*>(n);
+                if (is_lazy_decl(v)) break;
                 Type* t = m_types.canonicalize(v->get_type_info());
                 const bool is_static = v->get_type_info().modifiers.has(RM::Static);
                 const bool is_mutable = v->get_type_info().modifiers.has(RM::Mutable);
@@ -2726,7 +3304,7 @@ void CppEmitter::emit_record(std::ostream& os, RecordInfo* r) {
                     else os << " = " << folded_or(v, t, is_static);
                 } else if (is_union && !is_static) {
                     if (!union_has_explicit_init && !union_init_done) { os << "{}"; union_init_done = true; }
-                } else if (!is_record_t(t)) {
+                } else if (!is_record_t(t) && !(t && t->is_reference())) {
                     os << "{}";
                 }
                 os << ";\n";
@@ -2776,6 +3354,8 @@ void CppEmitter::emit_record(std::ostream& os, RecordInfo* r) {
                 Sym* fs = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->symbol : static_cast<nodes::OperatorFunctionDeclaration*>(n)->symbol;
                 const modifiers::RawModifiers& mods = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->get_modifiers() : static_cast<nodes::OperatorFunctionDeclaration*>(n)->get_modifiers();
                 if (mods.has(RM::Friend) || !fs) break;
+                if (n->kind == K::FunctionDeclaration && static_cast<nodes::FunctionDeclaration*>(n)->lazy_untyped) break;
+                if (n->kind == K::OperatorFunctionDeclaration && static_cast<nodes::OperatorFunctionDeclaration*>(n)->lazy_untyped) break;
                 FuncInfo f{ n, fs, r->env, r };
                 const modifiers::FunctionQualifiers& q = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->qualifiers() : static_cast<nodes::OperatorFunctionDeclaration*>(n)->qualifiers();
                 if (q.has(FQ::Virtual) || q.has(FQ::Override)) has_virtual = true;
@@ -2805,6 +3385,14 @@ void CppEmitter::emit_record(std::ostream& os, RecordInfo* r) {
         os << pad() << function_header(f, false, true) << ";\n";
     }
 
+    for (Inst* I : m_ctor_insts) {
+        if (owner_record_of(I->sym) != r) continue;
+        EnvScope inst_env(m_types, &I->env);
+        auto* c = static_cast<nodes::ConstructorDeclaration*>(I->decl);
+        os << pad() << (ctor_instance_self_kind(I) == 2 ? "template <int W_ = 0> " : "") << (c->m_qualifiers.has(FQ::Explicit) ? "explicit " : "") << r->cname << "(" << param_list(c->get_parameters(), c, true) << ");\n";
+    }
+
+    emit_lazy_fields(os, r);
     emit_special_members(os, r, has_virtual || polymorphic);
 
     m_indent = 0;
@@ -2817,77 +3405,13 @@ void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
     RecordInfo* saved = m_current_record;
     m_current_record = r;
 
-    for (const auto& member : r->decl->get_members()) {
-        nodes::ASTNode* n = member.node;
-        if (!n) continue;
-
-        if (n->kind == K::ConstructorDeclaration) {
-            auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
-            using SP = nodes::ConstructorDeclaration::Special;
-            if (c->m_special != SP::None) continue;
+    if (r->native) {
+        for (const auto& member : r->decl->get_members()) {
+            if (!member.node || member.node->kind != K::ConstructorDeclaration) continue;
+            auto* c = static_cast<nodes::ConstructorDeclaration*>(member.node);
+            if (!c->m_body) continue;
             line_marker(os, c);
-            os << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ")";
-            std::vector<std::string> inits;
-
-            for (nodes::ASTNode* init : c->get_init_list()) {
-                if (init && init->kind == K::BraceConstructExpression) {
-                    auto* bc = static_cast<nodes::BraceConstructExpression*>(init);
-                    Sym* target = bc->m_callee && bc->m_callee->kind == K::Identifier ? static_cast<nodes::Identifier*>(bc->m_callee)->resolved : nullptr;
-                    std::vector<nodes::ASTNode*> els = bc->m_init ? bc->m_init->m_elements : std::vector<nodes::ASTNode*>{};
-
-                    if (target && target->kind == SK::Variable) {
-                        Type* ft = target->decl && target->decl->kind == K::ArrayDeclaration
-                            ? array_decl_type(static_cast<nodes::ArrayDeclaration*>(target->decl))
-                            : (target->type ? m_types.canonicalize(*target->type) : nullptr);
-                        Type* fv = ft ? m_types.strip_cv(value_type(ft)) : nullptr;
-
-                        if (bc->ctor) inits.push_back(local_name(target->name) + "(" + call_args(bc->ctor, els, init) + ")");
-                        else if (fv && fv->is_record()) inits.push_back(local_name(target->name) + "{" + aggregate_args(fv, els, init) + "}");
-                        else if (fv && fv->is_array() && bc->m_init) inits.push_back(local_name(target->name) + "(" + brace_list(bc->m_init, ft, init) + ")");
-                        else if (els.size() == 1) inits.push_back(local_name(target->name) + "(" + conv(els[0], ft, init) + ")");
-                        else if (els.empty()) inits.push_back(local_name(target->name) + "{}");
-                        else unsupported(init, "this brace initializer for a non-array field");
-                    } else if (target && target->kind == SK::Type) {
-                        RecordInfo* b = init_record(r, target);
-                        if (!b) { unsupported(init, "this base initializer"); continue; }
-                        inits.push_back(b->cname + "(" + (bc->ctor ? call_args(bc->ctor, els, init) : std::string()) + ")");
-                    } else {
-                        unsupported(init, "this constructor initializer");
-                    }
-
-                    continue;
-                }
-
-                if (!init || init->kind != K::CallExpression) { unsupported(init, "this constructor initializer"); continue; }
-                auto* call_e = static_cast<nodes::CallExpression*>(init);
-                Sym* target = nullptr;
-                if (call_e->m_callee->kind == K::Identifier) target = static_cast<nodes::Identifier*>(call_e->m_callee)->resolved;
-
-                if (target && target->kind == SK::Variable && call_e->resolved && call_e->resolved->decl && call_e->resolved->decl->kind == K::ConstructorDeclaration) {
-                    inits.push_back(local_name(target->name) + "(" + call_args(call_e->resolved, call_e->m_arguments, init) + ")");
-                } else if (target && target->kind == SK::Variable) {
-                    Type* ft = target->type ? m_types.canonicalize(*target->type) : nullptr;
-                    std::string args;
-                    for (std::size_t i = 0; i < call_e->m_arguments.size(); ++i) {
-                        if (i) args += ", ";
-                        args += (call_e->m_arguments.size() == 1 && ft) ? conv(call_e->m_arguments[i], ft, init) : expr(call_e->m_arguments[i]);
-                    }
-                    inits.push_back(local_name(target->name) + "(" + args + ")");
-                } else if (target && target->kind == SK::Type) {
-                    RecordInfo* b = init_record(r, target);
-                    if (!b) { unsupported(init, "this base initializer"); continue; }
-                    inits.push_back(b->cname + "(" + call_args(call_e->resolved, call_e->m_arguments, init) + ")");
-                } else {
-                    unsupported(init, "this constructor initializer");
-                }
-            }
-
-            if (!inits.empty()) {
-                os << " : ";
-                for (std::size_t i = 0; i < inits.size(); ++i) { if (i) os << ", "; os << inits[i]; }
-            }
-
-            os << " ";
+            os << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ") : native() ";
             Type* saved_ret = m_current_return;
             m_current_return = m_types.void_();
             m_indent = 0;
@@ -2896,6 +3420,22 @@ void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
             os << "\n";
             line_reset(os);
             os << "\n";
+        }
+
+        m_current_record = saved;
+        return;
+    }
+
+    emit_lazy_definitions(os, r);
+
+    for (const auto& member : r->decl->get_members()) {
+        nodes::ASTNode* n = member.node;
+        if (!n) continue;
+
+        if (n->kind == K::ConstructorDeclaration) {
+            auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
+            if (c->m_special != nodes::ConstructorDeclaration::Special::None) continue;
+            emit_constructor_definition(os, r, c);
         } else if (n->kind == K::DestructorDeclaration) {
             auto* d = static_cast<nodes::DestructorDeclaration*>(n);
             using SP = nodes::DestructorDeclaration::Special;
@@ -2913,7 +3453,112 @@ void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
         }
     }
 
+    for (Inst* I : m_ctor_insts) {
+        if (owner_record_of(I->sym) != r) continue;
+        EnvScope inst_env(m_types, &I->env);
+        auto* c = static_cast<nodes::ConstructorDeclaration*>(I->decl);
+
+        if (ctor_instance_self_kind(I) == 2) {
+            os << "template <int W_>\n";
+            emit_constructor_definition(os, r, c);
+            os << "template " << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ");\n\n";
+        } else {
+            emit_constructor_definition(os, r, c);
+        }
+    }
+
     m_current_record = saved;
+}
+
+int CppEmitter::ctor_instance_self_kind(Inst* I) {
+    if (!I || !I->sym) return 0;
+    RecordInfo* r = owner_record_of(I->sym);
+    if (!r || !r->sym) return 0;
+    if (!I->type || I->type->kind() != semantics::TypeKind::Function) return 0;
+    const auto& ps = static_cast<semantics::FunctionType*>(I->type)->params();
+    if (ps.size() != 1 || !ps[0]) return 0;
+    Type* p = ps[0];
+    Type* pv = p->is_reference() ? static_cast<semantics::ReferenceType*>(p)->referent() : p;
+    if (record_info_of(pv) != r) return 0;
+    if (!p->is_reference()) return 1;
+    auto* rt = static_cast<semantics::ReferenceType*>(p);
+    if (rt->ref_qual() == semantics::RefQual::LValue && pv->cv().is_const && !pv->cv().is_volatile) return 1;
+    if (rt->ref_qual() == semantics::RefQual::RValue && pv->cv().bits() == 0) return 1;
+    return 2;
+}
+
+void CppEmitter::emit_constructor_definition(std::ostream& os, RecordInfo* r, nodes::ConstructorDeclaration* c) {
+    line_marker(os, c);
+    os << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ")";
+    std::vector<std::string> inits;
+
+    for (nodes::ASTNode* init : c->get_init_list()) {
+        if (init && init->kind == K::BraceConstructExpression) {
+            auto* bc = static_cast<nodes::BraceConstructExpression*>(init);
+            Sym* target = bc->m_callee && bc->m_callee->kind == K::Identifier ? static_cast<nodes::Identifier*>(bc->m_callee)->resolved : nullptr;
+            std::vector<nodes::ASTNode*> els = bc->m_init ? bc->m_init->m_elements : std::vector<nodes::ASTNode*>{};
+
+            if (target && target->kind == SK::Variable) {
+                Type* ft = target->decl && target->decl->kind == K::ArrayDeclaration
+                    ? array_decl_type(static_cast<nodes::ArrayDeclaration*>(target->decl))
+                    : (target->type ? m_types.canonicalize(*target->type) : nullptr);
+                Type* fv = ft ? m_types.strip_cv(value_type(ft)) : nullptr;
+
+                if (bc->ctor) inits.push_back(local_name(target->name) + "(" + call_args(bc->ctor, els, init) + ")");
+                else if (fv && fv->is_record()) inits.push_back(local_name(target->name) + "{" + aggregate_args(fv, els, init) + "}");
+                else if (fv && fv->is_array() && bc->m_init) inits.push_back(local_name(target->name) + "(" + brace_list(bc->m_init, ft, init) + ")");
+                else if (els.size() == 1) inits.push_back(local_name(target->name) + "(" + conv(els[0], ft, init) + ")");
+                else if (els.empty()) inits.push_back(local_name(target->name) + "{}");
+                else unsupported(init, "this brace initializer for a non-array field");
+            } else if (target && target->kind == SK::Type) {
+                RecordInfo* b = init_record(r, target);
+                if (!b) { unsupported(init, "this base initializer"); continue; }
+                inits.push_back(b->cname + "(" + (bc->ctor ? call_args(bc->ctor, els, init) : std::string()) + ")");
+            } else {
+                unsupported(init, "this constructor initializer");
+            }
+
+            continue;
+        }
+
+        if (!init || init->kind != K::CallExpression) { unsupported(init, "this constructor initializer"); continue; }
+        auto* call_e = static_cast<nodes::CallExpression*>(init);
+        Sym* target = nullptr;
+        if (call_e->m_callee->kind == K::Identifier) target = static_cast<nodes::Identifier*>(call_e->m_callee)->resolved;
+
+        if (target && target->kind == SK::Variable && call_e->resolved && call_e->resolved->decl && call_e->resolved->decl->kind == K::ConstructorDeclaration) {
+            inits.push_back(local_name(target->name) + "(" + call_args(call_e->resolved, call_e->m_arguments, init) + ")");
+        } else if (target && target->kind == SK::Variable) {
+            Type* ft = target->type ? m_types.canonicalize(*target->type) : nullptr;
+            std::string args;
+            for (std::size_t i = 0; i < call_e->m_arguments.size(); ++i) {
+                if (i) args += ", ";
+                args += (call_e->m_arguments.size() == 1 && ft) ? conv(call_e->m_arguments[i], ft, init) : expr(call_e->m_arguments[i]);
+            }
+            inits.push_back(local_name(target->name) + "(" + args + ")");
+        } else if (target && target->kind == SK::Type) {
+            RecordInfo* b = init_record(r, target);
+            if (!b) { unsupported(init, "this base initializer"); continue; }
+            inits.push_back(b->cname + "(" + call_args(call_e->resolved, call_e->m_arguments, init) + ")");
+        } else {
+            unsupported(init, "this constructor initializer");
+        }
+    }
+
+    if (!inits.empty()) {
+        os << " : ";
+        for (std::size_t i = 0; i < inits.size(); ++i) { if (i) os << ", "; os << inits[i]; }
+    }
+
+    os << " ";
+    Type* saved_ret = m_current_return;
+    m_current_return = m_types.void_();
+    m_indent = 0;
+    block(os, c->m_body);
+    m_current_return = saved_ret;
+    os << "\n";
+    line_reset(os);
+    os << "\n";
 }
 
 void CppEmitter::emit_prototypes(std::ostream& os) {
@@ -3007,7 +3652,7 @@ void CppEmitter::emit_globals(std::ostream& os, bool as_extern) {
                 continue;
             }
 
-            if (!v->symbol || inline_variable(v)) continue;
+            if (!v->symbol || inline_variable(v) || pruned_global(v->symbol)) continue;
             Type* t = declared_type(v);
             if (t && t->is_reference()) {
                 os << cpp_type(static_cast<semantics::ReferenceType*>(t)->referent(), v) << "* " << global_var_name(v->symbol) << " = nullptr;\n";
@@ -3028,6 +3673,17 @@ void CppEmitter::emit_globals(std::ostream& os, bool as_extern) {
     }
 }
 
+auto CppEmitter::named_direct_base(RecordInfo* r, std::string_view name) -> RecordInfo* {
+    if (!r || !r->decl || name.empty()) return nullptr;
+
+    for (parser_types::TypeInfo* info : r->decl->all_bases()) {
+        RecordInfo* b = record_info_of(m_types.canonicalize(*info));
+        if (b && b->decl && b->decl->get_name() == name) return b;
+    }
+
+    return nullptr;
+}
+
 auto CppEmitter::init_record(RecordInfo* r, Sym* target) -> RecordInfo* {
     if (!r || !target) return nullptr;
     std::vector<parser_types::TypeInfo*> bases = r->decl->all_bases();
@@ -3041,13 +3697,36 @@ auto CppEmitter::init_record(RecordInfo* r, Sym* target) -> RecordInfo* {
     return bases.size() == 1 ? record_info_of(m_types.canonicalize(*bases[0])) : nullptr;
 }
 
+std::string CppEmitter::interpolated_text(nodes::CastExpression* c) {
+    Type* src = value_type(type_of(c->operand));
+    const std::string v = expr(c->operand);
+
+    if (src && src->is_record()) {
+        Sym* chosen = nullptr;
+        if (semantics::rank_user_defined(src, m_types.builtin(BK::String), m_types, false, &chosen) != semantics::ConversionRank::None && chosen) return "(" + v + ")." + function_name(chosen) + "()";
+        if (semantics::rank_user_defined(src, m_types.builtin(BK::Text), m_types, false, &chosen) != semantics::ConversionRank::None && chosen) return "(" + v + ")." + function_name(chosen) + "()";
+    }
+
+    return "walnut_rt::to_display(" + v + ")";
+}
+
 std::string CppEmitter::type_test(nodes::CastExpression* c) {
     const bool is_test = c->cast_kind == nodes::CastExpression::CastKind::Is;
     Type* src = value_type(type_of(c->operand));
+
+    if (c->special_test) {
+        static const char* const tests[] = { "infinity", "infinity", "nan", "undefined", "indeterminate" };
+        return "walnut_rt::is_special(" + expr(c->operand) + ", walnut_rt::special_test::" + tests[c->special_test < 5 ? c->special_test : 0] + ")";
+    }
+
     Type* tv = m_types.strip_cv(m_types.canonicalize(c->get_target()));
     if (!src || !tv) { fail_at(c, "type test without types"); return "false"; }
     const std::string v = expr(c->operand);
     const std::string name = cpp_string_literal(type_text(tv));
+
+    if (semantics::special_held_type(src) && !is_test) {
+        return "walnut_rt::special_as<" + cpp_type(tv, c) + ">(" + v + ", " + name + ")";
+    }
 
     if (src->kind() == semantics::TypeKind::Variant) {
         const std::string tc = cpp_type(tv, c);
@@ -3193,6 +3872,105 @@ void CppEmitter::emit_equality_helpers(std::ostream& os) {
     os << defs.str();
 }
 
+bool CppEmitter::is_lazy_decl(const nodes::ASTNode* n) {
+    return n && n->kind == K::VariableDeclaration && static_cast<const nodes::VariableDeclaration*>(n)->get_type_info().modifiers.has(RM::Lazy);
+}
+
+bool CppEmitter::is_lazy_field(const Sym* s) {
+    return s && s->kind == SK::Variable && s->owner && s->owner->kind == semantics::Scope::Kind::Record && is_lazy_decl(s->decl);
+}
+
+std::string CppEmitter::lazy_prefix(nodes::ASTNode* target) {
+    if (target && target->kind == K::MemberAccessExpression) {
+        auto* m = static_cast<nodes::MemberAccessExpression*>(target);
+        if (RecordInfo* q = qualifier_record(m)) return member_object(m) + q->cname + "::";
+        return member_object(m);
+    }
+    return "this->";
+}
+
+void CppEmitter::emit_lazy_fields(std::ostream& os, RecordInfo* r) {
+    for (const auto& member : r->decl->get_members()) {
+        if (!is_lazy_decl(member.node)) continue;
+        auto* v = static_cast<nodes::VariableDeclaration*>(member.node);
+        const std::string ct = cpp_type(m_types.strip_cv(m_types.canonicalize(v->get_type_info())), v);
+        const bool ts = v->get_type_info().modifiers.has(RM::LazyThreadsafe);
+        const std::string n = local_name(v->get_name());
+        os << pad() << "mutable walnut_rt::lazy_cell<" << ct << ", " << (ts ? "true" : "false") << "> " << n << ";\n";
+        os << pad() << ct << "& lz_" << n << "() const;\n";
+        os << pad() << ct << "& lz_set_" << n << "(" << ct << " walnut_value) const;\n";
+        os << pad() << ct << " lz_make_" << n << "();\n";
+    }
+}
+
+void CppEmitter::emit_lazy_definitions(std::ostream& os, RecordInfo* r) {
+    for (const auto& member : r->decl->get_members()) {
+        if (!is_lazy_decl(member.node)) continue;
+        auto* v = static_cast<nodes::VariableDeclaration*>(member.node);
+        Type* t = m_types.strip_cv(m_types.canonicalize(v->get_type_info()));
+        const std::string ct = cpp_type(t, v);
+        const std::string n = local_name(v->get_name());
+        const std::string label = "\"" + std::string(v->get_name()) + "\"";
+        os << ct << "& " << r->cname << "::lz_" << n << "() const { return " << n << ".get([this]() -> " << ct << " { return const_cast<" << r->cname << "*>(this)->lz_make_" << n << "(); }, " << label << "); }\n";
+        os << ct << "& " << r->cname << "::lz_set_" << n << "(" << ct << " walnut_value) const { return " << n << ".set(std::move(walnut_value), " << label << "); }\n";
+        line_marker(os, v);
+        Type* saved_ret = m_current_return;
+        m_current_return = t;
+        m_indent = 0;
+        os << ct << " " << r->cname << "::lz_make_" << n << "() {\n    return " << conv(v->m_initializer, t, v) << ";\n}\n";
+        m_current_return = saved_ret;
+        line_reset(os);
+        os << "\n";
+    }
+}
+
+bool CppEmitter::prunable_global(nodes::ASTNode* n) const {
+    if (!n || n->kind != K::VariableDeclaration || !source_path) return false;
+    auto* v = static_cast<nodes::VariableDeclaration*>(n);
+    if (!v->symbol || v->is_structured_binding()) return false;
+    const auto& mods = v->get_type_info().modifiers;
+    if (!mods.has(RM::Const) && !mods.has(RM::Constexpr)) return false;
+    return source_path(FileId(v->file_id)).rfind(SourceManager::LIBRARY_ROOT, 0) == 0;
+}
+
+void CppEmitter::note_global_uses(nodes::ASTNode* n) {
+    if (!n) return;
+    switch (n->kind) {
+        case K::Identifier:             if (Sym* s = static_cast<nodes::Identifier*>(n)->resolved) m_used_globals.insert(s); break;
+        case K::QualifiedIdentifier:    if (Sym* s = static_cast<nodes::QualifiedIdentifier*>(n)->resolved) m_used_globals.insert(s); break;
+        case K::MemberAccessExpression: if (Sym* s = static_cast<nodes::MemberAccessExpression*>(n)->resolved) m_used_globals.insert(s); break;
+        default: break;
+    }
+    nodes::for_each_child<true>(n, [this](nodes::ASTNode* c) { note_global_uses(c); });
+}
+
+void CppEmitter::finish_global_usage() {
+    m_track_globals = false;
+    std::vector<nodes::VariableDeclaration*> waiting;
+
+    for (nodes::ASTNode* n : m_script) {
+        if (n->kind == K::VariableDeclaration) {
+            auto* v = static_cast<nodes::VariableDeclaration*>(n);
+            if (v->symbol && m_prunable.count(v->symbol) && !m_used_globals.count(v->symbol)) { waiting.push_back(v); continue; }
+            note_global_uses(v->m_initializer);
+        } else {
+            note_global_uses(n);
+        }
+    }
+
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (nodes::VariableDeclaration*& v : waiting) {
+            if (!v || !m_used_globals.count(v->symbol)) continue;
+            note_global_uses(v->m_initializer);
+            v = nullptr;
+            changed = true;
+        }
+    }
+
+    m_prune_ready = true;
+}
+
 void CppEmitter::emit_definitions(std::ostream& os) {
     for (RecordInfo* r : m_record_order) emit_record_definitions(os, r);
     for (const FuncInfo& f : m_functions) emit_function_body(os, f);
@@ -3221,7 +3999,7 @@ void CppEmitter::emit_init(std::ostream& os) {
                 continue;
             }
 
-            if (!v->symbol || is_closure_global(v->symbol) || inline_variable(v)) continue;
+            if (!v->symbol || is_closure_global(v->symbol) || inline_variable(v) || pruned_global(v->symbol)) continue;
             Type* t = declared_type(v);
 
             if (t && t->is_reference()) {

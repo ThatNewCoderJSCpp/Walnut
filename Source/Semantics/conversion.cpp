@@ -1,4 +1,5 @@
 #include "Semantics/conversion.hpp"
+#include "Parser/nodes.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -59,6 +60,17 @@ ConversionRank rank_builtin(Type* src, Type* dst) {
     return ConversionRank::None;
 }
 
+bool rvalue_only_conversion(const Symbol* op) {
+    if (!op || !op->decl) return false;
+    using FQ = modifiers::FunctionQualifiers;
+    const nodes::ASTNode* d = op->decl;
+    if (d->kind == nodes::ASTNode::Kind::TemplateDeclaration) d = static_cast<const nodes::TemplateDeclaration*>(d)->m_declaration;
+    if (!d) return false;
+    if (d->kind == nodes::ASTNode::Kind::OperatorFunctionDeclaration) return static_cast<const nodes::OperatorFunctionDeclaration*>(d)->qualifiers().has(FQ::RValueRef);
+    if (d->kind == nodes::ASTNode::Kind::FunctionDeclaration) return static_cast<const nodes::FunctionDeclaration*>(d)->qualifiers().has(FQ::RValueRef);
+    return false;
+}
+
 ConversionRank rank_user_defined(
     Type* src, Type* dst, TypeContext& ctx,
     bool allow_explicit, Symbol** chosen 
@@ -71,15 +83,42 @@ ConversionRank rank_user_defined(
 
     for (const UserConversion& uc : *set) {
         if (uc.explicit_ && !allow_explicit) continue;  
+        if (uc.generic) continue;
+        if (ctx.conversion_source_lvalue && rvalue_only_conversion(uc.op)) continue;
         ConversionRank here = ConversionRank::None;
         if (uc.dst == dst)                                          here = ConversionRank::UserDefined; 
         else if (rank_builtin(uc.dst, dst) != ConversionRank::None) here = ConversionRank::UserDefined;
 
-        if (here != ConversionRank::None && best == ConversionRank::None) {
+        if (here != ConversionRank::None && (best == ConversionRank::None || uc.dst == dst)) {
             best = here;
             if (chosen) *chosen = uc.op;
             if (uc.dst == dst) break;                    
         }
+    }
+
+    const bool exact = chosen && *chosen && best != ConversionRank::None;
+
+    if (ctx.template_conversion_hook && !(exact && best == ConversionRank::UserDefined && std::any_of(set->begin(), set->end(), [&](const UserConversion& u) { return !u.generic && u.dst == dst; }))) {
+        Type* want = dst;
+        if (want->is_reference()) want = static_cast<ReferenceType*>(want)->referent();
+        want = ctx.strip_cv(want);
+
+        UserConversion made;
+
+        for (const UserConversion& uc : *set) {
+            if (!uc.generic || (uc.explicit_ && !allow_explicit)) continue;
+            if (ctx.conversion_source_lvalue && rvalue_only_conversion(uc.generic)) continue;
+            if (Symbol* inst = ctx.template_conversion_hook(uc.generic, want)) {
+                best = ConversionRank::UserDefined;
+                if (chosen) *chosen = inst;
+                made.dst = want;
+                made.op = inst;
+                made.explicit_ = uc.explicit_;
+                break;
+            }
+        }
+
+        if (made.op) ctx.user_conversions().add(ctx.strip_cv(src), made);
     }
 
     return best;
@@ -181,10 +220,14 @@ ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx) {
     if (ctx.strip_cv(src) == ctx.strip_cv(dst)) return ConversionRank::Exact;
     if (src->is_null() && dst->is_pointer()) return ConversionRank::Conversion;  
 
+    if (ctx.strip_cv(src)->is_special_value() && ctx.strip_cv(dst)->is_builtin()) {
+        if (auto p = numeric_profile(static_cast<BuiltinType*>(ctx.strip_cv(dst))); p) return ConversionRank::Conversion;
+    }
+
     if (dst->is_builtin() && static_cast<BuiltinType*>(dst)->is_dynamic()) {
         Type* sv = ctx.strip_cv(src);
         if (sv->is_builtin() && !static_cast<BuiltinType*>(sv)->is_void()) return ConversionRank::Conversion;
-        if (sv->is_null()) return ConversionRank::Conversion;
+        if (sv->is_null() || sv->is_special_value()) return ConversionRank::Conversion;
         if (sv->is_function() && dynamic_callable(static_cast<FunctionType*>(sv), ctx)) return ConversionRank::Conversion;
     }
 

@@ -55,6 +55,60 @@ Scope* record_scope(TypeContext& ctx, Type* t) {
     return r->decl() ? r->decl()->inner_scope : nullptr;
 }
 
+bool record_has_virtual(const Scope* s, bool abstract_only, int depth) {
+    if (!s || depth > 64) return false;
+    const nodes::RecordDeclaration* rd = s->node && s->node->kind == nodes::ASTNode::Kind::RecordDeclaration ? static_cast<const nodes::RecordDeclaration*>(s->node) : nullptr;
+    using FQ = modifiers::FunctionQualifiers;
+
+    if (rd) {
+        for (const auto& m : rd->get_members()) {
+            if (!m.node) continue;
+            const modifiers::FunctionQualifiers* q = nullptr;
+            bool has_body = true;
+            if (m.node->kind == nodes::ASTNode::Kind::FunctionDeclaration) { auto* f = static_cast<const nodes::FunctionDeclaration*>(m.node); q = &f->qualifiers(); has_body = f->has_body(); }
+            else if (m.node->kind == nodes::ASTNode::Kind::OperatorFunctionDeclaration) { auto* f = static_cast<const nodes::OperatorFunctionDeclaration*>(m.node); q = &f->qualifiers(); has_body = f->has_body(); }
+            else if (m.node->kind == nodes::ASTNode::Kind::DestructorDeclaration) { if (!abstract_only && static_cast<const nodes::DestructorDeclaration*>(m.node)->m_qualifiers.has(FQ::Virtual)) return true; continue; }
+            if (!q) continue;
+            if (abstract_only) { if (q->has(FQ::Abstract) || (q->has(FQ::Virtual) && !has_body)) return true; }
+            else if (q->has_any(FQ::Virtual | FQ::Override | FQ::Abstract)) return true;
+        }
+    }
+
+    if (abstract_only) return false;
+    for (const Scope* b : s->bases) if (record_has_virtual(b, false, depth + 1)) return true;
+    return false;
+}
+
+bool record_is_empty(TypeContext& ctx, const Scope* s, int depth) {
+    if (!s || depth > 64) return true;
+    const nodes::RecordDeclaration* rd = s->node && s->node->kind == nodes::ASTNode::Kind::RecordDeclaration ? static_cast<const nodes::RecordDeclaration*>(s->node) : nullptr;
+    if (rd) {
+        if (rd->m_native) return false;
+        for (const auto& m : rd->get_members()) {
+            if (!m.node) continue;
+            if (m.node->kind == nodes::ASTNode::Kind::VariableDeclaration && !static_cast<const nodes::VariableDeclaration*>(m.node)->get_type_info().modifiers.has(modifiers::RawModifiers::Static)) return false;
+            if (m.node->kind == nodes::ASTNode::Kind::ArrayDeclaration && !static_cast<const nodes::ArrayDeclaration*>(m.node)->get_array_modifiers().has(modifiers::RawModifiers::Static)) return false;
+        }
+    }
+    if (record_has_virtual(s, false, 0)) return false;
+    for (const Scope* b : s->bases) if (!record_is_empty(ctx, b, depth + 1)) return false;
+    return true;
+}
+
+std::int64_t int_bits_of(BuiltinType* b) { return static_cast<std::int64_t>(bit_width_of_rank(b->width())); }
+
+std::int64_t float_bits_of(BuiltinType* b) { return static_cast<std::int64_t>(bit_width_of_rank(b->width())); }
+
+std::int64_t float_exponent_bits_for(std::int64_t bits) {
+    if (bits <= 8)  return 3;
+    if (bits <= 16) return 5;
+    if (bits <= 32) return 8;
+    if (bits <= 64) return 11;
+    std::int64_t lg = 0;
+    while ((std::int64_t(1) << (lg + 1)) <= bits) ++lg;
+    return 16 + 2 * (lg - 7);
+}
+
 bool derives_from(Scope* derived, Scope* base, int depth) {
     if (!derived || !base || depth > 64) return false;
     if (derived == base) return true;
@@ -267,6 +321,7 @@ std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const
 
     if (args.size() == 1) {
         TypeQueryOverloadResult custom = overload_of(ctx, args.front(), parser_types::type_trait_name(trait), {});
+        if (!custom.found && trait == Trait::IsFloating) custom = overload_of(ctx, args.front(), "is_floating", {});
 
         if (custom.found) {
             if (!custom.error.empty()) error = custom.error;
@@ -294,7 +349,7 @@ std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const
         case Trait::IsRvalueRef:   return raw->is_reference() && static_cast<ReferenceType*>(raw)->ref_qual() == RefQual::RValue ? 1 : 0;
         case Trait::IsPointer:     return v->is_pointer() ? 1 : 0;
         case Trait::IsArray:       return v->is_array() ? 1 : 0;
-        case Trait::IsIntegral:    return b && b->base() == BK::Int ? 1 : 0;
+        case Trait::IsInteger:     return b && b->base() == BK::Int ? 1 : 0;
         case Trait::IsFloating:    return b && b->base() == BK::Float ? 1 : 0;
         case Trait::IsArithmetic:  return b && (b->base() == BK::Int || b->base() == BK::Float) ? 1 : 0;
         case Trait::IsSigned:      return is_numeric(b) && !b->is_unsigned() ? 1 : 0;
@@ -325,6 +380,50 @@ std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const
         case Trait::FloatRank:
             if (!b || b->base() != BK::Float) { error = "float_rank needs a float type, not '" + text(v) + "'"; return std::nullopt; }
             return b->width() - kFloatRankBase;
+
+        case Trait::IsText:        return b && b->base() == BK::Text ? 1 : 0;
+        case Trait::IsStr:         return b && b->base() == BK::String ? 1 : 0;
+        case Trait::IsNullPointer: return v->is_null() ? 1 : 0;
+        case Trait::IsSpecial:     return v->is_special_value() ? 1 : 0;
+        case Trait::IsVariant:     return v->kind() == TypeKind::Variant ? 1 : 0;
+        case Trait::IsClosure:     return v->kind() == TypeKind::Closure ? 1 : 0;
+        case Trait::IsFixedArray:  return v->is_array() && static_cast<ArrayType*>(v)->extent().has_value() ? 1 : 0;
+        case Trait::IsRuntimeArray: return v->is_array() && !static_cast<ArrayType*>(v)->extent().has_value() ? 1 : 0;
+
+        case Trait::ArrayExtent:
+            if (!v->is_array() || !static_cast<ArrayType*>(v)->extent()) { error = "array_extent needs a fixed-size array type, not '" + text(v) + "'"; return std::nullopt; }
+            return static_cast<std::int64_t>(*static_cast<ArrayType*>(v)->extent());
+
+        case Trait::IsUnion:
+        case Trait::IsStruct:
+        case Trait::IsAbstract:
+        case Trait::IsPolymorphic:
+        case Trait::IsEmpty:
+        case Trait::IsNative: {
+            Scope* s = record_scope(ctx, v);
+            const nodes::RecordDeclaration* rd = s && s->node && s->node->kind == nodes::ASTNode::Kind::RecordDeclaration ? static_cast<const nodes::RecordDeclaration*>(s->node) : nullptr;
+            if (!rd) return 0;
+            if (trait == Trait::IsUnion)  return rd->is_union() ? 1 : 0;
+            if (trait == Trait::IsStruct) return rd->is_struct() ? 1 : 0;
+            if (trait == Trait::IsNative) return rd->m_native ? 1 : 0;
+            if (trait == Trait::IsEmpty)  return record_is_empty(ctx, s, 0) ? 1 : 0;
+            return record_has_virtual(s, trait == Trait::IsAbstract, 0) ? 1 : 0;
+        }
+
+        case Trait::IntegerBits:
+            if (!b || b->base() != BK::Int) { error = "integer_bits needs an integer type, not '" + text(v) + "'"; return std::nullopt; }
+            return int_bits_of(b);
+
+        case Trait::FloatBits:
+        case Trait::FloatMantissaBits:
+        case Trait::FloatExponentBits: {
+            if (!b || b->base() != BK::Float) { error = std::string(parser_types::type_trait_name(trait)) + " needs a float type, not '" + text(v) + "'"; return std::nullopt; }
+            const std::int64_t bits = float_bits_of(b);
+            const std::int64_t exp = float_exponent_bits_for(bits);
+            if (trait == Trait::FloatBits) return bits;
+            if (trait == Trait::FloatExponentBits) return exp;
+            return bits - exp;
+        }
     }
 
     return std::nullopt;

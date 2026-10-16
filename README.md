@@ -11,7 +11,7 @@ function main() -> int {
 } end function main
 ```
 
-Programs reach the screen, files and the rest of the system by calling C or C++ directly, as `puts` does above. The full language is described in [documentation.md](documentation.md). Walnut's library has its own documentation, one page per module, in [Documentation/Library](Documentation/Library/README.md); so far it has one module, `core`, which every program gets automatically.
+Programs reach the screen, files and the rest of the system by calling C or C++ directly, as `puts` does above. The full language is described in [documentation.md](documentation.md). Walnut's library has its own documentation, one page per module, in [Documentation/Library](Documentation/Library/README.md). `core` comes with every program; the other modules, such as `io`, `collections`, `linalg`, `statistics`, `combinatorics`, `units`, `memory`, `graphs`, `windows`, `graphics`, `images`, `ui`, `game`, `time`, `networking` and `crypto`, are imported by name.
 
 ## Requirements
 
@@ -91,6 +91,7 @@ walnut <command> [options] <main.wal> [more.wal ...] [C/C++ files] [-- program a
 | `walnut build main.wal` | Build an executable (named after the input, or `-o <path>`) |
 | `walnut emit main.wal` | Print the generated C++ (or write it with `-o file.cpp`) |
 | `walnut clean` | Delete the build cache |
+| `walnut highlight main.wal` | Print what each name and operator is, and the errors, as JSON for editors (`--stdin` reads the text from standard input) |
 
 Arguments after `--` go to your program: `walnut run main.wal -- input.txt 3`.
 
@@ -116,6 +117,7 @@ Common options:
 | `--tokens <file>`, `--ast <file>` | Write the token list or syntax tree, for debugging |
 | `--time` | Show how long each compiler stage takes |
 | `-g` | Build for a debugger (gdb, lldb, an IDE) that steps through your `.wal` lines |
+| `-u`, `--unbuffered` | Make the program flush `cout` and `clog` after every write, like `python -u`; see [Flushing](Documentation/Library/io.md#printing) |
 | `--debug-cpp` | Build for a debugger that steps through the generated C++ instead; the C++ is kept next to the program |
 | `--line-map[=file]` | Write which `.wal` line each line of generated C++ came from (to the terminal when no file is given) |
 | `-v`, `--verbose` | Print the C++ compiler command |
@@ -210,6 +212,10 @@ walnut run main.wal -L ./lib -l mylib
 ```
 
 C or C++ code can also be written straight into a `.wal` file, in an `extern "C++" code { ... } end extern` block. See [documentation.md](documentation.md#writing-c-and-c-code-in-walnut-files).
+
+## Editor support
+
+`Tools/vscode-walnut` is a Visual Studio Code extension that colors Walnut code (`.wal` and `.walh` files), underlines the compiler's errors as you type, and sets up comment toggling and bracket matching. It asks the compiler what each name and operator is with `walnut highlight`, so variables, types and overloaded operators get their exact colors. The colors are in `Tools/vscode-walnut/colors.json`, and saving that file recolors the editor at once. [Its README](Tools/vscode-walnut/README.md) covers installing it from a `.vsix` file, editing the colors, and using the grammar in other editors.
 
 ## A short tour
 

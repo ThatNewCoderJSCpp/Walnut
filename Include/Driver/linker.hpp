@@ -91,6 +91,7 @@ private:
 
     bool bind_file(const Pending& p, semantics::Symbol* ph, const UnitFrontResult& tgt);
 
+    bool bind_library_alias(const Pending& p, const nodes::ImportExportItem& it, semantics::Symbol* ph);
     bool bind_module(const Pending& p, const nodes::ImportExportItem& it, semantics::Symbol* ph, const UnitFrontResult& tgt);
 
     static std::size_t item_line(const Pending& p) { return p.item->line ? p.item->line : p.decl->line; }

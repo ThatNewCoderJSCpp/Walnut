@@ -19,7 +19,9 @@ enum class ConversionRank : std::uint8_t {
 
 #define WALNUT_BUILTIN_CAST_TABLE(X) \
     X(Char, Int,  Explicit) \
-    X(Int,  Char, Forbidden)
+    X(Int,  Char, Forbidden) \
+    X(String, Text, Explicit) \
+    X(Text, String, Explicit)
 
 enum class CastMode : std::uint8_t { Forbidden = 0, Explicit, Implicit };
 
@@ -51,6 +53,8 @@ ConversionRank rank_user_defined(
 );
 
 bool cv_at_least(const CV& have, const CV& want);
+
+bool rvalue_only_conversion(const Symbol* op);
 
 ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx);
 

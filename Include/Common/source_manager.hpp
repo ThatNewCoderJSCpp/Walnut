@@ -27,7 +27,7 @@ inline constexpr FileId INVALID_FILE = static_cast<FileId>(-1);
 
 class SourceManager {
     struct Entry {
-        const char* data;        // NUL-terminated, owned by the arena
+        const char* data;        // NUL-terminated
         std::size_t size;        // byte length, excluding the trailing '\0'
         std::string absolute;    // canonical absolute path 
         mutable std::string relative; // path relative to the current working directory

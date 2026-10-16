@@ -12,8 +12,16 @@ Token Lexer::string_literal() noexcept {
 
         while (peek() != quote_type) {
             if (peek() == '\0') {
-                report_error("Unterminated string literal: missing closing quote");
+                report_error("This string literal never ends; add the closing '\"' (a string can span lines, so the missing quote may be further up)");
                 return Token(Token::Kind::Unexpected, start, m_beg - start, m_line_number);  
+            }
+
+            if (quote_type == '`' && peek() == '$' && m_beg[1] == '{') {
+                if (!skip_interpolation()) {
+                    report_error("Unterminated '${' in text literal: missing closing '}'");
+                    return Token(Token::Kind::Unexpected, start, m_beg - start, m_line_number);
+                }
+                continue;
             }
 
             if (peek() == '\\') {
@@ -40,7 +48,7 @@ Token Lexer::string_literal() noexcept {
                 const std::size_t interior = std::size_t(m_beg - start - 2);
 
                 if (interior == 0) {
-                    report_error("Empty character literal");
+                    report_error("Empty character literal ''; a character literal holds exactly one character, as in 'a' (write \"\" for an empty string)");
                     return Token(Token::Kind::Unexpected, start, m_beg - start, m_line_number);
                 }
                 
@@ -53,6 +61,48 @@ Token Lexer::string_literal() noexcept {
 
     report_error("Missing opening quote");
     return Token(Token::Kind::Unexpected, start, 1, m_line_number);
+}
+
+bool Lexer::skip_interpolation() noexcept {
+    get<true>();
+    get<true>();
+    int depth = 1;
+
+    while (depth > 0) {
+        const char c = peek();
+        if (c == '\0') return false;
+        if (c == '{') { ++depth; get<true>(); continue; }
+        if (c == '}') { --depth; get<true>(); continue; }
+        if (c == '"' || c == '\'' || c == '`') { if (!skip_quoted(c)) return false; continue; }
+        get<true>();
+    }
+
+    return true;
+}
+
+bool Lexer::skip_quoted(char quote) noexcept {
+    get<true>();
+
+    while (peek() != quote) {
+        if (peek() == '\0') return false;
+
+        if (peek() == '\\') {
+            get<true>();
+            if (peek() == '\0') return false;
+            get<true>();
+            continue;
+        }
+
+        if (quote == '`' && peek() == '$' && m_beg[1] == '{') {
+            if (!skip_interpolation()) return false;
+            continue;
+        }
+
+        get<true>();
+    }
+
+    get<true>();
+    return true;
 }
 
 Token Lexer::next() noexcept {
@@ -250,7 +300,7 @@ Token Lexer::scan() noexcept {
                     return Token(Token::Kind::Ellipsis, m_beg - 3, 3, m_line_number);
                 }
 
-                report_error("Unexpected sequence '..'");
+                report_error("'..' isn't an operator; write '...' for a pack or variadic parameter, or a single '.' to reach a member");
                 return Token(Token::Kind::Unexpected, m_line_number);
             }
 
@@ -342,7 +392,7 @@ Token Lexer::scan() noexcept {
                 return identifier();
             } else {
                 std::string unexpected(1, peek());
-                report_error("Unexpected character: " + unexpected);
+                report_error("The character '" + unexpected + "' can't be used in Walnut code outside a string, character literal or comment");
                 return Token(Token::Kind::Unexpected, m_beg, 1, m_line_number);
             }
             break;
@@ -368,6 +418,7 @@ Token Lexer::number() noexcept {
     const char* start = m_beg;
     auto in_base = [](char c, int base) {
         if (base == 2)  return c == '0' || c == '1';
+        if (base == 8)  return c >= '0' && c <= '7';
         if (base == 16) return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         return c >= '0' && c <= '9';
     };
@@ -391,6 +442,13 @@ Token Lexer::number() noexcept {
     if (m_beg[0] == '0' && (m_beg[1] == 'b' || m_beg[1] == 'B') && in_base(m_beg[2], 2)) {
         get<false>(); get<false>();
         digits(2);
+        suffix();
+        return Token(Token::Kind::Integer, start, m_beg, m_line_number);
+    }
+
+    if (m_beg[0] == '0' && (m_beg[1] == 'o' || m_beg[1] == 'O') && in_base(m_beg[2], 8)) {
+        get<false>(); get<false>();
+        digits(8);
         suffix();
         return Token(Token::Kind::Integer, start, m_beg, m_line_number);
     }
@@ -447,7 +505,7 @@ Token Lexer::slash_or_comment() noexcept {
         }
 
         m_line_number = open_line;
-        report_error("Unterminated block comment");
+        report_error("This block comment never ends; close it with '*/'");
         return Token(Token::Kind::Unexpected, m_beg, 1, m_line_number);
     }
 
@@ -504,7 +562,7 @@ namespace tokenizing {
 
 void Lexer::report_error(const std::string& message) noexcept {
     ++m_error_count;
-    m_reporter.report(ErrorPhase::Lexer, m_line_number, message);
+    m_reporter.report_at(ErrorPhase::Lexer, m_reporter.current_file(), m_line_number, message, m_beg, 1);
 }
 
 Token Lexer::atom(Token::Kind kind) noexcept { return Token(kind, m_beg++, 1, m_line_number); }

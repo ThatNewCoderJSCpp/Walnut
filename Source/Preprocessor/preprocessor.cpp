@@ -108,6 +108,11 @@ bool Preprocessor::import_native_headers(Reader& r, FileId file, unsigned int de
             return true;
         }
 
+        if (is_system_header(n)) {
+            m_reporter.report(ErrorPhase::Preprocessor, line, "'" + n + "' is a system header; Walnut only reads the declarations of headers in your own folders, so declare what you need from it in an extern block");
+            return true;
+        }
+
         std::error_code ec;
         const fs::path full = (base / n).lexically_normal();
 

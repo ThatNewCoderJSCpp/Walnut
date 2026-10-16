@@ -1,0 +1,1395 @@
+import module.collections
+import module.colors
+import module.windows
+import module.graphics
+
+namespace std {
+    namespace errors {
+        class ui_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class ui_error
+    } end namespace errors
+
+    namespace ui {
+        using std::colors::Color;
+        using std::windows::Window;
+        using std::graphics::Renderer;
+
+        enum Align { start, center, finish, stretch }
+
+        enum ButtonStyle { normal, primary, danger, flat }
+
+        extern "C++" from "<walnut_ui.hpp>" {
+            class Widget as "walnut_rt::gfx::ui_widget" {
+            public:
+                constructor();
+                function valid() const -> bool;
+                function widget() const -> Widget as "node";
+            } end class Widget
+
+
+            class Label as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(const string&: t) -> Label as "walnut_rt::gfx::ui_label";
+                function native_set_color(long int: rgba) -> void as "set_color";
+                function native_set_align(long int: a) -> void as "set_align";
+
+            public:
+                constructor();
+
+                static function make(const string&: t = "") -> Label {
+                    return native_make(t);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_text(const string&: t) -> void;
+                function text_value() const -> string as "text";
+                function set_font_size(float: px) -> void;
+                function set_bold(bool: on = true) -> void;
+                function set_muted(bool: on = true) -> void;
+
+                function set_color(const Color&: c) -> void {
+                    native_set_color(c.packed());
+                } end function set_color
+
+                function set_align(Align: a) -> void {
+                    native_set_align(static_cast<long int>(a));
+                } end function set_align
+            } end class Label
+
+            class Button as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(const string&: t) -> Button as "walnut_rt::gfx::ui_button";
+                function native_set_style(long int: s) -> void as "set_button_style";
+
+            public:
+                constructor();
+
+                static function make(const string&: t = "") -> Button {
+                    return native_make(t);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_text(const string&: t) -> void;
+                function text_value() const -> string as "text";
+                function click() -> void;
+
+                function set_style(ButtonStyle: s) -> void {
+                    native_set_style(static_cast<long int>(s));
+                } end function set_style
+
+                function clicked() -> bool {
+                    return take_clicked();
+                } end function clicked
+            } end class Button
+
+            class Checkbox as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(const string&: t, bool: on) -> Checkbox as "walnut_rt::gfx::ui_checkbox";
+
+            public:
+                constructor();
+
+                static function make(const string&: t = "", bool: on = false) -> Checkbox {
+                    return native_make(t, on);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_text(const string&: t) -> void;
+                function text_value() const -> string as "text";
+                function checked() const -> bool;
+                function set_checked(bool: on) -> void;
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+            } end class Checkbox
+
+            class Toggle as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(const string&: t, bool: on) -> Toggle as "walnut_rt::gfx::ui_toggle";
+
+            public:
+                constructor();
+
+                static function make(const string&: t = "", bool: on = false) -> Toggle {
+                    return native_make(t, on);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_text(const string&: t) -> void;
+                function text_value() const -> string as "text";
+                function checked() const -> bool;
+                function set_checked(bool: on) -> void;
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+            } end class Toggle
+
+            class Slider as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(float: v, float: lo, float: hi, float: step) -> Slider as "walnut_rt::gfx::ui_slider";
+
+            public:
+                constructor();
+
+                static function make() -> Slider {
+                    return native_make(0.0, 0.0, 1.0, 0.0);
+                } end function make
+
+                static function make(float: value, float: min_value, float: max_value) -> Slider {
+                    return native_make(value, min_value, max_value, 0.0);
+                } end function make
+
+                static function make(float: value, float: min_value, float: max_value, float: step) -> Slider {
+                    return native_make(value, min_value, max_value, step);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function value() const -> float;
+                function set_value(float: v) -> void;
+                function set_range(float: min_value, float: max_value) -> void;
+                function set_step(float: step) -> void;
+                function set_show_value(bool: on, long int: decimals = 2) -> void;
+                function dragging() const -> bool;
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+
+                function released() -> bool {
+                    return take_released();
+                } end function released
+            } end class Slider
+
+            class ProgressBar as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(float: v) -> ProgressBar as "walnut_rt::gfx::ui_progress";
+                function native_set_color(long int: rgba) -> void as "set_color";
+
+            public:
+                constructor();
+
+                static function make(float: value = 0.0) -> ProgressBar {
+                    return native_make(value);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function value() const -> float;
+                function set_value(float: v) -> void;
+                function set_indeterminate(bool: on = true) -> void;
+                function set_show_text(bool: on) -> void;
+                function set_text(const string&: t) -> void;
+
+                function set_color(const Color&: c) -> void {
+                    native_set_color(c.packed());
+                } end function set_color
+            } end class ProgressBar
+
+            class Spinner as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(float: size) -> Spinner as "walnut_rt::gfx::ui_spinner";
+                function native_set_color(long int: rgba) -> void as "set_color";
+
+            public:
+                constructor();
+
+                static function make(float: size = 20.0) -> Spinner {
+                    return native_make(size);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_color(const Color&: c) -> void {
+                    native_set_color(c.packed());
+                } end function set_color
+            } end class Spinner
+
+            class Dropdown as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(const std::collections::Vector<string>&: items) -> Dropdown as "walnut_rt::gfx::ui_dropdown";
+
+            public:
+                constructor();
+
+                static function make(const std::collections::Vector<string>&: items = std::collections::Vector<string>()) -> Dropdown {
+                    return native_make(items);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function add_item(const string&: item) -> void;
+                function set_items(const std::collections::Vector<string>&: items) -> void;
+                function item_count() const -> long int;
+                function selected() const -> long int;
+                function selected_text() const -> string;
+                function set_selected(long int: index) -> void;
+                function set_placeholder(const string&: t) -> void;
+                function set_searchable(bool: on) -> void;
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+            } end class Dropdown
+
+            class TextField as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(const string&: t, const string&: placeholder) -> TextField as "walnut_rt::gfx::ui_text_field";
+
+            public:
+                constructor();
+
+                static function make(const string&: t = "") -> TextField {
+                    return native_make(t, "");
+                } end function make
+
+                static function make(const string&: t, const string&: placeholder) -> TextField {
+                    return native_make(t, placeholder);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_text(const string&: t) -> void;
+                function text_value() const -> string as "text";
+                function set_placeholder(const string&: t) -> void;
+                function set_max_length(long int: length) -> void;
+                function set_password(bool: on) -> void;
+                function set_read_only(bool: on) -> void;
+                function set_allowed_chars(const string&: chars) -> void;
+                function select_all() -> void;
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+
+                function submitted() -> bool {
+                    return take_submitted();
+                } end function submitted
+            } end class TextField
+
+            class IntField as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(long int: v, long int: lo, long int: hi, long int: step) -> IntField as "walnut_rt::gfx::ui_int_field";
+                function native_value() const -> float as "value";
+                function native_set_value(float: v) -> void as "set_value";
+                function native_set_range(float: lo, float: hi) -> void as "set_range";
+
+            public:
+                constructor();
+
+                static function make(long int: value = 0) -> IntField {
+                    return native_make(value, -9223372036854775807, 9223372036854775807, 1);
+                } end function make
+
+                static function make(long int: value, long int: min_value, long int: max_value, long int: step = 1) -> IntField {
+                    return native_make(value, min_value, max_value, step);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_spin_buttons(bool: on) -> void;
+
+                function value() const -> long int {
+                    return static_cast<long int>(native_value());
+                } end function value
+
+                function set_value(long int: v) -> void {
+                    native_set_value(static_cast<float>(v));
+                } end function set_value
+
+                function set_range(long int: min_value, long int: max_value) -> void {
+                    native_set_range(static_cast<float>(min_value), static_cast<float>(max_value));
+                } end function set_range
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+
+                function submitted() -> bool {
+                    return take_submitted();
+                } end function submitted
+            } end class IntField
+
+            class FloatField as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(float: v, float: lo, float: hi, float: step) -> FloatField as "walnut_rt::gfx::ui_float_field";
+
+            public:
+                constructor();
+
+                static function make(float: value = 0.0) -> FloatField {
+                    return native_make(value, -1.0e300, 1.0e300, 0.1);
+                } end function make
+
+                static function make(float: value, float: min_value, float: max_value, float: step) -> FloatField {
+                    return native_make(value, min_value, max_value, step);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function value() const -> float;
+                function set_value(float: v) -> void;
+                function set_range(float: min_value, float: max_value) -> void;
+                function set_step(float: step) -> void;
+                function set_decimals(long int: decimals) -> void;
+                function set_spin_buttons(bool: on) -> void;
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+
+                function submitted() -> bool {
+                    return take_submitted();
+                } end function submitted
+            } end class FloatField
+
+            class ColorPicker as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(long int: rgba, bool: alpha) -> ColorPicker as "walnut_rt::gfx::ui_color_picker";
+                function native_set_color(long int: rgba) -> void as "set_color";
+                function native_color() const -> long int as "color_value";
+
+            public:
+                constructor();
+
+                static function make(const Color&: c = Color(255, 255, 255), bool: alpha = true) -> ColorPicker {
+                    return native_make(c.packed(), alpha);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_alpha_enabled(bool: on) -> void;
+
+                function color() const -> Color {
+                    return Color::from_packed(native_color());
+                } end function color
+
+                function set_color(const Color&: c) -> void {
+                    native_set_color(c.packed());
+                } end function set_color
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+            } end class ColorPicker
+
+            class Separator as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(bool: vertical) -> Separator as "walnut_rt::gfx::ui_separator";
+
+            public:
+                constructor();
+
+                static function make(bool: vertical = false) -> Separator {
+                    return native_make(vertical);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+            } end class Separator
+
+            class Spacer as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make(float: flex) -> Spacer as "walnut_rt::gfx::ui_spacer";
+
+            public:
+                constructor();
+
+                static function make(float: flex = 1.0) -> Spacer {
+                    return native_make(flex);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+            } end class Spacer
+
+            class Stack as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                function native_add(const Widget&: child) -> bool as "add";
+                function native_remove(const Widget&: child) -> bool as "remove";
+                function native_set_background(long int: rgba) -> void as "set_background";
+                function native_set_border(long int: rgba) -> void as "set_border";
+                function native_set_cross_align(long int: a) -> void as "set_cross_align";
+                function native_set_main_align(long int: a) -> void as "set_main_align";
+                static function native_vertical(float: spacing) -> Stack as "walnut_rt::gfx::ui_vstack";
+                static function native_horizontal(float: spacing) -> Stack as "walnut_rt::gfx::ui_hstack";
+
+            public:
+                constructor();
+
+                static function vertical(float: spacing = 6.0) -> Stack {
+                    return native_vertical(spacing);
+                } end function vertical
+
+                static function horizontal(float: spacing = 6.0) -> Stack {
+                    return native_horizontal(spacing);
+                } end function horizontal
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                template <typename W>
+                function add(const W&: child) -> void {
+                    if (!native_add(child.widget())) then {
+                        throw std::errors::ui_error("add() needs a widget that isn't already this one");
+                    }
+                } end function add
+
+                template <typename W>
+                function remove(const W&: child) -> bool {
+                    return native_remove(child.widget());
+                } end function remove
+
+                function child_count() const -> long int;
+                function set_spacing(float: spacing) -> void;
+                function set_padding(float: padding) -> void;
+                function set_radius(float: radius) -> void;
+
+                function set_background(const Color&: c) -> void {
+                    native_set_background(c.packed());
+                } end function set_background
+
+                function set_border(const Color&: c) -> void {
+                    native_set_border(c.packed());
+                } end function set_border
+
+                function set_cross_align(Align: a) -> void {
+                    native_set_cross_align(static_cast<long int>(a));
+                } end function set_cross_align
+
+                function set_main_align(Align: a) -> void {
+                    native_set_main_align(static_cast<long int>(a));
+                } end function set_main_align
+            } end class Stack
+
+            class Panel as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                function native_add(const Widget&: child) -> bool as "add";
+                function native_remove(const Widget&: child) -> bool as "remove";
+                function native_set_background(long int: rgba) -> void as "set_background";
+                function native_set_border(long int: rgba) -> void as "set_border";
+                function native_set_cross_align(long int: a) -> void as "set_cross_align";
+                function native_set_main_align(long int: a) -> void as "set_main_align";
+                static function native_make(bool: horizontal) -> Panel as "walnut_rt::gfx::ui_panel";
+
+            public:
+                constructor();
+
+                static function make(bool: horizontal = false) -> Panel {
+                    return native_make(horizontal);
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                template <typename W>
+                function add(const W&: child) -> void {
+                    if (!native_add(child.widget())) then {
+                        throw std::errors::ui_error("add() needs a widget that isn't already this one");
+                    }
+                } end function add
+
+                template <typename W>
+                function remove(const W&: child) -> bool {
+                    return native_remove(child.widget());
+                } end function remove
+
+                function child_count() const -> long int;
+                function set_spacing(float: spacing) -> void;
+                function set_padding(float: padding) -> void;
+                function set_radius(float: radius) -> void;
+
+                function set_background(const Color&: c) -> void {
+                    native_set_background(c.packed());
+                } end function set_background
+
+                function set_border(const Color&: c) -> void {
+                    native_set_border(c.packed());
+                } end function set_border
+
+                function set_cross_align(Align: a) -> void {
+                    native_set_cross_align(static_cast<long int>(a));
+                } end function set_cross_align
+
+                function set_main_align(Align: a) -> void {
+                    native_set_main_align(static_cast<long int>(a));
+                } end function set_main_align
+            } end class Panel
+
+            class ScrollView as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make() -> ScrollView as "walnut_rt::gfx::ui_scroll_view";
+                function native_set_content(const Widget&: child) -> bool as "set_content";
+
+            public:
+                constructor();
+
+                static function make() -> ScrollView {
+                    return native_make();
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function set_scroll_directions(bool: horizontal, bool: vertical) -> void;
+                function scroll_to(float: x, float: y) -> void;
+                function scroll_x() const -> float;
+                function scroll_y() const -> float;
+
+                template <typename W>
+                function set_content(const W&: child) -> void {
+                    native_set_content(child.widget());
+                } end function set_content
+            } end class ScrollView
+
+            class TabView as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make() -> TabView as "walnut_rt::gfx::ui_tab_view";
+                function native_add_tab(const string&: title, const Widget&: page) -> bool as "add_tab";
+
+            public:
+                constructor();
+
+                static function make() -> TabView {
+                    return native_make();
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function tab_count() const -> long int;
+                function selected() const -> long int;
+                function set_selected(long int: index) -> void;
+
+                template <typename W>
+                function add_tab(const string&: title, const W&: page) -> void {
+                    native_add_tab(title, page.widget());
+                } end function add_tab
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+            } end class TabView
+
+            class RadioButton as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+
+            public:
+                constructor();
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function checked() const -> bool;
+                function set_checked(bool: on) -> void;
+            } end class RadioButton
+
+            class RadioGroup as "walnut_rt::gfx::ui_widget" {
+                function native_rect(long int: which) const -> float as "rect";
+                function take_clicked() -> bool;
+                function take_changed() -> bool;
+                function take_released() -> bool;
+                function take_submitted() -> bool;
+                static function native_make() -> RadioGroup as "walnut_rt::gfx::ui_radio_group";
+                function native_radio(const string&: label, long int: value) -> RadioButton as "radio";
+
+            public:
+                constructor();
+
+                static function make() -> RadioGroup {
+                    return native_make();
+                } end function make
+
+                function set_size(float: width, float: height) -> void;
+                function set_width(float: width) -> void;
+                function set_height(float: height) -> void;
+                function set_min_size(float: width, float: height) -> void;
+                function set_max_size(float: width, float: height) -> void;
+                function set_flex(float: flex) -> void;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_enabled(bool: enabled) -> void;
+                function enabled() const -> bool;
+                function set_tooltip(const string&: tip) -> void;
+                function set_id(const string&: id_value) -> void;
+                function id() const -> string;
+                function hovered() const -> bool;
+                function focused() const -> bool;
+                function focus() -> void;
+                function widget() const -> Widget as "node";
+
+                function x() const -> float {
+                    return native_rect(0);
+                } end function x
+
+                function y() const -> float {
+                    return native_rect(1);
+                } end function y
+
+                function width() const -> float {
+                    return native_rect(2);
+                } end function width
+
+                function height() const -> float {
+                    return native_rect(3);
+                } end function height
+
+                function selected() const -> long int;
+                function set_selected(long int: value) -> void;
+
+                function option(const string&: label, long int: value) -> RadioButton {
+                    return native_radio(label, value);
+                } end function option
+
+                function changed() -> bool {
+                    return take_changed();
+                } end function changed
+            } end class RadioGroup
+
+            class Ui as "walnut_rt::gfx::ui" {
+                function native_add(const Widget&: child) -> bool as "add";
+                function native_remove(const Widget&: child) -> bool as "remove";
+                function native_set_accent(long int: rgba) -> void as "set_accent";
+                function native_root() const -> Stack as "root";
+                function valid() const -> bool;
+
+            public:
+                constructor();
+                constructor(const Window&: window);
+
+                static function make(const Window&: window) -> Ui {
+                    Ui: u = Ui(window);
+                    if (!u.valid()) then {
+                        throw std::errors::ui_error("can't attach a Ui to this window");
+                    }
+                    return u;
+                } end function make
+
+                template <typename W>
+                function add(const W&: child) -> void {
+                    if (!native_add(child.widget())) then {
+                        throw std::errors::ui_error("add() needs a widget");
+                    }
+                } end function add
+
+                template <typename W>
+                function remove(const W&: child) -> bool {
+                    return native_remove(child.widget());
+                } end function remove
+
+                function root() const -> Stack {
+                    return native_root();
+                } end function root
+
+                function update(float: dt) -> void;
+                function draw(Renderer&: renderer) -> void;
+                function set_dark() -> void;
+                function set_light() -> void;
+                function set_font_size(float: px) -> void;
+                function set_font(const string&: name) -> void;
+                function set_scale(float: scale) -> void;
+                function scale() const -> float;
+                function wants_mouse() const -> bool;
+                function wants_keyboard() const -> bool;
+                function alert(const string&: title, const string&: message) -> void;
+                function modal_open() const -> bool;
+                function clear_focus() -> void;
+
+                function set_accent(const Color&: c) -> void {
+                    native_set_accent(c.packed());
+                } end function set_accent
+            } end class Ui
+        } end extern
+    } end namespace ui
+} end namespace std

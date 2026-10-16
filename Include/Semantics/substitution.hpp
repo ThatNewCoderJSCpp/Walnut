@@ -17,6 +17,8 @@ struct SubstEnv {
     std::unordered_map<Symbol*, Type*>              types;   
     std::unordered_map<Symbol*, const WideInt*>     values;  
     std::unordered_map<Symbol*, const WideFloat*>   fvalues;
+    std::unordered_map<Symbol*, const std::string*> svalues;
+    std::unordered_map<Symbol*, TemplateArg>        forwarded;
     std::unordered_map<Symbol*, std::vector<Type*>> packs;  
 
     Type* lookup_type(Symbol* p) const {
@@ -29,6 +31,11 @@ struct SubstEnv {
         return it == values.end() ? nullptr : it->second;
     }
 
+    const std::string* lookup_svalue(Symbol* p) const {
+        auto it = svalues.find(p);
+        return it == svalues.end() ? nullptr : it->second;
+    }
+
     const WideFloat* lookup_fvalue(Symbol* p) const {
         auto it = fvalues.find(p);
         return it == fvalues.end() ? nullptr : it->second;
@@ -39,7 +46,7 @@ struct SubstEnv {
         return it == packs.end() ? nullptr : &it->second;
     }
 
-    bool empty() const { return types.empty() && values.empty() && fvalues.empty() && packs.empty(); }
+    bool empty() const { return types.empty() && values.empty() && fvalues.empty() && svalues.empty() && packs.empty(); }
 };
 
 CV cv_union(CV a, CV b);

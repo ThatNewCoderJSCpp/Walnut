@@ -1,0 +1,444 @@
+import module.collections
+
+namespace std {
+    namespace errors {
+        class network_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class network_error
+    } end namespace errors
+
+    namespace networking {
+        extern "C++" from "<walnut_net.hpp>" {
+            class TcpStream as "walnut_rt::net::tcp_stream" {
+            public:
+                constructor();
+                static function connect(const string&: host, long int: port, long int: timeout_ms = 10000) -> TcpStream as "walnut_rt::net::tcp_stream::connect";
+                function is_open() const -> bool;
+                function send(const string&: data) -> long int;
+                function send_all(const string&: data) -> bool;
+                function receive(long int: max_bytes = 65536) -> string;
+                function receive_exact(long int: count) -> string;
+                function read_line() -> string;
+                function receive_all() -> string;
+                function set_timeout(long int: milliseconds) -> void;
+                function close() -> void;
+                function local_address() const -> string;
+                function remote_address() const -> string;
+                function last_error() const -> string;
+
+                function write_line(const string&: line) -> bool {
+                    return send_all(line + "\n");
+                } end function write_line
+            } end class TcpStream
+
+            class TcpListener as "walnut_rt::net::tcp_listener" {
+            public:
+                constructor();
+                static function bind(const string&: host, long int: port, long int: backlog = 16) -> TcpListener as "walnut_rt::net::tcp_listener::bind";
+                function accept() -> TcpStream;
+                function port() const -> long int;
+                function local_address() const -> string;
+                function is_open() const -> bool;
+                function close() -> void;
+            } end class TcpListener
+
+            class Datagram as "walnut_rt::net::datagram" {
+            public:
+                constructor();
+                function data() const -> string;
+                function host() const -> string;
+                function port() const -> long int;
+                function empty() const -> bool;
+            } end class Datagram
+
+            class UdpSocket as "walnut_rt::net::udp_socket" {
+            public:
+                constructor();
+                static function bind(const string&: host, long int: port) -> UdpSocket as "walnut_rt::net::udp_socket::bind";
+                function send_to(const string&: host, long int: port, const string&: data) -> long int;
+                function receive_from(long int: max_bytes = 65507) -> Datagram;
+                function broadcast(long int: port, const string&: data) -> long int;
+                function set_timeout(long int: milliseconds) -> void;
+                function port() const -> long int;
+                function local_address() const -> string;
+                function close() -> void;
+            } end class UdpSocket
+
+            class TlsStream as "walnut_rt::net::tls_stream" {
+            public:
+                constructor();
+                static function connect(const string&: host, long int: port, bool: verify = true, long int: timeout_ms = 10000) -> TlsStream as "walnut_rt::net::tls_stream::connect";
+                function is_open() const -> bool;
+                function send_all(const string&: data) -> bool;
+                function receive(long int: max_bytes = 16384) -> string;
+                function receive_all() -> string;
+                function close() -> void;
+            } end class TlsStream
+
+            class Url as "walnut_rt::net::url" {
+            public:
+                constructor();
+                static function parse(const string&: input) -> Url as "walnut_rt::net::url::parse";
+                static function parse_relative(const string&: input, const string&: base) -> Url as "walnut_rt::net::url::parse_relative";
+                static function can_parse(const string&: input) -> bool as "walnut_rt::net::url::can_parse";
+                static function default_port(const string&: scheme) -> long int as "walnut_rt::net::url::default_port";
+                function href() const -> string;
+                function origin() const -> string;
+                function scheme() const -> string;
+                function username() const -> string;
+                function password() const -> string;
+                function host() const -> string;
+                function hostname() const -> string;
+                function port() const -> long int;
+                function path() const -> string;
+                function query() const -> string;
+                function fragment() const -> string;
+                function path_and_query() const -> string;
+                function secure() const -> bool;
+                function param(const string&: name) const -> string;
+                function has_param(const string&: name) const -> bool;
+                function params(const string&: name) const -> std::collections::Vector<string>;
+                function param_names() const -> std::collections::Vector<string>;
+                function with_scheme(const string&: value) const -> Url;
+                function with_host(const string&: value) const -> Url;
+                function with_port(long int: value) const -> Url;
+                function with_path(const string&: value) const -> Url;
+                function with_query(const string&: value) const -> Url;
+                function with_fragment(const string&: value) const -> Url;
+                function with_param(const string&: name, const string&: value) const -> Url;
+                function without_param(const string&: name) const -> Url;
+
+                function to_string() const -> string {
+                    return href();
+                } end function to_string
+            } end class Url
+
+            class Headers as "walnut_rt::net::headers" {
+            public:
+                constructor();
+                function set(const string&: name, const string&: value) -> void;
+                function add(const string&: name, const string&: value) -> void;
+                function get(const string&: name) const -> string;
+                function has(const string&: name) const -> bool;
+                function remove(const string&: name) -> bool;
+                function size() const -> long int;
+                function names() const -> std::collections::Vector<string>;
+            } end class Headers
+
+            class Request as "walnut_rt::net::request" {
+            public:
+                constructor();
+                function method() const -> string;
+                function target() const -> string;
+                function path() const -> string;
+                function query() const -> string;
+                function param(const string&: name) const -> string;
+                function body() const -> string;
+                function version() const -> string;
+                function header(const string&: name) const -> string;
+                function has_header(const string&: name) const -> bool;
+                function header_names() const -> std::collections::Vector<string>;
+            } end class Request
+
+            class Response as "walnut_rt::net::response" {
+            public:
+                constructor();
+                static function make(long int: status, const string&: body, const string&: content_type = "text/plain; charset=utf-8") -> Response as "walnut_rt::net::response::make";
+                function status() const -> long int;
+                function status_text() const -> string;
+                function body() const -> string;
+                function url() const -> string;
+                function ok() const -> bool;
+                function header(const string&: name) const -> string;
+                function has_header(const string&: name) const -> bool;
+                function header_names() const -> std::collections::Vector<string>;
+                function error() const -> string;
+                function failed() const -> bool;
+                function set_status(long int: code) -> void;
+                function set_body(const string&: input) -> void;
+                function set_header(const string&: name, const string&: value) -> void;
+                function add_header(const string&: name, const string&: value) -> void;
+
+                static function plain(const string&: body, long int: status = 200) -> Response {
+                    return Response::make(status, body, "text/plain; charset=utf-8");
+                } end function plain
+
+                static function html(const string&: body, long int: status = 200) -> Response {
+                    return Response::make(status, body, "text/html; charset=utf-8");
+                } end function html
+
+                static function json(const string&: body, long int: status = 200) -> Response {
+                    return Response::make(status, body, "application/json");
+                } end function json
+
+                static function not_found() -> Response {
+                    return Response::make(404, "not found");
+                } end function not_found
+
+                static function redirect(const string&: location, long int: status = 302) -> Response {
+                    Response: r = Response::make(status, "");
+                    r.set_header("Location", location);
+                    return r;
+                } end function redirect
+            } end class Response
+
+            class HttpServer as "walnut_rt::net::http_server" {
+            public:
+                constructor();
+                function handle(function(Request) -> Response: handler) -> void;
+                function listen(const string&: host, long int: port) -> void;
+                function serve() -> void;
+                function serve_for(long int: milliseconds) -> void;
+                function close() -> void;
+                function is_listening() const -> bool;
+            } end class HttpServer
+
+            class Message as "walnut_rt::net::message" {
+            public:
+                constructor();
+                function data() const -> string;
+                function is_binary() const -> bool;
+                function is_text() const -> bool;
+                function ok() const -> bool;
+            } end class Message
+
+            class WebSocket as "walnut_rt::net::websocket" {
+            public:
+                constructor();
+                static function connect(const string&: url, long int: timeout_ms = 30000) -> WebSocket as "walnut_rt::net::websocket::connect";
+                function send_text(const string&: input) -> bool;
+                function send_binary(const string&: data) -> bool;
+                function receive(long int: timeout_ms = -1) -> Message;
+                function on_message(function(Message) -> void: callback) -> void;
+                function close(long int: code = 1000, const string&: reason = "") -> void;
+                function is_open() const -> bool;
+                function close_code() const -> long int;
+                function close_reason() const -> string;
+                function error() const -> string;
+                function remote_address() const -> string;
+            } end class WebSocket
+
+            class WebSocketServer as "walnut_rt::net::websocket_server" {
+            public:
+                constructor();
+                function handle(function(WebSocket) -> void: on_connect) -> void;
+                function listen(const string&: host, long int: port) -> void;
+                function broadcast(const string&: input) -> long int;
+                function client_count() const -> long int;
+                function port() const -> long int;
+                function serve() -> void;
+                function serve_for(long int: milliseconds) -> void;
+                function close() -> void;
+            } end class WebSocketServer
+
+            class Timer as "walnut_rt::net::timer" {
+            public:
+                constructor();
+                function cancel() -> void;
+                function active() const -> bool;
+            } end class Timer
+
+            class Native as "walnut_rt::net::api" {
+            public:
+                static function resolve(const string&: host) -> std::collections::Vector<string> as "walnut_rt::net::resolve";
+                static function resolve4(const string&: host) -> std::collections::Vector<string> as "walnut_rt::net::resolve4";
+                static function resolve6(const string&: host) -> std::collections::Vector<string> as "walnut_rt::net::resolve6";
+                static function reverse_lookup(const string&: ip) -> std::collections::Vector<string> as "walnut_rt::net::reverse_lookup";
+                static function is_ipv4(const string&: input) -> bool as "walnut_rt::net::is_ipv4";
+                static function is_ipv6(const string&: input) -> bool as "walnut_rt::net::is_ipv6";
+                static function fetch(const string&: method, const string&: url, const string&: body, const Headers&: headers, long int: timeout_ms, bool: follow, bool: verify) -> Response as "walnut_rt::net::fetch";
+                static function fetch_async(const string&: method, const string&: url, const string&: body, const Headers&: headers, long int: timeout_ms, bool: follow, bool: verify, function(Response) -> void: callback) -> void as "walnut_rt::net::fetch_async";
+                static function set_timeout(long int: ms, function() -> void: callback) -> Timer as "walnut_rt::net::set_timeout";
+                static function set_interval(long int: ms, function() -> void: callback) -> Timer as "walnut_rt::net::set_interval";
+                static function next_tick(function() -> void: callback) -> void as "walnut_rt::net::next_tick";
+                static function run() -> long int as "walnut_rt::net::run";
+                static function run_once() -> long int as "walnut_rt::net::run_once";
+                static function poll() -> long int as "walnut_rt::net::poll";
+                static function run_for(long int: ms) -> long int as "walnut_rt::net::run_for";
+                static function stop() -> void as "walnut_rt::net::stop";
+                static function status_text(long int: code) -> string as "walnut_rt::net::status_text";
+                static function url_encode(const string&: input) -> string as "walnut_rt::net::url_encode";
+                static function url_decode(const string&: input) -> string as "walnut_rt::net::url_decode";
+            } end class Native
+        } end extern
+
+        function resolve(const string&: host) -> std::collections::Vector<string> {
+            return Native::resolve(host);
+        } end function resolve
+
+        function resolve4(const string&: host) -> std::collections::Vector<string> {
+            return Native::resolve4(host);
+        } end function resolve4
+
+        function resolve6(const string&: host) -> std::collections::Vector<string> {
+            return Native::resolve6(host);
+        } end function resolve6
+
+        function reverse_lookup(const string&: ip) -> std::collections::Vector<string> {
+            return Native::reverse_lookup(ip);
+        } end function reverse_lookup
+
+        function is_ipv4(const string&: input) -> bool {
+            return Native::is_ipv4(input);
+        } end function is_ipv4
+
+        function is_ipv6(const string&: input) -> bool {
+            return Native::is_ipv6(input);
+        } end function is_ipv6
+
+        function url_encode(const string&: input) -> string {
+            return Native::url_encode(input);
+        } end function url_encode
+
+        function url_decode(const string&: input) -> string {
+            return Native::url_decode(input);
+        } end function url_decode
+
+        function status_text(long int: code) -> string {
+            return Native::status_text(code);
+        } end function status_text
+
+        struct RequestOptions {
+            string: method = "GET";
+            string: body;
+            Headers: headers;
+            long int: timeout_ms = 30000;
+            bool: follow_redirects = true;
+            bool: verify_certificates = true;
+
+            function header(const string&: name, const string&: value) -> RequestOptions& {
+                headers.set(name, value);
+                return *this;
+            } end function header
+        } end struct RequestOptions
+
+        function request(const string&: url, const RequestOptions&: options) -> Response {
+            return Native::fetch(options.method, url, options.body, options.headers, options.timeout_ms, options.follow_redirects, options.verify_certificates);
+        } end function request
+
+        function request(const string&: method, const string&: url, const string&: body = "", long int: timeout_ms = 30000) -> Response {
+            RequestOptions: o;
+            o.method = method;
+            o.body = body;
+            o.timeout_ms = timeout_ms;
+            return request(url, o);
+        } end function request
+
+        function get(const string&: url, long int: timeout_ms = 30000) -> Response {
+            return request("GET", url, "", timeout_ms);
+        } end function get
+
+        function head(const string&: url, long int: timeout_ms = 30000) -> Response {
+            return request("HEAD", url, "", timeout_ms);
+        } end function head
+
+        function post(const string&: url, const string&: body, const string&: content_type = "application/x-www-form-urlencoded", long int: timeout_ms = 30000) -> Response {
+            RequestOptions: o;
+            o.method = "POST";
+            o.body = body;
+            o.timeout_ms = timeout_ms;
+            o.headers.set("Content-Type", content_type);
+            return request(url, o);
+        } end function post
+
+        function post_json(const string&: url, const string&: json, long int: timeout_ms = 30000) -> Response {
+            return post(url, json, "application/json", timeout_ms);
+        } end function post_json
+
+        function put(const string&: url, const string&: body, const string&: content_type = "application/octet-stream", long int: timeout_ms = 30000) -> Response {
+            RequestOptions: o;
+            o.method = "PUT";
+            o.body = body;
+            o.timeout_ms = timeout_ms;
+            o.headers.set("Content-Type", content_type);
+            return request(url, o);
+        } end function put
+
+        function patch(const string&: url, const string&: body, const string&: content_type = "application/json", long int: timeout_ms = 30000) -> Response {
+            RequestOptions: o;
+            o.method = "PATCH";
+            o.body = body;
+            o.timeout_ms = timeout_ms;
+            o.headers.set("Content-Type", content_type);
+            return request(url, o);
+        } end function patch
+
+        function remove(const string&: url, long int: timeout_ms = 30000) -> Response {
+            return request("DELETE", url, "", timeout_ms);
+        } end function remove
+
+        function download(const string&: url) -> string {
+            const Response: r = get(url);
+            if (r.failed()) then {
+                throw std::errors::network_error(static_cast<string>(`download of ${url} failed: ${r.error()}`));
+            }
+            if (!r.ok()) then {
+                throw std::errors::network_error(static_cast<string>(`download of ${url} failed: ${r.status()} ${r.status_text()}`));
+            }
+            return r.body();
+        } end function download
+
+        function request_async(const string&: url, const RequestOptions&: options, function(Response) -> void: callback) -> void {
+            Native::fetch_async(options.method, url, options.body, options.headers, options.timeout_ms, options.follow_redirects, options.verify_certificates, callback);
+        } end function request_async
+
+        function get_async(const string&: url, function(Response) -> void: callback) -> void {
+            RequestOptions: o;
+            request_async(url, o, callback);
+        } end function get_async
+
+        function post_async(const string&: url, const string&: body, const string&: content_type, function(Response) -> void: callback) -> void {
+            RequestOptions: o;
+            o.method = "POST";
+            o.body = body;
+            o.headers.set("Content-Type", content_type);
+            request_async(url, o, callback);
+        } end function post_async
+
+        function serve(const string&: host, long int: port, function(Request) -> Response: handler) -> void {
+            HttpServer: server;
+            server.handle(handler);
+            server.listen(host, port);
+            server.serve();
+        } end function serve
+
+        function set_timeout(long int: milliseconds, function() -> void: callback) -> Timer {
+            return Native::set_timeout(milliseconds, callback);
+        } end function set_timeout
+
+        function set_interval(long int: milliseconds, function() -> void: callback) -> Timer {
+            return Native::set_interval(milliseconds, callback);
+        } end function set_interval
+
+        function next_tick(function() -> void: callback) -> void {
+            Native::next_tick(callback);
+        } end function next_tick
+
+        function run() -> long int {
+            return Native::run();
+        } end function run
+
+        function run_once() -> long int {
+            return Native::run_once();
+        } end function run_once
+
+        function poll() -> long int {
+            return Native::poll();
+        } end function poll
+
+        function run_for(long int: milliseconds) -> long int {
+            return Native::run_for(milliseconds);
+        } end function run_for
+
+        function stop() -> void {
+            Native::stop();
+        } end function stop
+    } end namespace networking
+} end namespace std

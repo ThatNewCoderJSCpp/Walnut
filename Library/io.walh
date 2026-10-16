@@ -1,0 +1,2316 @@
+hidden namespace walnut_rt {
+    namespace io_native {
+        extern "C++" {
+            function file_open(const string&: path, long int: mode) noexcept -> long int;
+            function string_open(const string&: initial, long int: mode) noexcept -> long int;
+            function string_get(long int: id) noexcept -> string;
+            function string_set(long int: id, const string&: value, long int: mode) noexcept -> void;
+            function device_close(long int: id) noexcept -> bool;
+            function device_write(long int: id, const string&: bytes) noexcept -> bool;
+            function device_flush(long int: id) noexcept -> bool;
+            function device_peek_ok(long int: id) noexcept -> bool;
+            function device_peek(long int: id) noexcept -> char;
+            function device_bump(long int: id) noexcept -> void;
+            function device_unget(long int: id) noexcept -> bool;
+            function device_seek(long int: id, long int: offset, long int: dir, long int: which) noexcept -> long int;
+            function device_available(long int: id) noexcept -> long int;
+            function sync_acquire() noexcept -> void;
+            function sync_release() noexcept -> void;
+            function format_int(long long integer: value, long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
+            function format_uint(unsigned long long integer: value, long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
+            function format_float(long long double: value, long int: bits, long int: precision, long int: style, bool: upper, bool: showpos, bool: showpoint) noexcept -> string;
+            function parse_int_ok(const string&: token, long int: base) noexcept -> bool;
+            function parse_int(const string&: token, long int: base) noexcept -> long long integer;
+            function parse_uint_ok(const string&: token, long int: base) noexcept -> bool;
+            function parse_uint(const string&: token, long int: base) noexcept -> unsigned long long integer;
+            function parse_float_ok(const string&: token) noexcept -> bool;
+            function parse_float(const string&: token) noexcept -> long long double;
+            function unescape_ok(const string&: s) noexcept -> bool;
+            function unescape(const string&: s) noexcept -> string;
+            function trim_spaces(const string&: s) noexcept -> string;
+            function start_unbuffered() noexcept -> bool;
+        } end extern
+    } end namespace io_native
+} end namespace walnut_rt
+
+namespace std {
+    namespace errors {
+        class format_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class format_error
+
+        class input_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class input_error
+    } end namespace errors
+
+    namespace io {
+        class streambuf;
+        class ostream;
+
+        struct ios_state {
+            int: flags = 4098;
+            int: state = 0;
+            long int: width = 0;
+            long int: precision = 6;
+            bool: precision_set = false;
+            char: fill = ' ';
+            streambuf*: buf = nullptr;
+            ostream*: tied = nullptr;
+        } end struct ios_state
+
+        class ios_base {
+        protected:
+            ios_state: m_own;
+            ios_state*: m_s;
+
+        public:
+            static constexpr int: boolalpha  = 1;
+            static constexpr int: base10     = 2;
+            static constexpr int: fixed      = 4;
+            static constexpr int: hex        = 8;
+            static constexpr int: internal   = 16;
+            static constexpr int: left       = 32;
+            static constexpr int: oct        = 64;
+            static constexpr int: right      = 128;
+            static constexpr int: scientific = 256;
+            static constexpr int: showbase   = 512;
+            static constexpr int: showpoint  = 1024;
+            static constexpr int: showpos    = 2048;
+            static constexpr int: skipws     = 4096;
+            static constexpr int: unitbuf    = 8192;
+            static constexpr int: uppercase  = 16384;
+            static constexpr int: bin        = 32768;
+            static constexpr int: basefield   = 32842;
+            static constexpr int: adjustfield = 176;
+            static constexpr int: floatfield  = 260;
+
+            static constexpr int: goodbit = 0;
+            static constexpr int: badbit  = 1;
+            static constexpr int: eofbit  = 2;
+            static constexpr int: failbit = 4;
+
+            static constexpr int: app       = 1;
+            static constexpr int: binary    = 2;
+            static constexpr int: input     = 4;
+            static constexpr int: output    = 8;
+            static constexpr int: trunc     = 16;
+            static constexpr int: ate       = 32;
+            static constexpr int: noreplace = 64;
+
+            static constexpr int: seek_beg = 0;
+            static constexpr int: seek_cur = 1;
+            static constexpr int: seek_end = 2;
+
+            constructor() : m_s = nullptr {
+                m_s = &m_own;
+            }
+
+            constructor(const ios_base&: other) = delete;
+
+            function flags() const -> int {
+                return m_s->flags;
+            } end function flags
+
+            function flags(int: f) -> int {
+                int: old = m_s->flags;
+                m_s->flags = f;
+                return old;
+            } end function flags
+
+            function setf(int: f) -> int {
+                int: old = m_s->flags;
+                m_s->flags = old | f;
+                return old;
+            } end function setf
+
+            function setf(int: f, int: mask) -> int {
+                int: old = m_s->flags;
+                m_s->flags = (old & ~mask) | (f & mask);
+                return old;
+            } end function setf
+
+            function unsetf(int: mask) -> void {
+                m_s->flags = m_s->flags & ~mask;
+            } end function unsetf
+
+            function width() const -> long int {
+                return m_s->width;
+            } end function width
+
+            function width(long int: w) -> long int {
+                long int: old = m_s->width;
+                m_s->width = w;
+                return old;
+            } end function width
+
+            function precision() const -> long int {
+                return m_s->precision;
+            } end function precision
+
+            function precision(long int: p) -> long int {
+                long int: old = m_s->precision;
+                m_s->precision = p;
+                m_s->precision_set = true;
+                return old;
+            } end function precision
+
+            function fill() const -> char {
+                return m_s->fill;
+            } end function fill
+
+            function fill(char: c) -> char {
+                char: old = m_s->fill;
+                m_s->fill = c;
+                return old;
+            } end function fill
+
+            function rdstate() const -> int {
+                return m_s->state;
+            } end function rdstate
+
+            function good() const -> bool {
+                return m_s->state == 0;
+            } end function good
+
+            function eof() const -> bool {
+                return (m_s->state & eofbit) != 0;
+            } end function eof
+
+            function fail() const -> bool {
+                return (m_s->state & (failbit | badbit)) != 0;
+            } end function fail
+
+            function bad() const -> bool {
+                return (m_s->state & badbit) != 0;
+            } end function bad
+
+            function clear(int: s = 0) -> void {
+                m_s->state = s;
+            } end function clear
+
+            function setstate(int: s) -> void {
+                m_s->state = m_s->state | s;
+            } end function setstate
+
+            function share_state_with(ios_base&: other) -> void {
+                m_s = other.m_s;
+            } end function share_state_with
+
+            operator(bool) function() const {
+                return (m_s->state & (failbit | badbit)) == 0;
+            }
+
+            operator(!) function() const -> bool {
+                return (m_s->state & (failbit | badbit)) != 0;
+            }
+        } end class ios_base
+
+        class ios inherits ios_base {
+        public:
+            constructor() { }
+
+            function rdbuf() const -> streambuf* {
+                return m_s->buf;
+            } end function rdbuf
+
+            function rdbuf(streambuf*: b) -> streambuf* {
+                streambuf*: old = m_s->buf;
+                m_s->buf = b;
+                m_s->state = 0;
+                return old;
+            } end function rdbuf
+
+            function tie() const -> ostream* {
+                return m_s->tied;
+            } end function tie
+
+            function tie(ostream*: t) -> ostream* {
+                ostream*: old = m_s->tied;
+                m_s->tied = t;
+                return old;
+            } end function tie
+
+            function copyfmt(const ios&: other) -> ios& {
+                m_s->flags = other.flags();
+                m_s->width = other.width();
+                m_s->precision = other.precision();
+                m_s->precision_set = other.m_s->precision_set;
+                m_s->fill = other.fill();
+                return *this;
+            } end function copyfmt
+        } end class ios
+
+        class streambuf {
+        public:
+            constructor() { }
+
+            constructor(const streambuf&: other) = delete;
+
+            function sputn(const string&: s) virtual -> long int {
+                return 0;
+            } end function sputn
+
+            function sputc(char: c) -> bool {
+                string: s = "";
+                s += c;
+                return sputn(s) > 0;
+            } end function sputc
+
+            function sgetc(char&: out) virtual -> bool {
+                return false;
+            } end function sgetc
+
+            function sbumpc(char&: out) virtual -> bool {
+                return false;
+            } end function sbumpc
+
+            function snextc(char&: out) -> bool {
+                char: skipped = ' ';
+                if (!sbumpc(skipped)) then {
+                    return false;
+                }
+                return sgetc(out);
+            } end function snextc
+
+            function sungetc() virtual -> bool {
+                return false;
+            } end function sungetc
+
+            function sgetn(long int: count) -> string {
+                string: got = "";
+                char: c = ' ';
+                long int: n = 0;
+                while (n < count && sbumpc(c)) {
+                    got += c;
+                    n++;
+                }
+                return got;
+            } end function sgetn
+
+            function in_avail() virtual -> long int {
+                return 0;
+            } end function in_avail
+
+            function pubsync() virtual -> int {
+                return 0;
+            } end function pubsync
+
+            function pubseekoff(long int: offset, int: dir, int: which = 12) virtual -> long int {
+                return -1;
+            } end function pubseekoff
+
+            function pubseekpos(long int: pos, int: which = 12) -> long int {
+                return pubseekoff(pos, 0, which);
+            } end function pubseekpos
+        } end class streambuf
+
+        class nativebuf inherits streambuf {
+        protected:
+            long int: m_id = -1;
+
+        public:
+            constructor() { }
+
+            function native_handle() const -> long int {
+                return m_id;
+            } end function native_handle
+
+            function sputn(const string&: s) override -> long int {
+                if (m_id < 0 || !walnut_rt::io_native::device_write(m_id, s)) then {
+                    return 0;
+                }
+                return countof(s);
+            } end function sputn
+
+            function sgetc(char&: out) override -> bool {
+                if (m_id < 0 || !walnut_rt::io_native::device_peek_ok(m_id)) then {
+                    return false;
+                }
+                out = walnut_rt::io_native::device_peek(m_id);
+                return true;
+            } end function sgetc
+
+            function sbumpc(char&: out) override -> bool {
+                if (!sgetc(out)) then {
+                    return false;
+                }
+                walnut_rt::io_native::device_bump(m_id);
+                return true;
+            } end function sbumpc
+
+            function sungetc() override -> bool {
+                return m_id >= 0 && walnut_rt::io_native::device_unget(m_id);
+            } end function sungetc
+
+            function in_avail() override -> long int {
+                if (m_id < 0) then {
+                    return 0;
+                }
+                return walnut_rt::io_native::device_available(m_id);
+            } end function in_avail
+
+            function pubsync() override -> int {
+                if (m_id < 0 || !walnut_rt::io_native::device_flush(m_id)) then {
+                    return -1;
+                }
+                return 0;
+            } end function pubsync
+
+            function pubseekoff(long int: offset, int: dir, int: which = 12) override -> long int {
+                if (m_id < 0) then {
+                    return -1;
+                }
+                return walnut_rt::io_native::device_seek(m_id, offset, dir, which);
+            } end function pubseekoff
+        } end class nativebuf
+
+        class filebuf inherits nativebuf {
+        public:
+            constructor() { }
+
+            constructor(long int: standard_handle) explicit {
+                if (standard_handle >= 0 && standard_handle <= 2) then {
+                    m_id = standard_handle;
+                }
+            }
+
+            destructor() {
+                close();
+            }
+
+            function open(const string&: path, int: mode) -> filebuf* {
+                if (m_id >= 0) then {
+                    return nullptr;
+                }
+                m_id = walnut_rt::io_native::file_open(path, mode);
+                if (m_id < 0) then {
+                    return nullptr;
+                }
+                return this;
+            } end function open
+
+            function is_open() const -> bool {
+                return m_id >= 0;
+            } end function is_open
+
+            function close() -> filebuf* {
+                if (m_id < 0) then {
+                    return nullptr;
+                }
+                walnut_rt::io_native::device_close(m_id);
+                m_id = -1;
+                return this;
+            } end function close
+        } end class filebuf
+
+        class stringbuf inherits nativebuf {
+            int: m_mode;
+
+        public:
+            constructor(int: mode = 12) : m_mode = mode {
+                m_id = walnut_rt::io_native::string_open("", mode);
+            }
+
+            constructor(const string&: s, int: mode = 12) : m_mode = mode {
+                m_id = walnut_rt::io_native::string_open(s, mode);
+            }
+
+            destructor() {
+                walnut_rt::io_native::device_close(m_id);
+            }
+
+            function contents() const -> string {
+                return walnut_rt::io_native::string_get(m_id);
+            } end function contents
+
+            function contents(const string&: s) -> void {
+                walnut_rt::io_native::string_set(m_id, s, m_mode);
+            } end function contents
+        } end class stringbuf
+
+        class textbuf inherits nativebuf {
+            int: m_mode;
+
+        public:
+            constructor(int: mode = 12) : m_mode = mode {
+                m_id = walnut_rt::io_native::string_open("", mode);
+            }
+
+            constructor(const text&: s, int: mode = 12) : m_mode = mode {
+                m_id = walnut_rt::io_native::string_open(static_cast<string>(s), mode);
+            }
+
+            destructor() {
+                walnut_rt::io_native::device_close(m_id);
+            }
+
+            function contents() const -> text {
+                return static_cast<text>(walnut_rt::io_native::string_get(m_id));
+            } end function contents
+
+            function contents(const text&: s) -> void {
+                walnut_rt::io_native::string_set(m_id, static_cast<string>(s), m_mode);
+            } end function contents
+        } end class textbuf
+
+        class spanbuf inherits streambuf {
+            char*: m_data;
+            long int: m_size;
+            long int: m_put = 0;
+            long int: m_get = 0;
+            int: m_mode;
+
+            function readable() const -> long int {
+                if ((m_mode & 8) != 0) then {
+                    return m_put;
+                }
+                return m_size;
+            } end function readable
+
+        public:
+            constructor(char*: data, long int: size, int: mode = 12) : m_data = data, m_size = size, m_mode = mode { }
+
+            function span_data() const -> char* {
+                return m_data;
+            } end function span_data
+
+            function span_size() const -> long int {
+                return readable();
+            } end function span_size
+
+            function span(char*: data, long int: size) -> void {
+                m_data = data;
+                m_size = size;
+                m_put = 0;
+                m_get = 0;
+            } end function span
+
+            function sputn(const string&: s) override -> long int {
+                long int: written = 0;
+                for (char: c in s) {
+                    if (m_put >= m_size) then {
+                        return written;
+                    }
+                    m_data[m_put] = c;
+                    m_put++;
+                    written++;
+                }
+                return written;
+            } end function sputn
+
+            function sgetc(char&: out) override -> bool {
+                if (m_get >= readable()) then {
+                    return false;
+                }
+                out = m_data[m_get];
+                return true;
+            } end function sgetc
+
+            function sbumpc(char&: out) override -> bool {
+                if (!sgetc(out)) then {
+                    return false;
+                }
+                m_get++;
+                return true;
+            } end function sbumpc
+
+            function sungetc() override -> bool {
+                if (m_get <= 0) then {
+                    return false;
+                }
+                m_get--;
+                return true;
+            } end function sungetc
+
+            function in_avail() override -> long int {
+                return readable() - m_get;
+            } end function in_avail
+
+            function pubseekoff(long int: offset, int: dir, int: which = 12) override -> long int {
+                long int: result = -1;
+                if ((which & 4) != 0) then {
+                    long int: base = 0;
+                    if (dir == 1) then { base = m_get; } else if (dir == 2) then { base = readable(); }
+                    long int: target = base + offset;
+                    if (target < 0 || target > readable()) then {
+                        return -1;
+                    }
+                    m_get = target;
+                    result = target;
+                }
+                if ((which & 8) != 0) then {
+                    long int: base = 0;
+                    if (dir == 1) then { base = m_put; } else if (dir == 2) then { base = m_size; }
+                    long int: target = base + offset;
+                    if (target < 0 || target > m_size) then {
+                        return -1;
+                    }
+                    m_put = target;
+                    result = target;
+                }
+                return result;
+            } end function pubseekoff
+        } end class spanbuf
+
+        class syncbuf inherits streambuf {
+            streambuf*: m_wrapped;
+            string: m_pending = "";
+            bool: m_emit_on_sync = false;
+
+        public:
+            constructor(streambuf*: wrapped = nullptr) : m_wrapped = wrapped { }
+
+            destructor() {
+                emit();
+            }
+
+            function emit() -> bool {
+                if (m_wrapped == nullptr) then {
+                    return false;
+                }
+                if (m_pending == "") then {
+                    return true;
+                }
+                walnut_rt::io_native::sync_acquire();
+                const long int: wanted = countof(m_pending);
+                const long int: written = m_wrapped->sputn(m_pending);
+                m_wrapped->pubsync();
+                walnut_rt::io_native::sync_release();
+                m_pending = "";
+                return written == wanted;
+            } end function emit
+
+            function get_wrapped() const -> streambuf* {
+                return m_wrapped;
+            } end function get_wrapped
+
+            function set_emit_on_sync(bool: on) -> void {
+                m_emit_on_sync = on;
+            } end function set_emit_on_sync
+
+            function sputn(const string&: s) override -> long int {
+                m_pending += s;
+                return countof(s);
+            } end function sputn
+
+            function pubsync() override -> int {
+                if (m_emit_on_sync && !emit()) then {
+                    return -1;
+                }
+                return 0;
+            } end function pubsync
+        } end class syncbuf
+
+        struct manipulator {
+            int: kind = 0;
+            int: set = 0;
+            int: mask = 0;
+            long int: number = 0;
+            char: fill_char = ' ';
+        } end struct manipulator
+
+        const manipulator: endl         = manipulator{1, 0, 0, 0, ' '};
+        const manipulator: ends         = manipulator{2, 0, 0, 0, ' '};
+        const manipulator: flush        = manipulator{3, 0, 0, 0, ' '};
+        const manipulator: ws           = manipulator{4, 0, 0, 0, ' '};
+        const manipulator: emit_on_flush   = manipulator{8, 0, 0, 1, ' '};
+        const manipulator: noemit_on_flush = manipulator{8, 0, 0, 0, ' '};
+        const manipulator: flush_emit   = manipulator{9, 0, 0, 0, ' '};
+        const manipulator: boolalpha    = manipulator{0, 1, 1, 0, ' '};
+        const manipulator: noboolalpha  = manipulator{0, 0, 1, 0, ' '};
+        const manipulator: base10       = manipulator{0, 2, 32842, 0, ' '};
+        const manipulator: hex          = manipulator{0, 8, 32842, 0, ' '};
+        const manipulator: oct          = manipulator{0, 64, 32842, 0, ' '};
+        const manipulator: bin          = manipulator{0, 32768, 32842, 0, ' '};
+        const manipulator: fixed        = manipulator{0, 4, 260, 0, ' '};
+        const manipulator: scientific   = manipulator{0, 256, 260, 0, ' '};
+        const manipulator: defaultfloat = manipulator{0, 0, 260, 0, ' '};
+        const manipulator: left         = manipulator{0, 32, 176, 0, ' '};
+        const manipulator: right        = manipulator{0, 128, 176, 0, ' '};
+        const manipulator: internal     = manipulator{0, 16, 176, 0, ' '};
+        const manipulator: showbase     = manipulator{0, 512, 512, 0, ' '};
+        const manipulator: noshowbase   = manipulator{0, 0, 512, 0, ' '};
+        const manipulator: showpoint    = manipulator{0, 1024, 1024, 0, ' '};
+        const manipulator: noshowpoint  = manipulator{0, 0, 1024, 0, ' '};
+        const manipulator: showpos      = manipulator{0, 2048, 2048, 0, ' '};
+        const manipulator: noshowpos    = manipulator{0, 0, 2048, 0, ' '};
+        const manipulator: skipws       = manipulator{0, 4096, 4096, 0, ' '};
+        const manipulator: noskipws     = manipulator{0, 0, 4096, 0, ' '};
+        const manipulator: unitbuf      = manipulator{0, 8192, 8192, 0, ' '};
+        const manipulator: nounitbuf    = manipulator{0, 0, 8192, 0, ' '};
+        const manipulator: uppercase    = manipulator{0, 16384, 16384, 0, ' '};
+        const manipulator: nouppercase  = manipulator{0, 0, 16384, 0, ' '};
+
+        function setw(long int: n) -> manipulator {
+            return manipulator{5, 0, 0, n, ' '};
+        } end function setw
+
+        function setprecision(long int: n) -> manipulator {
+            return manipulator{6, 0, 0, n, ' '};
+        } end function setprecision
+
+        function setfill(char: c) -> manipulator {
+            return manipulator{7, 0, 0, 0, c};
+        } end function setfill
+
+        function setbase(int: base) -> manipulator {
+            if (base == 16) then {
+                return hex;
+            } else if (base == 8) then {
+                return oct;
+            } else if (base == 2) then {
+                return bin;
+            }
+            return base10;
+        } end function setbase
+
+        function setiosflags(int: f) -> manipulator {
+            return manipulator{0, f, f, 0, ' '};
+        } end function setiosflags
+
+        function resetiosflags(int: f) -> manipulator {
+            return manipulator{0, 0, f, 0, ' '};
+        } end function resetiosflags
+
+        class ostream inherits ios {
+        protected:
+            function emit_raw(const string&: s) -> void {
+                streambuf*: b = m_s->buf;
+                if (b == nullptr) then {
+                    setstate(ios_base::badbit);
+                    return;
+                }
+                if (b->sputn(s) < countof(s)) then {
+                    setstate(ios_base::badbit);
+                }
+            } end function emit_raw
+
+            function after_output() -> void {
+                if ((m_s->flags & ios_base::unitbuf) != 0) then {
+                    flush();
+                }
+            } end function after_output
+
+            function emit_field(const string&: body) -> void {
+                const long int: want = m_s->width;
+                m_s->width = 0;
+                const long int: have = countof(body);
+                if (want <= have) then {
+                    emit_raw(body);
+                    after_output();
+                    return;
+                }
+                string: pad = "";
+                for (long int: i = 0; i < want - have; i++) {
+                    pad += m_s->fill;
+                }
+                const int: adjust = m_s->flags & ios_base::adjustfield;
+                if (adjust == ios_base::left) then {
+                    emit_raw(body + pad);
+                } else if (adjust == ios_base::internal) then {
+                    long int: split = 0;
+                    if (have > 0 && (body[0] == '-' || body[0] == '+')) then {
+                        split = 1;
+                    }
+                    if (have > split + 1 && body[split] == '0' && (body[split + 1] == 'x' || body[split + 1] == 'X' || body[split + 1] == 'b' || body[split + 1] == 'B')) then {
+                        split += 2;
+                    }
+                    string: head = "";
+                    string: tail = "";
+                    long int: at = 0;
+                    for (char: c in body) {
+                        if (at < split) then {
+                            head += c;
+                        } else then {
+                            tail += c;
+                        }
+                        at++;
+                    }
+                    emit_raw(head + pad + tail);
+                } else then {
+                    emit_raw(pad + body);
+                }
+                after_output();
+            } end function emit_field
+
+            function number_base() const -> long int {
+                const int: base = m_s->flags & ios_base::basefield;
+                if (base == ios_base::hex) then {
+                    return 16;
+                } else if (base == ios_base::oct) then {
+                    return 8;
+                } else if (base == ios_base::bin) then {
+                    return 2;
+                }
+                return 10;
+            } end function number_base
+
+        public:
+            constructor(streambuf*: b, ostream*: tied = nullptr, int: extra_flags = 0) {
+                m_s->buf = b;
+                m_s->tied = tied;
+                m_s->flags = m_s->flags | extra_flags;
+            }
+
+            function write(const string&: s) -> ostream& {
+                emit_raw(s);
+                after_output();
+                return *this;
+            } end function write
+
+            function put(char: c) -> ostream& {
+                string: s = "";
+                s += c;
+                emit_raw(s);
+                after_output();
+                return *this;
+            } end function put
+
+            function flush() -> ostream& {
+                streambuf*: b = m_s->buf;
+                if (b != nullptr && b->pubsync() != 0) then {
+                    setstate(ios_base::badbit);
+                }
+                return *this;
+            } end function flush
+
+            function tellp() -> long int {
+                streambuf*: b = m_s->buf;
+                if (b == nullptr || fail()) then {
+                    return -1;
+                }
+                return b->pubseekoff(0, ios_base::seek_cur, ios_base::output);
+            } end function tellp
+
+            function seekp(long int: pos) -> ostream& {
+                return seekp(pos, ios_base::seek_beg);
+            } end function seekp
+
+            function seekp(long int: offset, int: dir) -> ostream& {
+                streambuf*: b = m_s->buf;
+                if (b == nullptr || fail() || b->pubseekoff(offset, dir, ios_base::output) < 0) then {
+                    setstate(ios_base::failbit);
+                }
+                return *this;
+            } end function seekp
+
+            operator(<<) function(const string&: s) -> ostream& {
+                emit_field(s);
+                return *this;
+            }
+
+            operator(<<) function(const text&: t) -> ostream& {
+                emit_field(static_cast<string>(t));
+                return *this;
+            }
+
+            operator(<<) function(const var&: v) -> ostream& {
+                emit_field(static_cast<string>(`${v}`));
+                return *this;
+            }
+
+            operator(<<) function(char: c) -> ostream& {
+                string: s = "";
+                s += c;
+                emit_field(s);
+                return *this;
+            }
+
+            operator(<<) function(bool: b) -> ostream& {
+                if ((m_s->flags & ios_base::boolalpha) != 0) then {
+                    if (b) then { emit_field("true"); } else then { emit_field("false"); }
+                } else then {
+                    if (b) then { emit_field("1"); } else then { emit_field("0"); }
+                }
+                return *this;
+            }
+
+            template <typename T>
+            requires std::traits::is_builtin_integer<T> && std::traits::is_signed<T>
+            operator(<<) function(T: v) -> ostream& {
+                const long long integer: wide = v;
+                const int: f = m_s->flags;
+                emit_field(walnut_rt::io_native::format_int(wide, number_base(), (f & ios_base::uppercase) != 0, (f & ios_base::showbase) != 0, (f & ios_base::showpos) != 0));
+                return *this;
+            }
+
+            template <typename T>
+            requires std::traits::is_builtin_integer<T> && std::traits::is_unsigned<T>
+            operator(<<) function(T: v) -> ostream& {
+                const unsigned long long integer: wide = v;
+                const int: f = m_s->flags;
+                emit_field(walnut_rt::io_native::format_uint(wide, number_base(), (f & ios_base::uppercase) != 0, (f & ios_base::showbase) != 0, (f & ios_base::showpos) != 0));
+                return *this;
+            }
+
+            template <typename T>
+            requires std::traits::is_builtin_float<T>
+            operator(<<) function(T: v) -> ostream& {
+                const long long double: wide = v;
+                const int: f = m_s->flags;
+                const int: style = f & ios_base::floatfield;
+                long int: mode = 0;
+                if (style == ios_base::fixed) then {
+                    mode = 1;
+                } else if (style == ios_base::scientific) then {
+                    mode = 2;
+                }
+                long int: digits = m_s->precision;
+                if (mode == 0 && !m_s->precision_set) then {
+                    digits = 0;
+                } else if (mode == 0 && digits <= 0) then {
+                    digits = 1;
+                } else if (digits < 0) then {
+                    digits = 6;
+                }
+                emit_field(walnut_rt::io_native::format_float(wide, sizeof(T) * 8, digits, mode, (f & ios_base::uppercase) != 0, (f & ios_base::showpos) != 0, (f & ios_base::showpoint) != 0));
+                return *this;
+            }
+
+            operator(<<) function(streambuf*: source) -> ostream& {
+                if (source == nullptr) then {
+                    setstate(ios_base::badbit);
+                    return *this;
+                }
+                char: c = ' ';
+                string: all = "";
+                while (source->sbumpc(c)) {
+                    all += c;
+                }
+                emit_raw(all);
+                after_output();
+                return *this;
+            }
+
+            operator(<<) function(const manipulator&: m) -> ostream& {
+                if (m.kind == 0) then {
+                    setf(m.set, m.mask);
+                } else if (m.kind == 1) then {
+                    emit_raw("\n");
+                    flush();
+                } else if (m.kind == 2) then {
+                    emit_raw("\0");
+                } else if (m.kind == 3) then {
+                    flush();
+                } else if (m.kind == 5) then {
+                    width(m.number);
+                } else if (m.kind == 6) then {
+                    precision(m.number);
+                } else if (m.kind == 7) then {
+                    fill(m.fill_char);
+                } else if (m.kind == 8) then {
+                    syncbuf*: s = dynamic_cast<syncbuf*>(m_s->buf);
+                    if (s != nullptr) then {
+                        s->set_emit_on_sync(m.number != 0);
+                    }
+                } else if (m.kind == 9) then {
+                    syncbuf*: s = dynamic_cast<syncbuf*>(m_s->buf);
+                    flush();
+                    if (s != nullptr && !s->emit()) then {
+                        setstate(ios_base::badbit);
+                    }
+                }
+                return *this;
+            }
+
+            template <typename T>
+            requires std::traits::is_class<T> && std::concepts::has_to_string<T>
+            operator(<<) function(const T&: value) -> ostream& {
+                emit_field(std::core::to_string(value));
+                return *this;
+            }
+        } end class ostream
+
+        class istream inherits ios {
+        protected:
+            long int: m_gcount = 0;
+
+            static function is_space(char: c) -> bool {
+                return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+            } end function is_space
+
+            function prepare(bool: skip) -> bool {
+                m_gcount = 0;
+                if (!good()) then {
+                    setstate(ios_base::failbit);
+                    return false;
+                }
+                if (m_s->buf == nullptr) then {
+                    setstate(ios_base::badbit);
+                    return false;
+                }
+                if (m_s->tied != nullptr) then {
+                    m_s->tied->flush();
+                }
+                if (skip && (m_s->flags & ios_base::skipws) != 0) then {
+                    skip_space();
+                    if (eof()) then {
+                        setstate(ios_base::failbit);
+                        return false;
+                    }
+                }
+                return true;
+            } end function prepare
+
+            function skip_space() -> void {
+                char: c = ' ';
+                while (true) {
+                    if (!m_s->buf->sgetc(c)) then {
+                        setstate(ios_base::eofbit);
+                        return;
+                    }
+                    if (!is_space(c)) then {
+                        return;
+                    }
+                    m_s->buf->sbumpc(c);
+                }
+            } end function skip_space
+
+            function read_token() -> string {
+                string: token = "";
+                char: c = ' ';
+                long int: limit = m_s->width;
+                m_s->width = 0;
+                while (true) {
+                    if (limit > 0 && countof(token) >= limit) then {
+                        break;
+                    }
+                    if (!m_s->buf->sgetc(c)) then {
+                        setstate(ios_base::eofbit);
+                        break;
+                    }
+                    if (is_space(c)) then {
+                        break;
+                    }
+                    token += c;
+                    m_s->buf->sbumpc(c);
+                    m_gcount++;
+                }
+                if (token == "") then {
+                    setstate(ios_base::failbit);
+                }
+                return token;
+            } end function read_token
+
+            function number_base() const -> long int {
+                const int: base = m_s->flags & ios_base::basefield;
+                if (base == ios_base::hex) then {
+                    return 16;
+                } else if (base == ios_base::oct) then {
+                    return 8;
+                } else if (base == ios_base::bin) then {
+                    return 2;
+                }
+                return 10;
+            } end function number_base
+
+        public:
+            constructor(streambuf*: b, ostream*: tied = nullptr) {
+                m_s->buf = b;
+                m_s->tied = tied;
+            }
+
+            function gcount() const -> long int {
+                return m_gcount;
+            } end function gcount
+
+            function get(char&: c) -> istream& {
+                if (!prepare(false)) then {
+                    return *this;
+                }
+                if (m_s->buf->sbumpc(c)) then {
+                    m_gcount = 1;
+                } else then {
+                    setstate(ios_base::eofbit | ios_base::failbit);
+                }
+                return *this;
+            } end function get
+
+            function peek(char&: c) -> bool {
+                if (!prepare(false)) then {
+                    return false;
+                }
+                if (!m_s->buf->sgetc(c)) then {
+                    setstate(ios_base::eofbit);
+                    return false;
+                }
+                return true;
+            } end function peek
+
+            function unget() -> istream& {
+                clear(rdstate() & ~ios_base::eofbit);
+                if (!prepare(false)) then {
+                    return *this;
+                }
+                if (!m_s->buf->sungetc()) then {
+                    setstate(ios_base::badbit);
+                }
+                return *this;
+            } end function unget
+
+            function putback(char: c) -> istream& {
+                return unget();
+            } end function putback
+
+            function ignore(long int: n = 1) -> istream& {
+                if (!prepare(false)) then {
+                    return *this;
+                }
+                char: c = ' ';
+                while (m_gcount < n) {
+                    if (!m_s->buf->sbumpc(c)) then {
+                        setstate(ios_base::eofbit);
+                        break;
+                    }
+                    m_gcount++;
+                }
+                return *this;
+            } end function ignore
+
+            function ignore(long int: n, char: delim) -> istream& {
+                if (!prepare(false)) then {
+                    return *this;
+                }
+                char: c = ' ';
+                while (m_gcount < n) {
+                    if (!m_s->buf->sbumpc(c)) then {
+                        setstate(ios_base::eofbit);
+                        break;
+                    }
+                    m_gcount++;
+                    if (c == delim) then {
+                        break;
+                    }
+                }
+                return *this;
+            } end function ignore
+
+            function getline(string&: s, char: delim = '\n') -> istream& {
+                s = "";
+                if (!prepare(false)) then {
+                    return *this;
+                }
+                char: c = ' ';
+                bool: got_any = false;
+                while (true) {
+                    if (!m_s->buf->sbumpc(c)) then {
+                        setstate(ios_base::eofbit);
+                        break;
+                    }
+                    got_any = true;
+                    m_gcount++;
+                    if (c == delim) then {
+                        break;
+                    }
+                    s += c;
+                }
+                if (!got_any) then {
+                    setstate(ios_base::failbit);
+                }
+                return *this;
+            } end function getline
+
+            function getline(text&: t, char: delim = '\n') -> istream& {
+                string: s = "";
+                getline(s, delim);
+                t = static_cast<text>(s);
+                return *this;
+            } end function getline
+
+            function read(string&: s, long int: n) -> istream& {
+                s = "";
+                if (!prepare(false)) then {
+                    return *this;
+                }
+                char: c = ' ';
+                while (m_gcount < n) {
+                    if (!m_s->buf->sbumpc(c)) then {
+                        setstate(ios_base::eofbit | ios_base::failbit);
+                        break;
+                    }
+                    s += c;
+                    m_gcount++;
+                }
+                return *this;
+            } end function read
+
+            function sync() -> int {
+                if (m_s->buf == nullptr) then {
+                    return -1;
+                }
+                return m_s->buf->pubsync();
+            } end function sync
+
+            function tellg() -> long int {
+                if (m_s->buf == nullptr || fail()) then {
+                    return -1;
+                }
+                return m_s->buf->pubseekoff(0, ios_base::seek_cur, ios_base::input);
+            } end function tellg
+
+            function seekg(long int: pos) -> istream& {
+                return seekg(pos, ios_base::seek_beg);
+            } end function seekg
+
+            function seekg(long int: offset, int: dir) -> istream& {
+                clear(rdstate() & ~ios_base::eofbit);
+                if (m_s->buf == nullptr || fail() || m_s->buf->pubseekoff(offset, dir, ios_base::input) < 0) then {
+                    setstate(ios_base::failbit);
+                }
+                return *this;
+            } end function seekg
+
+            operator(>>) function(string&: s) -> istream& {
+                if (prepare(true)) then {
+                    s = read_token();
+                }
+                return *this;
+            }
+
+            operator(>>) function(text&: t) -> istream& {
+                if (prepare(true)) then {
+                    t = static_cast<text>(read_token());
+                }
+                return *this;
+            }
+
+            operator(>>) function(char&: c) -> istream& {
+                if (!prepare(true)) then {
+                    return *this;
+                }
+                if (m_s->buf->sbumpc(c)) then {
+                    m_gcount = 1;
+                } else then {
+                    setstate(ios_base::eofbit | ios_base::failbit);
+                }
+                return *this;
+            }
+
+            operator(>>) function(bool&: b) -> istream& {
+                if (!prepare(true)) then {
+                    return *this;
+                }
+                const string: token = read_token();
+                if (token == "1" || ((m_s->flags & ios_base::boolalpha) != 0 && token == "true")) then {
+                    b = true;
+                } else if (token == "0" || ((m_s->flags & ios_base::boolalpha) != 0 && token == "false")) then {
+                    b = false;
+                } else then {
+                    b = false;
+                    setstate(ios_base::failbit);
+                }
+                return *this;
+            }
+
+            template <typename T>
+            requires std::traits::is_builtin_integer<T> && std::traits::is_signed<T>
+            operator(>>) function(T&: v) -> istream& {
+                if (!prepare(true)) then {
+                    return *this;
+                }
+                const string: token = read_token();
+                if (fail()) then {
+                    return *this;
+                }
+                if (!walnut_rt::io_native::parse_int_ok(token, number_base())) then {
+                    v = 0;
+                    setstate(ios_base::failbit);
+                    return *this;
+                }
+                const long long integer: wide = walnut_rt::io_native::parse_int(token, number_base());
+                if (wide is inf || wide is nan || wide is undefined || wide is indeterminate) then {
+                    v = static_cast<T>(wide);
+                    return *this;
+                }
+                const T: narrow = static_cast<T>(wide);
+                const long long integer: back = narrow;
+                if (back != wide) then {
+                    setstate(ios_base::failbit);
+                }
+                v = narrow;
+                return *this;
+            }
+
+            template <typename T>
+            requires std::traits::is_builtin_integer<T> && std::traits::is_unsigned<T>
+            operator(>>) function(T&: v) -> istream& {
+                if (!prepare(true)) then {
+                    return *this;
+                }
+                const string: token = read_token();
+                if (fail()) then {
+                    return *this;
+                }
+                if (!walnut_rt::io_native::parse_uint_ok(token, number_base())) then {
+                    v = 0;
+                    setstate(ios_base::failbit);
+                    return *this;
+                }
+                const unsigned long long integer: wide = walnut_rt::io_native::parse_uint(token, number_base());
+                if (wide is inf || wide is nan || wide is undefined || wide is indeterminate) then {
+                    v = static_cast<T>(wide);
+                    return *this;
+                }
+                const T: narrow = static_cast<T>(wide);
+                const unsigned long long integer: back = narrow;
+                if (back != wide) then {
+                    setstate(ios_base::failbit);
+                }
+                v = narrow;
+                return *this;
+            }
+
+            template <typename T>
+            requires std::traits::is_builtin_float<T>
+            operator(>>) function(T&: v) -> istream& {
+                if (!prepare(true)) then {
+                    return *this;
+                }
+                const string: token = read_token();
+                if (fail()) then {
+                    return *this;
+                }
+                if (!walnut_rt::io_native::parse_float_ok(token)) then {
+                    v = 0;
+                    setstate(ios_base::failbit);
+                    return *this;
+                }
+                v = static_cast<T>(walnut_rt::io_native::parse_float(token));
+                return *this;
+            }
+
+            operator(>>) function(const manipulator&: m) -> istream& {
+                if (m.kind == 0) then {
+                    setf(m.set, m.mask);
+                } else if (m.kind == 4) then {
+                    if (m_s->buf != nullptr) then {
+                        skip_space();
+                    }
+                } else if (m.kind == 5) then {
+                    width(m.number);
+                }
+                return *this;
+            }
+        } end class istream
+
+        class iostream inherits istream, ostream {
+        public:
+            constructor(streambuf*: b) : istream(b), ostream(b) {
+                istream*: as_in = this;
+                ostream*: as_out = this;
+                ios_base*: in_base = as_in;
+                ios_base*: out_base = as_out;
+                out_base->share_state_with(*in_base);
+            }
+
+            function flags() const -> int { return istream::flags(); } end function flags
+            function flags(int: f) -> int { return istream::flags(f); } end function flags
+            function setf(int: f) -> int { return istream::setf(f); } end function setf
+            function setf(int: f, int: mask) -> int { return istream::setf(f, mask); } end function setf
+            function unsetf(int: mask) -> void { istream::unsetf(mask); } end function unsetf
+            function width() const -> long int { return istream::width(); } end function width
+            function width(long int: w) -> long int { return istream::width(w); } end function width
+            function precision() const -> long int { return istream::precision(); } end function precision
+            function precision(long int: p) -> long int { return istream::precision(p); } end function precision
+            function fill() const -> char { return istream::fill(); } end function fill
+            function fill(char: c) -> char { return istream::fill(c); } end function fill
+            function rdstate() const -> int { return istream::rdstate(); } end function rdstate
+            function good() const -> bool { return istream::good(); } end function good
+            function eof() const -> bool { return istream::eof(); } end function eof
+            function fail() const -> bool { return istream::fail(); } end function fail
+            function bad() const -> bool { return istream::bad(); } end function bad
+            function clear(int: s = 0) -> void { istream::clear(s); } end function clear
+            function setstate(int: s) -> void { istream::setstate(s); } end function setstate
+            function rdbuf() const -> streambuf* { return istream::rdbuf(); } end function rdbuf
+            function rdbuf(streambuf*: b) -> streambuf* { return istream::rdbuf(b); } end function rdbuf
+            function tie() const -> ostream* { return istream::tie(); } end function tie
+            function tie(ostream*: t) -> ostream* { return istream::tie(t); } end function tie
+            function copyfmt(const ios&: other) -> ios& { return istream::copyfmt(other); } end function copyfmt
+            function share_state_with(ios_base&: other) -> void { istream::share_state_with(other); } end function share_state_with
+
+            operator(bool) function() const {
+                return !istream::fail();
+            }
+
+            operator(!) function() const -> bool {
+                return istream::fail();
+            }
+        } end class iostream
+
+        class ofstream inherits ostream {
+            filebuf: m_fb;
+
+        public:
+            constructor() : ostream(nullptr) {
+                rdbuf(&m_fb);
+            }
+
+            constructor(const string&: path, int: mode = 8) : ostream(nullptr) {
+                rdbuf(&m_fb);
+                open(path, mode);
+            }
+
+            function open(const string&: path, int: mode = 8) -> void {
+                if (m_fb.open(path, mode | ios_base::output) == nullptr) then {
+                    setstate(ios_base::failbit);
+                } else then {
+                    clear();
+                }
+            } end function open
+
+            function is_open() const -> bool {
+                return m_fb.is_open();
+            } end function is_open
+
+            function close() -> void {
+                flush();
+                if (m_fb.close() == nullptr) then {
+                    setstate(ios_base::failbit);
+                }
+            } end function close
+        } end class ofstream
+
+        class ifstream inherits istream {
+            filebuf: m_fb;
+
+        public:
+            constructor() : istream(nullptr) {
+                rdbuf(&m_fb);
+            }
+
+            constructor(const string&: path, int: mode = 4) : istream(nullptr) {
+                rdbuf(&m_fb);
+                open(path, mode);
+            }
+
+            function open(const string&: path, int: mode = 4) -> void {
+                if (m_fb.open(path, mode | ios_base::input) == nullptr) then {
+                    setstate(ios_base::failbit);
+                } else then {
+                    clear();
+                }
+            } end function open
+
+            function is_open() const -> bool {
+                return m_fb.is_open();
+            } end function is_open
+
+            function close() -> void {
+                if (m_fb.close() == nullptr) then {
+                    setstate(ios_base::failbit);
+                }
+            } end function close
+        } end class ifstream
+
+        class fstream inherits iostream {
+            filebuf: m_fb;
+
+        public:
+            constructor() : iostream(nullptr) {
+                rdbuf(&m_fb);
+            }
+
+            constructor(const string&: path, int: mode = 12) : iostream(nullptr) {
+                rdbuf(&m_fb);
+                open(path, mode);
+            }
+
+            function open(const string&: path, int: mode = 12) -> void {
+                if (m_fb.open(path, mode) == nullptr) then {
+                    setstate(ios_base::failbit);
+                } else then {
+                    clear();
+                }
+            } end function open
+
+            function is_open() const -> bool {
+                return m_fb.is_open();
+            } end function is_open
+
+            function close() -> void {
+                flush();
+                if (m_fb.close() == nullptr) then {
+                    setstate(ios_base::failbit);
+                }
+            } end function close
+        } end class fstream
+
+        class ostringstream inherits ostream {
+            stringbuf: m_sb;
+
+        public:
+            constructor(int: mode = 8) : ostream(nullptr), m_sb(mode | ios_base::output) {
+                rdbuf(&m_sb);
+            }
+
+            constructor(const string&: s, int: mode = 8) : ostream(nullptr), m_sb(s, mode | ios_base::output) {
+                rdbuf(&m_sb);
+            }
+
+            function contents() const -> string {
+                return m_sb.contents();
+            } end function contents
+
+            function contents(const string&: s) -> void {
+                m_sb.contents(s);
+            } end function contents
+        } end class ostringstream
+
+        class istringstream inherits istream {
+            stringbuf: m_sb;
+
+        public:
+            constructor(int: mode = 4) : istream(nullptr), m_sb(mode | ios_base::input) {
+                rdbuf(&m_sb);
+            }
+
+            constructor(const string&: s, int: mode = 4) : istream(nullptr), m_sb(s, mode | ios_base::input) {
+                rdbuf(&m_sb);
+            }
+
+            function contents() const -> string {
+                return m_sb.contents();
+            } end function contents
+
+            function contents(const string&: s) -> void {
+                m_sb.contents(s);
+                clear();
+            } end function contents
+        } end class istringstream
+
+        class stringstream inherits iostream {
+            stringbuf: m_sb;
+
+        public:
+            constructor(int: mode = 12) : iostream(nullptr), m_sb(mode) {
+                rdbuf(&m_sb);
+            }
+
+            constructor(const string&: s, int: mode = 12) : iostream(nullptr), m_sb(s, mode) {
+                rdbuf(&m_sb);
+            }
+
+            function contents() const -> string {
+                return m_sb.contents();
+            } end function contents
+
+            function contents(const string&: s) -> void {
+                m_sb.contents(s);
+                clear();
+            } end function contents
+        } end class stringstream
+
+        class otextstream inherits ostream {
+            textbuf: m_tb;
+
+        public:
+            constructor(int: mode = 8) : ostream(nullptr), m_tb(mode | ios_base::output) {
+                rdbuf(&m_tb);
+            }
+
+            constructor(const text&: t, int: mode = 8) : ostream(nullptr), m_tb(t, mode | ios_base::output) {
+                rdbuf(&m_tb);
+            }
+
+            function contents() const -> text {
+                return m_tb.contents();
+            } end function contents
+
+            function contents(const text&: t) -> void {
+                m_tb.contents(t);
+            } end function contents
+        } end class otextstream
+
+        class itextstream inherits istream {
+            textbuf: m_tb;
+
+        public:
+            constructor(int: mode = 4) : istream(nullptr), m_tb(mode | ios_base::input) {
+                rdbuf(&m_tb);
+            }
+
+            constructor(const text&: t, int: mode = 4) : istream(nullptr), m_tb(t, mode | ios_base::input) {
+                rdbuf(&m_tb);
+            }
+
+            function contents() const -> text {
+                return m_tb.contents();
+            } end function contents
+
+            function contents(const text&: t) -> void {
+                m_tb.contents(t);
+                clear();
+            } end function contents
+        } end class itextstream
+
+        class textstream inherits iostream {
+            textbuf: m_tb;
+
+        public:
+            constructor(int: mode = 12) : iostream(nullptr), m_tb(mode) {
+                rdbuf(&m_tb);
+            }
+
+            constructor(const text&: t, int: mode = 12) : iostream(nullptr), m_tb(t, mode) {
+                rdbuf(&m_tb);
+            }
+
+            function contents() const -> text {
+                return m_tb.contents();
+            } end function contents
+
+            function contents(const text&: t) -> void {
+                m_tb.contents(t);
+                clear();
+            } end function contents
+        } end class textstream
+
+        class ospanstream inherits ostream {
+            spanbuf: m_sb;
+
+        public:
+            constructor(char*: data, long int: size) : ostream(nullptr), m_sb(data, size, ios_base::output) {
+                rdbuf(&m_sb);
+            }
+
+            function span_data() const -> char* {
+                return m_sb.span_data();
+            } end function span_data
+
+            function span_size() const -> long int {
+                return m_sb.span_size();
+            } end function span_size
+        } end class ospanstream
+
+        class ispanstream inherits istream {
+            spanbuf: m_sb;
+
+        public:
+            constructor(char*: data, long int: size) : istream(nullptr), m_sb(data, size, ios_base::input) {
+                rdbuf(&m_sb);
+            }
+
+            function span_data() const -> char* {
+                return m_sb.span_data();
+            } end function span_data
+
+            function span_size() const -> long int {
+                return m_sb.span_size();
+            } end function span_size
+        } end class ispanstream
+
+        class spanstream inherits iostream {
+            spanbuf: m_sb;
+
+        public:
+            constructor(char*: data, long int: size) : iostream(nullptr), m_sb(data, size, 12) {
+                rdbuf(&m_sb);
+            }
+
+            function span_data() const -> char* {
+                return m_sb.span_data();
+            } end function span_data
+
+            function span_size() const -> long int {
+                return m_sb.span_size();
+            } end function span_size
+        } end class spanstream
+
+        class osyncstream inherits ostream {
+            syncbuf: m_sb;
+
+        public:
+            constructor(ostream&: target) : ostream(nullptr), m_sb(target.rdbuf()) {
+                rdbuf(&m_sb);
+            }
+
+            constructor(streambuf*: target) : ostream(nullptr), m_sb(target) {
+                rdbuf(&m_sb);
+            }
+
+            function emit() -> void {
+                if (!m_sb.emit()) then {
+                    setstate(ios_base::badbit);
+                }
+            } end function emit
+
+            function get_wrapped() const -> streambuf* {
+                return m_sb.get_wrapped();
+            } end function get_wrapped
+        } end class osyncstream
+
+        function getline(istream&: input, string&: s, char: delim = '\n') -> istream& {
+            return input.getline(s, delim);
+        } end function getline
+
+        function getline(istream&: input, text&: t, char: delim = '\n') -> istream& {
+            return input.getline(t, delim);
+        } end function getline
+
+        filebuf: stdin_buf = filebuf(0);
+        filebuf: stdout_buf = filebuf(1);
+        filebuf: stderr_buf = filebuf(2);
+
+        ostream: cout = ostream(&stdout_buf, nullptr, walnut_rt::io_native::start_unbuffered() ? ios_base::unitbuf : 0);
+        istream: cin = istream(&stdin_buf, &cout);
+        ostream: cerr = ostream(&stderr_buf, &cout, ios_base::unitbuf);
+        ostream: clog = ostream(&stderr_buf, &cout, walnut_rt::io_native::start_unbuffered() ? ios_base::unitbuf : 0);
+
+        namespace detail {
+            struct format_spec {
+                bool: left = false;
+                bool: plus = false;
+                bool: space = false;
+                bool: alt = false;
+                bool: zero = false;
+                long int: width = -1;
+                long int: precision = -1;
+                char: conv = 's';
+            } end struct format_spec
+
+            function digit_of(char: c) -> long int {
+                return static_cast<long int>(c) - static_cast<long int>('0');
+            } end function digit_of
+
+            function is_digit(char: c) -> bool {
+                return c >= '0' && c <= '9';
+            } end function is_digit
+
+            function next_spec(string&: out, string&: rest, format_spec&: sp) -> bool {
+                sp = format_spec{};
+                long int: used = 0;
+                int: state = 0;
+                bool: found = false;
+
+                for (char: c in rest) {
+                    used += 1;
+
+                    if (state == 0) then {
+                        if (c == '%') then {
+                            state = 1;
+                        } else then {
+                            out += c;
+                        }
+                        continue;
+                    }
+
+                    if (state == 1) then {
+                        if (c == '%') then {
+                            out += '%';
+                            state = 0;
+                            continue;
+                        }
+                        state = 2;
+                    }
+
+                    if (state == 2) then {
+                        if (c == '-') then {
+                            sp.left = true;
+                            continue;
+                        }
+                        if (c == '+') then {
+                            sp.plus = true;
+                            continue;
+                        }
+                        if (c == ' ') then {
+                            sp.space = true;
+                            continue;
+                        }
+                        if (c == '#') then {
+                            sp.alt = true;
+                            continue;
+                        }
+                        if (c == '0') then {
+                            sp.zero = true;
+                            continue;
+                        }
+                        state = 3;
+                    }
+
+                    if (state == 3) then {
+                        if (is_digit(c)) then {
+                            sp.width = (sp.width < 0 ? 0 : sp.width) * 10 + digit_of(c);
+                            continue;
+                        }
+                        if (c == '.') then {
+                            sp.precision = 0;
+                            state = 4;
+                            continue;
+                        }
+                        state = 5;
+                    }
+
+                    if (state == 4) then {
+                        if (is_digit(c)) then {
+                            sp.precision = sp.precision * 10 + digit_of(c);
+                            continue;
+                        }
+                        state = 5;
+                    }
+
+                    if (c == 'h' || c == 'l' || c == 'L' || c == 'z' || c == 'j' || c == 't' || c == 'q') then {
+                        continue;
+                    }
+
+                    sp.conv = c;
+                    found = true;
+                    break;
+                }
+
+                if (state != 0 && !found) then {
+                    throw std::errors::format_error("the format ends in the middle of a '%' placeholder");
+                }
+
+                rest = found ? rest.substr(used) : "";
+                return found;
+            } end function next_spec
+
+            function spaces(long int: n, char: c) -> string {
+                string: s = "";
+                for (long int: i = 0; i < n; i++) {
+                    s += c;
+                }
+                return s;
+            } end function spaces
+
+            function mismatch(const format_spec&: sp, long int: index, const string&: wanted, const string&: given) -> std::errors::format_error {
+                return std::errors::format_error(static_cast<string>(`argument ${index} is ${given}, but %${sp.conv} needs ${wanted}`));
+            } end function mismatch
+
+            function pad(string&: body, const format_spec&: sp, bool: numeric) -> void {
+                if (numeric && sp.space && !body.starts_with('-') && !body.starts_with('+')) then {
+                    body = " " + body;
+                }
+
+                const long int: len = body.length();
+                if (sp.width <= len) then {
+                    return;
+                }
+
+                const long int: gap = sp.width - len;
+                if (sp.left) then {
+                    body = body + spaces(gap, ' ');
+                    return;
+                }
+
+                const bool: special_word = body.contains("inf") || body.contains("nan") || body.contains("undefined") || body.contains("indeterminate");
+                if (numeric && sp.zero && !special_word) then {
+                    long int: prefix = 0;
+                    if (body.starts_with('-') || body.starts_with('+') || body.starts_with(' ')) then {
+                        prefix = 1;
+                    }
+                    const string: after = body.substr(prefix);
+                    if (after.starts_with("0x") || after.starts_with("0X") || after.starts_with("0b") || after.starts_with("0B")) then {
+                        prefix += 2;
+                    }
+                    body = body.substr(0, prefix) + spaces(gap, '0') + body.substr(prefix);
+                    return;
+                }
+
+                body = spaces(gap, ' ') + body;
+            } end function pad
+
+            template <typename T>
+            function put_one(string&: out, const format_spec&: sp, long int: index, const T&: v) -> void {
+                ostringstream: s;
+                bool: numeric = true;
+                const char: conv = sp.conv;
+                if (sp.plus) then {
+                    s.setf(ios_base::showpos);
+                }
+
+                if (conv == 'd' || conv == 'i' || conv == 'u') then {
+                    if constexpr (std::traits::is_char<T>) then {
+                        s << static_cast<long int>(v);
+                    } else if constexpr (std::traits::is_builtin_integer<T>) then {
+                        s << v;
+                    } else then {
+                        throw mismatch(sp, index, "an integer", typeid(T));
+                    }
+                } else if (conv == 'x' || conv == 'X' || conv == 'o' || conv == 'b' || conv == 'B') then {
+                    if constexpr (std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>) then {
+                        if (conv == 'o') then {
+                            s.setf(ios_base::oct, ios_base::basefield);
+                        } else if (conv == 'b' || conv == 'B') then {
+                            s.setf(ios_base::bin, ios_base::basefield);
+                        } else then {
+                            s.setf(ios_base::hex, ios_base::basefield);
+                        }
+                        if (sp.alt) then {
+                            s.setf(ios_base::showbase);
+                        }
+                        if (conv == 'X' || conv == 'B') then {
+                            s.setf(ios_base::uppercase);
+                        }
+                        s << v;
+                    } else then {
+                        throw mismatch(sp, index, "an integer", typeid(T));
+                    }
+                } else if (conv == 'f' || conv == 'F' || conv == 'e' || conv == 'E' || conv == 'g' || conv == 'G') then {
+                    if constexpr (std::traits::is_builtin_float<T>) then {
+                        s.precision(sp.precision < 0 ? 6 : sp.precision);
+                        if (conv == 'f' || conv == 'F') then {
+                            s.setf(ios_base::fixed, ios_base::floatfield);
+                        } else if (conv == 'e' || conv == 'E') then {
+                            s.setf(ios_base::scientific, ios_base::floatfield);
+                        }
+                        if (sp.alt) then {
+                            s.setf(ios_base::showpoint);
+                        }
+                        if (conv == 'F' || conv == 'E' || conv == 'G') then {
+                            s.setf(ios_base::uppercase);
+                        }
+                        s << v;
+                    } else then {
+                        throw mismatch(sp, index, "a float", typeid(T));
+                    }
+                } else if (conv == 'c') then {
+                    numeric = false;
+                    if constexpr (std::traits::is_char<T>) then {
+                        s << v;
+                    } else then {
+                        throw mismatch(sp, index, "a char", typeid(T));
+                    }
+                } else if (conv == 's' || conv == 'v') then {
+                    numeric = false;
+                    if constexpr (std::traits::is_bool<T>) then {
+                        s.setf(ios_base::boolalpha);
+                    }
+                    s << v;
+                } else then {
+                    throw std::errors::format_error(static_cast<string>(`%${conv} isn't a placeholder; use %d, %i, %u, %x, %X, %o, %b, %f, %e, %g, %c, %s or %%`));
+                }
+
+                string: body = s.contents();
+                if (!numeric && sp.precision >= 0 && body.length() > sp.precision) then {
+                    body = body.substr(0, sp.precision);
+                }
+                pad(body, sp, numeric);
+                out += body;
+            } end function put_one
+
+            template <typename T, typename... Ts>
+            function format_into(string&: out, string&: rest, long int: index, const T&: first, const Ts&...: others) -> void {
+                format_spec: sp;
+                if (!next_spec(out, rest, sp)) then {
+                    throw std::errors::format_error(static_cast<string>(`there are more arguments than placeholders; the format has ${index - 1}`));
+                }
+                put_one(out, sp, index, first);
+                if constexpr (countof(others) > 0) then {
+                    format_into(out, rest, index + 1, others...);
+                }
+            } end function format_into
+
+            function format_finish(string&: out, string&: rest, long int: given) -> void {
+                format_spec: sp;
+                if (next_spec(out, rest, sp)) then {
+                    throw std::errors::format_error(static_cast<string>(`the format has more placeholders than arguments; ${given} given`));
+                }
+            } end function format_finish
+
+            function lowered(const string&: s) -> string {
+                return s.to_lower();
+            } end function lowered
+        } end namespace detail
+
+        template <typename... Ts>
+        function sprintf(const string&: fmt, const Ts&...: args) -> string {
+            string: out = "";
+            string: rest = fmt;
+            if constexpr (countof(args) > 0) then {
+                detail::format_into(out, rest, 1, args...);
+            }
+            detail::format_finish(out, rest, countof(args));
+            return out;
+        } end function sprintf
+
+        template <typename... Ts>
+        function sprintf(const text&: fmt, const Ts&...: args) -> text {
+            return static_cast<text>(sprintf(static_cast<string>(fmt), args...));
+        } end function sprintf
+
+        template <typename... Ts>
+        function printf(const string&: fmt, const Ts&...: args) -> void {
+            cout.write(sprintf(fmt, args...));
+        } end function printf
+
+        template <typename... Ts>
+        function printf(const text&: fmt, const Ts&...: args) -> void {
+            cout.write(sprintf(static_cast<string>(fmt), args...));
+        } end function printf
+
+        template <typename... Ts>
+        function printf(ostream&: out, const string&: fmt, const Ts&...: args) -> void {
+            out.write(sprintf(fmt, args...));
+        } end function printf
+
+        template <typename... Ts>
+        function printf(ostream&: out, const text&: fmt, const Ts&...: args) -> void {
+            out.write(sprintf(static_cast<string>(fmt), args...));
+        } end function printf
+
+        namespace detail {
+            template <typename T>
+            function wants_flush(const T&: value) -> bool {
+                return false;
+            } end function wants_flush
+
+            function wants_flush(const manipulator&: m) -> bool {
+                return m.kind == 3;
+            } end function wants_flush
+
+            template <typename... Ts>
+            function any_flush(const Ts&...: values) -> bool {
+                if constexpr (countof(values) > 0) then {
+                    return (wants_flush(values) || ...);
+                } else then {
+                    return false;
+                }
+            } end function any_flush
+        } end namespace detail
+
+        function print() -> void {
+            return;
+        } end function print
+
+        template <typename T, typename... Ts>
+        function print(const T&: first, const Ts&...: rest) -> void {
+            if constexpr (std::traits::is_same<T, ostream> || std::traits::is_base_of<ostream, T>) then {
+                ostream&: out = const_cast<T&>(first);
+                if constexpr (countof(rest) > 0) then {
+                    (out << ... << rest);
+                }
+            } else then {
+                cout << first;
+                if constexpr (countof(rest) > 0) then {
+                    (cout << ... << rest);
+                }
+            }
+        } end function print
+
+        function println() -> void {
+            cout << '\n';
+        } end function println
+
+        template <typename T, typename... Ts>
+        function println(const T&: first, const Ts&...: rest) -> void {
+            if constexpr (std::traits::is_same<T, ostream> || std::traits::is_base_of<ostream, T>) then {
+                ostream&: out = const_cast<T&>(first);
+                if constexpr (countof(rest) > 0) then {
+                    (out << ... << rest);
+                }
+                out << '\n';
+                if (detail::any_flush(rest...)) then {
+                    out.flush();
+                }
+            } else then {
+                cout << first;
+                if constexpr (countof(rest) > 0) then {
+                    (cout << ... << rest);
+                }
+                cout << '\n';
+                if (detail::wants_flush(first) || detail::any_flush(rest...)) then {
+                    cout.flush();
+                }
+            }
+        } end function println
+
+        function set_unbuffered(bool: on = true) -> void {
+            if (on) then {
+                cout.setf(ios_base::unitbuf);
+                clog.setf(ios_base::unitbuf);
+                cout.flush();
+                clog.flush();
+            } else then {
+                cout.unsetf(ios_base::unitbuf);
+                clog.unsetf(ios_base::unitbuf);
+            }
+        } end function set_unbuffered
+
+        function is_unbuffered() -> bool {
+            return (cout.flags() & ios_base::unitbuf) != 0;
+        } end function is_unbuffered
+
+        template <typename T = int>
+        requires std::traits::is_builtin_integer<T> && std::traits::is_signed<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
+        function parse_int(const string&: s, int: base = 10) -> T {
+            const string: token = walnut_rt::io_native::trim_spaces(s);
+            if (!walnut_rt::io_native::parse_int_ok(token, base)) then {
+                return undefined;
+            }
+            const long long integer: wide = walnut_rt::io_native::parse_int(token, base);
+            if (wide is inf || wide is nan || wide is undefined || wide is indeterminate) then {
+                return static_cast<T>(wide);
+            }
+            const T: narrow = static_cast<T>(wide);
+            const long long integer: back = narrow;
+            if (back != wide) then {
+                if (wide > 0) then {
+                    return inf;
+                }
+                return -inf;
+            }
+            return narrow;
+        } end function parse_int
+
+        template <typename T = int>
+        requires std::traits::is_builtin_integer<T> && std::traits::is_signed<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
+        function parse_int(const text&: s, int: base = 10) -> T {
+            return parse_int<T>(static_cast<string>(s), base);
+        } end function parse_int
+
+        template <typename T = unsigned int>
+        requires std::traits::is_builtin_integer<T> && std::traits::is_unsigned<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
+        function parse_uint(const string&: s, int: base = 10) -> T {
+            const string: token = walnut_rt::io_native::trim_spaces(s);
+            if (!walnut_rt::io_native::parse_uint_ok(token, base)) then {
+                return undefined;
+            }
+            const unsigned long long integer: wide = walnut_rt::io_native::parse_uint(token, base);
+            if (wide is inf || wide is nan || wide is undefined || wide is indeterminate) then {
+                return static_cast<T>(wide);
+            }
+            const T: narrow = static_cast<T>(wide);
+            const unsigned long long integer: back = narrow;
+            if (back != wide) then {
+                return inf;
+            }
+            return narrow;
+        } end function parse_uint
+
+        template <typename T = unsigned int>
+        requires std::traits::is_builtin_integer<T> && std::traits::is_unsigned<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
+        function parse_uint(const text&: s, int: base = 10) -> T {
+            return parse_uint<T>(static_cast<string>(s), base);
+        } end function parse_uint
+
+        template <typename T = float>
+        requires std::traits::is_builtin_float<T>
+        function parse_float(const string&: s) -> T {
+            const string: token = walnut_rt::io_native::trim_spaces(s);
+            if (!walnut_rt::io_native::parse_float_ok(token)) then {
+                return undefined;
+            }
+            return static_cast<T>(walnut_rt::io_native::parse_float(token));
+        } end function parse_float
+
+        template <typename T = float>
+        requires std::traits::is_builtin_float<T>
+        function parse_float(const text&: s) -> T {
+            return parse_float<T>(static_cast<string>(s));
+        } end function parse_float
+
+        function parse_bool(const string&: s) -> special(bool) {
+            const string: token = detail::lowered(walnut_rt::io_native::trim_spaces(s));
+            if (token == "true" || token == "1") then {
+                return true;
+            }
+            if (token == "false" || token == "0") then {
+                return false;
+            }
+            return undefined;
+        } end function parse_bool
+
+        function parse_bool(const text&: s) -> special(bool) {
+            return parse_bool(static_cast<string>(s));
+        } end function parse_bool
+
+        function parse_char(const string&: s) -> special(char) {
+            string: body = s;
+            if (s.length() >= 3 && s.starts_with('\'') && s.ends_with('\'')) then {
+                if (!walnut_rt::io_native::unescape_ok(s)) then {
+                    return undefined;
+                }
+                body = walnut_rt::io_native::unescape(s);
+            }
+            if (body.length() != 1) then {
+                return undefined;
+            }
+            return body[0];
+        } end function parse_char
+
+        function parse_char(const text&: s) -> special(char) {
+            return parse_char(static_cast<string>(s));
+        } end function parse_char
+
+        function parse_string(const string&: s) -> special(string) {
+            const string: token = walnut_rt::io_native::trim_spaces(s);
+            const bool: quoted = token.length() >= 2 && (token.starts_with('"') || token.starts_with('`') || token.starts_with('\'')) && token.ends_with(token[0]);
+            if (!quoted) then {
+                return s;
+            }
+            if (!walnut_rt::io_native::unescape_ok(token)) then {
+                return undefined;
+            }
+            return walnut_rt::io_native::unescape(token);
+        } end function parse_string
+
+        function parse_string(const text&: s) -> special(string) {
+            return parse_string(static_cast<string>(s));
+        } end function parse_string
+
+        namespace detail {
+            function input_line(istream&: input, const string&: prompt, const string&: what) -> string {
+                if (!prompt.empty()) then {
+                    cout << prompt;
+                    cout.flush();
+                }
+                string: line;
+                if (!getline(input, line)) then {
+                    throw std::errors::input_error(what + ": the input ended before a value was entered");
+                }
+                if (line.ends_with('\r')) then {
+                    line = line.substr(0, line.length() - 1);
+                }
+                return line;
+            } end function input_line
+
+            function input_retry(const string&: message) -> void {
+                cout << message << '\n';
+            } end function input_retry
+
+            function blank(const string&: line) -> bool {
+                return walnut_rt::io_native::trim_spaces(line).empty();
+            } end function blank
+        } end namespace detail
+
+        template <typename T = int>
+        requires std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
+        function input_integer(istream&: input, const string&: prompt = "") -> T {
+            while (true) {
+                const string: line = detail::input_line(input, prompt, "input_integer");
+                if (detail::blank(line)) then {
+                    continue;
+                }
+                T: value = 0;
+                if constexpr (std::traits::is_signed<T>) then {
+                    value = parse_int<T>(line);
+                } else then {
+                    value = parse_uint<T>(line);
+                }
+                if (value is undefined && !std::traits::is_signed<T> && parse_int<long long integer>(line) < 0) then {
+                    detail::input_retry("That number can't be negative. Please try again.");
+                } else if (value is undefined) then {
+                    detail::input_retry("That isn't a whole number. Please try again.");
+                } else if (value is inf || value is nan || value is indeterminate) then {
+                    detail::input_retry("That number is too large or too small. Please try again.");
+                } else then {
+                    return value;
+                }
+            }
+        } end function input_integer
+
+        template <typename T = int>
+        requires std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
+        function input_integer(const string&: prompt = "") -> T {
+            return input_integer<T>(cin, prompt);
+        } end function input_integer
+
+        template <typename T = float>
+        requires std::traits::is_builtin_float<T>
+        function input_float(istream&: input, const string&: prompt = "") -> T {
+            while (true) {
+                const string: line = detail::input_line(input, prompt, "input_float");
+                if (detail::blank(line)) then {
+                    continue;
+                }
+                const T: value = parse_float<T>(line);
+                if (value is undefined) then {
+                    detail::input_retry("That isn't a number. Please try again.");
+                } else if (value is inf || value is nan || value is indeterminate) then {
+                    detail::input_retry("Please enter a finite number.");
+                } else then {
+                    return value;
+                }
+            }
+        } end function input_float
+
+        template <typename T = float>
+        requires std::traits::is_builtin_float<T>
+        function input_float(const string&: prompt = "") -> T {
+            return input_float<T>(cin, prompt);
+        } end function input_float
+
+        function input_string(istream&: input, const string&: prompt = "") -> string {
+            return detail::input_line(input, prompt, "input_string");
+        } end function input_string
+
+        function input_string(const string&: prompt = "") -> string {
+            return input_string(cin, prompt);
+        } end function input_string
+
+        function input_text(istream&: input, const string&: prompt = "") -> text {
+            return static_cast<text>(detail::input_line(input, prompt, "input_text"));
+        } end function input_text
+
+        function input_text(const string&: prompt = "") -> text {
+            return input_text(cin, prompt);
+        } end function input_text
+
+        function input_bool(istream&: input, const string&: prompt = "") -> bool {
+            while (true) {
+                const string: line = detail::input_line(input, prompt, "input_bool");
+                if (detail::blank(line)) then {
+                    continue;
+                }
+                const string: word = detail::lowered(walnut_rt::io_native::trim_spaces(line));
+                if (word == "true" || word == "1" || word == "yes" || word == "y") then {
+                    return true;
+                }
+                if (word == "false" || word == "0" || word == "no" || word == "n") then {
+                    return false;
+                }
+                detail::input_retry("Please answer yes or no.");
+            }
+        } end function input_bool
+
+        function input_bool(const string&: prompt = "") -> bool {
+            return input_bool(cin, prompt);
+        } end function input_bool
+
+        function input_char(istream&: input, const string&: prompt = "") -> char {
+            while (true) {
+                const string: line = detail::input_line(input, prompt, "input_char");
+                const string: token = walnut_rt::io_native::trim_spaces(line);
+                if (token.empty()) then {
+                    continue;
+                }
+                if (token.length() == 1) then {
+                    return token[0];
+                }
+                detail::input_retry("Please enter a single character.");
+            }
+        } end function input_char
+
+        function input_char(const string&: prompt = "") -> char {
+            return input_char(cin, prompt);
+        } end function input_char
+
+        function parse_text(const string&: s) -> special(text) {
+            special(string): r = parse_string(s);
+            if (r is undefined) then {
+                return undefined;
+            }
+            return static_cast<text>(r as string);
+        } end function parse_text
+
+        function parse_text(const text&: s) -> special(text) {
+            return parse_text(static_cast<string>(s));
+        } end function parse_text
+    } end namespace io
+} end namespace std

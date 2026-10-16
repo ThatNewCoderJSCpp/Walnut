@@ -95,11 +95,16 @@ namespace tokenizing {
     X(InKeyword, true, "in") \
     X(InlineKeyword, true, "inline") \
     X(InfinityKeyword, true, "infinity", "inf") \
+    X(NanKeyword, true, "nan") \
+    X(UndefinedKeyword, true, "undefined") \
+    X(IndeterminateKeyword, true, "indeterminate") \
+    X(SpecialKeyword, true, "special") \
     X(ImplicitKeyword, true, "implicit") \
     X(InheritsKeyword, true, "inherits", "inherit") \
     X(IsKeyword, true, "is") \
     X(LocalKeyword, true, "local") \
     X(MutableKeyword, true, "mutable") \
+    X(LazyKeyword, true, "lazy") \
     X(ModuleKeyword, true, "module") \
     X(NamespaceKeyword, true, "namespace") \
     X(NewKeyword, true, "new") \
@@ -123,6 +128,7 @@ namespace tokenizing {
     X(SwitchKeyword, true, "switch") \
     X(ThenKeyword, true, "then") \
     X(ThisKeyword, true, "this") \
+    X(SelfKeyword, true, "self") \
     X(ThrowKeyword, true, "throw") \
     X(TryKeyword, true, "try") \
     X(True, true, "true", "TRUE", "True") \
@@ -136,6 +142,7 @@ namespace tokenizing {
     X(UsingKeyword, true, "using") \
     X(VariantKeyword, true, "variant") \
     X(VirtualKeyword, true, "virtual") \
+    X(AbstractKeyword, true, "abstract") \
     X(VoidKeyword, true, "void") \
     X(VolatileKeyword, true, "volatile") \
     X(WhileKeyword, true, "while") \
@@ -231,6 +238,7 @@ public:
     }
 
     constexpr std::uint32_t line() const noexcept { return m_line; }
+    constexpr void line(std::uint32_t l) noexcept { m_line = l; }
 
     constexpr std::uint32_t file_id() const noexcept { return m_file; }
     constexpr void file_id(std::uint32_t f) noexcept { m_file = f; }

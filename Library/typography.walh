@@ -1,0 +1,174 @@
+import module.collections
+import module.colors
+
+namespace std {
+    namespace errors {
+        class typography_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class typography_error
+    } end namespace errors
+
+    namespace typography {
+        using std::colors::Color;
+
+        enum FontWeight { thin, extra_light, light, normal, medium, semi_bold, bold, extra_bold, black }
+
+        enum TextAlign { left, center, right, justify }
+
+        enum TextOverflow { visible, clip, ellipsis, word_wrap }
+
+        enum TextTransform { none, uppercase, lowercase, capitalize }
+
+        struct TextMetrics {
+            long int: width = 0;
+            long int: height = 0;
+            long int: ascent = 0;
+            long int: descent = 0;
+
+            constructor() { }
+
+            constructor(long int: w, long int: h, long int: a, long int: d) : width = w, height = h, ascent = a, descent = d { }
+
+            function is_empty() const -> bool {
+                return width == 0 && height == 0;
+            } end function is_empty
+
+            function to_string() const -> string {
+                return static_cast<string>(`${width} by ${height} (ascent ${ascent}, descent ${descent})`);
+            } end function to_string
+        } end struct TextMetrics
+
+        namespace detail {
+            extern "C++" from "<walnut_graphics.hpp>" {
+                class Native as "walnut_rt::gfx::typography_api" {
+                public:
+                    static function font_names() -> std::collections::Vector<string> as "walnut_rt::gfx::font_names";
+                } end class Native
+            } end extern
+        } end namespace detail
+
+        function font_names() -> std::collections::Vector<string> {
+            return detail::Native::font_names();
+        } end function font_names
+
+        extern "C++" from "<walnut_graphics.hpp>" {
+            class TextStyle as "walnut_rt::gfx::text_style" {
+                function native_set_font(const string&: name) -> bool as "set_font";
+                function native_set_color(long int: rgba) -> void as "set_color";
+                function native_color() const -> long int as "color_value";
+                function native_set_background(long int: rgba) -> void as "set_background";
+                function native_set_weight(long int: weight) -> void as "set_weight";
+                function native_weight() const -> long int as "weight";
+                function native_set_align(long int: a) -> void as "set_align";
+                function native_align() const -> long int as "align";
+                function native_set_overflow(long int: o) -> void as "set_overflow";
+                function native_set_transform(long int: t) -> void as "set_transform";
+                function native_set_outline(long int: rgba, float: width) -> void as "set_outline";
+                function native_set_shadow(float: dx, float: dy, float: blur, long int: rgba) -> void as "set_shadow";
+
+            public:
+                constructor();
+                constructor(float: size, long int: rgba);
+
+                static function make(float: size, const Color&: color = Color(0, 0, 0)) -> TextStyle {
+                    return TextStyle(size, color.packed());
+                } end function make
+
+                static function is_font(const string&: name) -> bool {
+                    TextStyle: probe;
+                    return probe.native_set_font(name);
+                } end function is_font
+
+                function set_font(const string&: name) -> void {
+                    if (!native_set_font(name)) then {
+                        throw std::errors::typography_error(static_cast<string>(`'${name}' is not a font Fizmo knows; std::typography::font_names() lists them`));
+                    }
+                } end function set_font
+
+                function font() const -> string;
+                function clear_font() -> void;
+                function set_size(float: px) -> void;
+                function size() const -> float;
+                function set_bold(bool: on = true) -> void;
+                function bold() const -> bool;
+                function set_italic(bool: on = true) -> void;
+                function italic() const -> bool;
+                function set_underline(bool: on = true) -> void;
+                function underline() const -> bool;
+                function set_strikethrough(bool: on = true) -> void;
+                function strikethrough() const -> bool;
+                function set_overline(bool: on = true) -> void;
+                function overline() const -> bool;
+                function set_letter_spacing(float: px) -> void;
+                function letter_spacing() const -> float;
+                function set_word_spacing(float: px) -> void;
+                function set_line_height(float: multiple) -> void;
+                function line_height() const -> float;
+                function set_opacity(float: opacity) -> void;
+                function clear_background() -> void;
+                function clear_outline() -> void;
+                function clear_shadow() -> void;
+                function set_max_lines(long int: count) -> void;
+                function set_indent(float: px) -> void;
+
+                function set_color(const Color&: c) -> void {
+                    native_set_color(c.packed());
+                } end function set_color
+
+                function color() const -> Color {
+                    return Color::from_packed(native_color());
+                } end function color
+
+                function set_background(const Color&: c) -> void {
+                    native_set_background(c.packed());
+                } end function set_background
+
+                function set_weight(FontWeight: weight) -> void {
+                    native_set_weight((static_cast<long int>(weight) + 1) * 100);
+                } end function set_weight
+
+                function weight() const -> FontWeight {
+                    long int: index = native_weight() / 100 - 1;
+                    if (index < 0) then {
+                        index = 0;
+                    }
+                    if (index > 8) then {
+                        index = 8;
+                    }
+                    return static_cast<FontWeight>(index);
+                } end function weight
+
+                function set_align(TextAlign: a) -> void {
+                    native_set_align(static_cast<long int>(a));
+                } end function set_align
+
+                function align() const -> TextAlign {
+                    return static_cast<TextAlign>(native_align());
+                } end function align
+
+                function set_overflow(TextOverflow: o) -> void {
+                    native_set_overflow(static_cast<long int>(o));
+                } end function set_overflow
+
+                function set_transform(TextTransform: t) -> void {
+                    native_set_transform(static_cast<long int>(t));
+                } end function set_transform
+
+                function set_outline(const Color&: c, float: width = 1.0) -> void {
+                    native_set_outline(c.packed(), width);
+                } end function set_outline
+
+                function set_shadow(float: dx, float: dy, float: blur = 0.0, const Color&: c = Color(0, 0, 0, 128)) -> void {
+                    native_set_shadow(dx, dy, blur, c.packed());
+                } end function set_shadow
+            } end class TextStyle
+        } end extern
+    } end namespace typography
+} end namespace std

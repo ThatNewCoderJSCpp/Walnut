@@ -106,6 +106,7 @@ ASTNode* CallExpression::clone_into(Arena& a) const {
     copy_base_to(c);
     c->m_arguments     = clone_list(m_arguments, a);
     c->m_template_args = clone_targs(m_template_args, a);
+    c->has_angle_args  = has_angle_args;
     return c;
 }
 
@@ -138,7 +139,7 @@ void BraceInitializerList::print(std::ostream& os, std::size_t indent) const {
     }
 }
 
-ASTNode* BraceInitializerList::clone_into(Arena& a) const { auto* c = make_in<BraceInitializerList>(a, line); copy_base_to(c); c->m_elements = clone_list(m_elements, a); return c; }
+ASTNode* BraceInitializerList::clone_into(Arena& a) const { auto* c = make_in<BraceInitializerList>(a, line); copy_base_to(c); c->m_elements = clone_list(m_elements, a); c->parens = parens; return c; }
 
 const char* MemberAccessExpression::op_spelling() const {
     switch (m_op) { case Op::Dot: return "."; case Op::Arrow: return "\u2192"; case Op::Scope: return "::"; }
@@ -155,7 +156,7 @@ void MemberAccessExpression::print(std::ostream& os, std::size_t indent) const {
     os << "Member: " << m_member << "\n";
 }
 
-ASTNode* MemberAccessExpression::clone_into(Arena& a) const { auto* c = make_in<MemberAccessExpression>(a, clone_child(m_object, a), m_member, m_op, line); copy_base_to(c); return c; }
+ASTNode* MemberAccessExpression::clone_into(Arena& a) const { auto* c = make_in<MemberAccessExpression>(a, clone_child(m_object, a), m_member, m_op, line); c->qualifier = qualifier; c->qualifier_global = qualifier_global; copy_base_to(c); return c; }
 
 const char* CastExpression::cast_name() const {
     switch (cast_kind) {
@@ -180,7 +181,7 @@ void CastExpression::print(std::ostream& os, std::size_t indent) const {
     print_node(operand, os, indent + 2);
 }
 
-ASTNode* CastExpression::clone_into(Arena& a) const { auto* c = make_in<CastExpression>(a, cast_kind, target.clone_into(a), clone_child(operand, a), line); copy_base_to(c); return c; }
+ASTNode* CastExpression::clone_into(Arena& a) const { auto* c = make_in<CastExpression>(a, cast_kind, target.clone_into(a), clone_child(operand, a), line); c->special_test = special_test; c->interpolation = interpolation; copy_base_to(c); return c; }
 
 void TemplateInstantiation::print(std::ostream& os, std::size_t indent) const {
     print_indent(os, indent);

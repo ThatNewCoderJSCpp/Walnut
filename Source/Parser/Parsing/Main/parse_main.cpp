@@ -9,13 +9,18 @@ nodes::BlockStatement* Parser::parse_program() {
     return program;
 }
 
+void Parser::drain_spliced(nodes::BlockStatement* block, std::size_t mark) {
+    for (std::size_t i = mark; i < m_spliced.size(); ++i) block->add_statement(m_spliced[i]);
+    m_spliced.resize(mark);
+}
+
 void Parser::parse_declaration_into(nodes::BlockStatement* block) {
+    const std::size_t mark = m_spliced.size();
     m_declaration_level = true;
     nodes::ASTNode* s = parse_statement();
     m_declaration_level = false;
     block->add_statement(s);
-    for (nodes::ASTNode* extra : m_spliced) block->add_statement(extra);
-    m_spliced.clear();
+    drain_spliced(block, mark);
 }
 
 nodes::ASTNode* Parser::parse_extern_block(const modifiers::RawModifiers& mods) {
@@ -43,8 +48,30 @@ nodes::ASTNode* Parser::parse_extern_block(const modifiers::RawModifiers& mods) 
             continue;
         }
 
+        if (native && current_token().is_one_of(tokenizing::Token::Kind::TemplateKeyword, tokenizing::Token::Kind::ClassKeyword, tokenizing::Token::Kind::StructKeyword)) {
+            if (mods.linkage() != modifiers::RawModifiers::Linkage::Cpp) {
+                throw ParserError::invalid_declaration(reporter, current_token(), "An extern \"C\" block can only hold functions; C++ classes go in an extern \"C++\" block");
+            }
+
+            if (!item.exactly(modifiers::RawModifiers::Extern)) {
+                throw ParserError::invalid_declaration(reporter, item_start, "A C++ class in an extern block can't have modifiers");
+            }
+
+            m_native_record_next = true;
+            m_native_record_mods = item;
+            nodes::ASTNode* d = current_token().kind() == tokenizing::Token::Kind::TemplateKeyword ? parse_template_declaration() : parse_record_declaration(item, item_line);
+
+            if (m_native_record_next) {
+                m_native_record_next = false;
+                throw ParserError::invalid_declaration(reporter, item_start, "Only functions and classes can be declared in an extern \"C++\" block; a template there must be a class template");
+            }
+
+            items.push_back(d);
+            continue;
+        }
+
         if (native) {
-            throw ParserError::invalid_declaration(reporter, current_token(), "An extern \"C\" or extern \"C++\" block can only hold function declarations");
+            throw ParserError::invalid_declaration(reporter, current_token(), "An extern \"C\" block can only hold function declarations, and an extern \"C++\" block can only hold function and class declarations");
         }
 
         if (current_token().kind() == tokenizing::Token::Kind::ArrayKeyword) items.push_back(parse_array_declaration(item, item_line));
@@ -95,12 +122,64 @@ bool Parser::looks_like_user_type_declaration() {
         ++i;
     }
 
+    if (at(i).kind() == K::Ellipsis && at(i + 1).kind() == K::Colon) return true;
     return at(i).kind() == K::Colon;
 }
 
 nodes::ASTNode* Parser::parse_statement() {
     const bool declaration_level = m_declaration_level;
     m_declaration_level = false;
+    const bool list_level = m_list_level;
+    m_list_level = false;
+    nodes::TemplateDeclaration* owner_template = m_pending_template;
+    m_pending_template = nullptr;
+    const bool injected_candidate = m_injected_candidate;
+    m_injected_candidate = false;
+    const bool nested_hoist = m_nested_hoist;
+    m_nested_hoist = false;
+    take_keyword_as_name(true);
+
+    if (current_token().kind() == tokenizing::Token::Kind::Identifier && (current_token().lexeme() == "goto" || current_token().lexeme() == "label")
+        && lookahead(1).kind() == tokenizing::Token::Kind::Identifier && lookahead(2).is_one_of(tokenizing::Token::Kind::Semicolon, tokenizing::Token::Kind::DoubleSemicolon)) {
+        using V = nodes::SingleStatement::Variant;
+        const std::uint32_t at = static_cast<std::uint32_t>(current_token().line());
+        auto* jump = make<nodes::SingleStatement>(current_token().lexeme() == "goto" ? V::Goto : V::Label, at);
+        advance();
+        jump->label = current_token().lexeme();
+        advance();
+        consume_semicolons();
+        return jump;
+    }
+
+    if (current_token().kind() == tokenizing::Token::Kind::Identifier && current_token().lexeme() == "invalidate"
+        && lookahead(1).is_one_of(tokenizing::Token::Kind::Identifier, tokenizing::Token::Kind::ThisKeyword, tokenizing::Token::Kind::SelfKeyword)) {
+        auto* inv = make<nodes::InvalidateStatement>(static_cast<std::uint32_t>(current_token().line()));
+        advance();
+
+        do {
+            inv->targets.push_back(parse_expression_pratt(to_int(Precedence::None)));
+        } while (match(tokenizing::Token::Kind::Comma));
+
+        if (!current_token().is_one_of(tokenizing::Token::Kind::Semicolon, tokenizing::Token::Kind::DoubleSemicolon)) {
+            throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::Semicolon, "Expected ';' after the members named by 'invalidate'");
+        }
+
+        consume_semicolons();
+        return inv;
+    }
+
+    if (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::Colon
+        && lookahead(2).is_one_of(tokenizing::Token::Kind::ForKeyword, tokenizing::Token::Kind::WhileKeyword, tokenizing::Token::Kind::DoKeyword)) {
+        const std::string_view label = current_token().lexeme();
+        advance();
+        advance();
+        nodes::ASTNode* loop = parse_statement();
+        if (auto* f = nodes::node_cast<nodes::ForStatement>(loop)) f->label = label;
+        else if (auto* fe = nodes::node_cast<nodes::ForEachStatement>(loop)) fe->label = label;
+        else if (auto* w = nodes::node_cast<nodes::WhileStatement>(loop)) w->label = label;
+        else if (auto* d = nodes::node_cast<nodes::DoWhileStatement>(loop)) d->label = label;
+        return loop;
+    }
 
     switch (current_token().kind()) {
         case tokenizing::Token::Kind::LeftCurly:           return parse_block(); 
@@ -115,7 +194,18 @@ nodes::ASTNode* Parser::parse_statement() {
         case tokenizing::Token::Kind::EnumKeyword:         return parse_enum_declaration({}, current_token().line());
         case tokenizing::Token::Kind::UsingKeyword:        return parse_using_declaration();
         case tokenizing::Token::Kind::TypedefKeyword:      return parse_typedef_declaration();
-        case tokenizing::Token::Kind::TemplateKeyword:     return parse_template_declaration();
+        case tokenizing::Token::Kind::ConstructorKeyword:
+        case tokenizing::Token::Kind::DestructorKeyword:
+            if (!declaration_level) {
+                throw ParserError::invalid_declaration(reporter, current_token(), "A constructor or destructor defined outside its class must be at file or namespace level, as in 'constructor Account(int: n) { ... }'");
+            }
+            if (current_token().kind() == tokenizing::Token::Kind::ConstructorKeyword) return parse_constructor_declaration({}, current_token().line());
+            return parse_destructor_declaration({}, current_token().line());
+
+        case tokenizing::Token::Kind::TemplateKeyword:
+            m_template_list_level = declaration_level || list_level || nested_hoist;
+            m_template_injected   = injected_candidate;
+            return parse_template_declaration();
         case tokenizing::Token::Kind::ImportKeyword:       return parse_import_export(nodes::ImportExportDeclaration::Direction::Import);
         case tokenizing::Token::Kind::ExportKeyword:       return parse_import_export(nodes::ImportExportDeclaration::Direction::Export);
         case tokenizing::Token::Kind::CoReturnKeyword:     return parse_co_return_statement();
@@ -137,6 +227,8 @@ nodes::ASTNode* Parser::parse_statement() {
         case tokenizing::Token::Kind::ClassKeyword:
         case tokenizing::Token::Kind::StructKeyword:  
         case tokenizing::Token::Kind::UnionKeyword:  
+            m_hoist_friends   = declaration_level || list_level || nested_hoist;
+            m_record_template = owner_template;
             return parse_record_declaration({}, current_token().line());
 
         case tokenizing::Token::Kind::BreakKeyword:
@@ -162,6 +254,7 @@ nodes::ASTNode* Parser::parse_statement() {
         case tokenizing::Token::Kind::AutoDeclaration:
         case tokenizing::Token::Kind::DynamicDeclaration:
         case tokenizing::Token::Kind::VariantKeyword:
+        case tokenizing::Token::Kind::SpecialKeyword:
         case tokenizing::Token::Kind::AlignasKeyword: {
             std::size_t line = current_token().line();
             return parse_variable_declaration({}, line, true);
@@ -171,6 +264,8 @@ nodes::ASTNode* Parser::parse_statement() {
         case tokenizing::Token::Kind::ConstinitKeyword:
         case tokenizing::Token::Kind::ThreadLocalKeyword:
         case tokenizing::Token::Kind::MutableKeyword:
+        case tokenizing::Token::Kind::LazyKeyword:
+        case tokenizing::Token::Kind::PublicKeyword:
         case tokenizing::Token::Kind::HoistKeyword:
         case tokenizing::Token::Kind::ConstexprKeyword:
         case tokenizing::Token::Kind::InlineKeyword:
@@ -183,6 +278,13 @@ nodes::ASTNode* Parser::parse_statement() {
         case tokenizing::Token::Kind::FriendKeyword: {
             std::size_t line = current_token().line();
             modifiers::RawModifiers mods = parse_raw_modifiers();
+            const bool was_injected = m_injected_active;
+            struct InjectedGuard {
+                bool& flag;
+                bool  saved;
+                ~InjectedGuard() { flag = saved; }
+            } injected_guard{m_injected_active, was_injected};
+            if (injected_candidate && mods.has(modifiers::RawModifiers::Friend)) m_injected_active = true;
 
             if (current_token().kind() == tokenizing::Token::Kind::RawCode) {
                 const tokenizing::Token raw = current_token();
@@ -223,6 +325,8 @@ nodes::ASTNode* Parser::parse_statement() {
                     tokenizing::Token::Kind::UnionKeyword
                 )
             ) {
+                m_hoist_friends   = declaration_level || list_level || nested_hoist;
+                m_record_template = owner_template;
                 return parse_record_declaration(mods, line);
             }
 
@@ -273,7 +377,12 @@ nodes::ASTNode* Parser::parse_statement() {
 
         case tokenizing::Token::Kind::Identifier:
         case tokenizing::Token::Kind::DoubleColon: {
-            if (current_token().kind() == tokenizing::Token::Kind::Identifier && parser_types::find_type_op(current_token().lexeme()) && computed_type_declaration_ahead()) {
+            if (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::LeftParen
+                && parser_types::find_type_op(current_token().lexeme()) && computed_type_declaration_ahead()) {
+                throw_type_op_moved(current_token());
+            }
+
+            if (current_token().kind() == tokenizing::Token::Kind::Identifier && parser_types::find_builtin_type_op(current_token().lexeme()) && computed_type_declaration_ahead()) {
                 std::size_t line = current_token().line();
                 return parse_variable_declaration({}, line, true);
             }
@@ -302,6 +411,7 @@ bool Parser::is_indirection_token(tokenizing::Token::Kind k) {
 }
 
 void Parser::parse_indirection_qualifiers(parser_types::TypeInfo& info) {
+    if (m_pending_close_angle > 0) return;
     bool pending_const = false;
     
     while (true) {
@@ -381,11 +491,13 @@ parser_types::TypeInfo Parser::parse_type_only() {
     } else if (current_token().kind() == tokenizing::Token::Kind::ArrayKeyword) {   
         info = parse_array_type();
         return info; 
-    } else if (current_token().kind() == tokenizing::Token::Kind::VariantKeyword) {
+    } else if (current_token().is_one_of(tokenizing::Token::Kind::VariantKeyword, tokenizing::Token::Kind::SpecialKeyword)) {
         info = parse_variant_type();
         return info;
+    } else if (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::LeftParen && parser_types::find_type_op(current_token().lexeme())) {
+        throw_type_op_moved(current_token());
     } else if (current_token().is_one_of(tokenizing::Token::Kind::TypeofKeyword, tokenizing::Token::Kind::DecltypeKeyword, tokenizing::Token::Kind::DiscardConstKeyword)
-               || (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::LeftParen && parser_types::find_type_op(current_token().lexeme()))) {
+               || (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::LeftParen && parser_types::find_builtin_type_op(current_token().lexeme()))) {
         info = parse_computed_type();
         return info;
     } else if (current_token().kind() == tokenizing::Token::Kind::Identifier || current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
@@ -448,6 +560,11 @@ parser_types::TypeInfo Parser::parse_type_only() {
             info.type = (parts.size() == 1 && !is_global) ? make<parser_types::UserDefinedType>(parts[0]) : make<parser_types::UserDefinedType>(std::move(parts), is_global);
             info.has_angle_args = comps.back().angled;
             if (!comps.back().args.empty()) { info.template_args = std::move(comps.back().args); }
+
+            if (m_injected_active && comps.size() == 1 && !is_global && !comps.back().angled && comps.back().name == m_injected_name) {
+                info.template_args = injected_arguments();
+                info.has_angle_args = true;
+            }
         }
     } else if (is_unsigned || length != parser_types::LengthModifier::None) {
         info.type = make<parser_types::PrimitiveType>(parser_types::PrimitiveType::BaseKind::Int, length, is_unsigned, false);
@@ -495,7 +612,7 @@ parser_types::TypeInfo Parser::parse_computed_type() {
         op = kw == K::TypeofKeyword ? Op::Typeof : Op::Decltype;
         min_types = max_types = 0;
     } else if (kw == K::Identifier) {
-        const parser_types::TypeOpInfo* info_op = parser_types::find_type_op(at.lexeme());
+        const parser_types::TypeOpInfo* info_op = parser_types::find_builtin_type_op(at.lexeme());
         if (!info_op) throw ParserError::invalid_expression(reporter, at, "Expected a type operation");
         op = info_op->op;
         min_types = info_op->min_types;
@@ -514,8 +631,10 @@ parser_types::TypeInfo Parser::parse_computed_type() {
     }
 
     if (max_types != 0) {
-        args.push_back(parse_type_info());
-        while (match(K::Comma)) args.push_back(parse_type_info());
+        do {
+            args.push_back(parse_type_info());
+            if (match(K::Ellipsis)) args.back().pack_expansion = true;
+        } while (match(K::Comma));
     }
 
     const int count = static_cast<int>(args.size());
@@ -617,6 +736,17 @@ parser_types::TypeInfo Parser::parse_function_pointer_type() {
 
 parser_types::TypeInfo Parser::parse_variant_type() {
     parser_types::TypeInfo info;
+
+    if (match(tokenizing::Token::Kind::SpecialKeyword)) {
+        expect(tokenizing::Token::Kind::LeftParen, "Expected '(' after 'special'");
+        std::vector<parser_types::TypeInfo> held;
+        held.push_back(parse_type_info());
+        expect(tokenizing::Token::Kind::RightParen, "'special' holds exactly one type, e.g. special(string)");
+        info.type = make<parser_types::VariantType>(std::move(held), true);
+        parse_indirection_qualifiers(info);
+        return info;
+    }
+
     expect(tokenizing::Token::Kind::VariantKeyword, "Expected 'variant' keyword");
     expect(tokenizing::Token::Kind::LeftParen, "Expected '(' after 'variant'");
 

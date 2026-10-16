@@ -35,6 +35,7 @@ public:
     ) noexcept : m_sm(sm), m_pp(pp), m_reporter(reporter), m_arena(arena) {}
 
     void load(FileId root);
+    void load_all(const std::vector<FileId>& roots);
 
     void add_module_dir(std::string dir) { m_module_dirs.push_back(std::move(dir)); }
 
@@ -59,6 +60,10 @@ private:
     std::vector<FileId>                    m_work;   
     std::unordered_map<FileId, ParsedUnit> m_units;  
     std::unordered_map<FileId, std::unordered_map<std::string, FileId>> m_file_edges;
+    std::unordered_map<FileId, std::vector<tokenizing::Token>> m_tokens;
+    std::unordered_map<FileId, std::vector<std::pair<std::string, std::optional<FileId>>>> m_resolved;
+    std::vector<FileId>                    m_order;
+    parsing::ParseNames                    m_names;
 
 private:
     void enqueue(FileId f) {
@@ -66,11 +71,13 @@ private:
         if (m_seen.insert(f).second) m_work.push_back(f);   
     }
 
-    void process(FileId f);
+    void discover(FileId f);
 
-    nodes::BlockStatement* parse_unit(FileId f);
+    nodes::BlockStatement* parse_tokens(FileId f, ErrorReporter& reporter);
 
-    void scan_imports(FileId importer, nodes::BlockStatement* ast);
+    void discover_import(FileId importer, nodes::ImportExportDeclaration* decl);
+
+    void link_imports(FileId importer, nodes::BlockStatement* ast);
 
     std::optional<FileId> resolve_file(std::string_view raw, FileId importer, std::uint32_t line);
 

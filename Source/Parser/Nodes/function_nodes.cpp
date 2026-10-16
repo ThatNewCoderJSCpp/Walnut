@@ -221,6 +221,9 @@ ASTNode* FunctionDeclaration::clone_into(Arena& a) const {
     c->m_is_specialization = m_is_specialization;
     c->m_spec_args         = clone_targs(m_spec_args, a);
     c->m_lowered_operator  = m_lowered_operator;
+    c->hoisted_friend      = hoisted_friend;
+    c->native_name         = native_name;
+    c->variable_template   = variable_template;
     copy_base_to(c);
     return c;
 }
@@ -448,6 +451,8 @@ ASTNode* OperatorFunctionDeclaration::clone_into(Arena& a) const {
     copy_base_to(c);
     c->overload = overload;
     c->m_deleted = m_deleted;
+    c->hoisted_friend = hoisted_friend;
+    c->native_name = native_name;
     return c;
 }
 

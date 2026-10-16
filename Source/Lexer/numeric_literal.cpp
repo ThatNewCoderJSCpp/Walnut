@@ -8,6 +8,7 @@ namespace {
 
 bool digit_in_base(char c, int base) {
     if (base == 2)  return c == '0' || c == '1';
+    if (base == 8)  return c >= '0' && c <= '7';
     if (base == 16) return is_hex(c);
     return c >= '0' && c <= '9';
 }
@@ -22,8 +23,9 @@ NumericLiteral parse_numeric_literal(std::string_view lexeme) {
 
     if (lexeme.size() > 2 && lexeme[0] == '0' && (lexeme[1] == 'x' || lexeme[1] == 'X')) { out.base = 16; i = 2; }
     else if (lexeme.size() > 2 && lexeme[0] == '0' && (lexeme[1] == 'b' || lexeme[1] == 'B')) { out.base = 2; i = 2; }
+    else if (lexeme.size() > 2 && lexeme[0] == '0' && (lexeme[1] == 'o' || lexeme[1] == 'O')) { out.base = 8; i = 2; }
 
-    std::string body = out.base == 16 ? "0x" : out.base == 2 ? "0b" : "";
+    std::string body = out.base == 16 ? "0x" : out.base == 2 ? "0b" : out.base == 8 ? "0o" : "";
     char previous = 0;
 
     for (; i < lexeme.size(); ++i) {

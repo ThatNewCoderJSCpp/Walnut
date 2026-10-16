@@ -7,6 +7,8 @@
 namespace walnut {
 namespace nodes {
 
+struct RecordDeclaration;
+
 struct FunctionParameter : ASTNode {
     static constexpr std::size_t INFINITE_VARIADIC = std::numeric_limits<std::size_t>::max();
 
@@ -127,6 +129,12 @@ struct FunctionDeclaration : ASTNode {
     std::vector<parser_types::TemplateArgument*> m_spec_args;
     bool                                         m_is_specialization = false;
     OverloadableOperator                         m_lowered_operator = OverloadableOperator::None;
+    RecordDeclaration*                           friend_of = nullptr;
+    bool                                         hoisted_friend = false;
+    bool                                         lazy_untyped = false;
+    bool                                         native_used = false;
+    bool                                         variable_template = false;
+    std::string_view                             native_name;
     semantics::Symbol* symbol = nullptr; 
 
     FunctionDeclaration(
@@ -312,6 +320,13 @@ struct OperatorFunctionDeclaration : ASTNode {
     FunctionParameters*                   m_parameters;
     ASTNode*                              m_body;
     bool                                  m_deleted = false;
+    std::vector<std::string_view>         owner_parts;
+    bool                                  owner_global = false;
+    RecordDeclaration*                    friend_of = nullptr;
+    bool                                  hoisted_friend = false;
+    bool                                  lazy_untyped = false;
+    bool                                  native_used = false;
+    std::string_view                      native_name;
     semantics::Symbol* symbol = nullptr; 
 
     OperatorFunctionDeclaration(

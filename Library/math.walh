@@ -1,0 +1,2781 @@
+namespace std {
+    namespace math {
+        extern "C++" from "<walnut_math.hpp>" {
+            class BigFloat as "fizmo::multiprecision::BigFloat" {
+            public:
+                constructor();
+                constructor(long int: value);
+                constructor(float: value) as "walnut_rt::math::big_from";
+                constructor(long float: value) as "walnut_rt::math::big_from";
+                constructor(long long float: value) as "walnut_rt::math::big_from";
+                constructor(long double: value) as "walnut_rt::math::big_from";
+                constructor(long long double: value) as "walnut_rt::math::big_from";
+                constructor(const string&: digits) explicit as "walnut_rt::math::parse_big";
+                function to_string() const -> string;
+                function to_string(long int: digits) const -> string as "walnut_rt::math::big_to_string";
+                function is_zero() const -> bool;
+                function is_negative() const -> bool;
+                function is_positive() const -> bool;
+                function is_integer() const -> bool;
+                function is_finite() const -> bool;
+                function is_infinite() const -> bool;
+                function is_nan() const -> bool;
+                function sign() const -> int;
+                function abs() const -> BigFloat;
+                operator(-) function() const -> BigFloat;
+                operator(+) function(const BigFloat&: other) const -> BigFloat;
+                operator(-) function(const BigFloat&: other) const -> BigFloat;
+                operator(*) function(const BigFloat&: other) const -> BigFloat;
+                operator(/) function(const BigFloat&: other) const -> BigFloat;
+                operator(==) function(const BigFloat&: other) const -> bool;
+                operator(!=) function(const BigFloat&: other) const -> bool;
+                operator(<) function(const BigFloat&: other) const -> bool;
+                operator(>) function(const BigFloat&: other) const -> bool;
+                operator(<=) function(const BigFloat&: other) const -> bool;
+                operator(>=) function(const BigFloat&: other) const -> bool;
+                operator(+=) function(const BigFloat&: other) -> BigFloat&;
+                operator(-=) function(const BigFloat&: other) -> BigFloat&;
+                operator(*=) function(const BigFloat&: other) -> BigFloat&;
+                operator(/=) function(const BigFloat&: other) -> BigFloat&;
+                operator(short short float) function() const explicit;
+                operator(short float) function() const explicit;
+                operator(float) function() const explicit;
+                operator(long float) function() const explicit;
+                operator(long long float) function() const explicit;
+                operator(long double) function() const explicit;
+                operator(long long double) function() const explicit;
+            } end class BigFloat
+
+            class BigComplex as "fizmo::multiprecision::BigComplex" {
+            public:
+                constructor();
+                constructor(const BigFloat&: real);
+                constructor(const BigFloat&: real, const BigFloat&: imaginary);
+                constructor(long int: real) as "walnut_rt::math::big_complex_of";
+                constructor(float: real) as "walnut_rt::math::big_complex_of";
+                constructor(float: real, float: imaginary) as "walnut_rt::math::big_complex_of";
+                static function i() -> BigComplex;
+                static function polar(const BigFloat&: magnitude, const BigFloat&: angle) -> BigComplex as "walnut_rt::math::big_polar";
+                function real() const -> BigFloat;
+                function imaginary() const -> BigFloat;
+                function magnitude() const -> BigFloat as "walnut_rt::math::big_magnitude";
+                function argument() const -> BigFloat as "walnut_rt::math::big_argument";
+                function conjugate() const -> BigComplex;
+                function to_string() const -> string;
+                function to_string(long int: digits) const -> string as "walnut_rt::math::big_complex_to_string";
+                function is_zero() const -> bool;
+                function is_real() const -> bool;
+                function is_imaginary() const -> bool;
+                function is_finite() const -> bool;
+                operator(-) function() const -> BigComplex;
+                operator(+) function(const BigComplex&: other) const -> BigComplex;
+                operator(-) function(const BigComplex&: other) const -> BigComplex;
+                operator(*) function(const BigComplex&: other) const -> BigComplex;
+                operator(/) function(const BigComplex&: other) const -> BigComplex;
+                operator(==) function(const BigComplex&: other) const -> bool;
+                operator(!=) function(const BigComplex&: other) const -> bool;
+                operator(+=) function(const BigComplex&: other) -> BigComplex&;
+                operator(-=) function(const BigComplex&: other) -> BigComplex&;
+                operator(*=) function(const BigComplex&: other) -> BigComplex&;
+                operator(/=) function(const BigComplex&: other) -> BigComplex&;
+            } end class BigComplex
+
+            template <typename T>
+            class Complex as "fizmo::Complex" {
+            public:
+                constructor();
+                constructor(const T&: real);
+                constructor(const T&: real, const T&: imaginary);
+                static function i() -> Complex;
+                static function polar(const T&: magnitude, const T&: angle) -> Complex;
+                function real() const -> T;
+                function imaginary() const -> T;
+                function magnitude() const -> T;
+                function magnitude_squared() const -> T;
+                function argument() const -> T;
+                function conjugate() const -> Complex;
+                function reciprocal() const -> Complex;
+                function to_string() const -> string;
+                function is_zero() const -> bool;
+                function is_real() const -> bool;
+                function is_imaginary() const -> bool;
+                function is_finite() const -> bool;
+                operator(-) function() const -> Complex;
+                operator(+) function(const Complex&: other) const -> Complex;
+                operator(+) function(const T&: other) const -> Complex;
+                operator(-) function(const Complex&: other) const -> Complex;
+                operator(-) function(const T&: other) const -> Complex;
+                operator(*) function(const Complex&: other) const -> Complex;
+                operator(*) function(const T&: other) const -> Complex;
+                operator(/) function(const Complex&: other) const -> Complex;
+                operator(/) function(const T&: other) const -> Complex;
+                operator(==) function(const Complex&: other) const -> bool;
+                operator(!=) function(const Complex&: other) const -> bool;
+                operator(+=) function(const Complex&: other) -> Complex&;
+                operator(-=) function(const Complex&: other) -> Complex&;
+                operator(*=) function(const Complex&: other) -> Complex&;
+                operator(/=) function(const Complex&: other) -> Complex&;
+            } end class Complex
+
+        } end extern
+
+        namespace detail {
+            template <typename T>
+            concept ComplexValue = requires (T: z) { z.imaginary(); z.conjugate(); }
+
+            template <typename T>
+            concept RealValue = std::traits::is_builtin_float<T> || std::traits::is_same<T, BigFloat>
+
+            template <typename T>
+            concept MathValue = RealValue<T> || ComplexValue<T>
+
+            extern "C++" from "<walnut_math.hpp>" {
+                template <typename T>
+                class Fn as "walnut_rt::math::tag" {
+                public:
+                    static function abs(const T&: x) -> T as "walnut_rt::math::abs";
+                    static function sin(const T&: x) -> T as "walnut_rt::math::sin";
+                    static function cos(const T&: x) -> T as "walnut_rt::math::cos";
+                    static function tan(const T&: x) -> T as "walnut_rt::math::tan";
+                    static function csc(const T&: x) -> T as "walnut_rt::math::csc";
+                    static function sec(const T&: x) -> T as "walnut_rt::math::sec";
+                    static function cot(const T&: x) -> T as "walnut_rt::math::cot";
+                    static function sinh(const T&: x) -> T as "walnut_rt::math::sinh";
+                    static function cosh(const T&: x) -> T as "walnut_rt::math::cosh";
+                    static function tanh(const T&: x) -> T as "walnut_rt::math::tanh";
+                    static function csch(const T&: x) -> T as "walnut_rt::math::csch";
+                    static function sech(const T&: x) -> T as "walnut_rt::math::sech";
+                    static function coth(const T&: x) -> T as "walnut_rt::math::coth";
+                    static function arcsin(const T&: x) -> T as "walnut_rt::math::arcsin";
+                    static function arccos(const T&: x) -> T as "walnut_rt::math::arccos";
+                    static function arctan(const T&: x) -> T as "walnut_rt::math::arctan";
+                    static function arccot(const T&: x) -> T as "walnut_rt::math::arccot";
+                    static function arcsec(const T&: x) -> T as "walnut_rt::math::arcsec";
+                    static function arccsc(const T&: x) -> T as "walnut_rt::math::arccsc";
+                    static function arcsinh(const T&: x) -> T as "walnut_rt::math::arcsinh";
+                    static function arccosh(const T&: x) -> T as "walnut_rt::math::arccosh";
+                    static function arctanh(const T&: x) -> T as "walnut_rt::math::arctanh";
+                    static function arccoth(const T&: x) -> T as "walnut_rt::math::arccoth";
+                    static function arcsech(const T&: x) -> T as "walnut_rt::math::arcsech";
+                    static function arccsch(const T&: x) -> T as "walnut_rt::math::arccsch";
+                    static function exp(const T&: x) -> T as "walnut_rt::math::exp";
+                    static function ln(const T&: x) -> T as "walnut_rt::math::ln";
+                    static function log2(const T&: x) -> T as "walnut_rt::math::log2";
+                    static function log10(const T&: x) -> T as "walnut_rt::math::log10";
+                    static function sqrt(const T&: x) -> T as "walnut_rt::math::sqrt";
+                    static function cbrt(const T&: x) -> T as "walnut_rt::math::cbrt";
+                    static function pow2(const T&: x) -> T as "walnut_rt::math::pow2";
+                    static function pow10(const T&: x) -> T as "walnut_rt::math::pow10";
+                    static function log1p(const T&: x) -> T as "walnut_rt::math::log1p";
+                    static function expm1(const T&: x) -> T as "walnut_rt::math::expm1";
+                    static function sinc(const T&: x) -> T as "walnut_rt::math::sinc";
+                    static function normalized_sinc(const T&: x) -> T as "walnut_rt::math::normalized_sinc";
+                    static function gudermannian(const T&: x) -> T as "walnut_rt::math::gudermannian";
+                    static function inv_gudermannian(const T&: x) -> T as "walnut_rt::math::inv_gudermannian";
+                    static function erf(const T&: x) -> T as "walnut_rt::math::erf";
+                    static function erfc(const T&: x) -> T as "walnut_rt::math::erfc";
+                    static function erfi(const T&: x) -> T as "walnut_rt::math::erfi";
+                    static function inv_erf(const T&: x) -> T as "walnut_rt::math::inv_erf";
+                    static function inv_erfc(const T&: x) -> T as "walnut_rt::math::inv_erfc";
+                    static function inv_erfi(const T&: x) -> T as "walnut_rt::math::inv_erfi";
+                    static function gamma(const T&: x) -> T as "walnut_rt::math::gamma";
+                    static function log_gamma(const T&: x) -> T as "walnut_rt::math::log_gamma";
+                    static function log_abs_gamma(const T&: x) -> T as "walnut_rt::math::log_abs_gamma";
+                    static function factorial(const T&: x) -> T as "walnut_rt::math::factorial";
+                    static function digamma(const T&: x) -> T as "walnut_rt::math::digamma";
+                    static function trigamma(const T&: x) -> T as "walnut_rt::math::trigamma";
+                    static function harmonic(const T&: x) -> T as "walnut_rt::math::harmonic";
+                    static function riemann_zeta(const T&: x) -> T as "walnut_rt::math::riemann_zeta";
+                    static function riemann_xi(const T&: x) -> T as "walnut_rt::math::riemann_xi";
+                    static function riemann_chi(const T&: x) -> T as "walnut_rt::math::riemann_chi";
+                    static function dirichlet_eta(const T&: x) -> T as "walnut_rt::math::dirichlet_eta";
+                    static function dirichlet_lambda(const T&: x) -> T as "walnut_rt::math::dirichlet_lambda";
+                    static function dirichlet_beta(const T&: x) -> T as "walnut_rt::math::dirichlet_beta";
+                    static function dilogarithm(const T&: x) -> T as "walnut_rt::math::dilogarithm";
+                    static function trilogarithm(const T&: x) -> T as "walnut_rt::math::trilogarithm";
+                    static function rogers_l(const T&: x) -> T as "walnut_rt::math::rogers_l";
+                    static function rogers_l_normalized(const T&: x) -> T as "walnut_rt::math::rogers_l_normalized";
+                    static function spence_function(const T&: x) -> T as "walnut_rt::math::spence_function";
+                    static function spence_integral(const T&: x) -> T as "walnut_rt::math::spence_integral";
+                    static function airy_ai(const T&: x) -> T as "walnut_rt::math::airy_ai";
+                    static function airy_bi(const T&: x) -> T as "walnut_rt::math::airy_bi";
+                    static function scorer_gi(const T&: x) -> T as "walnut_rt::math::scorer_gi";
+                    static function scorer_hi(const T&: x) -> T as "walnut_rt::math::scorer_hi";
+                    static function elliptic_k(const T&: x) -> T as "walnut_rt::math::elliptic_k";
+                    static function elliptic_e(const T&: x) -> T as "walnut_rt::math::elliptic_e";
+                    static function lambert_w(const T&: x) -> T as "walnut_rt::math::lambert_w";
+                    static function lambert_w0(const T&: x) -> T as "walnut_rt::math::lambert_w0";
+                    static function lambert_wm1(const T&: x) -> T as "walnut_rt::math::lambert_wm1";
+                    static function fresnel_c(const T&: x) -> T as "walnut_rt::math::fresnel_c";
+                    static function fresnel_s(const T&: x) -> T as "walnut_rt::math::fresnel_s";
+                    static function sin_integral(const T&: x) -> T as "walnut_rt::math::sin_integral";
+                    static function cos_integral(const T&: x) -> T as "walnut_rt::math::cos_integral";
+                    static function sinh_integral(const T&: x) -> T as "walnut_rt::math::sinh_integral";
+                    static function cosh_integral(const T&: x) -> T as "walnut_rt::math::cosh_integral";
+                    static function exp_integral(const T&: x) -> T as "walnut_rt::math::exp_integral";
+                    static function log_integral(const T&: x) -> T as "walnut_rt::math::log_integral";
+                    static function clausen_integral(const T&: x) -> T as "walnut_rt::math::clausen_integral";
+                    static function floor(const T&: x) -> T as "walnut_rt::math::floor";
+                    static function ceiling(const T&: x) -> T as "walnut_rt::math::ceiling";
+                    static function round(const T&: x) -> T as "walnut_rt::math::round";
+                    static function trunc(const T&: x) -> T as "walnut_rt::math::trunc";
+                    static function fractional_part(const T&: x) -> T as "walnut_rt::math::fractional_part";
+                    static function atan2(const T&: x, const T&: y) -> T as "walnut_rt::math::atan2";
+                    static function pow(const T&: x, const T&: y) -> T as "walnut_rt::math::pow";
+                    static function log(const T&: x, const T&: y) -> T as "walnut_rt::math::log_base";
+                    static function nth_root(const T&: x, const T&: y) -> T as "walnut_rt::math::nth_root";
+                    static function fmod(const T&: x, const T&: y) -> T as "walnut_rt::math::fmod";
+                    static function remainder(const T&: x, const T&: y) -> T as "walnut_rt::math::remainder";
+                    static function mod_floor(const T&: x, const T&: y) -> T as "walnut_rt::math::mod_floor";
+                    static function mod_euclid(const T&: x, const T&: y) -> T as "walnut_rt::math::mod_euclid";
+                    static function generalized_erf(const T&: x, const T&: y) -> T as "walnut_rt::math::generalized_erf";
+                    static function generalized_erfc(const T&: x, const T&: y) -> T as "walnut_rt::math::generalized_erfc";
+                    static function beta(const T&: x, const T&: y) -> T as "walnut_rt::math::beta";
+                    static function log_beta(const T&: x, const T&: y) -> T as "walnut_rt::math::log_beta";
+                    static function log_abs_beta(const T&: x, const T&: y) -> T as "walnut_rt::math::log_abs_beta";
+                    static function legendre_chi(const T&: x, const T&: y) -> T as "walnut_rt::math::legendre_chi";
+                    static function hurwitz_zeta(const T&: x, const T&: y) -> T as "walnut_rt::math::hurwitz_zeta";
+                    static function polylog(const T&: x, const T&: y) -> T as "walnut_rt::math::polylog";
+                    static function carlson_rc(const T&: x, const T&: y) -> T as "walnut_rt::math::carlson_rc";
+                    static function elliptic_e(const T&: x, const T&: y) -> T as "walnut_rt::math::elliptic_e";
+                    static function elliptic_f(const T&: x, const T&: y) -> T as "walnut_rt::math::elliptic_f";
+                    static function elliptic_pi(const T&: x, const T&: y) -> T as "walnut_rt::math::elliptic_pi";
+                    static function jacobi_am(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_am";
+                    static function jacobi_sn(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_sn";
+                    static function jacobi_cn(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_cn";
+                    static function jacobi_dn(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_dn";
+                    static function jacobi_ns(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_ns";
+                    static function jacobi_nc(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_nc";
+                    static function jacobi_nd(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_nd";
+                    static function jacobi_sc(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_sc";
+                    static function jacobi_sd(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_sd";
+                    static function jacobi_cs(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_cs";
+                    static function jacobi_cd(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_cd";
+                    static function jacobi_ds(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_ds";
+                    static function jacobi_dc(const T&: x, const T&: y) -> T as "walnut_rt::math::jacobi_dc";
+                    static function generalized_gaussian_integral(const T&: x, const T&: y) -> T as "walnut_rt::math::generalized_gaussian_integral";
+                    static function regularized_gamma_p(const T&: x, const T&: y) -> T as "walnut_rt::math::regularized_gamma_p";
+                    static function regularized_gamma_q(const T&: x, const T&: y) -> T as "walnut_rt::math::regularized_gamma_q";
+                    static function lower_incomplete_gamma(const T&: x, const T&: y) -> T as "walnut_rt::math::lower_incomplete_gamma";
+                    static function upper_incomplete_gamma(const T&: x, const T&: y) -> T as "walnut_rt::math::upper_incomplete_gamma";
+                    static function inverse_regularized_gamma_p(const T&: x, const T&: y) -> T as "walnut_rt::math::inverse_regularized_gamma_p";
+                    static function inverse_regularized_gamma_q(const T&: x, const T&: y) -> T as "walnut_rt::math::inverse_regularized_gamma_q";
+                    static function rising_pochhammer(const T&: x, const T&: y) -> T as "walnut_rt::math::rising_pochhammer";
+                    static function falling_pochhammer(const T&: x, const T&: y) -> T as "walnut_rt::math::falling_pochhammer";
+                    static function permutation(const T&: x, const T&: y) -> T as "walnut_rt::math::permutation";
+                    static function combination(const T&: x, const T&: y) -> T as "walnut_rt::math::combination";
+                    static function pow(const T&: x, long int: n) -> T as "walnut_rt::math::pow";
+                    static function nth_root(const T&: x, long int: n) -> T as "walnut_rt::math::nth_root";
+                    static function polygamma(const T&: x, long int: n) -> T as "walnut_rt::math::polygamma";
+                    static function chebyshev_t(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_t";
+                    static function chebyshev_u(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_u";
+                    static function chebyshev_v(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_v";
+                    static function chebyshev_w(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_w";
+                    static function fibonacci_polynomial(const T&: x, long int: n) -> T as "walnut_rt::math::fibonacci_polynomial";
+                    static function lucas_polynomial(const T&: x, long int: n) -> T as "walnut_rt::math::lucas_polynomial";
+                    static function legendre_p(const T&: x, long int: n) -> T as "walnut_rt::math::legendre_p";
+                    static function legendre_q(const T&: x, long int: n) -> T as "walnut_rt::math::legendre_q";
+                    static function lambert_w(const T&: x, long int: n) -> T as "walnut_rt::math::lambert_w";
+                    static function exp_integral_generalized(const T&: x, long int: n) -> T as "walnut_rt::math::exp_integral_generalized";
+                    static function log_integral_generalized(const T&: x, long int: n) -> T as "walnut_rt::math::log_integral_generalized";
+                    static function clausen(const T&: x, long int: n) -> T as "walnut_rt::math::clausen";
+                    static function debye(const T&: x, long int: n) -> T as "walnut_rt::math::debye";
+                    static function debye_integral(const T&: x, long int: n) -> T as "walnut_rt::math::debye_integral";
+                    static function debye_tail(const T&: x, long int: n) -> T as "walnut_rt::math::debye_tail";
+                    static function rising_pochhammer(const T&: x, long int: n) -> T as "walnut_rt::math::rising_pochhammer";
+                    static function falling_pochhammer(const T&: x, long int: n) -> T as "walnut_rt::math::falling_pochhammer";
+                    static function permutation(const T&: x, long int: n) -> T as "walnut_rt::math::permutation";
+                    static function combination(const T&: x, long int: n) -> T as "walnut_rt::math::combination";
+                    static function lerch_transcendent(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::lerch_transcendent";
+                    static function carlson_rf(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::carlson_rf";
+                    static function carlson_rd(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::carlson_rd";
+                    static function carlson_rg(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::carlson_rg";
+                    static function elliptic_pi(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::elliptic_pi";
+                    static function generalized_gaussian_moment(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::generalized_gaussian_moment";
+                    static function regularized_beta(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::regularized_beta";
+                    static function regularized_beta_complement(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::regularized_beta_complement";
+                    static function incomplete_beta(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::incomplete_beta";
+                    static function inverse_regularized_beta(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::inverse_regularized_beta";
+                    static function inverse_regularized_beta_complement(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::inverse_regularized_beta_complement";
+                    static function carlson_rj(const T&: x, const T&: y, const T&: z, const T&: w) -> T as "walnut_rt::math::carlson_rj";
+                    static function sqrt2() -> T as "walnut_rt::math::sqrt2<T>";
+                    static function inv_sqrt2() -> T as "walnut_rt::math::inv_sqrt2<T>";
+                    static function sqrt3() -> T as "walnut_rt::math::sqrt3<T>";
+                    static function inv_sqrt3() -> T as "walnut_rt::math::inv_sqrt3<T>";
+                    static function sqrt5() -> T as "walnut_rt::math::sqrt5<T>";
+                    static function inv_sqrt5() -> T as "walnut_rt::math::inv_sqrt5<T>";
+                    static function ln2() -> T as "walnut_rt::math::ln2<T>";
+                    static function inv_ln2() -> T as "walnut_rt::math::inv_ln2<T>";
+                    static function ln10() -> T as "walnut_rt::math::ln10<T>";
+                    static function inv_ln10() -> T as "walnut_rt::math::inv_ln10<T>";
+                    static function e() -> T as "walnut_rt::math::e<T>";
+                    static function inv_e() -> T as "walnut_rt::math::inv_e<T>";
+                    static function phi() -> T as "walnut_rt::math::phi<T>";
+                    static function inv_phi() -> T as "walnut_rt::math::inv_phi<T>";
+                    static function psi() -> T as "walnut_rt::math::psi<T>";
+                    static function pi() -> T as "walnut_rt::math::pi<T>";
+                    static function two_pi() -> T as "walnut_rt::math::two_pi<T>";
+                    static function half_pi() -> T as "walnut_rt::math::half_pi<T>";
+                    static function third_pi() -> T as "walnut_rt::math::third_pi<T>";
+                    static function quarter_pi() -> T as "walnut_rt::math::quarter_pi<T>";
+                    static function sixth_pi() -> T as "walnut_rt::math::sixth_pi<T>";
+                    static function pi_180() -> T as "walnut_rt::math::pi_180<T>";
+                    static function inv_pi() -> T as "walnut_rt::math::inv_pi<T>";
+                    static function two_inv_pi() -> T as "walnut_rt::math::two_inv_pi<T>";
+                    static function inv_two_pi() -> T as "walnut_rt::math::inv_two_pi<T>";
+                    static function inv_pi_180() -> T as "walnut_rt::math::inv_pi_180<T>";
+                    static function zeta2() -> T as "walnut_rt::math::zeta2<T>";
+                    static function apery() -> T as "walnut_rt::math::apery<T>";
+                    static function sqrt_pi() -> T as "walnut_rt::math::sqrt_pi<T>";
+                    static function inv_sqrt_pi() -> T as "walnut_rt::math::inv_sqrt_pi<T>";
+                    static function two_inv_sqrt_pi() -> T as "walnut_rt::math::two_inv_sqrt_pi<T>";
+                    static function euler_mascheroni() -> T as "walnut_rt::math::euler_mascheroni<T>";
+                    static function catalan() -> T as "walnut_rt::math::catalan<T>";
+                    static function silver_ratio() -> T as "walnut_rt::math::silver_ratio<T>";
+                    static function bronze_ratio() -> T as "walnut_rt::math::bronze_ratio<T>";
+                    static function silver_constant() -> T as "walnut_rt::math::silver_constant<T>";
+                    static function stieltjes(long int: n) -> T as "walnut_rt::math::stieltjes<T>";
+                    static function bernoulli(long int: n) -> T as "walnut_rt::math::bernoulli<T>";
+                    static function metallic_ratio(long int: n) -> T as "walnut_rt::math::metallic_ratio<T>";
+                    static function inv_metallic_ratio(long int: n) -> T as "walnut_rt::math::inv_metallic_ratio<T>";
+                    static function metallic_mean(long int: n) -> T as "walnut_rt::math::metallic_mean<T>";
+                    static function inv_metallic_mean(long int: n) -> T as "walnut_rt::math::inv_metallic_mean<T>";
+                    static function beraha(long int: n) -> T as "walnut_rt::math::beraha<T>";
+                    static function tangent_number(long int: n) -> T as "walnut_rt::math::tangent_number<T>";
+                    static function secant_number(long int: n) -> T as "walnut_rt::math::secant_number<T>";
+                    static function euler_number(long int: n) -> T as "walnut_rt::math::euler_number<T>";
+                } end class Fn
+
+                class Api as "walnut_rt::math::api" {
+                public:
+                    static function set_precision(long int: bits) -> void as "walnut_rt::math::set_precision";
+                    static function precision() -> long int as "walnut_rt::math::precision";
+                    static function set_digits(long int: digits) -> void as "walnut_rt::math::set_digits";
+                    static function digits() -> long int as "walnut_rt::math::digits";
+                } end class Api
+            } end extern
+        } end namespace detail
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function sin(const T&: x) -> float {
+            return detail::Fn<float>::sin(static_cast<float>(x));
+        } end function sin
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function sin(const T&: x) -> T {
+            return detail::Fn<T>::sin(x);
+        } end function sin
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function cos(const T&: x) -> float {
+            return detail::Fn<float>::cos(static_cast<float>(x));
+        } end function cos
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function cos(const T&: x) -> T {
+            return detail::Fn<T>::cos(x);
+        } end function cos
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function tan(const T&: x) -> float {
+            return detail::Fn<float>::tan(static_cast<float>(x));
+        } end function tan
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function tan(const T&: x) -> T {
+            return detail::Fn<T>::tan(x);
+        } end function tan
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function csc(const T&: x) -> float {
+            return detail::Fn<float>::csc(static_cast<float>(x));
+        } end function csc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function csc(const T&: x) -> T {
+            return detail::Fn<T>::csc(x);
+        } end function csc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function sec(const T&: x) -> float {
+            return detail::Fn<float>::sec(static_cast<float>(x));
+        } end function sec
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function sec(const T&: x) -> T {
+            return detail::Fn<T>::sec(x);
+        } end function sec
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function cot(const T&: x) -> float {
+            return detail::Fn<float>::cot(static_cast<float>(x));
+        } end function cot
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function cot(const T&: x) -> T {
+            return detail::Fn<T>::cot(x);
+        } end function cot
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function sinh(const T&: x) -> float {
+            return detail::Fn<float>::sinh(static_cast<float>(x));
+        } end function sinh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function sinh(const T&: x) -> T {
+            return detail::Fn<T>::sinh(x);
+        } end function sinh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function cosh(const T&: x) -> float {
+            return detail::Fn<float>::cosh(static_cast<float>(x));
+        } end function cosh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function cosh(const T&: x) -> T {
+            return detail::Fn<T>::cosh(x);
+        } end function cosh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function tanh(const T&: x) -> float {
+            return detail::Fn<float>::tanh(static_cast<float>(x));
+        } end function tanh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function tanh(const T&: x) -> T {
+            return detail::Fn<T>::tanh(x);
+        } end function tanh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function csch(const T&: x) -> float {
+            return detail::Fn<float>::csch(static_cast<float>(x));
+        } end function csch
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function csch(const T&: x) -> T {
+            return detail::Fn<T>::csch(x);
+        } end function csch
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function sech(const T&: x) -> float {
+            return detail::Fn<float>::sech(static_cast<float>(x));
+        } end function sech
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function sech(const T&: x) -> T {
+            return detail::Fn<T>::sech(x);
+        } end function sech
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function coth(const T&: x) -> float {
+            return detail::Fn<float>::coth(static_cast<float>(x));
+        } end function coth
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function coth(const T&: x) -> T {
+            return detail::Fn<T>::coth(x);
+        } end function coth
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arcsin(const T&: x) -> float {
+            return detail::Fn<float>::arcsin(static_cast<float>(x));
+        } end function arcsin
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arcsin(const T&: x) -> T {
+            return detail::Fn<T>::arcsin(x);
+        } end function arcsin
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arccos(const T&: x) -> float {
+            return detail::Fn<float>::arccos(static_cast<float>(x));
+        } end function arccos
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arccos(const T&: x) -> T {
+            return detail::Fn<T>::arccos(x);
+        } end function arccos
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arctan(const T&: x) -> float {
+            return detail::Fn<float>::arctan(static_cast<float>(x));
+        } end function arctan
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arctan(const T&: x) -> T {
+            return detail::Fn<T>::arctan(x);
+        } end function arctan
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arccot(const T&: x) -> float {
+            return detail::Fn<float>::arccot(static_cast<float>(x));
+        } end function arccot
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arccot(const T&: x) -> T {
+            return detail::Fn<T>::arccot(x);
+        } end function arccot
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arcsec(const T&: x) -> float {
+            return detail::Fn<float>::arcsec(static_cast<float>(x));
+        } end function arcsec
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arcsec(const T&: x) -> T {
+            return detail::Fn<T>::arcsec(x);
+        } end function arcsec
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arccsc(const T&: x) -> float {
+            return detail::Fn<float>::arccsc(static_cast<float>(x));
+        } end function arccsc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arccsc(const T&: x) -> T {
+            return detail::Fn<T>::arccsc(x);
+        } end function arccsc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arcsinh(const T&: x) -> float {
+            return detail::Fn<float>::arcsinh(static_cast<float>(x));
+        } end function arcsinh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arcsinh(const T&: x) -> T {
+            return detail::Fn<T>::arcsinh(x);
+        } end function arcsinh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arccosh(const T&: x) -> float {
+            return detail::Fn<float>::arccosh(static_cast<float>(x));
+        } end function arccosh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arccosh(const T&: x) -> T {
+            return detail::Fn<T>::arccosh(x);
+        } end function arccosh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arctanh(const T&: x) -> float {
+            return detail::Fn<float>::arctanh(static_cast<float>(x));
+        } end function arctanh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arctanh(const T&: x) -> T {
+            return detail::Fn<T>::arctanh(x);
+        } end function arctanh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arccoth(const T&: x) -> float {
+            return detail::Fn<float>::arccoth(static_cast<float>(x));
+        } end function arccoth
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arccoth(const T&: x) -> T {
+            return detail::Fn<T>::arccoth(x);
+        } end function arccoth
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arcsech(const T&: x) -> float {
+            return detail::Fn<float>::arcsech(static_cast<float>(x));
+        } end function arcsech
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arcsech(const T&: x) -> T {
+            return detail::Fn<T>::arcsech(x);
+        } end function arcsech
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function arccsch(const T&: x) -> float {
+            return detail::Fn<float>::arccsch(static_cast<float>(x));
+        } end function arccsch
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function arccsch(const T&: x) -> T {
+            return detail::Fn<T>::arccsch(x);
+        } end function arccsch
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function exp(const T&: x) -> float {
+            return detail::Fn<float>::exp(static_cast<float>(x));
+        } end function exp
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function exp(const T&: x) -> T {
+            return detail::Fn<T>::exp(x);
+        } end function exp
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function ln(const T&: x) -> float {
+            return detail::Fn<float>::ln(static_cast<float>(x));
+        } end function ln
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function ln(const T&: x) -> T {
+            return detail::Fn<T>::ln(x);
+        } end function ln
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log2(const T&: x) -> float {
+            return detail::Fn<float>::log2(static_cast<float>(x));
+        } end function log2
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log2(const T&: x) -> T {
+            return detail::Fn<T>::log2(x);
+        } end function log2
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log10(const T&: x) -> float {
+            return detail::Fn<float>::log10(static_cast<float>(x));
+        } end function log10
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log10(const T&: x) -> T {
+            return detail::Fn<T>::log10(x);
+        } end function log10
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function sqrt(const T&: x) -> float {
+            return detail::Fn<float>::sqrt(static_cast<float>(x));
+        } end function sqrt
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function sqrt(const T&: x) -> T {
+            return detail::Fn<T>::sqrt(x);
+        } end function sqrt
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function cbrt(const T&: x) -> float {
+            return detail::Fn<float>::cbrt(static_cast<float>(x));
+        } end function cbrt
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function cbrt(const T&: x) -> T {
+            return detail::Fn<T>::cbrt(x);
+        } end function cbrt
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function pow2(const T&: x) -> float {
+            return detail::Fn<float>::pow2(static_cast<float>(x));
+        } end function pow2
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function pow2(const T&: x) -> T {
+            return detail::Fn<T>::pow2(x);
+        } end function pow2
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function pow10(const T&: x) -> float {
+            return detail::Fn<float>::pow10(static_cast<float>(x));
+        } end function pow10
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function pow10(const T&: x) -> T {
+            return detail::Fn<T>::pow10(x);
+        } end function pow10
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log1p(const T&: x) -> float {
+            return detail::Fn<float>::log1p(static_cast<float>(x));
+        } end function log1p
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function log1p(const T&: x) -> T {
+            return detail::Fn<T>::log1p(x);
+        } end function log1p
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function expm1(const T&: x) -> float {
+            return detail::Fn<float>::expm1(static_cast<float>(x));
+        } end function expm1
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function expm1(const T&: x) -> T {
+            return detail::Fn<T>::expm1(x);
+        } end function expm1
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function sinc(const T&: x) -> float {
+            return detail::Fn<float>::sinc(static_cast<float>(x));
+        } end function sinc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function sinc(const T&: x) -> T {
+            return detail::Fn<T>::sinc(x);
+        } end function sinc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function normalized_sinc(const T&: x) -> float {
+            return detail::Fn<float>::normalized_sinc(static_cast<float>(x));
+        } end function normalized_sinc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function normalized_sinc(const T&: x) -> T {
+            return detail::Fn<T>::normalized_sinc(x);
+        } end function normalized_sinc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function gudermannian(const T&: x) -> float {
+            return detail::Fn<float>::gudermannian(static_cast<float>(x));
+        } end function gudermannian
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function gudermannian(const T&: x) -> T {
+            return detail::Fn<T>::gudermannian(x);
+        } end function gudermannian
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function inv_gudermannian(const T&: x) -> float {
+            return detail::Fn<float>::inv_gudermannian(static_cast<float>(x));
+        } end function inv_gudermannian
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function inv_gudermannian(const T&: x) -> T {
+            return detail::Fn<T>::inv_gudermannian(x);
+        } end function inv_gudermannian
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function erf(const T&: x) -> float {
+            return detail::Fn<float>::erf(static_cast<float>(x));
+        } end function erf
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function erf(const T&: x) -> T {
+            return detail::Fn<T>::erf(x);
+        } end function erf
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function erfc(const T&: x) -> float {
+            return detail::Fn<float>::erfc(static_cast<float>(x));
+        } end function erfc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function erfc(const T&: x) -> T {
+            return detail::Fn<T>::erfc(x);
+        } end function erfc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function erfi(const T&: x) -> float {
+            return detail::Fn<float>::erfi(static_cast<float>(x));
+        } end function erfi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function erfi(const T&: x) -> T {
+            return detail::Fn<T>::erfi(x);
+        } end function erfi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function inv_erf(const T&: x) -> float {
+            return detail::Fn<float>::inv_erf(static_cast<float>(x));
+        } end function inv_erf
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function inv_erf(const T&: x) -> T {
+            return detail::Fn<T>::inv_erf(x);
+        } end function inv_erf
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function inv_erfc(const T&: x) -> float {
+            return detail::Fn<float>::inv_erfc(static_cast<float>(x));
+        } end function inv_erfc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function inv_erfc(const T&: x) -> T {
+            return detail::Fn<T>::inv_erfc(x);
+        } end function inv_erfc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function inv_erfi(const T&: x) -> float {
+            return detail::Fn<float>::inv_erfi(static_cast<float>(x));
+        } end function inv_erfi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function inv_erfi(const T&: x) -> T {
+            return detail::Fn<T>::inv_erfi(x);
+        } end function inv_erfi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function gamma(const T&: x) -> float {
+            return detail::Fn<float>::gamma(static_cast<float>(x));
+        } end function gamma
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function gamma(const T&: x) -> T {
+            return detail::Fn<T>::gamma(x);
+        } end function gamma
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log_gamma(const T&: x) -> float {
+            return detail::Fn<float>::log_gamma(static_cast<float>(x));
+        } end function log_gamma
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log_gamma(const T&: x) -> T {
+            return detail::Fn<T>::log_gamma(x);
+        } end function log_gamma
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log_abs_gamma(const T&: x) -> float {
+            return detail::Fn<float>::log_abs_gamma(static_cast<float>(x));
+        } end function log_abs_gamma
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log_abs_gamma(const T&: x) -> T {
+            return detail::Fn<T>::log_abs_gamma(x);
+        } end function log_abs_gamma
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function factorial(const T&: x) -> float {
+            return detail::Fn<float>::factorial(static_cast<float>(x));
+        } end function factorial
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function factorial(const T&: x) -> T {
+            return detail::Fn<T>::factorial(x);
+        } end function factorial
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function digamma(const T&: x) -> float {
+            return detail::Fn<float>::digamma(static_cast<float>(x));
+        } end function digamma
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function digamma(const T&: x) -> T {
+            return detail::Fn<T>::digamma(x);
+        } end function digamma
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function trigamma(const T&: x) -> float {
+            return detail::Fn<float>::trigamma(static_cast<float>(x));
+        } end function trigamma
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function trigamma(const T&: x) -> T {
+            return detail::Fn<T>::trigamma(x);
+        } end function trigamma
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function harmonic(const T&: x) -> float {
+            return detail::Fn<float>::harmonic(static_cast<float>(x));
+        } end function harmonic
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function harmonic(const T&: x) -> T {
+            return detail::Fn<T>::harmonic(x);
+        } end function harmonic
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function riemann_zeta(const T&: x) -> float {
+            return detail::Fn<float>::riemann_zeta(static_cast<float>(x));
+        } end function riemann_zeta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function riemann_zeta(const T&: x) -> T {
+            return detail::Fn<T>::riemann_zeta(x);
+        } end function riemann_zeta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function riemann_xi(const T&: x) -> float {
+            return detail::Fn<float>::riemann_xi(static_cast<float>(x));
+        } end function riemann_xi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function riemann_xi(const T&: x) -> T {
+            return detail::Fn<T>::riemann_xi(x);
+        } end function riemann_xi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function riemann_chi(const T&: x) -> float {
+            return detail::Fn<float>::riemann_chi(static_cast<float>(x));
+        } end function riemann_chi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function riemann_chi(const T&: x) -> T {
+            return detail::Fn<T>::riemann_chi(x);
+        } end function riemann_chi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function dirichlet_eta(const T&: x) -> float {
+            return detail::Fn<float>::dirichlet_eta(static_cast<float>(x));
+        } end function dirichlet_eta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function dirichlet_eta(const T&: x) -> T {
+            return detail::Fn<T>::dirichlet_eta(x);
+        } end function dirichlet_eta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function dirichlet_lambda(const T&: x) -> float {
+            return detail::Fn<float>::dirichlet_lambda(static_cast<float>(x));
+        } end function dirichlet_lambda
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function dirichlet_lambda(const T&: x) -> T {
+            return detail::Fn<T>::dirichlet_lambda(x);
+        } end function dirichlet_lambda
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function dirichlet_beta(const T&: x) -> float {
+            return detail::Fn<float>::dirichlet_beta(static_cast<float>(x));
+        } end function dirichlet_beta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function dirichlet_beta(const T&: x) -> T {
+            return detail::Fn<T>::dirichlet_beta(x);
+        } end function dirichlet_beta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function dilogarithm(const T&: x) -> float {
+            return detail::Fn<float>::dilogarithm(static_cast<float>(x));
+        } end function dilogarithm
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function dilogarithm(const T&: x) -> T {
+            return detail::Fn<T>::dilogarithm(x);
+        } end function dilogarithm
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function trilogarithm(const T&: x) -> float {
+            return detail::Fn<float>::trilogarithm(static_cast<float>(x));
+        } end function trilogarithm
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function trilogarithm(const T&: x) -> T {
+            return detail::Fn<T>::trilogarithm(x);
+        } end function trilogarithm
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function rogers_l(const T&: x) -> float {
+            return detail::Fn<float>::rogers_l(static_cast<float>(x));
+        } end function rogers_l
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function rogers_l(const T&: x) -> T {
+            return detail::Fn<T>::rogers_l(x);
+        } end function rogers_l
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function rogers_l_normalized(const T&: x) -> float {
+            return detail::Fn<float>::rogers_l_normalized(static_cast<float>(x));
+        } end function rogers_l_normalized
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function rogers_l_normalized(const T&: x) -> T {
+            return detail::Fn<T>::rogers_l_normalized(x);
+        } end function rogers_l_normalized
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function spence_function(const T&: x) -> float {
+            return detail::Fn<float>::spence_function(static_cast<float>(x));
+        } end function spence_function
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function spence_function(const T&: x) -> T {
+            return detail::Fn<T>::spence_function(x);
+        } end function spence_function
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function spence_integral(const T&: x) -> float {
+            return detail::Fn<float>::spence_integral(static_cast<float>(x));
+        } end function spence_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function spence_integral(const T&: x) -> T {
+            return detail::Fn<T>::spence_integral(x);
+        } end function spence_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function airy_ai(const T&: x) -> float {
+            return detail::Fn<float>::airy_ai(static_cast<float>(x));
+        } end function airy_ai
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function airy_ai(const T&: x) -> T {
+            return detail::Fn<T>::airy_ai(x);
+        } end function airy_ai
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function airy_bi(const T&: x) -> float {
+            return detail::Fn<float>::airy_bi(static_cast<float>(x));
+        } end function airy_bi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function airy_bi(const T&: x) -> T {
+            return detail::Fn<T>::airy_bi(x);
+        } end function airy_bi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function scorer_gi(const T&: x) -> float {
+            return detail::Fn<float>::scorer_gi(static_cast<float>(x));
+        } end function scorer_gi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function scorer_gi(const T&: x) -> T {
+            return detail::Fn<T>::scorer_gi(x);
+        } end function scorer_gi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function scorer_hi(const T&: x) -> float {
+            return detail::Fn<float>::scorer_hi(static_cast<float>(x));
+        } end function scorer_hi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function scorer_hi(const T&: x) -> T {
+            return detail::Fn<T>::scorer_hi(x);
+        } end function scorer_hi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function elliptic_k(const T&: x) -> float {
+            return detail::Fn<float>::elliptic_k(static_cast<float>(x));
+        } end function elliptic_k
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function elliptic_k(const T&: x) -> T {
+            return detail::Fn<T>::elliptic_k(x);
+        } end function elliptic_k
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function elliptic_e(const T&: x) -> float {
+            return detail::Fn<float>::elliptic_e(static_cast<float>(x));
+        } end function elliptic_e
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function elliptic_e(const T&: x) -> T {
+            return detail::Fn<T>::elliptic_e(x);
+        } end function elliptic_e
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lambert_w(const T&: x) -> float {
+            return detail::Fn<float>::lambert_w(static_cast<float>(x));
+        } end function lambert_w
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function lambert_w(const T&: x) -> T {
+            return detail::Fn<T>::lambert_w(x);
+        } end function lambert_w
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lambert_w0(const T&: x) -> float {
+            return detail::Fn<float>::lambert_w0(static_cast<float>(x));
+        } end function lambert_w0
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function lambert_w0(const T&: x) -> T {
+            return detail::Fn<T>::lambert_w0(x);
+        } end function lambert_w0
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lambert_wm1(const T&: x) -> float {
+            return detail::Fn<float>::lambert_wm1(static_cast<float>(x));
+        } end function lambert_wm1
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function lambert_wm1(const T&: x) -> T {
+            return detail::Fn<T>::lambert_wm1(x);
+        } end function lambert_wm1
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function fresnel_c(const T&: x) -> float {
+            return detail::Fn<float>::fresnel_c(static_cast<float>(x));
+        } end function fresnel_c
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function fresnel_c(const T&: x) -> T {
+            return detail::Fn<T>::fresnel_c(x);
+        } end function fresnel_c
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function fresnel_s(const T&: x) -> float {
+            return detail::Fn<float>::fresnel_s(static_cast<float>(x));
+        } end function fresnel_s
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function fresnel_s(const T&: x) -> T {
+            return detail::Fn<T>::fresnel_s(x);
+        } end function fresnel_s
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function sin_integral(const T&: x) -> float {
+            return detail::Fn<float>::sin_integral(static_cast<float>(x));
+        } end function sin_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function sin_integral(const T&: x) -> T {
+            return detail::Fn<T>::sin_integral(x);
+        } end function sin_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function cos_integral(const T&: x) -> float {
+            return detail::Fn<float>::cos_integral(static_cast<float>(x));
+        } end function cos_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function cos_integral(const T&: x) -> T {
+            return detail::Fn<T>::cos_integral(x);
+        } end function cos_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function sinh_integral(const T&: x) -> float {
+            return detail::Fn<float>::sinh_integral(static_cast<float>(x));
+        } end function sinh_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function sinh_integral(const T&: x) -> T {
+            return detail::Fn<T>::sinh_integral(x);
+        } end function sinh_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function cosh_integral(const T&: x) -> float {
+            return detail::Fn<float>::cosh_integral(static_cast<float>(x));
+        } end function cosh_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function cosh_integral(const T&: x) -> T {
+            return detail::Fn<T>::cosh_integral(x);
+        } end function cosh_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function exp_integral(const T&: x) -> float {
+            return detail::Fn<float>::exp_integral(static_cast<float>(x));
+        } end function exp_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function exp_integral(const T&: x) -> T {
+            return detail::Fn<T>::exp_integral(x);
+        } end function exp_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log_integral(const T&: x) -> float {
+            return detail::Fn<float>::log_integral(static_cast<float>(x));
+        } end function log_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log_integral(const T&: x) -> T {
+            return detail::Fn<T>::log_integral(x);
+        } end function log_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function clausen_integral(const T&: x) -> float {
+            return detail::Fn<float>::clausen_integral(static_cast<float>(x));
+        } end function clausen_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function clausen_integral(const T&: x) -> T {
+            return detail::Fn<T>::clausen_integral(x);
+        } end function clausen_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function floor(const T&: x) -> float {
+            return detail::Fn<float>::floor(static_cast<float>(x));
+        } end function floor
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function floor(const T&: x) -> T {
+            return detail::Fn<T>::floor(x);
+        } end function floor
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function ceiling(const T&: x) -> float {
+            return detail::Fn<float>::ceiling(static_cast<float>(x));
+        } end function ceiling
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function ceiling(const T&: x) -> T {
+            return detail::Fn<T>::ceiling(x);
+        } end function ceiling
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function round(const T&: x) -> float {
+            return detail::Fn<float>::round(static_cast<float>(x));
+        } end function round
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function round(const T&: x) -> T {
+            return detail::Fn<T>::round(x);
+        } end function round
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function trunc(const T&: x) -> float {
+            return detail::Fn<float>::trunc(static_cast<float>(x));
+        } end function trunc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function trunc(const T&: x) -> T {
+            return detail::Fn<T>::trunc(x);
+        } end function trunc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function fractional_part(const T&: x) -> float {
+            return detail::Fn<float>::fractional_part(static_cast<float>(x));
+        } end function fractional_part
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function fractional_part(const T&: x) -> T {
+            return detail::Fn<T>::fractional_part(x);
+        } end function fractional_part
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log(const T&: x) -> float {
+            return detail::Fn<float>::ln(static_cast<float>(x));
+        } end function log
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log(const T&: x) -> T {
+            return detail::Fn<T>::ln(x);
+        } end function log
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function asin(const T&: x) -> float {
+            return detail::Fn<float>::arcsin(static_cast<float>(x));
+        } end function asin
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function asin(const T&: x) -> T {
+            return detail::Fn<T>::arcsin(x);
+        } end function asin
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function acos(const T&: x) -> float {
+            return detail::Fn<float>::arccos(static_cast<float>(x));
+        } end function acos
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function acos(const T&: x) -> T {
+            return detail::Fn<T>::arccos(x);
+        } end function acos
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function atan(const T&: x) -> float {
+            return detail::Fn<float>::arctan(static_cast<float>(x));
+        } end function atan
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function atan(const T&: x) -> T {
+            return detail::Fn<T>::arctan(x);
+        } end function atan
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function asinh(const T&: x) -> float {
+            return detail::Fn<float>::arcsinh(static_cast<float>(x));
+        } end function asinh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function asinh(const T&: x) -> T {
+            return detail::Fn<T>::arcsinh(x);
+        } end function asinh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function acosh(const T&: x) -> float {
+            return detail::Fn<float>::arccosh(static_cast<float>(x));
+        } end function acosh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function acosh(const T&: x) -> T {
+            return detail::Fn<T>::arccosh(x);
+        } end function acosh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function atanh(const T&: x) -> float {
+            return detail::Fn<float>::arctanh(static_cast<float>(x));
+        } end function atanh
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function atanh(const T&: x) -> T {
+            return detail::Fn<T>::arctanh(x);
+        } end function atanh
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function ceil(const T&: x) -> float {
+            return detail::Fn<float>::ceiling(static_cast<float>(x));
+        } end function ceil
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function ceil(const T&: x) -> T {
+            return detail::Fn<T>::ceiling(x);
+        } end function ceil
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function atan2(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::atan2(static_cast<float>(x), static_cast<float>(y));
+        } end function atan2
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function atan2(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::atan2(x, y);
+        } end function atan2
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function pow(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::pow(static_cast<float>(x), static_cast<float>(y));
+        } end function pow
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function pow(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::pow(x, y);
+        } end function pow
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::log(static_cast<float>(x), static_cast<float>(y));
+        } end function log
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::log(x, y);
+        } end function log
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function nth_root(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::nth_root(static_cast<float>(x), static_cast<float>(y));
+        } end function nth_root
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function nth_root(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::nth_root(x, y);
+        } end function nth_root
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function fmod(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::fmod(static_cast<float>(x), static_cast<float>(y));
+        } end function fmod
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function fmod(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::fmod(x, y);
+        } end function fmod
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function remainder(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::remainder(static_cast<float>(x), static_cast<float>(y));
+        } end function remainder
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function remainder(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::remainder(x, y);
+        } end function remainder
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function mod_floor(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::mod_floor(static_cast<float>(x), static_cast<float>(y));
+        } end function mod_floor
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function mod_floor(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::mod_floor(x, y);
+        } end function mod_floor
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function mod_euclid(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::mod_euclid(static_cast<float>(x), static_cast<float>(y));
+        } end function mod_euclid
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function mod_euclid(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::mod_euclid(x, y);
+        } end function mod_euclid
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function generalized_erf(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::generalized_erf(static_cast<float>(x), static_cast<float>(y));
+        } end function generalized_erf
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function generalized_erf(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::generalized_erf(x, y);
+        } end function generalized_erf
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function generalized_erfc(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::generalized_erfc(static_cast<float>(x), static_cast<float>(y));
+        } end function generalized_erfc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function generalized_erfc(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::generalized_erfc(x, y);
+        } end function generalized_erfc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function beta(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::beta(static_cast<float>(x), static_cast<float>(y));
+        } end function beta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function beta(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::beta(x, y);
+        } end function beta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log_beta(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::log_beta(static_cast<float>(x), static_cast<float>(y));
+        } end function log_beta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log_beta(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::log_beta(x, y);
+        } end function log_beta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log_abs_beta(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::log_abs_beta(static_cast<float>(x), static_cast<float>(y));
+        } end function log_abs_beta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log_abs_beta(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::log_abs_beta(x, y);
+        } end function log_abs_beta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function legendre_chi(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::legendre_chi(static_cast<float>(x), static_cast<float>(y));
+        } end function legendre_chi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function legendre_chi(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::legendre_chi(x, y);
+        } end function legendre_chi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function hurwitz_zeta(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::hurwitz_zeta(static_cast<float>(x), static_cast<float>(y));
+        } end function hurwitz_zeta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function hurwitz_zeta(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::hurwitz_zeta(x, y);
+        } end function hurwitz_zeta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function polylog(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::polylog(static_cast<float>(x), static_cast<float>(y));
+        } end function polylog
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function polylog(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::polylog(x, y);
+        } end function polylog
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function carlson_rc(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::carlson_rc(static_cast<float>(x), static_cast<float>(y));
+        } end function carlson_rc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function carlson_rc(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::carlson_rc(x, y);
+        } end function carlson_rc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function elliptic_e(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::elliptic_e(static_cast<float>(x), static_cast<float>(y));
+        } end function elliptic_e
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function elliptic_e(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::elliptic_e(x, y);
+        } end function elliptic_e
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function elliptic_f(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::elliptic_f(static_cast<float>(x), static_cast<float>(y));
+        } end function elliptic_f
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function elliptic_f(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::elliptic_f(x, y);
+        } end function elliptic_f
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function elliptic_pi(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::elliptic_pi(static_cast<float>(x), static_cast<float>(y));
+        } end function elliptic_pi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function elliptic_pi(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::elliptic_pi(x, y);
+        } end function elliptic_pi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_am(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_am(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_am
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_am(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_am(x, y);
+        } end function jacobi_am
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_sn(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_sn(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_sn
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_sn(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_sn(x, y);
+        } end function jacobi_sn
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_cn(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_cn(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_cn
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_cn(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_cn(x, y);
+        } end function jacobi_cn
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_dn(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_dn(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_dn
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_dn(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_dn(x, y);
+        } end function jacobi_dn
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_ns(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_ns(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_ns
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_ns(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_ns(x, y);
+        } end function jacobi_ns
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_nc(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_nc(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_nc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_nc(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_nc(x, y);
+        } end function jacobi_nc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_nd(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_nd(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_nd
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_nd(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_nd(x, y);
+        } end function jacobi_nd
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_sc(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_sc(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_sc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_sc(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_sc(x, y);
+        } end function jacobi_sc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_sd(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_sd(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_sd
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_sd(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_sd(x, y);
+        } end function jacobi_sd
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_cs(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_cs(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_cs
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_cs(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_cs(x, y);
+        } end function jacobi_cs
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_cd(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_cd(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_cd
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_cd(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_cd(x, y);
+        } end function jacobi_cd
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_ds(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_ds(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_ds
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_ds(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_ds(x, y);
+        } end function jacobi_ds
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function jacobi_dc(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::jacobi_dc(static_cast<float>(x), static_cast<float>(y));
+        } end function jacobi_dc
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function jacobi_dc(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::jacobi_dc(x, y);
+        } end function jacobi_dc
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function generalized_gaussian_integral(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::generalized_gaussian_integral(static_cast<float>(x), static_cast<float>(y));
+        } end function generalized_gaussian_integral
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function generalized_gaussian_integral(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::generalized_gaussian_integral(x, y);
+        } end function generalized_gaussian_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function regularized_gamma_p(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::regularized_gamma_p(static_cast<float>(x), static_cast<float>(y));
+        } end function regularized_gamma_p
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function regularized_gamma_p(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::regularized_gamma_p(x, y);
+        } end function regularized_gamma_p
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function regularized_gamma_q(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::regularized_gamma_q(static_cast<float>(x), static_cast<float>(y));
+        } end function regularized_gamma_q
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function regularized_gamma_q(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::regularized_gamma_q(x, y);
+        } end function regularized_gamma_q
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lower_incomplete_gamma(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::lower_incomplete_gamma(static_cast<float>(x), static_cast<float>(y));
+        } end function lower_incomplete_gamma
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function lower_incomplete_gamma(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::lower_incomplete_gamma(x, y);
+        } end function lower_incomplete_gamma
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function upper_incomplete_gamma(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::upper_incomplete_gamma(static_cast<float>(x), static_cast<float>(y));
+        } end function upper_incomplete_gamma
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function upper_incomplete_gamma(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::upper_incomplete_gamma(x, y);
+        } end function upper_incomplete_gamma
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function inverse_regularized_gamma_p(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::inverse_regularized_gamma_p(static_cast<float>(x), static_cast<float>(y));
+        } end function inverse_regularized_gamma_p
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function inverse_regularized_gamma_p(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::inverse_regularized_gamma_p(x, y);
+        } end function inverse_regularized_gamma_p
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function inverse_regularized_gamma_q(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::inverse_regularized_gamma_q(static_cast<float>(x), static_cast<float>(y));
+        } end function inverse_regularized_gamma_q
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function inverse_regularized_gamma_q(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::inverse_regularized_gamma_q(x, y);
+        } end function inverse_regularized_gamma_q
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function rising_pochhammer(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::rising_pochhammer(static_cast<float>(x), static_cast<float>(y));
+        } end function rising_pochhammer
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function rising_pochhammer(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::rising_pochhammer(x, y);
+        } end function rising_pochhammer
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function falling_pochhammer(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::falling_pochhammer(static_cast<float>(x), static_cast<float>(y));
+        } end function falling_pochhammer
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function falling_pochhammer(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::falling_pochhammer(x, y);
+        } end function falling_pochhammer
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function permutation(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::permutation(static_cast<float>(x), static_cast<float>(y));
+        } end function permutation
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function permutation(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::permutation(x, y);
+        } end function permutation
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function combination(const T&: x, const T&: y) -> float {
+            return detail::Fn<float>::combination(static_cast<float>(x), static_cast<float>(y));
+        } end function combination
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function combination(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::combination(x, y);
+        } end function combination
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function atan(const T&: y, const T&: x) -> float {
+            return detail::Fn<float>::atan2(static_cast<float>(y), static_cast<float>(x));
+        } end function atan
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function atan(const T&: y, const T&: x) -> T {
+            return detail::Fn<T>::atan2(y, x);
+        } end function atan
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function pow(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::pow(static_cast<float>(x), n);
+        } end function pow
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function pow(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::pow(x, n);
+        } end function pow
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function nth_root(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::nth_root(static_cast<float>(x), n);
+        } end function nth_root
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function nth_root(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::nth_root(x, n);
+        } end function nth_root
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function polygamma(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::polygamma(static_cast<float>(x), n);
+        } end function polygamma
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function polygamma(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::polygamma(x, n);
+        } end function polygamma
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function chebyshev_t(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::chebyshev_t(static_cast<float>(x), n);
+        } end function chebyshev_t
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function chebyshev_t(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::chebyshev_t(x, n);
+        } end function chebyshev_t
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function chebyshev_u(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::chebyshev_u(static_cast<float>(x), n);
+        } end function chebyshev_u
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function chebyshev_u(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::chebyshev_u(x, n);
+        } end function chebyshev_u
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function chebyshev_v(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::chebyshev_v(static_cast<float>(x), n);
+        } end function chebyshev_v
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function chebyshev_v(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::chebyshev_v(x, n);
+        } end function chebyshev_v
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function chebyshev_w(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::chebyshev_w(static_cast<float>(x), n);
+        } end function chebyshev_w
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function chebyshev_w(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::chebyshev_w(x, n);
+        } end function chebyshev_w
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function fibonacci_polynomial(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::fibonacci_polynomial(static_cast<float>(x), n);
+        } end function fibonacci_polynomial
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function fibonacci_polynomial(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::fibonacci_polynomial(x, n);
+        } end function fibonacci_polynomial
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lucas_polynomial(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::lucas_polynomial(static_cast<float>(x), n);
+        } end function lucas_polynomial
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function lucas_polynomial(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::lucas_polynomial(x, n);
+        } end function lucas_polynomial
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function legendre_p(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::legendre_p(static_cast<float>(x), n);
+        } end function legendre_p
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function legendre_p(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::legendre_p(x, n);
+        } end function legendre_p
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function legendre_q(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::legendre_q(static_cast<float>(x), n);
+        } end function legendre_q
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function legendre_q(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::legendre_q(x, n);
+        } end function legendre_q
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lambert_w(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::lambert_w(static_cast<float>(x), n);
+        } end function lambert_w
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function lambert_w(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::lambert_w(x, n);
+        } end function lambert_w
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function exp_integral_generalized(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::exp_integral_generalized(static_cast<float>(x), n);
+        } end function exp_integral_generalized
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function exp_integral_generalized(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::exp_integral_generalized(x, n);
+        } end function exp_integral_generalized
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function log_integral_generalized(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::log_integral_generalized(static_cast<float>(x), n);
+        } end function log_integral_generalized
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function log_integral_generalized(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::log_integral_generalized(x, n);
+        } end function log_integral_generalized
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function clausen(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::clausen(static_cast<float>(x), n);
+        } end function clausen
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function clausen(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::clausen(x, n);
+        } end function clausen
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function debye(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::debye(static_cast<float>(x), n);
+        } end function debye
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function debye(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::debye(x, n);
+        } end function debye
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function debye_integral(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::debye_integral(static_cast<float>(x), n);
+        } end function debye_integral
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function debye_integral(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::debye_integral(x, n);
+        } end function debye_integral
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function debye_tail(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::debye_tail(static_cast<float>(x), n);
+        } end function debye_tail
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function debye_tail(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::debye_tail(x, n);
+        } end function debye_tail
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function rising_pochhammer(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::rising_pochhammer(static_cast<float>(x), n);
+        } end function rising_pochhammer
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function rising_pochhammer(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::rising_pochhammer(x, n);
+        } end function rising_pochhammer
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function falling_pochhammer(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::falling_pochhammer(static_cast<float>(x), n);
+        } end function falling_pochhammer
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function falling_pochhammer(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::falling_pochhammer(x, n);
+        } end function falling_pochhammer
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function permutation(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::permutation(static_cast<float>(x), n);
+        } end function permutation
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function permutation(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::permutation(x, n);
+        } end function permutation
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function combination(const T&: x, long int: n) -> float {
+            return detail::Fn<float>::combination(static_cast<float>(x), n);
+        } end function combination
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function combination(const T&: x, long int: n) -> T {
+            return detail::Fn<T>::combination(x, n);
+        } end function combination
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lerch_transcendent(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::lerch_transcendent(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function lerch_transcendent
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function lerch_transcendent(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::lerch_transcendent(x, y, z);
+        } end function lerch_transcendent
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function carlson_rf(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::carlson_rf(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function carlson_rf
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function carlson_rf(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::carlson_rf(x, y, z);
+        } end function carlson_rf
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function carlson_rd(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::carlson_rd(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function carlson_rd
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function carlson_rd(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::carlson_rd(x, y, z);
+        } end function carlson_rd
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function carlson_rg(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::carlson_rg(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function carlson_rg
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function carlson_rg(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::carlson_rg(x, y, z);
+        } end function carlson_rg
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function elliptic_pi(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::elliptic_pi(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function elliptic_pi
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function elliptic_pi(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::elliptic_pi(x, y, z);
+        } end function elliptic_pi
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function generalized_gaussian_moment(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::generalized_gaussian_moment(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function generalized_gaussian_moment
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function generalized_gaussian_moment(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::generalized_gaussian_moment(x, y, z);
+        } end function generalized_gaussian_moment
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function regularized_beta(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::regularized_beta(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function regularized_beta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function regularized_beta(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::regularized_beta(x, y, z);
+        } end function regularized_beta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function regularized_beta_complement(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::regularized_beta_complement(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function regularized_beta_complement
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function regularized_beta_complement(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::regularized_beta_complement(x, y, z);
+        } end function regularized_beta_complement
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function incomplete_beta(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::incomplete_beta(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function incomplete_beta
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function incomplete_beta(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::incomplete_beta(x, y, z);
+        } end function incomplete_beta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function inverse_regularized_beta(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::inverse_regularized_beta(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function inverse_regularized_beta
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function inverse_regularized_beta(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::inverse_regularized_beta(x, y, z);
+        } end function inverse_regularized_beta
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function inverse_regularized_beta_complement(const T&: x, const T&: y, const T&: z) -> float {
+            return detail::Fn<float>::inverse_regularized_beta_complement(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        } end function inverse_regularized_beta_complement
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function inverse_regularized_beta_complement(const T&: x, const T&: y, const T&: z) -> T {
+            return detail::Fn<T>::inverse_regularized_beta_complement(x, y, z);
+        } end function inverse_regularized_beta_complement
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function carlson_rj(const T&: x, const T&: y, const T&: z, const T&: w) -> float {
+            return detail::Fn<float>::carlson_rj(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), static_cast<float>(w));
+        } end function carlson_rj
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function carlson_rj(const T&: x, const T&: y, const T&: z, const T&: w) -> T {
+            return detail::Fn<T>::carlson_rj(x, y, z, w);
+        } end function carlson_rj
+
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function abs(const T&: x) -> T {
+            return x < 0 ? -x : x;
+        } end function abs
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function abs(const T&: x) -> T {
+            return detail::Fn<T>::abs(x);
+        } end function abs
+
+        template <typename T>
+        function abs(const Complex<T>&: z) -> T {
+            return z.magnitude();
+        } end function abs
+
+        function abs(const BigComplex&: z) -> BigFloat {
+            return z.magnitude();
+        } end function abs
+
+        template <typename T>
+        function arg(const Complex<T>&: z) -> T {
+            return z.argument();
+        } end function arg
+
+        function arg(const BigComplex&: z) -> BigFloat {
+            return z.argument();
+        } end function arg
+
+        template <typename T>
+        function conj(const Complex<T>&: z) -> Complex<T> {
+            return z.conjugate();
+        } end function conj
+
+        function conj(const BigComplex&: z) -> BigComplex {
+            return z.conjugate();
+        } end function conj
+
+        template <typename T>
+        function min(const T&: a, const T&: b) -> T {
+            return b < a ? b : a;
+        } end function min
+
+        template <typename T>
+        function max(const T&: a, const T&: b) -> T {
+            return a < b ? b : a;
+        } end function max
+
+        template <typename T>
+        function clamp(const T&: x, const T&: lo, const T&: hi) -> T {
+            if (x < lo) then {
+                return lo;
+            }
+            if (hi < x) then {
+                return hi;
+            }
+            return x;
+        } end function clamp
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function gcd(const T&: a, const T&: b) -> T {
+            T: x = a < 0 ? -a : a;
+            T: y = b < 0 ? -b : b;
+            while (y != 0) {
+                const T: r = x % y;
+                x = y;
+                y = r;
+            }
+            return x;
+        } end function gcd
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lcm(const T&: a, const T&: b) -> T {
+            if (a == 0 || b == 0) then {
+                return 0;
+            }
+            const T: g = gcd(a, b);
+            const T: r = a / g * b;
+            return r < 0 ? -r : r;
+        } end function lcm
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T> || detail::RealValue<T>
+        function sign(const T&: x) -> T {
+            if (x < 0) then {
+                return -1;
+            }
+            if (0 < x) then {
+                return 1;
+            }
+            return x;
+        } end function sign
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function hypot(const T&: x, const T&: y) -> float {
+            const float: fx = x;
+            const float: fy = y;
+            return detail::Fn<float>::sqrt(fx * fx + fy * fy);
+        } end function hypot
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function hypot(const T&: x, const T&: y) -> T {
+            return detail::Fn<T>::sqrt(x * x + y * y);
+        } end function hypot
+
+        template <typename T>
+        requires detail::MathValue<T>
+        function lerp(const T&: a, const T&: b, const T&: t) -> T {
+            return a + (b - a) * t;
+        } end function lerp
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function radians(const T&: degrees) -> T {
+            return degrees * detail::Fn<T>::pi_180();
+        } end function radians
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function degrees(const T&: radians) -> T {
+            return radians * detail::Fn<T>::inv_pi_180();
+        } end function degrees
+
+        function set_precision(long int: bits) -> void {
+            detail::Api::set_precision(bits);
+        } end function set_precision
+
+        function precision() -> long int {
+            return detail::Api::precision();
+        } end function precision
+
+        function set_digits(long int: digits) -> void {
+            detail::Api::set_digits(digits);
+        } end function set_digits
+
+        function digits() -> long int {
+            return detail::Api::digits();
+        } end function digits
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(+) function(const T&: a, const BigFloat&: b) -> BigFloat {
+            return BigFloat(a) + b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(+) function(const BigFloat&: a, const T&: b) -> BigFloat {
+            return a + BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(-) function(const T&: a, const BigFloat&: b) -> BigFloat {
+            return BigFloat(a) - b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(-) function(const BigFloat&: a, const T&: b) -> BigFloat {
+            return a - BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(*) function(const T&: a, const BigFloat&: b) -> BigFloat {
+            return BigFloat(a) * b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(*) function(const BigFloat&: a, const T&: b) -> BigFloat {
+            return a * BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(/) function(const T&: a, const BigFloat&: b) -> BigFloat {
+            return BigFloat(a) / b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(/) function(const BigFloat&: a, const T&: b) -> BigFloat {
+            return a / BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(+) function(const T&: a, const BigComplex&: b) -> BigComplex {
+            return BigComplex(a) + b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(+) function(const BigComplex&: a, const T&: b) -> BigComplex {
+            return a + BigComplex(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(-) function(const T&: a, const BigComplex&: b) -> BigComplex {
+            return BigComplex(a) - b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(-) function(const BigComplex&: a, const T&: b) -> BigComplex {
+            return a - BigComplex(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(*) function(const T&: a, const BigComplex&: b) -> BigComplex {
+            return BigComplex(a) * b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(*) function(const BigComplex&: a, const T&: b) -> BigComplex {
+            return a * BigComplex(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(/) function(const T&: a, const BigComplex&: b) -> BigComplex {
+            return BigComplex(a) / b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(/) function(const BigComplex&: a, const T&: b) -> BigComplex {
+            return a / BigComplex(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(==) function(const T&: a, const BigFloat&: b) -> bool {
+            return BigFloat(a) == b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(==) function(const BigFloat&: a, const T&: b) -> bool {
+            return a == BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(!=) function(const T&: a, const BigFloat&: b) -> bool {
+            return BigFloat(a) != b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(!=) function(const BigFloat&: a, const T&: b) -> bool {
+            return a != BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(<) function(const T&: a, const BigFloat&: b) -> bool {
+            return BigFloat(a) < b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(<) function(const BigFloat&: a, const T&: b) -> bool {
+            return a < BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(>) function(const T&: a, const BigFloat&: b) -> bool {
+            return BigFloat(a) > b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(>) function(const BigFloat&: a, const T&: b) -> bool {
+            return a > BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(<=) function(const T&: a, const BigFloat&: b) -> bool {
+            return BigFloat(a) <= b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(<=) function(const BigFloat&: a, const T&: b) -> bool {
+            return a <= BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(>=) function(const T&: a, const BigFloat&: b) -> bool {
+            return BigFloat(a) >= b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(>=) function(const BigFloat&: a, const T&: b) -> bool {
+            return a >= BigFloat(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(==) function(const T&: a, const BigComplex&: b) -> bool {
+            return BigComplex(a) == b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(==) function(const BigComplex&: a, const T&: b) -> bool {
+            return a == BigComplex(b);
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(!=) function(const T&: a, const BigComplex&: b) -> bool {
+            return BigComplex(a) != b;
+        }
+
+        template <typename T>
+        requires std::traits::is_builtin_number<T>
+        operator(!=) function(const BigComplex&: a, const T&: b) -> bool {
+            return a != BigComplex(b);
+        }
+
+    } end namespace math
+
+    namespace traits {
+        namespace extend {
+            template <>
+            struct is_float<std::math::BigFloat> inherits std::true_type {
+            } end struct is_float
+        } end namespace extend
+    } end namespace traits
+} end namespace std

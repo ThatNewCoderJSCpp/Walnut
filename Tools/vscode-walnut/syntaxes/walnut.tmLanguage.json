@@ -1,0 +1,375 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Walnut",
+    "scopeName": "source.walnut",
+    "fileTypes": [
+        "wal",
+        "walh"
+    ],
+    "patterns": [
+        {
+            "include": "#code"
+        }
+    ],
+    "repository": {
+        "code": {
+            "patterns": [
+                {
+                    "include": "#comments"
+                },
+                {
+                    "include": "#preprocessor"
+                },
+                {
+                    "include": "#strings"
+                },
+                {
+                    "include": "#numbers"
+                },
+                {
+                    "include": "#end-line"
+                },
+                {
+                    "include": "#declarations"
+                },
+                {
+                    "include": "#keywords"
+                },
+                {
+                    "include": "#templates"
+                },
+                {
+                    "include": "#calls"
+                },
+                {
+                    "include": "#names"
+                },
+                {
+                    "include": "#operators"
+                }
+            ]
+        },
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.double-slash.walnut",
+                    "begin": "//",
+                    "end": "$"
+                },
+                {
+                    "include": "#block-comment"
+                }
+            ]
+        },
+        "block-comment": {
+            "name": "comment.block.walnut",
+            "begin": "/\\*",
+            "end": "\\*/",
+            "patterns": [
+                {
+                    "include": "#block-comment"
+                }
+            ]
+        },
+        "preprocessor": {
+            "name": "meta.preprocessor.walnut",
+            "match": "^\\s*(#\\s*[A-Za-z_]+)\\b",
+            "captures": {
+                "1": {
+                    "name": "keyword.control.directive.walnut"
+                }
+            }
+        },
+        "escapes": {
+            "name": "constant.character.escape.walnut",
+            "match": "\\\\(?:u\\{[0-9A-Fa-f]+\\}|x[0-9A-Fa-f]{2}|[0-7]{1,3}|.)"
+        },
+        "strings": {
+            "patterns": [
+                {
+                    "name": "string.quoted.double.walnut",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "include": "#escapes"
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.walnut",
+                    "begin": "'",
+                    "end": "'",
+                    "patterns": [
+                        {
+                            "include": "#escapes"
+                        }
+                    ]
+                },
+                {
+                    "name": "string.interpolated.walnut",
+                    "begin": "`",
+                    "end": "`",
+                    "patterns": [
+                        {
+                            "include": "#escapes"
+                        },
+                        {
+                            "name": "meta.embedded.interpolation.walnut",
+                            "begin": "\\$\\{",
+                            "end": "\\}",
+                            "beginCaptures": {
+                                "0": {
+                                    "name": "punctuation.section.interpolation.begin.walnut"
+                                }
+                            },
+                            "endCaptures": {
+                                "0": {
+                                    "name": "punctuation.section.interpolation.end.walnut"
+                                }
+                            },
+                            "patterns": [
+                                {
+                                    "include": "#code"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.walnut",
+                    "match": "\\b0[xX][0-9A-Fa-f][0-9A-Fa-f_']*[A-Za-z]*\\b"
+                },
+                {
+                    "name": "constant.numeric.binary.walnut",
+                    "match": "\\b0[bB][01][01_']*[A-Za-z]*\\b"
+                },
+                {
+                    "name": "constant.numeric.octal.walnut",
+                    "match": "\\b0[oO][0-7][0-7_']*[A-Za-z]*\\b"
+                },
+                {
+                    "name": "constant.numeric.decimal.walnut",
+                    "match": "\\b[0-9][0-9_']*(?:\\.[0-9][0-9_']*)?(?:[eE][+-]?[0-9]+)?[A-Za-z]*\\b"
+                }
+            ]
+        },
+        "end-line": {
+            "patterns": [
+                {
+                    "match": "\\b(end)\\s+(function)\\b(?:\\s+([A-Za-z_][A-Za-z0-9_]*))?",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.end.walnut"
+                        },
+                        "2": {
+                            "name": "storage.type.function.walnut"
+                        },
+                        "3": {
+                            "name": "entity.name.function.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(end)\\s+(class|struct|union|enum|concept)\\b(?:\\s+([A-Za-z_][A-Za-z0-9_]*))?",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.end.walnut"
+                        },
+                        "2": {
+                            "name": "storage.type.walnut"
+                        },
+                        "3": {
+                            "name": "entity.name.type.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(end)\\s+(namespace|module|extern)\\b(?:\\s+([A-Za-z_][A-Za-z0-9_.]*))?",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.end.walnut"
+                        },
+                        "2": {
+                            "name": "storage.type.namespace.walnut"
+                        },
+                        "3": {
+                            "name": "entity.name.namespace.walnut"
+                        }
+                    }
+                }
+            ]
+        },
+        "declarations": {
+            "patterns": [
+                {
+                    "match": "(?<=[A-Za-z0-9_>&*\\]\\)])(:)(?!:)[ \\t]*(?!(?:return|break|continue|then|else|if|for|while|do|switch|case|default|throw|try|catch|repeat|fallthrough|in|is|as|end|co_return|co_yield|await)\\b)([A-Za-z_][A-Za-z0-9_]*)\\b(?!\\s*\\()",
+                    "captures": {
+                        "1": {
+                            "name": "punctuation.separator.declaration.walnut"
+                        },
+                        "2": {
+                            "name": "meta.declaration.variable.name.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(function)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "captures": {
+                        "1": {
+                            "name": "storage.type.function.walnut"
+                        },
+                        "2": {
+                            "name": "entity.name.function.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(class|struct|union|enum|concept)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "captures": {
+                        "1": {
+                            "name": "storage.type.walnut"
+                        },
+                        "2": {
+                            "name": "entity.name.type.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(namespace|module)\\s+([A-Za-z_][A-Za-z0-9_.]*)",
+                    "captures": {
+                        "1": {
+                            "name": "storage.type.namespace.walnut"
+                        },
+                        "2": {
+                            "name": "entity.name.namespace.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(operator)\\s*(\\([^)]*\\))",
+                    "captures": {
+                        "1": {
+                            "name": "storage.type.operator.walnut"
+                        },
+                        "2": {
+                            "name": "entity.name.function.operator.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(invalidate)\\b(?=\\s+[A-Za-z_])",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.walnut"
+                        }
+                    }
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "variable.language.self.walnut",
+                    "match": "\\bself\\b"
+                },
+                {
+                    "name": "keyword.control.walnut",
+                    "match": "\\b(?:fallthrough|co_return|co_yield|continue|default|repeat|return|switch|await|break|catch|label|throw|while|case|down|else|goto|then|end|for|try|as|do|if|in|is)\\b"
+                },
+                {
+                    "name": "storage.type.walnut",
+                    "match": "\\b(?:constructor|destructor|namespace|function|inherits|operator|requires|template|typename|concept|extends|include|inherit|typedef|define|export|import|module|struct|class|union|using|enum|def|let)\\b"
+                },
+                {
+                    "name": "storage.modifier.walnut",
+                    "match": "\\b(?:thread_local|threadlocal|no_discard|threadsafe|automatic|consteval|constexpr|constinit|nodiscard|protected|abstract|constant|explicit|implicit|noexcept|override|volatile|hoisted|mutable|private|virtual|extern|friend|global|hidden|inline|public|static|async|const|hoist|local|lazy)\\b"
+                },
+                {
+                    "name": "storage.type.primitive.walnut",
+                    "match": "\\b(?:character|unsigned|variable|boolean|decimal|dynamic|floater|integer|special|variant|double|string|array|float|short|auto|bool|char|long|text|void|any|arr|int|str|txt|var)\\b"
+                },
+                {
+                    "name": "constant.language.walnut",
+                    "match": "\\b(?:indeterminate|undefined|infinity|nullptr|FALSE|False|false|TRUE|True|true|inf|nan)\\b"
+                },
+                {
+                    "name": "variable.language.this.walnut",
+                    "match": "\\bthis\\b"
+                },
+                {
+                    "name": "keyword.operator.cast.walnut",
+                    "match": "\\b(?:reinterpret_cast|dynamic_cast|static_cast|const_cast|bit_cast|bitcast)\\b"
+                },
+                {
+                    "name": "keyword.operator.word.walnut",
+                    "match": "\\b(?:discard_no_discard|discard_nodiscard|discard_const|static_assert|align_as|align_of|count_of|decltype|alignas|alignof|countof|size_of|type_id|type_of|delete|sizeof|typeid|typeof|new)\\b"
+                }
+            ]
+        },
+        "calls": {
+            "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=(?:<[^<>;(){}]*(?:<[^<>;(){}]*>[^<>;(){}]*)*>)?\\s*\\()",
+            "captures": {
+                "1": {
+                    "name": "entity.name.function.call.walnut"
+                }
+            }
+        },
+        "names": {
+            "patterns": [
+                {
+                    "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=::)",
+                    "captures": {
+                        "1": {
+                            "name": "entity.name.namespace.walnut"
+                        }
+                    }
+                },
+                {
+                    "name": "entity.name.type.walnut",
+                    "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+                },
+                {
+                    "name": "variable.other.readwrite.walnut",
+                    "match": "\\b[a-z_][A-Za-z0-9_]*\\b"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.arrow.walnut",
+                    "match": "->"
+                },
+                {
+                    "name": "punctuation.separator.scope.walnut",
+                    "match": "::"
+                },
+                {
+                    "name": "keyword.operator.walnut",
+                    "match": "\\*\\*=?|<<=?|>>=?|<=|>=|==|!=|&&|\\|\\||\\+\\+|--|[-+*/%&|^~!=<>?]=?"
+                },
+                {
+                    "name": "punctuation.separator.declaration.walnut",
+                    "match": ":"
+                },
+                {
+                    "name": "punctuation.terminator.walnut",
+                    "match": ";"
+                }
+            ]
+        },
+        "templates": {
+            "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=<[^<>;(){}]*(?:<[^<>;(){}]*>[^<>;(){}]*)*>\\s*::)",
+            "captures": {
+                "1": {
+                    "name": "entity.name.function.template.walnut"
+                }
+            }
+        }
+    }
+}

@@ -37,6 +37,8 @@ std::vector<Symbol*> resolve_path(
 
 std::string visibility_violation(const Symbol* sym, const Scope* from, const nodes::ASTNode* use);
 
+std::string suggest_similar(const Scope* from, std::string_view name, bool members_only);
+
 } // namespace semantics
 } // namespace walnut
 

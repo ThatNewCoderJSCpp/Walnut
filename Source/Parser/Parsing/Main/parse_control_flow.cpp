@@ -26,6 +26,12 @@ nodes::ASTNode* Parser::parse_single_statement() {
 
     nodes::SingleStatement node_variant = variant;  
     advance();
+    std::string_view label;
+
+    if (variant != V::Fallthrough && current_token().kind() == tokenizing::Token::Kind::Identifier) {
+        label = current_token().lexeme();
+        advance();
+    }
 
     if (!concrete_match(tokenizing::Token::Kind::Semicolon) &&
         !concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
@@ -37,7 +43,9 @@ nodes::ASTNode* Parser::parse_single_statement() {
     }
 
     consume_semicolons();
-    return make<nodes::SingleStatement>(variant, line_number);
+    auto* single = make<nodes::SingleStatement>(variant, line_number);
+    single->label = label;
+    return single;
 }
 
 nodes::ASTNode* Parser::parse_do_while_loop() {

@@ -1,0 +1,1257 @@
+import module.collections
+import module.colors
+import module.images
+import module.windows
+import module.typography
+import module.math
+
+namespace std {
+    namespace errors {
+        class graphics_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class graphics_error
+    } end namespace errors
+
+    namespace graphics {
+        using std::colors::Color;
+        using std::images::Image;
+        using std::windows::Window;
+        using std::typography::TextStyle;
+        using std::typography::TextMetrics;
+
+        enum Backend { best, gpu, software, vulkan, opengl }
+
+        enum BlendMode { normal, add, multiply, screen }
+
+        enum PaintStyle { fill, stroke, fill_and_stroke }
+
+        enum LineCap { flat, round, square }
+
+        enum LineJoin { miter, round, bevel }
+
+        enum Origin { top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right }
+
+        enum Filter { nearest, bilinear }
+
+        enum Wrap { clamp, tile, mirror }
+
+        enum Spread { pad, tile, mirror }
+
+        struct Point {
+            float: x = 0.0;
+            float: y = 0.0;
+
+            constructor() { }
+
+            constructor(float: px, float: py) : x = px, y = py { }
+
+            operator(+) function(const Point&: o) const -> Point {
+                return Point(x + o.x, y + o.y);
+            }
+
+            operator(-) function(const Point&: o) const -> Point {
+                return Point(x - o.x, y - o.y);
+            }
+
+            operator(*) function(float: k) const -> Point {
+                return Point(x * k, y * k);
+            }
+
+            operator(==) function(const Point&: o) const -> bool {
+                return x == o.x && y == o.y;
+            }
+
+            function to_string() const -> string {
+                return static_cast<string>(`(${x}, ${y})`);
+            } end function to_string
+        } end struct Point
+
+        struct Camera {
+            float: x = 0.0;
+            float: y = 0.0;
+            float: zoom = 1.0;
+            float: rotation = 0.0;
+
+            constructor() { }
+
+            constructor(float: cx, float: cy, float: z = 1.0) : x = cx, y = cy, zoom = z { }
+
+            constructor(float: cx, float: cy, float: z, float: r) : x = cx, y = cy, zoom = z, rotation = r { }
+
+            function move(float: dx, float: dy) -> void {
+                x = x + dx;
+                y = y + dy;
+            } end function move
+
+            function zoom_by(float: factor) -> void {
+                zoom = zoom * factor;
+            } end function zoom_by
+        } end struct Camera
+
+        enum Cull { back, none, front }
+
+        enum Blend { opaque, alpha, additive }
+
+        enum Shadow { cast, no_shadow, cast_only }
+
+        enum MaterialPreset { plain, double_sided, transparent, unlit, metal, polished_metal, brushed_metal, plastic, glossy_plastic, rubber, wood, stone, ceramic, fabric }
+
+        enum LightingPreset { off, daylight, golden_hour, overcast, night, indoor, studio }
+
+        struct Vec3 {
+            float: x = 0.0;
+            float: y = 0.0;
+            float: z = 0.0;
+
+            constructor() { }
+
+            constructor(float: vx, float: vy, float: vz) : x = vx, y = vy, z = vz { }
+
+            operator(+) function(const Vec3&: o) const -> Vec3 {
+                return Vec3(x + o.x, y + o.y, z + o.z);
+            }
+
+            operator(-) function(const Vec3&: o) const -> Vec3 {
+                return Vec3(x - o.x, y - o.y, z - o.z);
+            }
+
+            operator(-) function() const -> Vec3 {
+                return Vec3(-x, -y, -z);
+            }
+
+            operator(*) function(float: k) const -> Vec3 {
+                return Vec3(x * k, y * k, z * k);
+            }
+
+            operator(==) function(const Vec3&: o) const -> bool {
+                return x == o.x && y == o.y && z == o.z;
+            }
+
+            function dot(const Vec3&: o) const -> float {
+                return x * o.x + y * o.y + z * o.z;
+            } end function dot
+
+            function cross(const Vec3&: o) const -> Vec3 {
+                return Vec3(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x);
+            } end function cross
+
+            function length() const -> float {
+                return std::math::sqrt(x * x + y * y + z * z);
+            } end function length
+
+            function normalized() const -> Vec3 {
+                const float: n = length();
+                if (n == 0.0) then {
+                    return Vec3();
+                }
+                return Vec3(x / n, y / n, z / n);
+            } end function normalized
+
+            function to_string() const -> string {
+                return static_cast<string>(`(${x}, ${y}, ${z})`);
+            } end function to_string
+        } end struct Vec3
+
+        struct Transform3D {
+            Vec3: position;
+            Vec3: rotation;
+            Vec3: scale = Vec3(1.0, 1.0, 1.0);
+
+            constructor() { }
+
+            constructor(const Vec3&: p) : position = p { }
+
+            constructor(const Vec3&: p, const Vec3&: r) : position = p, rotation = r { }
+
+            constructor(const Vec3&: p, const Vec3&: r, const Vec3&: s) : position = p, rotation = r, scale = s { }
+
+            static function at(float: x, float: y, float: z) -> Transform3D {
+                return Transform3D(Vec3(x, y, z));
+            } end function at
+
+            function scaled(float: k) const -> Transform3D {
+                return Transform3D(position, rotation, Vec3(k, k, k));
+            } end function scaled
+
+            function rotated(float: rx, float: ry, float: rz) const -> Transform3D {
+                return Transform3D(position, Vec3(rx, ry, rz), scale);
+            } end function rotated
+        } end struct Transform3D
+
+        struct ScreenPoint {
+            float: x = 0.0;
+            float: y = 0.0;
+            float: depth = 0.0;
+            bool: in_front = false;
+            bool: on_screen = false;
+
+            constructor() { }
+        } end struct ScreenPoint
+
+        struct TileMove {
+            float: x = 0.0;
+            float: y = 0.0;
+            bool: hit_x = false;
+            bool: hit_y = false;
+            bool: on_ground = false;
+            bool: on_ceiling = false;
+            bool: on_left = false;
+            bool: on_right = false;
+
+            constructor() { }
+        } end struct TileMove
+
+        struct TileHit {
+            bool: hit = false;
+            long int: tile_x = 0;
+            long int: tile_y = 0;
+            long int: gid = 0;
+            float: distance = 0.0;
+            float: x = 0.0;
+            float: y = 0.0;
+            float: normal_x = 0.0;
+            float: normal_y = 0.0;
+
+            constructor() { }
+        } end struct TileHit
+
+        namespace detail {
+            function xs_of(const std::collections::Vector<Point>&: pts) -> std::collections::Vector<float> {
+                std::collections::Vector<float>: out;
+                for (const Point&: p in pts) {
+                    out.push_back(p.x);
+                }
+                return out;
+            } end function xs_of
+
+            function ys_of(const std::collections::Vector<Point>&: pts) -> std::collections::Vector<float> {
+                std::collections::Vector<float>: out;
+                for (const Point&: p in pts) {
+                    out.push_back(p.y);
+                }
+                return out;
+            } end function ys_of
+        } end namespace detail
+
+        extern "C++" from "<walnut_graphics.hpp>" {
+            class Gradient as "walnut_rt::gfx::gradient" {
+                static function native_linear(float: x0, float: y0, float: x1, float: y1) -> Gradient as "walnut_rt::gfx::gradient::linear";
+                static function native_radial(float: cx, float: cy, float: r) -> Gradient as "walnut_rt::gfx::gradient::radial";
+                function native_add_stop(float: position, long int: rgba) -> void as "add_stop";
+                function native_set_spread(long int: s) -> void as "set_spread";
+                function native_color_at(float: t) const -> long int as "color_at";
+
+            public:
+                constructor();
+
+                static function linear(float: x0, float: y0, float: x1, float: y1) -> Gradient {
+                    return native_linear(x0, y0, x1, y1);
+                } end function linear
+
+                static function linear(float: x0, float: y0, float: x1, float: y1, const Color&: start_color, const Color&: end_color) -> Gradient {
+                    Gradient: g = native_linear(x0, y0, x1, y1);
+                    g.add_stop(0.0, start_color);
+                    g.add_stop(1.0, end_color);
+                    return g;
+                } end function linear
+
+                static function radial(float: cx, float: cy, float: radius) -> Gradient {
+                    return native_radial(cx, cy, radius);
+                } end function radial
+
+                static function radial(float: cx, float: cy, float: radius, const Color&: inner, const Color&: outer) -> Gradient {
+                    Gradient: g = native_radial(cx, cy, radius);
+                    g.add_stop(0.0, inner);
+                    g.add_stop(1.0, outer);
+                    return g;
+                } end function radial
+
+                function add_stop(float: position, const Color&: c) -> void {
+                    native_add_stop(position, c.packed());
+                } end function add_stop
+
+                function set_spread(Spread: s) -> void {
+                    native_set_spread(static_cast<long int>(s));
+                } end function set_spread
+
+                function set_focal(float: fx, float: fy) -> void;
+                function stop_count() const -> long int;
+
+                function color_at(float: t) const -> Color {
+                    return Color::from_packed(native_color_at(t));
+                } end function color_at
+            } end class Gradient
+
+            class Paint as "walnut_rt::gfx::paint" {
+                static function native_fill(long int: rgba) -> Paint as "walnut_rt::gfx::paint::fill";
+                static function native_stroke(long int: rgba, float: width) -> Paint as "walnut_rt::gfx::paint::stroke";
+                static function native_fill_and_stroke(long int: f, long int: s, float: width) -> Paint as "walnut_rt::gfx::paint::fill_and_stroke";
+                static function native_gradient(const Gradient&: g) -> Paint as "walnut_rt::gfx::paint::gradient_fill";
+                function native_set_fill_color(long int: rgba) -> void as "set_fill_color";
+                function native_set_stroke(long int: rgba, float: width) -> void as "set_stroke";
+                function native_set_style(long int: s) -> void as "set_style";
+                function native_set_line_cap(long int: c) -> void as "set_line_cap";
+                function native_set_line_join(long int: j) -> void as "set_line_join";
+                function native_set_origin(long int: o) -> void as "set_origin";
+                function native_fill_color() const -> long int as "fill_color";
+                function native_stroke_color() const -> long int as "stroke_color";
+                function native_style() const -> long int as "style";
+
+            public:
+                constructor();
+
+                static function fill(const Color&: c) -> Paint {
+                    return native_fill(c.packed());
+                } end function fill
+
+                static function stroke(const Color&: c, float: width = 1.0) -> Paint {
+                    return native_stroke(c.packed(), width);
+                } end function stroke
+
+                static function fill_and_stroke(const Color&: fill_color, const Color&: stroke_color, float: width = 1.0) -> Paint {
+                    return native_fill_and_stroke(fill_color.packed(), stroke_color.packed(), width);
+                } end function fill_and_stroke
+
+                static function gradient(const Gradient&: g) -> Paint {
+                    return native_gradient(g);
+                } end function gradient
+
+                function set_fill_color(const Color&: c) -> void {
+                    native_set_fill_color(c.packed());
+                } end function set_fill_color
+
+                function set_stroke(const Color&: c, float: width = 1.0) -> void {
+                    native_set_stroke(c.packed(), width);
+                } end function set_stroke
+
+                function set_style(PaintStyle: s) -> void {
+                    native_set_style(static_cast<long int>(s));
+                } end function set_style
+
+                function set_line_cap(LineCap: c) -> void {
+                    native_set_line_cap(static_cast<long int>(c));
+                } end function set_line_cap
+
+                function set_line_join(LineJoin: j) -> void {
+                    native_set_line_join(static_cast<long int>(j));
+                } end function set_line_join
+
+                function set_origin(Origin: o) -> void {
+                    native_set_origin(static_cast<long int>(o));
+                } end function set_origin
+
+                function set_opacity(float: opacity) -> void;
+                function set_angles(float: start_degrees, float: end_degrees) -> void;
+                function set_stroke_gradient(const Gradient&: g) -> void;
+                function stroke_width() const -> float;
+
+                function fill_color() const -> Color {
+                    return Color::from_packed(native_fill_color());
+                } end function fill_color
+
+                function stroke_color() const -> Color {
+                    return Color::from_packed(native_stroke_color());
+                } end function stroke_color
+
+                function style() const -> PaintStyle {
+                    return static_cast<PaintStyle>(native_style());
+                } end function style
+            } end class Paint
+
+            class Path as "walnut_rt::gfx::path" {
+                static function native_circle(float: cx, float: cy, float: r) -> Path as "walnut_rt::gfx::path::circle";
+                static function native_ellipse(float: cx, float: cy, float: rx, float: ry) -> Path as "walnut_rt::gfx::path::ellipse";
+                static function native_rounded_rect(float: x, float: y, float: w, float: h, float: r) -> Path as "walnut_rt::gfx::path::rounded_rect";
+
+            public:
+                constructor();
+
+                static function circle(float: cx, float: cy, float: radius) -> Path {
+                    return native_circle(cx, cy, radius);
+                } end function circle
+
+                static function ellipse(float: cx, float: cy, float: rx, float: ry) -> Path {
+                    return native_ellipse(cx, cy, rx, ry);
+                } end function ellipse
+
+                static function rounded_rect(float: x, float: y, float: w, float: h, float: radius) -> Path {
+                    return native_rounded_rect(x, y, w, h, radius);
+                } end function rounded_rect
+
+                function move_to(float: x, float: y) -> void;
+                function line_to(float: x, float: y) -> void;
+                function quad_to(float: cx, float: cy, float: x, float: y) -> void;
+                function cubic_to(float: c1x, float: c1y, float: c2x, float: c2y, float: x, float: y) -> void;
+                function arc_to(float: cx, float: cy, float: rx, float: ry, float: start_degrees, float: sweep_degrees) -> void;
+                function close() -> void;
+                function clear() -> void;
+                function empty() const -> bool;
+            } end class Path
+
+            class Texture as "walnut_rt::gfx::texture" {
+                function native_set_filter(long int: f) -> void as "set_filter";
+                function native_set_wrap(long int: m) -> void as "set_wrap";
+                function native_filter() const -> long int as "filter";
+
+            public:
+                constructor();
+                constructor(const Image&: img, long int: filter, long int: wrap);
+
+                static function from_image(const Image&: img, Filter: filter = Filter::nearest, Wrap: wrap = Wrap::clamp) -> Texture {
+                    if (img.is_empty()) then {
+                        throw std::errors::graphics_error("a texture needs an image that isn't empty");
+                    }
+                    return Texture(img, static_cast<long int>(filter), static_cast<long int>(wrap));
+                } end function from_image
+
+                static function load(const string&: path, Filter: filter = Filter::nearest, Wrap: wrap = Wrap::clamp) -> Texture {
+                    return Texture(Image::load(path), static_cast<long int>(filter), static_cast<long int>(wrap));
+                } end function load
+
+                function valid() const -> bool;
+                function width() const -> long int;
+                function height() const -> long int;
+                function to_image() const -> Image;
+
+                function set_filter(Filter: f) -> void {
+                    native_set_filter(static_cast<long int>(f));
+                } end function set_filter
+
+                function filter() const -> Filter {
+                    return static_cast<Filter>(native_filter());
+                } end function filter
+
+                function set_wrap(Wrap: m) -> void {
+                    native_set_wrap(static_cast<long int>(m));
+                } end function set_wrap
+            } end class Texture
+
+            class Sprite as "walnut_rt::gfx::sprite" {
+                function native_set_origin(long int: o) -> void as "set_origin";
+                function native_set_tint(long int: rgba) -> void as "set_tint";
+                function native_tint() const -> long int as "tint";
+                function native_set_blend_mode(long int: m) -> void as "set_blend_mode";
+
+            public:
+                constructor();
+                constructor(const Texture&: texture);
+
+                static function at(const Texture&: texture, float: x, float: y) -> Sprite {
+                    Sprite: s = Sprite(texture);
+                    s.set_position(x, y);
+                    return s;
+                } end function at
+
+                function x() const -> float;
+                function y() const -> float;
+                function set_position(float: x, float: y) -> void;
+                function move(float: dx, float: dy) -> void;
+                function move_forward(float: forward, float: sideways = 0.0) -> void;
+                function rotation() const -> float;
+                function set_rotation(float: degrees) -> void;
+                function rotate(float: degrees) -> void;
+                function look_at(float: x, float: y, float: offset_degrees = 0.0) -> void;
+                function scale_x() const -> float;
+                function scale_y() const -> float;
+                function set_scale(float: sx, float: sy) -> void;
+                function set_size(float: w, float: h) -> void;
+                function fit_size(float: w, float: h) -> void;
+                function width() const -> float;
+                function height() const -> float;
+                function set_flip(bool: horizontal, bool: vertical) -> void;
+                function flipped_h() const -> bool;
+                function flipped_v() const -> bool;
+                function set_pivot(float: nx, float: ny) -> void;
+                function set_opacity(float: opacity) -> void;
+                function opacity() const -> float;
+                function set_visible(bool: visible) -> void;
+                function visible() const -> bool;
+                function set_z_order(long int: z) -> void;
+                function z_order() const -> long int;
+                function clear_tint() -> void;
+                function set_texture(const Texture&: texture) -> void;
+                function set_source_rect(long int: x, long int: y, long int: w, long int: h) -> void;
+                function reset_source_rect() -> void;
+                function set_frame(long int: index, long int: frame_width, long int: frame_height, long int: columns = 0) -> bool;
+                function contains(float: x, float: y) const -> bool;
+                function overlaps(const Sprite&: other) const -> bool;
+                function bounds_x() const -> float;
+                function bounds_y() const -> float;
+                function bounds_width() const -> float;
+                function bounds_height() const -> float;
+
+                function set_scale(float: s) -> void {
+                    set_scale(s, s);
+                } end function set_scale
+
+                function set_origin(Origin: o) -> void {
+                    native_set_origin(static_cast<long int>(o));
+                } end function set_origin
+
+                function set_tint(const Color&: c) -> void {
+                    native_set_tint(c.packed());
+                } end function set_tint
+
+                function tint() const -> Color {
+                    return Color::from_packed(native_tint());
+                } end function tint
+
+                function set_blend_mode(BlendMode: m) -> void {
+                    native_set_blend_mode(static_cast<long int>(m));
+                } end function set_blend_mode
+            } end class Sprite
+
+            class RenderTarget as "walnut_rt::gfx::render_target" {
+            public:
+                constructor();
+                constructor(long int: width, long int: height, long int: filter);
+
+                static function make(long int: width, long int: height, Filter: filter = Filter::bilinear) -> RenderTarget {
+                    if (width <= 0 || height <= 0) then {
+                        throw std::errors::graphics_error(static_cast<string>(`a render target needs a width and height above 0, not ${width} by ${height}`));
+                    }
+                    return RenderTarget(width, height, static_cast<long int>(filter));
+                } end function make
+
+                function valid() const -> bool;
+                function width() const -> long int;
+                function height() const -> long int;
+                function resize(long int: width, long int: height) -> void;
+            } end class RenderTarget
+
+            class Camera3D as "walnut_rt::gfx::camera3d" {
+                function native_axis(long int: which, long int: comp) const -> float as "axis";
+                function native_project(float: x, float: y, float: z, long int: which) const -> float as "project";
+
+            public:
+                constructor();
+                constructor(float: x, float: y, float: z, float: fov);
+
+                static function at(float: x, float: y, float: z, float: fov_degrees = 60.0) -> Camera3D {
+                    return Camera3D(x, y, z, fov_degrees);
+                } end function at
+
+                function set_viewport(long int: width, long int: height) -> void;
+                function set_position(float: x, float: y, float: z) -> void;
+                function x() const -> float;
+                function y() const -> float;
+                function z() const -> float;
+                function move(float: dx, float: dy, float: dz) -> void;
+                function move_local(float: right, float: up, float: forward) -> void;
+                function move_flat(float: forward, float: right, float: up) -> void;
+                function set_rotation(float: yaw, float: pitch, float: roll) -> void;
+                function yaw() const -> float;
+                function pitch() const -> float;
+                function roll() const -> float;
+                function turn(float: dyaw, float: dpitch) -> void;
+                function set_pitch_limit(float: degrees) -> void;
+                function look_at(float: x, float: y, float: z) -> void;
+                function set_perspective(float: fov_degrees, float: near_plane, float: far_plane) -> void;
+                function set_orthographic(float: height, float: near_plane, float: far_plane) -> void;
+                function fov() const -> float;
+                function set_fov(float: degrees) -> void;
+                function near_plane() const -> float;
+                function far_plane() const -> float;
+                function visible_point(float: x, float: y, float: z) const -> bool;
+                function visible_sphere(float: x, float: y, float: z, float: radius) const -> bool;
+
+                function position() const -> Vec3 {
+                    return Vec3(x(), y(), z());
+                } end function position
+
+                function set_position(const Vec3&: p) -> void {
+                    set_position(p.x, p.y, p.z);
+                } end function set_position
+
+                function look_at(const Vec3&: p) -> void {
+                    look_at(p.x, p.y, p.z);
+                } end function look_at
+
+                function forward() const -> Vec3 {
+                    return Vec3(native_axis(0, 0), native_axis(0, 1), native_axis(0, 2));
+                } end function forward
+
+                function right() const -> Vec3 {
+                    return Vec3(native_axis(1, 0), native_axis(1, 1), native_axis(1, 2));
+                } end function right
+
+                function up() const -> Vec3 {
+                    return Vec3(native_axis(2, 0), native_axis(2, 1), native_axis(2, 2));
+                } end function up
+
+                function to_screen(const Vec3&: p) const -> ScreenPoint {
+                    ScreenPoint: out;
+                    out.x = native_project(p.x, p.y, p.z, 0);
+                    out.y = native_project(p.x, p.y, p.z, 1);
+                    out.depth = native_project(p.x, p.y, p.z, 2);
+                    out.in_front = native_project(p.x, p.y, p.z, 3) > 0.5;
+                    out.on_screen = native_project(p.x, p.y, p.z, 4) > 0.5;
+                    return out;
+                } end function to_screen
+            } end class Camera3D
+
+            class Mesh as "walnut_rt::gfx::mesh" {
+                function native_add_vertex(float: x, float: y, float: z, float: nx, float: ny, float: nz, long int: rgba, float: u, float: v) -> long int as "add_vertex";
+                function native_add_triangle(long int: a, long int: b, long int: c) -> bool as "add_triangle";
+                static function native_box(float: w, float: h, float: d, long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::box";
+                static function native_plane(float: w, float: d, long int: divisions, long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::plane";
+                static function native_sphere(float: r, long int: segments, long int: rings, long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::sphere";
+                static function native_cylinder(float: r, float: h, long int: segments, long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::cylinder";
+
+            public:
+                constructor();
+
+                static function box(float: width, float: height, float: depth, const Color&: c = Color(255, 255, 255)) -> Mesh {
+                    return native_box(width, height, depth, c.packed());
+                } end function box
+
+                static function cube(float: size, const Color&: c = Color(255, 255, 255)) -> Mesh {
+                    return native_box(size, size, size, c.packed());
+                } end function cube
+
+                static function plane(float: width, float: depth, const Color&: c = Color(255, 255, 255), long int: divisions = 1) -> Mesh {
+                    return native_plane(width, depth, divisions, c.packed());
+                } end function plane
+
+                static function sphere(float: radius, const Color&: c = Color(255, 255, 255)) -> Mesh {
+                    return native_sphere(radius, 32, 16, c.packed());
+                } end function sphere
+
+                static function sphere(float: radius, const Color&: c, long int: segments, long int: rings) -> Mesh {
+                    return native_sphere(radius, segments, rings, c.packed());
+                } end function sphere
+
+                static function cylinder(float: radius, float: height, const Color&: c = Color(255, 255, 255), long int: segments = 32) -> Mesh {
+                    return native_cylinder(radius, height, segments, c.packed());
+                } end function cylinder
+
+                function add_vertex(const Vec3&: position, const Vec3&: normal, const Color&: c) -> long int {
+                    return native_add_vertex(position.x, position.y, position.z, normal.x, normal.y, normal.z, c.packed(), 0.0, 0.0);
+                } end function add_vertex
+
+                function add_vertex(const Vec3&: position, const Vec3&: normal, const Color&: c, float: u, float: v) -> long int {
+                    return native_add_vertex(position.x, position.y, position.z, normal.x, normal.y, normal.z, c.packed(), u, v);
+                } end function add_vertex
+
+                function add_triangle(long int: a, long int: b, long int: c) -> void {
+                    if (!native_add_triangle(a, b, c)) then {
+                        throw std::errors::graphics_error(static_cast<string>(`add_triangle(${a}, ${b}, ${c}) needs vertex numbers below ${vertex_count()}`));
+                    }
+                } end function add_triangle
+
+                function add_quad(long int: a, long int: b, long int: c, long int: d) -> void {
+                    add_triangle(a, b, c);
+                    add_triangle(a, c, d);
+                } end function add_quad
+
+                function clear() -> void;
+                function vertex_count() const -> long int;
+                function triangle_count() const -> long int;
+                function empty() const -> bool;
+            } end class Mesh
+
+            class Material as "walnut_rt::gfx::material" {
+                static function native_preset(long int: which) -> Material as "walnut_rt::gfx::material::preset";
+                static function native_glowing(long int: rgba, float: strength) -> Material as "walnut_rt::gfx::material::glowing";
+                static function native_physical(float: metallic, float: roughness) -> Material as "walnut_rt::gfx::material::physical";
+                function native_set_cull(long int: c) -> void as "set_cull";
+                function native_set_blend(long int: b) -> void as "set_blend";
+                function native_set_shadow(long int: s) -> void as "set_shadow";
+                function native_set_emissive(long int: rgba, float: strength) -> void as "set_emissive";
+
+            public:
+                constructor();
+
+                static function make(MaterialPreset: preset = MaterialPreset::plain) -> Material {
+                    return native_preset(static_cast<long int>(preset));
+                } end function make
+
+                static function glowing(const Color&: c, float: strength = 1.0) -> Material {
+                    return native_glowing(c.packed(), strength);
+                } end function glowing
+
+                static function physical(float: metallic, float: roughness) -> Material {
+                    return native_physical(metallic, roughness);
+                } end function physical
+
+                static function textured(const Texture&: t) -> Material {
+                    Material: m = native_preset(0);
+                    m.set_texture(t);
+                    return m;
+                } end function textured
+
+                function set_texture(const Texture&: t) -> void;
+                function clear_texture() -> void;
+                function has_texture() const -> bool;
+                function set_lit(bool: on) -> void;
+                function lit() const -> bool;
+                function set_depth(bool: test, bool: write) -> void;
+                function set_fog(bool: on) -> void;
+                function set_pbr(float: metallic, float: roughness) -> void;
+                function set_occlusion(float: amount) -> void;
+                function metallic() const -> float;
+                function roughness() const -> float;
+
+                function set_cull(Cull: c) -> void {
+                    native_set_cull(static_cast<long int>(c));
+                } end function set_cull
+
+                function set_blend(Blend: b) -> void {
+                    native_set_blend(static_cast<long int>(b));
+                } end function set_blend
+
+                function set_shadow(Shadow: mode) -> void {
+                    native_set_shadow(static_cast<long int>(mode));
+                } end function set_shadow
+
+                function set_emissive(const Color&: c, float: strength = 1.0) -> void {
+                    native_set_emissive(c.packed(), strength);
+                } end function set_emissive
+            } end class Material
+
+            class Lighting as "walnut_rt::gfx::lighting" {
+                static function native_preset(long int: which) -> Lighting as "walnut_rt::gfx::lighting::preset";
+                function native_set_sun(float: dx, float: dy, float: dz, long int: rgba, float: intensity) -> void as "set_sun";
+                function native_set_sky(long int: rgba, float: intensity) -> void as "set_sky";
+                function native_add_point(float: x, float: y, float: z, long int: rgba, float: intensity, float: radius) -> long int as "add_point_light";
+                function native_move_point(long int: index, float: x, float: y, float: z) -> void as "move_point_light";
+
+            public:
+                constructor();
+
+                static function make(LightingPreset: preset = LightingPreset::off) -> Lighting {
+                    return native_preset(static_cast<long int>(preset));
+                } end function make
+
+                function set_enabled(bool: on) -> void;
+                function enabled() const -> bool;
+                function set_ambient(float: amount) -> void;
+                function set_shadows(bool: on) -> void;
+                function set_atmosphere(bool: on) -> void;
+                function set_exposure(float: exposure) -> void;
+                function clear_point_lights() -> void;
+                function point_light_count() const -> long int;
+
+                function set_sun(const Vec3&: direction, const Color&: c = Color(255, 244, 222), float: intensity = 1.0) -> void {
+                    native_set_sun(direction.x, direction.y, direction.z, c.packed(), intensity);
+                } end function set_sun
+
+                function set_sky(const Color&: c, float: intensity = 1.0) -> void {
+                    native_set_sky(c.packed(), intensity);
+                } end function set_sky
+
+                function add_point_light(const Vec3&: position, const Color&: c) -> long int {
+                    return add_point_light(position, c, 1.0, 8.0);
+                } end function add_point_light
+
+                function add_point_light(const Vec3&: position, const Color&: c, float: intensity, float: radius) -> long int {
+                    const long int: index = native_add_point(position.x, position.y, position.z, c.packed(), intensity, radius);
+                    if (index < 0) then {
+                        throw std::errors::graphics_error("a Lighting can hold at most 64 point lights");
+                    }
+                    return index;
+                } end function add_point_light
+
+                function move_point_light(long int: index, const Vec3&: position) -> void {
+                    native_move_point(index, position.x, position.y, position.z);
+                } end function move_point_light
+            } end class Lighting
+
+            class Model as "walnut_rt::gfx::model" {
+                static function native_load(const string&: path, float: scale, bool: z_up) -> Model as "walnut_rt::gfx::model::load";
+                static function native_load_error() -> string as "walnut_rt::gfx::model::load_error";
+                function native_bound(long int: which) const -> float as "bound";
+
+            public:
+                constructor();
+
+                static function load(const string&: path, float: scale = 1.0, bool: z_up = true) -> Model {
+                    Model: m = native_load(path, scale, z_up);
+                    if (!m.valid()) then {
+                        throw std::errors::graphics_error(static_cast<string>(`can't load the model '${path}': ${native_load_error()}`));
+                    }
+                    return m;
+                } end function load
+
+                function valid() const -> bool;
+                function vertex_count() const -> long int;
+                function find_animation(const string&: name) const -> long int;
+
+                function bounds_min() const -> Vec3 {
+                    return Vec3(native_bound(0), native_bound(1), native_bound(2));
+                } end function bounds_min
+
+                function bounds_max() const -> Vec3 {
+                    return Vec3(native_bound(3), native_bound(4), native_bound(5));
+                } end function bounds_max
+            } end class Model
+
+            class Animator as "walnut_rt::gfx::animator" {
+                function native_play(const string&: name, bool: loop, float: fade, float: speed) -> bool as "play";
+                function native_play_index(long int: index, bool: loop, float: fade, float: speed) -> bool as "play_index";
+
+            public:
+                constructor();
+                constructor(const Model&: model);
+
+                function play(const string&: name, bool: loop = true, float: fade_seconds = 0.0) -> bool {
+                    return native_play(name, loop, fade_seconds, 1.0);
+                } end function play
+
+                function play(const string&: name, bool: loop, float: fade_seconds, float: speed) -> bool {
+                    return native_play(name, loop, fade_seconds, speed);
+                } end function play
+
+                function play(long int: index, bool: loop = true, float: fade_seconds = 0.0) -> bool {
+                    return native_play_index(index, loop, fade_seconds, 1.0);
+                } end function play
+
+                function play(long int: index, bool: loop, float: fade_seconds, float: speed) -> bool {
+                    return native_play_index(index, loop, fade_seconds, speed);
+                } end function play
+
+                function valid() const -> bool;
+                function stop() -> void;
+                function set_speed(float: speed) -> void;
+                function set_time(float: seconds) -> void;
+                function time() const -> float;
+                function duration() const -> float;
+                function finished() const -> bool;
+                function current() const -> long int;
+                function update(float: dt) -> void;
+            } end class Animator
+
+            class TileMap as "walnut_rt::gfx::tilemap" {
+                static function native_load(const string&: path) -> TileMap as "walnut_rt::gfx::tilemap::load_tiled";
+                static function native_load_error() -> string as "walnut_rt::gfx::tilemap::load_error";
+                function native_add_tileset(const Texture&: t, long int: tw, long int: th, long int: margin, long int: spacing, long int: columns) -> long int as "add_tileset";
+                function native_add_layer_csv(const string&: name, const string&: csv, long int: offset) -> long int as "add_layer_csv";
+                function native_set_layer_tint(long int: layer, long int: rgba) -> void as "set_layer_tint";
+                function native_move(float: x, float: y, float: w, float: h, float: dx, float: dy) -> void as "move";
+                function native_move_x() const -> float as "move_x";
+                function native_move_y() const -> float as "move_y";
+                function native_move_flags() const -> long int as "move_flags";
+                function native_raycast(float: ox, float: oy, float: dx, float: dy, float: max_distance) -> void as "raycast";
+                function native_hit() const -> bool as "hit";
+                function native_hit_tile_x() const -> long int as "hit_tile_x";
+                function native_hit_tile_y() const -> long int as "hit_tile_y";
+                function native_hit_gid() const -> long int as "hit_gid";
+                function native_hit_value(long int: which) const -> float as "hit_value";
+                function native_set_animation(long int: gid, const std::collections::Vector<long int>&: frames, const std::collections::Vector<float>&: seconds) -> void as "set_animation";
+
+                function check_layer(long int: layer, const string&: what) const -> void {
+                    if (layer < 0 || layer >= layer_count()) then {
+                        throw std::errors::graphics_error(static_cast<string>(`${what}: there is no layer ${layer} (the map has ${layer_count()})`));
+                    }
+                } end function check_layer
+
+            public:
+                constructor();
+                constructor(long int: tile_width, long int: tile_height);
+
+                static function load_tiled(const string&: path) -> TileMap {
+                    TileMap: m = native_load(path);
+                    const string: problem = native_load_error();
+                    if (problem.size() > 0) then {
+                        throw std::errors::graphics_error(static_cast<string>(`can't load the map '${path}': ${problem}`));
+                    }
+                    return m;
+                } end function load_tiled
+
+                function tile_width() const -> long int;
+                function tile_height() const -> long int;
+                function tileset_count() const -> long int;
+                function layer_count() const -> long int;
+                function layer_index(const string&: name) const -> long int;
+                function layer_name(long int: layer) const -> string;
+                function layer_width(long int: layer) const -> long int;
+                function layer_height(long int: layer) const -> long int;
+                function add_layer(const string&: name, long int: width, long int: height) -> long int;
+                function set_layer_visible(long int: layer, bool: visible) -> void;
+                function set_layer_collides(long int: layer, bool: collides) -> void;
+                function set_layer_opacity(long int: layer, float: opacity) -> void;
+                function set_layer_offset(long int: layer, float: x, float: y) -> void;
+                function set_layer_parallax(long int: layer, float: x, float: y) -> void;
+                function set_solid(long int: gid, bool: solid) -> void;
+                function solid(long int: gid) const -> bool;
+                function update(float: dt) -> void;
+                function world_to_tile_x(float: x) const -> long int;
+                function world_to_tile_y(float: y) const -> long int;
+                function tile_to_world_x(long int: x) const -> float;
+                function tile_to_world_y(long int: y) const -> float;
+                function solid_at_tile(long int: x, long int: y) const -> bool;
+                function solid_at(float: x, float: y) const -> bool;
+                function overlaps_solid(float: x, float: y, float: w, float: h) const -> bool;
+                function pixel_width() const -> float;
+                function pixel_height() const -> float;
+                function get(long int: layer, long int: x, long int: y) const -> long int;
+                function set(long int: layer, long int: x, long int: y, long int: gid) -> void;
+                function fill(long int: layer, long int: gid) -> void;
+                function fill_rect(long int: layer, long int: x, long int: y, long int: w, long int: h, long int: gid) -> void;
+
+                function add_tileset(const Texture&: texture, long int: tile_width, long int: tile_height) -> long int {
+                    return native_add_tileset(texture, tile_width, tile_height, 0, 0, 0);
+                } end function add_tileset
+
+                function add_tileset(const Texture&: texture, long int: tile_width, long int: tile_height, long int: margin, long int: spacing) -> long int {
+                    return native_add_tileset(texture, tile_width, tile_height, margin, spacing, 0);
+                } end function add_tileset
+
+                function add_layer_csv(const string&: name, const string&: csv, long int: id_offset = 0) -> long int {
+                    const long int: index = native_add_layer_csv(name, csv, id_offset);
+                    if (index < 0) then {
+                        throw std::errors::graphics_error(static_cast<string>(`add_layer_csv: the CSV for '${name}' isn't a grid of tile numbers`));
+                    }
+                    return index;
+                } end function add_layer_csv
+
+                function tile(long int: layer, long int: x, long int: y) const -> long int {
+                    check_layer(layer, "tile()");
+                    return get(layer, x, y);
+                } end function tile
+
+                function set_tile(long int: layer, long int: x, long int: y, long int: gid) -> void {
+                    check_layer(layer, "set_tile()");
+                    set(layer, x, y, gid);
+                } end function set_tile
+
+                function fill_layer(long int: layer, long int: gid) -> void {
+                    check_layer(layer, "fill_layer()");
+                    fill(layer, gid);
+                } end function fill_layer
+
+                function set_layer_tint(long int: layer, const Color&: c) -> void {
+                    native_set_layer_tint(layer, c.packed());
+                } end function set_layer_tint
+
+                function set_animation(long int: gid, const std::collections::Vector<long int>&: frames, const std::collections::Vector<float>&: seconds) -> void {
+                    native_set_animation(gid, frames, seconds);
+                } end function set_animation
+
+                function move(float: x, float: y, float: w, float: h, float: dx, float: dy) -> TileMove {
+                    native_move(x, y, w, h, dx, dy);
+                    TileMove: out;
+                    out.x = native_move_x();
+                    out.y = native_move_y();
+                    const long int: f = native_move_flags();
+                    out.hit_x = f % 2 == 1;
+                    out.hit_y = (f / 2) % 2 == 1;
+                    out.on_ground = (f / 4) % 2 == 1;
+                    out.on_ceiling = (f / 8) % 2 == 1;
+                    out.on_left = (f / 16) % 2 == 1;
+                    out.on_right = (f / 32) % 2 == 1;
+                    return out;
+                } end function move
+
+                function raycast(float: ox, float: oy, float: dx, float: dy, float: max_distance) -> TileHit {
+                    native_raycast(ox, oy, dx, dy, max_distance);
+                    TileHit: out;
+                    out.hit = native_hit();
+                    out.tile_x = native_hit_tile_x();
+                    out.tile_y = native_hit_tile_y();
+                    out.gid = native_hit_gid();
+                    out.distance = native_hit_value(0);
+                    out.x = native_hit_value(1);
+                    out.y = native_hit_value(2);
+                    out.normal_x = native_hit_value(3);
+                    out.normal_y = native_hit_value(4);
+                    return out;
+                } end function raycast
+            } end class TileMap
+
+            class Renderer as "walnut_rt::gfx::renderer" {
+                function native_clear(long int: rgba) -> void as "clear";
+                function native_set_blend_mode(long int: m) -> void as "set_blend_mode";
+                function native_blend_mode() const -> long int as "blend_mode";
+                function native_pixel(float: x, float: y, long int: rgba) -> void as "pixel";
+                function native_line(float: x1, float: y1, float: x2, float: y2, const Paint&: p) -> void as "line";
+                function native_rect(float: x, float: y, float: w, float: h, const Paint&: p) -> void as "rect";
+                function native_rounded_rect(float: x, float: y, float: w, float: h, float: r, const Paint&: p) -> void as "rounded_rect";
+                function native_circle(float: cx, float: cy, float: r, const Paint&: p) -> void as "circle";
+                function native_ellipse(float: cx, float: cy, float: rx, float: ry, const Paint&: p) -> void as "ellipse";
+                function native_arc(float: cx, float: cy, float: rx, float: ry, const Paint&: p) -> void as "arc";
+                function native_triangle(float: x1, float: y1, float: x2, float: y2, float: x3, float: y3, const Paint&: p) -> void as "triangle";
+                function native_polygon(const std::collections::Vector<float>&: xs, const std::collections::Vector<float>&: ys, const Paint&: p) -> void as "polygon";
+                function native_polyline(const std::collections::Vector<float>&: xs, const std::collections::Vector<float>&: ys, const Paint&: p, bool: closed) -> void as "polyline";
+                function native_path(const Path&: path, const Paint&: p) -> void as "draw_path";
+                function native_image(const Image&: img, float: x, float: y) -> void as "draw_image";
+                function native_image_sized(const Image&: img, float: x, float: y, float: w, float: h) -> void as "draw_image_sized";
+                function native_texture(const Texture&: t, float: x, float: y, float: opacity) -> void as "draw_texture";
+                function native_texture_sized(const Texture&: t, float: x, float: y, float: w, float: h, float: opacity) -> void as "draw_texture_sized";
+                function native_texture_part(const Texture&: t, float: x, float: y, float: w, float: h, long int: sx, long int: sy, long int: sw, long int: sh, long int: tint, float: opacity) -> void as "draw_texture_part";
+                function native_sprite(const Sprite&: s) -> void as "draw_sprite";
+                function native_text(float: x, float: y, const string&: s, const TextStyle&: style) -> void as "text";
+                function native_text_box(float: x, float: y, float: w, float: h, const string&: s, const TextStyle&: style) -> void as "text_box";
+                function native_measure(const string&: s, const TextStyle&: style, long int: max_width, long int: which) -> long int as "measure";
+                function native_begin_camera(float: x, float: y, float: zoom, float: rotation) -> void as "begin_camera";
+                function native_begin_target(const RenderTarget&: t, long int: rgba, bool: clear) -> bool as "begin_target";
+                function native_draw_target(const RenderTarget&: t, float: x, float: y, float: w, float: h, float: opacity) -> void as "draw_target";
+                function native_load_font(const string&: file) -> bool as "load_font_file";
+                function valid() const -> bool;
+
+            public:
+                constructor();
+                constructor(const Window&: window, long int: backend, bool: vsync);
+
+                static function make(const Window&: window, Backend: backend = Backend::best, bool: vsync = true) -> Renderer {
+                    Renderer: r = Renderer(window, static_cast<long int>(backend), vsync);
+                    if (!r.valid()) then {
+                        throw std::errors::graphics_error("can't start a renderer for this window; is it open?");
+                    }
+                    return r;
+                } end function make
+
+                function is_ready() const -> bool {
+                    return valid();
+                } end function is_ready
+
+                function backend_name() const -> string;
+                function is_gpu() const -> bool;
+                function set_vsync(bool: on) -> void;
+                function vsync() const -> bool;
+                function width() const -> long int;
+                function height() const -> long int;
+                function frame_ms() const -> float;
+                function begin_frame() -> void;
+                function present() -> void;
+                function capture() -> Image;
+                function push() -> void;
+                function pop() -> void;
+                function reset_transform() -> void;
+                function translate(float: dx, float: dy) -> void;
+                function rotate(float: degrees) -> void;
+                function scale(float: sx, float: sy) -> void;
+                function set_clip(float: x, float: y, float: w, float: h) -> void;
+                function reset_clip() -> void;
+                function end_camera() -> void;
+                function end_target() -> void;
+                function read_target(const RenderTarget&: target) -> Image;
+
+                function scale(float: s) -> void {
+                    scale(s, s);
+                } end function scale
+
+                function clear(const Color&: c = Color(0, 0, 0)) -> void {
+                    native_clear(c.packed());
+                } end function clear
+
+                function set_blend_mode(BlendMode: m) -> void {
+                    native_set_blend_mode(static_cast<long int>(m));
+                } end function set_blend_mode
+
+                function blend_mode() const -> BlendMode {
+                    return static_cast<BlendMode>(native_blend_mode());
+                } end function blend_mode
+
+                function begin_camera(const Camera&: camera) -> void {
+                    native_begin_camera(camera.x, camera.y, camera.zoom, camera.rotation);
+                } end function begin_camera
+
+                function draw_pixel(float: x, float: y, const Color&: c) -> void {
+                    native_pixel(x, y, c.packed());
+                } end function draw_pixel
+
+                function draw_line(float: x1, float: y1, float: x2, float: y2, const Paint&: p) -> void {
+                    native_line(x1, y1, x2, y2, p);
+                } end function draw_line
+
+                function draw_line(float: x1, float: y1, float: x2, float: y2, const Color&: c, float: width = 1.0) -> void {
+                    native_line(x1, y1, x2, y2, Paint::stroke(c, width));
+                } end function draw_line
+
+                function draw_rect(float: x, float: y, float: w, float: h, const Paint&: p) -> void {
+                    native_rect(x, y, w, h, p);
+                } end function draw_rect
+
+                function fill_rect(float: x, float: y, float: w, float: h, const Color&: c) -> void {
+                    native_rect(x, y, w, h, Paint::fill(c));
+                } end function fill_rect
+
+                function stroke_rect(float: x, float: y, float: w, float: h, const Color&: c, float: width = 1.0) -> void {
+                    native_rect(x, y, w, h, Paint::stroke(c, width));
+                } end function stroke_rect
+
+                function draw_rounded_rect(float: x, float: y, float: w, float: h, float: radius, const Paint&: p) -> void {
+                    native_rounded_rect(x, y, w, h, radius, p);
+                } end function draw_rounded_rect
+
+                function draw_circle(float: cx, float: cy, float: radius, const Paint&: p) -> void {
+                    native_circle(cx, cy, radius, p);
+                } end function draw_circle
+
+                function fill_circle(float: cx, float: cy, float: radius, const Color&: c) -> void {
+                    native_circle(cx, cy, radius, Paint::fill(c));
+                } end function fill_circle
+
+                function stroke_circle(float: cx, float: cy, float: radius, const Color&: c, float: width = 1.0) -> void {
+                    native_circle(cx, cy, radius, Paint::stroke(c, width));
+                } end function stroke_circle
+
+                function draw_ellipse(float: cx, float: cy, float: rx, float: ry, const Paint&: p) -> void {
+                    native_ellipse(cx, cy, rx, ry, p);
+                } end function draw_ellipse
+
+                function draw_arc(float: cx, float: cy, float: rx, float: ry, const Paint&: p) -> void {
+                    native_arc(cx, cy, rx, ry, p);
+                } end function draw_arc
+
+                function draw_triangle(float: x1, float: y1, float: x2, float: y2, float: x3, float: y3, const Paint&: p) -> void {
+                    native_triangle(x1, y1, x2, y2, x3, y3, p);
+                } end function draw_triangle
+
+                function draw_polygon(const std::collections::Vector<Point>&: points, const Paint&: p) -> void {
+                    native_polygon(detail::xs_of(points), detail::ys_of(points), p);
+                } end function draw_polygon
+
+                function draw_polyline(const std::collections::Vector<Point>&: points, const Paint&: p, bool: closed = false) -> void {
+                    native_polyline(detail::xs_of(points), detail::ys_of(points), p, closed);
+                } end function draw_polyline
+
+                function draw_path(const Path&: path, const Paint&: p) -> void {
+                    native_path(path, p);
+                } end function draw_path
+
+                function draw_image(const Image&: img, float: x, float: y) -> void {
+                    native_image(img, x, y);
+                } end function draw_image
+
+                function draw_image(const Image&: img, float: x, float: y, float: w, float: h) -> void {
+                    native_image_sized(img, x, y, w, h);
+                } end function draw_image
+
+                function draw_texture(const Texture&: t, float: x, float: y, float: opacity = 1.0) -> void {
+                    native_texture(t, x, y, opacity);
+                } end function draw_texture
+
+                function draw_texture(const Texture&: t, float: x, float: y, float: w, float: h, float: opacity = 1.0) -> void {
+                    native_texture_sized(t, x, y, w, h, opacity);
+                } end function draw_texture
+
+                function draw_texture_part(const Texture&: t, float: x, float: y, float: w, float: h, long int: sx, long int: sy, long int: sw, long int: sh, const Color&: tint = Color(255, 255, 255), float: opacity = 1.0) -> void {
+                    native_texture_part(t, x, y, w, h, sx, sy, sw, sh, tint.packed(), opacity);
+                } end function draw_texture_part
+
+                function draw_sprite(const Sprite&: s) -> void {
+                    native_sprite(s);
+                } end function draw_sprite
+
+                function draw_text(float: x, float: y, const string&: s, const TextStyle&: style) -> void {
+                    native_text(x, y, s, style);
+                } end function draw_text
+
+                function draw_text(float: x, float: y, float: w, float: h, const string&: s, const TextStyle&: style) -> void {
+                    native_text_box(x, y, w, h, s, style);
+                } end function draw_text
+
+                function measure_text(const string&: s, const TextStyle&: style, long int: max_width = 0) -> TextMetrics {
+                    return TextMetrics(native_measure(s, style, max_width, 0), native_measure(s, style, max_width, 1), native_measure(s, style, max_width, 2), native_measure(s, style, max_width, 3));
+                } end function measure_text
+
+                function load_font(const string&: file) -> void {
+                    if (!native_load_font(file)) then {
+                        throw std::errors::graphics_error(static_cast<string>(`can't load the font file '${file}'`));
+                    }
+                } end function load_font
+
+                function begin_target(const RenderTarget&: target) -> void {
+                    if (!native_begin_target(target, 0, false)) then {
+                        throw std::errors::graphics_error("can't draw into this render target");
+                    }
+                } end function begin_target
+
+                function begin_target(const RenderTarget&: target, const Color&: clear_color) -> void {
+                    if (!native_begin_target(target, clear_color.packed(), true)) then {
+                        throw std::errors::graphics_error("can't draw into this render target");
+                    }
+                } end function begin_target
+
+                function draw_target(const RenderTarget&: target, float: x, float: y, float: opacity = 1.0) -> void {
+                    native_draw_target(target, x, y, static_cast<float>(target.width()), static_cast<float>(target.height()), opacity);
+                } end function draw_target
+
+                function draw_target(const RenderTarget&: target, float: x, float: y, float: w, float: h, float: opacity = 1.0) -> void {
+                    native_draw_target(target, x, y, w, h, opacity);
+                } end function draw_target
+
+            private:
+                function native_begin_3d(Camera3D&: camera) -> bool as "walnut_rt::gfx::begin_3d";
+                function native_end_3d() -> void as "walnut_rt::gfx::end_3d";
+                function native_set_light(float: dx, float: dy, float: dz, float: ambient, float: diffuse) -> void as "walnut_rt::gfx::set_light";
+                function native_set_lighting(const Lighting&: l) -> void as "walnut_rt::gfx::set_lighting";
+                function native_draw_mesh(const Mesh&: m, const Material&: mat) -> void as "walnut_rt::gfx::draw_mesh";
+                function native_draw_mesh_at(const Mesh&: m, float: px, float: py, float: pz, float: rx, float: ry, float: rz, float: sx, float: sy, float: sz, const Material&: mat) -> void as "walnut_rt::gfx::draw_mesh_at";
+                function native_draw_model(const Model&: m, float: px, float: py, float: pz, float: rx, float: ry, float: rz, float: sx, float: sy, float: sz) -> void as "walnut_rt::gfx::draw_model";
+                function native_draw_animated(const Animator&: a, float: px, float: py, float: pz, float: rx, float: ry, float: rz, float: sx, float: sy, float: sz) -> void as "walnut_rt::gfx::draw_animated";
+                function native_line_3d(float: ax, float: ay, float: az, float: bx, float: by, float: bz, long int: rgba, float: width, bool: depth_test) -> void as "walnut_rt::gfx::draw_line_3d";
+                function native_box_3d(float: ax, float: ay, float: az, float: bx, float: by, float: bz, long int: rgba, float: width, bool: depth_test) -> void as "walnut_rt::gfx::draw_box_3d";
+                function native_draw_tilemap(const TileMap&: map, float: x, float: y) -> long int as "walnut_rt::gfx::draw_tilemap";
+
+            public:
+                function begin_3d(Camera3D&: camera) -> void {
+                    if (!native_begin_3d(camera)) then {
+                        throw std::errors::graphics_error("can't start 3D drawing; call begin_3d between begin_frame and present");
+                    }
+                } end function begin_3d
+
+                function end_3d() -> void {
+                    native_end_3d();
+                } end function end_3d
+
+                function set_light(const Vec3&: direction) -> void {
+                    native_set_light(direction.x, direction.y, direction.z, 0.45, 0.55);
+                } end function set_light
+
+                function set_light(const Vec3&: direction, float: ambient, float: diffuse) -> void {
+                    native_set_light(direction.x, direction.y, direction.z, ambient, diffuse);
+                } end function set_light
+
+                function set_lighting(const Lighting&: lighting) -> void {
+                    native_set_lighting(lighting);
+                } end function set_lighting
+
+                function draw_mesh(const Mesh&: mesh) -> void {
+                    native_draw_mesh(mesh, Material());
+                } end function draw_mesh
+
+                function draw_mesh(const Mesh&: mesh, const Material&: material) -> void {
+                    native_draw_mesh(mesh, material);
+                } end function draw_mesh
+
+                function draw_mesh(const Mesh&: mesh, const Transform3D&: t, const Material&: material = Material()) -> void {
+                    native_draw_mesh_at(mesh, t.position.x, t.position.y, t.position.z, t.rotation.x, t.rotation.y, t.rotation.z, t.scale.x, t.scale.y, t.scale.z, material);
+                } end function draw_mesh
+
+                function draw_model(const Model&: model, const Transform3D&: t = Transform3D()) -> void {
+                    native_draw_model(model, t.position.x, t.position.y, t.position.z, t.rotation.x, t.rotation.y, t.rotation.z, t.scale.x, t.scale.y, t.scale.z);
+                } end function draw_model
+
+                function draw_model(const Animator&: animator, const Transform3D&: t = Transform3D()) -> void {
+                    native_draw_animated(animator, t.position.x, t.position.y, t.position.z, t.rotation.x, t.rotation.y, t.rotation.z, t.scale.x, t.scale.y, t.scale.z);
+                } end function draw_model
+
+                function draw_line_3d(const Vec3&: a, const Vec3&: b, const Color&: c, float: width = 1.0, bool: depth_test = true) -> void {
+                    native_line_3d(a.x, a.y, a.z, b.x, b.y, b.z, c.packed(), width, depth_test);
+                } end function draw_line_3d
+
+                function draw_box_3d(const Vec3&: low, const Vec3&: high, const Color&: c, float: width = 1.0, bool: depth_test = true) -> void {
+                    native_box_3d(low.x, low.y, low.z, high.x, high.y, high.z, c.packed(), width, depth_test);
+                } end function draw_box_3d
+
+                function draw_tilemap(const TileMap&: map) -> long int {
+                    return native_draw_tilemap(map, 0.0, 0.0);
+                } end function draw_tilemap
+
+                function draw_tilemap(const TileMap&: map, float: x, float: y) -> long int {
+                    return native_draw_tilemap(map, x, y);
+                } end function draw_tilemap
+            } end class Renderer
+        } end extern
+    } end namespace graphics
+} end namespace std

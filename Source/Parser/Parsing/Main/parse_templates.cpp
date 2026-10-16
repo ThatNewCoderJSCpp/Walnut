@@ -81,18 +81,19 @@ bool Parser::looks_like_type_argument(bool include_paren) {
 
     K k = token_at(i).kind();
 
-    if (is_base_type_token(k) || k == K::FunctionKeyword || k == K::ArrayKeyword || k == K::VariantKeyword) {
+    if (is_base_type_token(k) || k == K::FunctionKeyword || k == K::ArrayKeyword || k == K::VariantKeyword || k == K::SpecialKeyword) {
         return true;
     }
 
     if (k == K::TypeofKeyword || k == K::DecltypeKeyword || k == K::DiscardConstKeyword
-        || (k == K::Identifier && token_at(i + 1).kind() == K::LeftParen && parser_types::find_type_op(token_at(i).lexeme()))) {
+        || (k == K::Identifier && token_at(i + 1).kind() == K::LeftParen && parser_types::find_builtin_type_op(token_at(i).lexeme()))) {
         return true;
     }
 
     if (k == K::DoubleColon || k == K::Identifier) {
         if (token_at(i).kind() == K::DoubleColon) ++i;
         if (token_at(i).kind() != K::Identifier) return false;
+        std::string_view leaf = token_at(i).lexeme();
         ++i;
 
         for (;;) {
@@ -105,12 +106,15 @@ bool Parser::looks_like_type_argument(bool include_paren) {
             }
 
             if (token_at(i).kind() == K::DoubleColon && token_at(i + 1).kind() == K::Identifier) {
+                leaf = token_at(i + 1).lexeme();
                 i += 2;
                 continue;
             }
 
             break;
         }
+
+        if (m_variable_template_names.count(leaf) != 0) return false;
 
         while (token_at(i).is_one_of(K::Asterisk, K::DoubleAsterisk, K::Ampersand, K::LogicAnd, K::ConstantDeclaration)) {
             ++i;
@@ -145,6 +149,35 @@ std::string_view Parser::template_probe_key(const nodes::ASTNode* n) {
 bool Parser::is_known_template(const nodes::ASTNode* n) const {
     std::string_view key = template_probe_key(n);
     return !key.empty() && m_template_names.count(key) != 0;
+}
+
+bool Parser::known_template_ahead() {
+    using K = tokenizing::Token::Kind;
+    bool leftover = false;
+    std::size_t end = scan_angle_close(0, &leftover);
+    if (end == 0) return false;
+    if (leftover) return true;
+
+    bool expression_inside = false;
+    int depth = 0;
+    for (std::size_t k = 1; k < end; ++k) {
+        const K kind = lookahead(k).kind();
+        if (kind == K::LeftParen || kind == K::LeftSquare) ++depth;
+        else if (kind == K::RightParen || kind == K::RightSquare) --depth;
+        else if (depth == 0 && (kind == K::LogicAnd || kind == K::LogicOr || kind == K::LogicEqual || kind == K::NotEqual || kind == K::LessEqual || kind == K::GreaterEqual)) expression_inside = true;
+    }
+    if (!expression_inside) return true;
+
+    switch (lookahead(end + 1).kind()) {
+        case K::LeftParen: case K::RightParen: case K::LeftCurly: case K::RightCurly:
+        case K::RightSquare: case K::DoubleColon: case K::Comma: case K::Semicolon: case K::DoubleSemicolon:
+        case K::GreaterThan: case K::DoubleGreaterThan: case K::Dot: case K::SingleRightArrow: case K::Colon:
+        case K::Ellipsis: case K::LogicAnd: case K::LogicOr: case K::LogicEqual: case K::NotEqual:
+        case K::QuestionMark: case K::End:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool Parser::template_ambiguous_ahead() {
@@ -223,6 +256,8 @@ nodes::TemplateParameter* Parser::parse_template_parameter() {
 
 nodes::ASTNode* Parser::parse_template_declaration() {
     const std::size_t line = current_token().line();
+    const bool member_template = m_member_template;
+    m_member_template = false;
     expect(tokenizing::Token::Kind::TemplateKeyword, "Expected 'template'");
     expect(tokenizing::Token::Kind::LessThan, "Expected '<' after 'template'");
     auto* decl = make<nodes::TemplateDeclaration>(static_cast<std::uint32_t>(line));
@@ -245,7 +280,34 @@ nodes::ASTNode* Parser::parse_template_declaration() {
         decl->set_requires_clause(parse_expression());
     }
 
+    m_list_level         = m_template_list_level;
+    m_injected_candidate = m_template_injected;
+    m_pending_template   = decl;
+    m_template_list_level = false;
+    m_template_injected   = false;
+
+    if (member_template && looks_like_special_member()) {
+        const std::size_t ctor_line = current_token().line();
+        const modifiers::RawModifiers mods = parse_raw_modifiers();
+        if (current_token().kind() != tokenizing::Token::Kind::ConstructorKeyword) {
+            throw ParserError::invalid_declaration(reporter, current_token(), "A destructor can't be a template; only constructors, methods and operators can have their own template parameters");
+        }
+        m_pending_template = nullptr;
+        const tokenizing::Token ctor_start = current_token();
+        auto* ctor = static_cast<nodes::ConstructorDeclaration*>(parse_constructor_declaration(mods, ctor_line));
+        if (ctor->m_special != nodes::ConstructorDeclaration::Special::None || !ctor->has_body()) {
+            throw ParserError::invalid_declaration(reporter, ctor_start, "A template constructor needs its body here in the class, as in 'template <typename T> constructor(T: value) { ... }'; it can't be '= default', '= delete' or defined later");
+        }
+        decl->set_declaration(ctor);
+        return decl;
+    }
+
+    const tokenizing::Token inner_start = current_token();
     nodes::ASTNode* inner = parse_statement();
+    if (inner && (inner->kind == nodes::ASTNode::Kind::ConstructorDeclaration || inner->kind == nodes::ASTNode::Kind::DestructorDeclaration)) {
+        throw ParserError::invalid_declaration(reporter, inner_start, "A template constructor has to be written inside its class, as in 'template <typename T> constructor(T: value) { ... }'; it can't be defined outside the class");
+    }
+    if (auto* v = nodes::node_cast<nodes::VariableDeclaration>(inner)) inner = lower_variable_template(v);
     decl->set_declaration(inner);
 
     if (auto* r = nodes::node_cast<nodes::RecordDeclaration>(inner)) {
@@ -267,8 +329,38 @@ nodes::ASTNode* Parser::parse_template_declaration() {
 namespace walnut {
 namespace parsing {
 
+nodes::ASTNode* Parser::lower_variable_template(nodes::VariableDeclaration* v) {
+    using M = modifiers::RawModifiers;
+    if (v->is_structured_binding()) throw ParserError::invalid_declaration(reporter, current_token(), "a variable template can't be a structured binding");
+    if (!v->has_initializer()) throw ParserError::invalid_declaration(reporter, current_token(), "variable template '" + std::string(v->get_name()) + "' needs an initializer");
+    const M& vm = v->get_type_info().modifiers;
+    if (!vm.has(M::Constexpr) && !vm.has(M::Const)) {
+        throw ParserError::invalid_declaration(reporter, current_token(), "variable template '" + std::string(v->get_name()) + "' must be 'constexpr' or 'const'");
+    }
+
+    parser_types::TypeInfo ret = v->get_type_info();
+    ret.modifiers.remove_mask(M::Constexpr | M::Const | M::Static | M::Inline | M::Hidden | M::Local | M::Global);
+
+    M fm;
+    fm.add_mask(vm.flags() & (M::Constexpr | M::Static | M::Hidden | M::Local | M::Global));
+    auto* params = make<nodes::FunctionParameters>();
+    auto* body   = make<nodes::BlockStatement>();
+    body->line = v->line;
+    body->add_statement(make<nodes::ReturnStatement>(v->m_initializer, v->line));
+    auto* fd = make<nodes::FunctionDeclaration>(v->get_name(), ret, fm, modifiers::FunctionQualifiers{}, v->line, params, body);
+    fd->file_id           = v->file_id;
+    fd->order             = v->order;
+    fd->variable_template = true;
+    m_variable_template_names.insert(v->get_name());
+    if (m_shared_names) m_shared_names->variable_templates.insert(v->get_name());
+    if (v->template_specialization) fd->set_specialization(std::move(v->spec_args));
+    return fd;
+}
+
 void Parser::register_template_name(std::string_view name) {
-    if (!name.empty()) { m_template_names.insert(name); }
+    if (name.empty()) return;
+    m_template_names.insert(name);
+    if (m_shared_names) m_shared_names->templates.insert(name);
 }
 
 nodes::ASTNode* Parser::parse_template_value_expr() {
@@ -296,7 +388,7 @@ std::vector<parser_types::TemplateArgument*> Parser::parse_template_argument_lis
         }
 
         args.push_back(arg);
-    } while (match(tokenizing::Token::Kind::Comma));
+    } while (m_pending_close_angle == 0 && match(tokenizing::Token::Kind::Comma));
 
     if (!match_template_close()) {
         throw ParserError::missing_token(

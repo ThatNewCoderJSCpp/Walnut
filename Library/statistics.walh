@@ -1,0 +1,1538 @@
+import module.collections
+
+namespace std {
+    namespace errors {
+        class statistics_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class statistics_error
+    } end namespace errors
+
+    namespace statistics {
+        enum Tail { lower, upper, two }
+
+        enum Variances { unequal, equal }
+
+        enum Expected { infer, counts, proportions }
+
+        template <typename T>
+        concept Real = std::traits::is_builtin_float<T>
+
+        extern "C++" from "<walnut_statistics.hpp>" {
+            template <typename T>
+            class Sample as "walnut_rt::stats::Sample" {
+            public:
+                static function of(const std::collections::Vector<T>&: data) -> Sample as "walnut_rt::stats::sample_from_data";
+                static function from_summary(const T&: mean, const T&: standard_deviation, long int: size) -> Sample as "walnut_rt::stats::sample_from_summary";
+                static function differences(const std::collections::Vector<T>&: before, const std::collections::Vector<T>&: after) -> Sample as "walnut_rt::stats::sample_from_differences";
+                function with_population(long int: population) const -> Sample as "walnut_rt::stats::sample_with_population";
+                function size() const -> long int as "walnut_rt::stats::sample_size";
+                function population() const -> long int as "walnut_rt::stats::sample_population";
+                function degrees_of_freedom() const -> long int as "walnut_rt::stats::sample_df";
+                function has_population() const -> bool;
+                function mean() const -> T;
+                function standard_deviation() const -> T;
+                function standard_error() const -> T;
+            } end class Sample
+
+            template <typename T>
+            class RawTest as "walnut_rt::stats::TestResult" {
+            public:
+                function name() const -> string as "walnut_rt::stats::test_name";
+                function number(int: which) const -> T as "walnut_rt::stats::test_number";
+                function tail_code() const -> int as "walnut_rt::stats::test_tail";
+                function condition_count() const -> long int as "walnut_rt::stats::test_condition_count";
+                function condition_name(long int: i) const -> string as "walnut_rt::stats::test_condition_name";
+                function condition_met(long int: i) const -> bool as "walnut_rt::stats::test_condition_met";
+                function condition_detail(long int: i) const -> string as "walnut_rt::stats::test_condition_detail";
+            } end class RawTest
+
+            template <typename T>
+            class RawInterval as "walnut_rt::stats::ConfidenceInterval" {
+            public:
+                function name() const -> string as "walnut_rt::stats::interval_name";
+                function number(int: which) const -> T as "walnut_rt::stats::interval_number";
+                function condition_count() const -> long int as "walnut_rt::stats::interval_condition_count";
+                function condition_name(long int: i) const -> string as "walnut_rt::stats::interval_condition_name";
+                function condition_met(long int: i) const -> bool as "walnut_rt::stats::interval_condition_met";
+                function condition_detail(long int: i) const -> string as "walnut_rt::stats::interval_condition_detail";
+            } end class RawInterval
+
+            template <typename T>
+            class Native as "walnut_rt::stats::tag" {
+            public:
+                static function sum(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::sum";
+                static function mean(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::mean";
+                static function median(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::median";
+                static function mode(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::mode";
+                static function minimum(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::minimum";
+                static function maximum(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::maximum";
+                static function range(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::range";
+                static function variance(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::variance";
+                static function population_variance(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::population_variance";
+                static function standard_deviation(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::standard_deviation";
+                static function population_standard_deviation(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::population_standard_deviation";
+                static function standard_error(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::standard_error";
+                static function interquartile_range(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::interquartile_range";
+                static function geometric_mean(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::geometric_mean";
+                static function harmonic_mean(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::harmonic_mean";
+                static function mean_absolute_deviation(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::mean_absolute_deviation";
+                static function median_absolute_deviation(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::median_absolute_deviation";
+                static function coefficient_of_variation(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::coefficient_of_variation";
+                static function sum_of_squares(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::sum_of_squares";
+                static function root_mean_square(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::root_mean_square";
+                static function modes(const std::collections::Vector<T>&: data) -> std::collections::Vector<T> as "walnut_rt::stats::modes";
+                static function quantile(const std::collections::Vector<T>&: data, const T&: p) -> T as "walnut_rt::stats::quantile";
+                static function percentile(const std::collections::Vector<T>&: data, const T&: p) -> T as "walnut_rt::stats::percentile";
+                static function outliers(const std::collections::Vector<T>&: data, const T&: fence) -> std::collections::Vector<T> as "walnut_rt::stats::outliers";
+                static function skewness(const std::collections::Vector<T>&: data, bool: sample) -> T as "walnut_rt::stats::skewness";
+                static function kurtosis(const std::collections::Vector<T>&: data, bool: sample) -> T as "walnut_rt::stats::kurtosis";
+                static function excess_kurtosis(const std::collections::Vector<T>&: data, bool: sample) -> T as "walnut_rt::stats::excess_kurtosis";
+                static function pearson_kurtosis(const std::collections::Vector<T>&: data, bool: sample) -> T as "walnut_rt::stats::pearson_kurtosis";
+                static function covariance(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y, bool: sample) -> T as "walnut_rt::stats::covariance";
+                static function correlation(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y) -> T as "walnut_rt::stats::correlation";
+                static function z_score(const T&: x, const T&: m, const T&: sd) -> T as "walnut_rt::stats::z_score";
+                static function z_scores(const std::collections::Vector<T>&: data, bool: sample) -> std::collections::Vector<T> as "walnut_rt::stats::z_scores";
+                static function weighted_mean(const std::collections::Vector<T>&: data, const std::collections::Vector<T>&: weights) -> T as "walnut_rt::stats::weighted_mean";
+                static function quartiles(const std::collections::Vector<T>&: data) -> std::collections::Vector<T> as "walnut_rt::stats::quartiles";
+                static function five_numbers(const std::collections::Vector<T>&: data) -> std::collections::Vector<T> as "walnut_rt::stats::five_numbers";
+                static function regression(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y) -> std::collections::Vector<T> as "walnut_rt::stats::regression";
+                static function one_mean_t_test(const Sample<T>&: s, const T&: mu0, int: tail) -> RawTest<T> as "walnut_rt::stats::one_mean_t_test";
+                static function one_mean_z_test(const Sample<T>&: s, const T&: sigma, const T&: mu0, int: tail) -> RawTest<T> as "walnut_rt::stats::one_mean_z_test";
+                static function two_mean_t_test(const Sample<T>&: a, const Sample<T>&: b, const T&: d0, int: tail, int: v) -> RawTest<T> as "walnut_rt::stats::two_mean_t_test";
+                static function two_mean_z_test(const Sample<T>&: a, const T&: s1, const Sample<T>&: b, const T&: s2, const T&: d0, int: tail) -> RawTest<T> as "walnut_rt::stats::two_mean_z_test";
+                static function paired_t_test(const Sample<T>&: d, const T&: d0, int: tail) -> RawTest<T> as "walnut_rt::stats::paired_t_test";
+                static function one_proportion_z_test(long int: s, long int: n, long int: pop, const T&: p0, int: tail) -> RawTest<T> as "walnut_rt::stats::one_proportion_z_test<T>";
+                static function two_proportion_z_test(long int: s1, long int: n1, long int: pop1, long int: s2, long int: n2, long int: pop2, int: tail) -> RawTest<T> as "walnut_rt::stats::two_proportion_z_test<T>";
+                static function goodness_of_fit(const std::collections::Vector<T>&: observed, const std::collections::Vector<T>&: expected, int: kind) -> RawTest<T> as "walnut_rt::stats::goodness_of_fit";
+                static function independence(const std::collections::Vector<std::collections::Vector<T>>&: table) -> RawTest<T> as "walnut_rt::stats::independence";
+                static function homogeneity(const std::collections::Vector<std::collections::Vector<T>>&: table) -> RawTest<T> as "walnut_rt::stats::homogeneity";
+                static function slope_t_test(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y, const T&: b0, int: tail) -> RawTest<T> as "walnut_rt::stats::slope_t_test";
+                static function one_mean_t_interval(const Sample<T>&: s, const T&: c) -> RawInterval<T> as "walnut_rt::stats::one_mean_t_interval";
+                static function one_mean_z_interval(const Sample<T>&: s, const T&: sigma, const T&: c) -> RawInterval<T> as "walnut_rt::stats::one_mean_z_interval";
+                static function two_mean_t_interval(const Sample<T>&: a, const Sample<T>&: b, const T&: c, int: v) -> RawInterval<T> as "walnut_rt::stats::two_mean_t_interval";
+                static function two_mean_z_interval(const Sample<T>&: a, const T&: s1, const Sample<T>&: b, const T&: s2, const T&: c) -> RawInterval<T> as "walnut_rt::stats::two_mean_z_interval";
+                static function paired_t_interval(const Sample<T>&: d, const T&: c) -> RawInterval<T> as "walnut_rt::stats::paired_t_interval";
+                static function variance_interval(const Sample<T>&: s, const T&: c) -> RawInterval<T> as "walnut_rt::stats::variance_interval";
+                static function slope_t_interval(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y, const T&: c) -> RawInterval<T> as "walnut_rt::stats::slope_t_interval";
+                static function one_proportion_z_interval(long int: s, long int: n, long int: pop, const T&: c) -> RawInterval<T> as "walnut_rt::stats::one_proportion_z_interval<T>";
+                static function two_proportion_z_interval(long int: s1, long int: n1, long int: pop1, long int: s2, long int: n2, long int: pop2, const T&: c) -> RawInterval<T> as "walnut_rt::stats::two_proportion_z_interval<T>";
+                static function critical_z(const T&: alpha, int: tail) -> T as "walnut_rt::stats::critical_z";
+                static function critical_t(const T&: alpha, const T&: df, int: tail) -> T as "walnut_rt::stats::critical_t";
+                static function critical_chi_squared(const T&: alpha, const T&: df) -> T as "walnut_rt::stats::critical_chi_squared";
+                static function critical_f(const T&: alpha, const T&: d1, const T&: d2) -> T as "walnut_rt::stats::critical_f";
+                static function z_star(const T&: c) -> T as "walnut_rt::stats::z_star";
+                static function t_star(const T&: c, const T&: df) -> T as "walnut_rt::stats::t_star";
+                static function z_statistic(const T&: e, const T&: n, const T&: se) -> T as "walnut_rt::stats::z_statistic";
+                static function t_statistic(const Sample<T>&: s, const T&: mu0) -> T as "walnut_rt::stats::t_statistic";
+                static function welch_df(const Sample<T>&: a, const Sample<T>&: b) -> T as "walnut_rt::stats::welch_df";
+                static function one_mean_z_power(const T&: m0, const T&: ma, const T&: sigma, long int: n, const T&: alpha, int: tail) -> T as "walnut_rt::stats::one_mean_z_power";
+                static function one_mean_t_power(const T&: m0, const T&: ma, const T&: sd, long int: n, const T&: alpha, int: tail) -> T as "walnut_rt::stats::one_mean_t_power";
+                static function two_mean_z_power(const T&: d0, const T&: da, const T&: s1, long int: n1, const T&: s2, long int: n2, const T&: alpha, int: tail) -> T as "walnut_rt::stats::two_mean_z_power";
+                static function two_mean_t_power(const T&: d0, const T&: da, const T&: s1, long int: n1, const T&: s2, long int: n2, const T&: alpha, int: tail, int: v) -> T as "walnut_rt::stats::two_mean_t_power";
+                static function one_proportion_z_power(const T&: p0, const T&: pa, long int: n, const T&: alpha, int: tail) -> T as "walnut_rt::stats::one_proportion_z_power";
+                static function two_proportion_z_power(const T&: p1, const T&: p2, long int: n1, long int: n2, const T&: alpha, int: tail) -> T as "walnut_rt::stats::two_proportion_z_power";
+                static function size_for_mean(const T&: margin, const T&: sigma, const T&: c) -> long int as "walnut_rt::stats::size_for_mean";
+                static function size_for_proportion(const T&: margin, const T&: c, const T&: guess) -> long int as "walnut_rt::stats::size_for_proportion";
+            } end class Native
+
+            template <typename T>
+            requires Real<T>
+            class Normal as "walnut_rt::stats::Normal" {
+            public:
+                constructor() as "walnut_rt::stats::make_normal_standard<T>";
+                constructor(const T&: mean, const T&: standard_deviation) as "walnut_rt::stats::make_normal<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+
+                function z_score(const T&: x) const -> T {
+                    return (x - mean()) / standard_deviation();
+                } end function z_score
+
+                function value_at(const T&: z) const -> T {
+                    return mean() + z * standard_deviation();
+                } end function value_at
+            } end class Normal
+
+            template <typename T>
+            requires Real<T>
+            class StudentT as "walnut_rt::stats::StudentT" {
+            public:
+                constructor(const T&: degrees_of_freedom) as "walnut_rt::stats::make_student_t<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+            } end class StudentT
+
+            template <typename T>
+            requires Real<T>
+            class ChiSquared as "walnut_rt::stats::ChiSquared" {
+            public:
+                constructor(const T&: degrees_of_freedom) as "walnut_rt::stats::make_chi_squared<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+            } end class ChiSquared
+
+            template <typename T>
+            requires Real<T>
+            class FisherF as "walnut_rt::stats::FisherF" {
+            public:
+                constructor(const T&: numerator_df, const T&: denominator_df) as "walnut_rt::stats::make_fisher_f<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+            } end class FisherF
+
+            template <typename T>
+            requires Real<T>
+            class Exponential as "walnut_rt::stats::Exponential" {
+            public:
+                constructor(const T&: rate) as "walnut_rt::stats::make_exponential<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+            } end class Exponential
+
+            template <typename T>
+            requires Real<T>
+            class Uniform as "walnut_rt::stats::Uniform" {
+            public:
+                constructor() as "walnut_rt::stats::make_uniform_unit<T>";
+                constructor(const T&: low, const T&: high) as "walnut_rt::stats::make_uniform<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+            } end class Uniform
+
+            template <typename T>
+            requires Real<T>
+            class Gamma as "walnut_rt::stats::Gamma" {
+            public:
+                constructor(const T&: shape, const T&: scale) as "walnut_rt::stats::make_gamma<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+            } end class Gamma
+
+            template <typename T>
+            requires Real<T>
+            class Beta as "walnut_rt::stats::Beta" {
+            public:
+                constructor(const T&: alpha, const T&: beta) as "walnut_rt::stats::make_beta<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+            } end class Beta
+
+            template <typename T>
+            requires Real<T>
+            class NoncentralT as "walnut_rt::stats::NoncentralT" {
+            public:
+                constructor(const T&: degrees_of_freedom, const T&: noncentrality) as "walnut_rt::stats::make_noncentral_t<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pdf(const T&: x) const -> T as "walnut_rt::stats::dist_pdf";
+                function log_pdf(const T&: x) const -> T as "walnut_rt::stats::dist_log_pdf";
+                function cdf(const T&: x) const -> T as "walnut_rt::stats::dist_cdf";
+                function survival(const T&: x) const -> T as "walnut_rt::stats::dist_survival";
+                function between(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_between";
+                function outside(const T&: low, const T&: high) const -> T as "walnut_rt::stats::dist_outside";
+
+                function below(const T&: x) const -> T {
+                    return cdf(x);
+                } end function below
+
+                function above(const T&: x) const -> T {
+                    return survival(x);
+                } end function above
+
+                function inverse_cdf(const T&: p) const -> T {
+                    return quantile(p);
+                } end function inverse_cdf
+            } end class NoncentralT
+
+            template <typename T>
+            requires Real<T>
+            class Binomial as "walnut_rt::stats::Binomial" {
+            public:
+                constructor(long int: trials, const T&: probability) as "walnut_rt::stats::make_binomial<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pmf(long int: k) const -> T as "walnut_rt::stats::dist_pmf";
+                function log_pmf(long int: k) const -> T as "walnut_rt::stats::dist_log_pmf";
+                function cdf(long int: k) const -> T as "walnut_rt::stats::dist_cdf_k";
+                function survival(long int: k) const -> T as "walnut_rt::stats::dist_survival_k";
+                function between(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_between_k";
+                function outside(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_outside_k";
+
+                function exactly(long int: k) const -> T {
+                    return pmf(k);
+                } end function exactly
+
+                function at_most(long int: k) const -> T {
+                    return cdf(k);
+                } end function at_most
+
+                function less_than(long int: k) const -> T {
+                    return cdf(k - 1);
+                } end function less_than
+
+                function at_least(long int: k) const -> T {
+                    return survival(k - 1);
+                } end function at_least
+
+                function greater_than(long int: k) const -> T {
+                    return survival(k);
+                } end function greater_than
+            } end class Binomial
+
+            template <typename T>
+            requires Real<T>
+            class Geometric as "walnut_rt::stats::Geometric" {
+            public:
+                constructor(const T&: probability) as "walnut_rt::stats::make_geometric<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pmf(long int: k) const -> T as "walnut_rt::stats::dist_pmf";
+                function log_pmf(long int: k) const -> T as "walnut_rt::stats::dist_log_pmf";
+                function cdf(long int: k) const -> T as "walnut_rt::stats::dist_cdf_k";
+                function survival(long int: k) const -> T as "walnut_rt::stats::dist_survival_k";
+                function between(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_between_k";
+                function outside(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_outside_k";
+
+                function exactly(long int: k) const -> T {
+                    return pmf(k);
+                } end function exactly
+
+                function at_most(long int: k) const -> T {
+                    return cdf(k);
+                } end function at_most
+
+                function less_than(long int: k) const -> T {
+                    return cdf(k - 1);
+                } end function less_than
+
+                function at_least(long int: k) const -> T {
+                    return survival(k - 1);
+                } end function at_least
+
+                function greater_than(long int: k) const -> T {
+                    return survival(k);
+                } end function greater_than
+            } end class Geometric
+
+            template <typename T>
+            requires Real<T>
+            class Poisson as "walnut_rt::stats::Poisson" {
+            public:
+                constructor(const T&: rate) as "walnut_rt::stats::make_poisson<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pmf(long int: k) const -> T as "walnut_rt::stats::dist_pmf";
+                function log_pmf(long int: k) const -> T as "walnut_rt::stats::dist_log_pmf";
+                function cdf(long int: k) const -> T as "walnut_rt::stats::dist_cdf_k";
+                function survival(long int: k) const -> T as "walnut_rt::stats::dist_survival_k";
+                function between(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_between_k";
+                function outside(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_outside_k";
+
+                function exactly(long int: k) const -> T {
+                    return pmf(k);
+                } end function exactly
+
+                function at_most(long int: k) const -> T {
+                    return cdf(k);
+                } end function at_most
+
+                function less_than(long int: k) const -> T {
+                    return cdf(k - 1);
+                } end function less_than
+
+                function at_least(long int: k) const -> T {
+                    return survival(k - 1);
+                } end function at_least
+
+                function greater_than(long int: k) const -> T {
+                    return survival(k);
+                } end function greater_than
+            } end class Poisson
+
+            template <typename T>
+            requires Real<T>
+            class Hypergeometric as "walnut_rt::stats::Hypergeometric" {
+            public:
+                constructor(long int: population, long int: successes, long int: draws) as "walnut_rt::stats::make_hypergeometric<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pmf(long int: k) const -> T as "walnut_rt::stats::dist_pmf";
+                function log_pmf(long int: k) const -> T as "walnut_rt::stats::dist_log_pmf";
+                function cdf(long int: k) const -> T as "walnut_rt::stats::dist_cdf_k";
+                function survival(long int: k) const -> T as "walnut_rt::stats::dist_survival_k";
+                function between(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_between_k";
+                function outside(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_outside_k";
+
+                function exactly(long int: k) const -> T {
+                    return pmf(k);
+                } end function exactly
+
+                function at_most(long int: k) const -> T {
+                    return cdf(k);
+                } end function at_most
+
+                function less_than(long int: k) const -> T {
+                    return cdf(k - 1);
+                } end function less_than
+
+                function at_least(long int: k) const -> T {
+                    return survival(k - 1);
+                } end function at_least
+
+                function greater_than(long int: k) const -> T {
+                    return survival(k);
+                } end function greater_than
+            } end class Hypergeometric
+
+            template <typename T>
+            requires Real<T>
+            class NegativeBinomial as "walnut_rt::stats::NegativeBinomial" {
+            public:
+                constructor(const T&: successes, const T&: probability) as "walnut_rt::stats::make_negative_binomial<T>";
+                function mean() const -> T as "walnut_rt::stats::dist_mean";
+                function variance() const -> T as "walnut_rt::stats::dist_variance";
+                function standard_deviation() const -> T as "walnut_rt::stats::dist_sd";
+                function median() const -> T as "walnut_rt::stats::dist_median";
+                function quantile(const T&: p) const -> T as "walnut_rt::stats::dist_quantile";
+                function upper_quantile(const T&: p) const -> T as "walnut_rt::stats::dist_upper_quantile";
+                function is_valid() const -> bool as "walnut_rt::stats::dist_valid";
+                function pmf(long int: k) const -> T as "walnut_rt::stats::dist_pmf";
+                function log_pmf(long int: k) const -> T as "walnut_rt::stats::dist_log_pmf";
+                function cdf(long int: k) const -> T as "walnut_rt::stats::dist_cdf_k";
+                function survival(long int: k) const -> T as "walnut_rt::stats::dist_survival_k";
+                function between(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_between_k";
+                function outside(long int: low, long int: high) const -> T as "walnut_rt::stats::dist_outside_k";
+
+                function exactly(long int: k) const -> T {
+                    return pmf(k);
+                } end function exactly
+
+                function at_most(long int: k) const -> T {
+                    return cdf(k);
+                } end function at_most
+
+                function less_than(long int: k) const -> T {
+                    return cdf(k - 1);
+                } end function less_than
+
+                function at_least(long int: k) const -> T {
+                    return survival(k - 1);
+                } end function at_least
+
+                function greater_than(long int: k) const -> T {
+                    return survival(k);
+                } end function greater_than
+            } end class NegativeBinomial
+        } end extern
+
+        struct Condition {
+            string: name;
+            bool: met = true;
+            string: detail;
+        } end struct Condition
+
+        template <typename T>
+        struct Quartiles {
+            T: q1;
+            T: median;
+            T: q3;
+
+            function interquartile_range() const -> T {
+                return q3 - q1;
+            } end function interquartile_range
+        } end struct Quartiles
+
+        template <typename T>
+        struct FiveNumberSummary {
+            T: minimum;
+            T: q1;
+            T: median;
+            T: q3;
+            T: maximum;
+
+            function range() const -> T {
+                return maximum - minimum;
+            } end function range
+
+            function interquartile_range() const -> T {
+                return q3 - q1;
+            } end function interquartile_range
+        } end struct FiveNumberSummary
+
+        template <typename T>
+        struct LinearRegression {
+            T: slope;
+            T: intercept;
+            T: r;
+            T: r_squared;
+            T: residual_standard_error;
+            T: slope_standard_error;
+            T: intercept_standard_error;
+            long int: size = 0;
+
+            function predict(const T&: x) const -> T {
+                return intercept + slope * x;
+            } end function predict
+
+            function residual(const T&: x, const T&: y) const -> T {
+                return y - predict(x);
+            } end function residual
+        } end struct LinearRegression
+
+        template <typename T>
+        struct TestResult {
+            string: name;
+            T: statistic;
+            T: p_value;
+            T: degrees_of_freedom;
+            T: estimate;
+            T: null_value;
+            T: standard_error;
+            Tail: tail = Tail::two;
+            std::collections::Vector<Condition>: conditions;
+
+            function reject(const T&: alpha) const -> bool {
+                return p_value < alpha;
+            } end function reject
+
+            function fail_to_reject(const T&: alpha) const -> bool {
+                return !reject(alpha);
+            } end function fail_to_reject
+
+            function conditions_met() const -> bool {
+                for (const Condition&: c in conditions) {
+                    if (!c.met) then {
+                        return false;
+                    }
+                }
+                return true;
+            } end function conditions_met
+
+            function to_string() const -> string {
+                return static_cast<string>(`${name}: statistic ${std::core::to_string(statistic)}, p-value ${std::core::to_string(p_value)}`);
+            } end function to_string
+        } end struct TestResult
+
+        template <typename T>
+        struct ConfidenceInterval {
+            string: name;
+            T: estimate;
+            T: critical_value;
+            T: standard_error;
+            T: margin_of_error;
+            T: lower;
+            T: upper;
+            T: confidence;
+            T: degrees_of_freedom;
+            std::collections::Vector<Condition>: conditions;
+
+            function contains(const T&: value) const -> bool {
+                return value >= lower && value <= upper;
+            } end function contains
+
+            function width() const -> T {
+                return upper - lower;
+            } end function width
+
+            function conditions_met() const -> bool {
+                for (const Condition&: c in conditions) {
+                    if (!c.met) then {
+                        return false;
+                    }
+                }
+                return true;
+            } end function conditions_met
+
+            function to_string() const -> string {
+                return static_cast<string>(`${name}: (${std::core::to_string(lower)}, ${std::core::to_string(upper)})`);
+            } end function to_string
+        } end struct ConfidenceInterval
+
+        struct Proportion {
+            long int: successes = 0;
+            long int: size = 0;
+            long int: population = 0;
+
+            constructor() { }
+
+            constructor(long int: success_count, long int: sample_size) : successes = success_count, size = sample_size { }
+
+            constructor(long int: success_count, long int: sample_size, long int: population_size) : successes = success_count, size = sample_size, population = population_size { }
+
+            function with_population(long int: population_size) const -> Proportion {
+                return Proportion(successes, size, population_size);
+            } end function with_population
+
+            function failures() const -> long int {
+                return size - successes;
+            } end function failures
+
+            template <typename T = float>
+            function value() const -> T {
+                return static_cast<T>(successes) / static_cast<T>(size);
+            } end function value
+        } end struct Proportion
+
+        namespace detail {
+            template <typename T>
+            function conditions_of(const RawTest<T>&: raw) -> std::collections::Vector<Condition> {
+                std::collections::Vector<Condition>: out;
+                for (long int: i = 0; i < raw.condition_count(); i++) {
+                    Condition: c;
+                    c.name = raw.condition_name(i);
+                    c.met = raw.condition_met(i);
+                    c.detail = raw.condition_detail(i);
+                    out.push_back(c);
+                }
+                return out;
+            } end function conditions_of
+
+            template <typename T>
+            function conditions_of(const RawInterval<T>&: raw) -> std::collections::Vector<Condition> {
+                std::collections::Vector<Condition>: out;
+                for (long int: i = 0; i < raw.condition_count(); i++) {
+                    Condition: c;
+                    c.name = raw.condition_name(i);
+                    c.met = raw.condition_met(i);
+                    c.detail = raw.condition_detail(i);
+                    out.push_back(c);
+                }
+                return out;
+            } end function conditions_of
+
+            template <typename T>
+            function test(const RawTest<T>&: raw) -> TestResult<T> {
+                TestResult<T>: out;
+                out.name = raw.name();
+                out.statistic = raw.number(0);
+                out.p_value = raw.number(1);
+                out.degrees_of_freedom = raw.number(2);
+                out.estimate = raw.number(3);
+                out.null_value = raw.number(4);
+                out.standard_error = raw.number(5);
+                const int: code = raw.tail_code();
+                out.tail = code == 0 ? Tail::lower : (code == 1 ? Tail::upper : Tail::two);
+                out.conditions = conditions_of(raw);
+                return out;
+            } end function test
+
+            template <typename T>
+            function interval(const RawInterval<T>&: raw) -> ConfidenceInterval<T> {
+                ConfidenceInterval<T>: out;
+                out.name = raw.name();
+                out.estimate = raw.number(0);
+                out.critical_value = raw.number(1);
+                out.standard_error = raw.number(2);
+                out.margin_of_error = raw.number(3);
+                out.lower = raw.number(4);
+                out.upper = raw.number(5);
+                out.confidence = raw.number(6);
+                out.degrees_of_freedom = raw.number(7);
+                out.conditions = conditions_of(raw);
+                return out;
+            } end function interval
+
+            template <typename T>
+            function require_data(const std::collections::Vector<T>&: data, long int: at_least, const string&: what) -> void {
+                if (data.size() < at_least) then {
+                    throw std::errors::statistics_error(static_cast<string>(`${what} needs at least ${at_least} values, not ${data.size()}`));
+                }
+            } end function require_data
+
+            template <typename T>
+            function require_same_size(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y, const string&: what) -> void {
+                if (x.size() != y.size()) then {
+                    throw std::errors::statistics_error(static_cast<string>(`${what} needs two lists of the same size, not ${x.size()} and ${y.size()}`));
+                }
+            } end function require_same_size
+        } end namespace detail
+
+        template <typename T>
+        requires Real<T>
+        function sum(const std::collections::Vector<T>&: data) -> T {
+            return Native<T>::sum(data);
+        } end function sum
+
+        template <typename T>
+        requires Real<T>
+        function mean(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "mean()");
+            return Native<T>::mean(data);
+        } end function mean
+
+        template <typename T>
+        requires Real<T>
+        function average(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "average()");
+            return Native<T>::mean(data);
+        } end function average
+
+        template <typename T>
+        requires Real<T>
+        function median(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "median()");
+            return Native<T>::median(data);
+        } end function median
+
+        template <typename T>
+        requires Real<T>
+        function mode(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "mode()");
+            return Native<T>::mode(data);
+        } end function mode
+
+        template <typename T>
+        requires Real<T>
+        function minimum(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "minimum()");
+            return Native<T>::minimum(data);
+        } end function minimum
+
+        template <typename T>
+        requires Real<T>
+        function maximum(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "maximum()");
+            return Native<T>::maximum(data);
+        } end function maximum
+
+        template <typename T>
+        requires Real<T>
+        function range(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "range()");
+            return Native<T>::range(data);
+        } end function range
+
+        template <typename T>
+        requires Real<T>
+        function variance(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 2, "variance()");
+            return Native<T>::variance(data);
+        } end function variance
+
+        template <typename T>
+        requires Real<T>
+        function sample_variance(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 2, "sample_variance()");
+            return Native<T>::variance(data);
+        } end function sample_variance
+
+        template <typename T>
+        requires Real<T>
+        function population_variance(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "population_variance()");
+            return Native<T>::population_variance(data);
+        } end function population_variance
+
+        template <typename T>
+        requires Real<T>
+        function standard_deviation(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 2, "standard_deviation()");
+            return Native<T>::standard_deviation(data);
+        } end function standard_deviation
+
+        template <typename T>
+        requires Real<T>
+        function sample_standard_deviation(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 2, "sample_standard_deviation()");
+            return Native<T>::standard_deviation(data);
+        } end function sample_standard_deviation
+
+        template <typename T>
+        requires Real<T>
+        function population_standard_deviation(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "population_standard_deviation()");
+            return Native<T>::population_standard_deviation(data);
+        } end function population_standard_deviation
+
+        template <typename T>
+        requires Real<T>
+        function standard_error(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 2, "standard_error()");
+            return Native<T>::standard_error(data);
+        } end function standard_error
+
+        template <typename T>
+        requires Real<T>
+        function interquartile_range(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "interquartile_range()");
+            return Native<T>::interquartile_range(data);
+        } end function interquartile_range
+
+        template <typename T>
+        requires Real<T>
+        function geometric_mean(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "geometric_mean()");
+            return Native<T>::geometric_mean(data);
+        } end function geometric_mean
+
+        template <typename T>
+        requires Real<T>
+        function harmonic_mean(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "harmonic_mean()");
+            return Native<T>::harmonic_mean(data);
+        } end function harmonic_mean
+
+        template <typename T>
+        requires Real<T>
+        function mean_absolute_deviation(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "mean_absolute_deviation()");
+            return Native<T>::mean_absolute_deviation(data);
+        } end function mean_absolute_deviation
+
+        template <typename T>
+        requires Real<T>
+        function median_absolute_deviation(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "median_absolute_deviation()");
+            return Native<T>::median_absolute_deviation(data);
+        } end function median_absolute_deviation
+
+        template <typename T>
+        requires Real<T>
+        function coefficient_of_variation(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 2, "coefficient_of_variation()");
+            return Native<T>::coefficient_of_variation(data);
+        } end function coefficient_of_variation
+
+        template <typename T>
+        requires Real<T>
+        function sum_of_squares(const std::collections::Vector<T>&: data) -> T {
+            return Native<T>::sum_of_squares(data);
+        } end function sum_of_squares
+
+        template <typename T>
+        requires Real<T>
+        function root_mean_square(const std::collections::Vector<T>&: data) -> T {
+            detail::require_data(data, 1, "root_mean_square()");
+            return Native<T>::root_mean_square(data);
+        } end function root_mean_square
+
+        template <typename T>
+        requires Real<T>
+        function modes(const std::collections::Vector<T>&: data) -> std::collections::Vector<T> {
+            return Native<T>::modes(data);
+        } end function modes
+
+        template <typename T>
+        requires Real<T>
+        function quantile(const std::collections::Vector<T>&: data, const T&: p) -> T {
+            detail::require_data(data, 1, "quantile()");
+            if (p < static_cast<T>(0) || p > static_cast<T>(1)) then {
+                throw std::errors::statistics_error("quantile() needs p between 0 and 1");
+            }
+            return Native<T>::quantile(data, p);
+        } end function quantile
+
+        template <typename T>
+        requires Real<T>
+        function percentile(const std::collections::Vector<T>&: data, const T&: percent) -> T {
+            detail::require_data(data, 1, "percentile()");
+            if (percent < static_cast<T>(0) || percent > static_cast<T>(100)) then {
+                throw std::errors::statistics_error("percentile() needs a percent between 0 and 100");
+            }
+            return Native<T>::percentile(data, percent);
+        } end function percentile
+
+        template <typename T>
+        requires Real<T>
+        function quartiles(const std::collections::Vector<T>&: data) -> Quartiles<T> {
+            detail::require_data(data, 1, "quartiles()");
+            const std::collections::Vector<T>: q = Native<T>::quartiles(data);
+            Quartiles<T>: out;
+            out.q1 = q[0];
+            out.median = q[1];
+            out.q3 = q[2];
+            return out;
+        } end function quartiles
+
+        template <typename T>
+        requires Real<T>
+        function five_number_summary(const std::collections::Vector<T>&: data) -> FiveNumberSummary<T> {
+            detail::require_data(data, 1, "five_number_summary()");
+            const std::collections::Vector<T>: q = Native<T>::five_numbers(data);
+            FiveNumberSummary<T>: out;
+            out.minimum = q[0];
+            out.q1 = q[1];
+            out.median = q[2];
+            out.q3 = q[3];
+            out.maximum = q[4];
+            return out;
+        } end function five_number_summary
+
+        template <typename T>
+        requires Real<T>
+        function outliers(const std::collections::Vector<T>&: data, const T&: fence = static_cast<T>(1.5)) -> std::collections::Vector<T> {
+            return Native<T>::outliers(data, fence);
+        } end function outliers
+
+        template <typename T>
+        requires Real<T>
+        function skewness(const std::collections::Vector<T>&: data, bool: sample = true) -> T {
+            detail::require_data(data, 3, "skewness()");
+            return Native<T>::skewness(data, sample);
+        } end function skewness
+
+        template <typename T>
+        requires Real<T>
+        function kurtosis(const std::collections::Vector<T>&: data, bool: sample = true) -> T {
+            detail::require_data(data, 4, "kurtosis()");
+            return Native<T>::kurtosis(data, sample);
+        } end function kurtosis
+
+        template <typename T>
+        requires Real<T>
+        function excess_kurtosis(const std::collections::Vector<T>&: data, bool: sample = true) -> T {
+            detail::require_data(data, 4, "excess_kurtosis()");
+            return Native<T>::excess_kurtosis(data, sample);
+        } end function excess_kurtosis
+
+        template <typename T>
+        requires Real<T>
+        function pearson_kurtosis(const std::collections::Vector<T>&: data, bool: sample = true) -> T {
+            detail::require_data(data, 4, "pearson_kurtosis()");
+            return Native<T>::pearson_kurtosis(data, sample);
+        } end function pearson_kurtosis
+
+        template <typename T>
+        requires Real<T>
+        function covariance(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y, bool: sample = true) -> T {
+            detail::require_same_size(x, y, "covariance()");
+            detail::require_data(x, 2, "covariance()");
+            return Native<T>::covariance(x, y, sample);
+        } end function covariance
+
+        template <typename T>
+        requires Real<T>
+        function correlation(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y) -> T {
+            detail::require_same_size(x, y, "correlation()");
+            detail::require_data(x, 2, "correlation()");
+            return Native<T>::correlation(x, y);
+        } end function correlation
+
+        template <typename T>
+        requires Real<T>
+        function z_score(const T&: x, const T&: mean, const T&: standard_deviation) -> T {
+            return Native<T>::z_score(x, mean, standard_deviation);
+        } end function z_score
+
+        template <typename T>
+        requires Real<T>
+        function z_scores(const std::collections::Vector<T>&: data, bool: sample = true) -> std::collections::Vector<T> {
+            detail::require_data(data, 2, "z_scores()");
+            return Native<T>::z_scores(data, sample);
+        } end function z_scores
+
+        template <typename T>
+        requires Real<T>
+        function weighted_mean(const std::collections::Vector<T>&: data, const std::collections::Vector<T>&: weights) -> T {
+            detail::require_same_size(data, weights, "weighted_mean()");
+            detail::require_data(data, 1, "weighted_mean()");
+            return Native<T>::weighted_mean(data, weights);
+        } end function weighted_mean
+
+        template <typename T>
+        requires Real<T>
+        function linear_regression(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y) -> LinearRegression<T> {
+            detail::require_same_size(x, y, "linear_regression()");
+            detail::require_data(x, 2, "linear_regression()");
+            const std::collections::Vector<T>: v = Native<T>::regression(x, y);
+            LinearRegression<T>: out;
+            out.slope = v[0];
+            out.intercept = v[1];
+            out.r = v[2];
+            out.r_squared = v[3];
+            out.residual_standard_error = v[4];
+            out.slope_standard_error = v[5];
+            out.intercept_standard_error = v[6];
+            out.size = x.size();
+            return out;
+        } end function linear_regression
+
+        template <typename T>
+        requires Real<T>
+        function sample_of(const std::collections::Vector<T>&: data) -> Sample<T> {
+            return Sample<T>::of(data);
+        } end function sample_of
+
+        template <typename T>
+        requires Real<T>
+        function sample_summary(const T&: mean, const T&: standard_deviation, long int: size) -> Sample<T> {
+            return Sample<T>::from_summary(mean, standard_deviation, size);
+        } end function sample_summary
+
+        template <typename T>
+        requires Real<T>
+        function differences_of(const std::collections::Vector<T>&: before, const std::collections::Vector<T>&: after) -> Sample<T> {
+            detail::require_same_size(before, after, "differences_of()");
+            return Sample<T>::differences(before, after);
+        } end function differences_of
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_t_test(const Sample<T>&: sample, const T&: null_mean, Tail: tail = Tail::two) -> TestResult<T> {
+            return detail::test(Native<T>::one_mean_t_test(sample, null_mean, static_cast<int>(tail)));
+        } end function one_mean_t_test
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_t_test(const std::collections::Vector<T>&: data, const T&: null_mean, Tail: tail = Tail::two) -> TestResult<T> {
+            return one_mean_t_test(sample_of(data), null_mean, tail);
+        } end function one_mean_t_test
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_z_test(const Sample<T>&: sample, const T&: sigma, const T&: null_mean, Tail: tail = Tail::two) -> TestResult<T> {
+            return detail::test(Native<T>::one_mean_z_test(sample, sigma, null_mean, static_cast<int>(tail)));
+        } end function one_mean_z_test
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_z_test(const std::collections::Vector<T>&: data, const T&: sigma, const T&: null_mean, Tail: tail = Tail::two) -> TestResult<T> {
+            return one_mean_z_test(sample_of(data), sigma, null_mean, tail);
+        } end function one_mean_z_test
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_t_test(const Sample<T>&: a, const Sample<T>&: b, const T&: null_difference = static_cast<T>(0), Tail: tail = Tail::two, Variances: variances = Variances::unequal) -> TestResult<T> {
+            return detail::test(Native<T>::two_mean_t_test(a, b, null_difference, static_cast<int>(tail), static_cast<int>(variances)));
+        } end function two_mean_t_test
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_t_test(const std::collections::Vector<T>&: a, const std::collections::Vector<T>&: b, const T&: null_difference = static_cast<T>(0), Tail: tail = Tail::two, Variances: variances = Variances::unequal) -> TestResult<T> {
+            return two_mean_t_test(sample_of(a), sample_of(b), null_difference, tail, variances);
+        } end function two_mean_t_test
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_z_test(const Sample<T>&: a, const T&: sigma_a, const Sample<T>&: b, const T&: sigma_b, const T&: null_difference = static_cast<T>(0), Tail: tail = Tail::two) -> TestResult<T> {
+            return detail::test(Native<T>::two_mean_z_test(a, sigma_a, b, sigma_b, null_difference, static_cast<int>(tail)));
+        } end function two_mean_z_test
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_z_test(const std::collections::Vector<T>&: a, const T&: sigma_a, const std::collections::Vector<T>&: b, const T&: sigma_b, const T&: null_difference = static_cast<T>(0), Tail: tail = Tail::two) -> TestResult<T> {
+            return two_mean_z_test(sample_of(a), sigma_a, sample_of(b), sigma_b, null_difference, tail);
+        } end function two_mean_z_test
+
+        template <typename T>
+        requires Real<T>
+        function paired_t_test(const Sample<T>&: differences, const T&: null_difference = static_cast<T>(0), Tail: tail = Tail::two) -> TestResult<T> {
+            return detail::test(Native<T>::paired_t_test(differences, null_difference, static_cast<int>(tail)));
+        } end function paired_t_test
+
+        template <typename T>
+        requires Real<T>
+        function paired_t_test(const std::collections::Vector<T>&: before, const std::collections::Vector<T>&: after, const T&: null_difference = static_cast<T>(0), Tail: tail = Tail::two) -> TestResult<T> {
+            return paired_t_test(differences_of(before, after), null_difference, tail);
+        } end function paired_t_test
+
+        template <typename T = float>
+        requires Real<T>
+        function one_proportion_z_test(const Proportion&: p, const T&: null_proportion, Tail: tail = Tail::two) -> TestResult<T> {
+            return detail::test(Native<T>::one_proportion_z_test(p.successes, p.size, p.population, null_proportion, static_cast<int>(tail)));
+        } end function one_proportion_z_test
+
+        template <typename T = float>
+        requires Real<T>
+        function two_proportion_z_test(const Proportion&: a, const Proportion&: b, Tail: tail = Tail::two) -> TestResult<T> {
+            return detail::test(Native<T>::two_proportion_z_test(a.successes, a.size, a.population, b.successes, b.size, b.population, static_cast<int>(tail)));
+        } end function two_proportion_z_test
+
+        template <typename T>
+        requires Real<T>
+        function chi_squared_goodness_of_fit_test(const std::collections::Vector<T>&: observed, const std::collections::Vector<T>&: expected, Expected: kind = Expected::infer) -> TestResult<T> {
+            detail::require_same_size(observed, expected, "chi_squared_goodness_of_fit_test()");
+            return detail::test(Native<T>::goodness_of_fit(observed, expected, static_cast<int>(kind)));
+        } end function chi_squared_goodness_of_fit_test
+
+        template <typename T>
+        requires Real<T>
+        function chi_squared_independence_test(const std::collections::Vector<std::collections::Vector<T>>&: table) -> TestResult<T> {
+            return detail::test(Native<T>::independence(table));
+        } end function chi_squared_independence_test
+
+        template <typename T>
+        requires Real<T>
+        function chi_squared_homogeneity_test(const std::collections::Vector<std::collections::Vector<T>>&: table) -> TestResult<T> {
+            return detail::test(Native<T>::homogeneity(table));
+        } end function chi_squared_homogeneity_test
+
+        template <typename T>
+        requires Real<T>
+        function slope_t_test(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y, const T&: null_slope = static_cast<T>(0), Tail: tail = Tail::two) -> TestResult<T> {
+            detail::require_same_size(x, y, "slope_t_test()");
+            return detail::test(Native<T>::slope_t_test(x, y, null_slope, static_cast<int>(tail)));
+        } end function slope_t_test
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_t_interval(const Sample<T>&: sample, const T&: confidence) -> ConfidenceInterval<T> {
+            return detail::interval(Native<T>::one_mean_t_interval(sample, confidence));
+        } end function one_mean_t_interval
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_t_interval(const std::collections::Vector<T>&: data, const T&: confidence) -> ConfidenceInterval<T> {
+            return one_mean_t_interval(sample_of(data), confidence);
+        } end function one_mean_t_interval
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_z_interval(const Sample<T>&: sample, const T&: sigma, const T&: confidence) -> ConfidenceInterval<T> {
+            return detail::interval(Native<T>::one_mean_z_interval(sample, sigma, confidence));
+        } end function one_mean_z_interval
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_z_interval(const std::collections::Vector<T>&: data, const T&: sigma, const T&: confidence) -> ConfidenceInterval<T> {
+            return one_mean_z_interval(sample_of(data), sigma, confidence);
+        } end function one_mean_z_interval
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_t_interval(const Sample<T>&: a, const Sample<T>&: b, const T&: confidence, Variances: variances = Variances::unequal) -> ConfidenceInterval<T> {
+            return detail::interval(Native<T>::two_mean_t_interval(a, b, confidence, static_cast<int>(variances)));
+        } end function two_mean_t_interval
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_t_interval(const std::collections::Vector<T>&: a, const std::collections::Vector<T>&: b, const T&: confidence, Variances: variances = Variances::unequal) -> ConfidenceInterval<T> {
+            return two_mean_t_interval(sample_of(a), sample_of(b), confidence, variances);
+        } end function two_mean_t_interval
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_z_interval(const Sample<T>&: a, const T&: sigma_a, const Sample<T>&: b, const T&: sigma_b, const T&: confidence) -> ConfidenceInterval<T> {
+            return detail::interval(Native<T>::two_mean_z_interval(a, sigma_a, b, sigma_b, confidence));
+        } end function two_mean_z_interval
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_z_interval(const std::collections::Vector<T>&: a, const T&: sigma_a, const std::collections::Vector<T>&: b, const T&: sigma_b, const T&: confidence) -> ConfidenceInterval<T> {
+            return two_mean_z_interval(sample_of(a), sigma_a, sample_of(b), sigma_b, confidence);
+        } end function two_mean_z_interval
+
+        template <typename T>
+        requires Real<T>
+        function paired_t_interval(const Sample<T>&: differences, const T&: confidence) -> ConfidenceInterval<T> {
+            return detail::interval(Native<T>::paired_t_interval(differences, confidence));
+        } end function paired_t_interval
+
+        template <typename T>
+        requires Real<T>
+        function paired_t_interval(const std::collections::Vector<T>&: before, const std::collections::Vector<T>&: after, const T&: confidence) -> ConfidenceInterval<T> {
+            return paired_t_interval(differences_of(before, after), confidence);
+        } end function paired_t_interval
+
+        template <typename T>
+        requires Real<T>
+        function variance_interval(const Sample<T>&: sample, const T&: confidence) -> ConfidenceInterval<T> {
+            return detail::interval(Native<T>::variance_interval(sample, confidence));
+        } end function variance_interval
+
+        template <typename T>
+        requires Real<T>
+        function variance_interval(const std::collections::Vector<T>&: data, const T&: confidence) -> ConfidenceInterval<T> {
+            return variance_interval(sample_of(data), confidence);
+        } end function variance_interval
+
+        template <typename T>
+        requires Real<T>
+        function slope_t_interval(const std::collections::Vector<T>&: x, const std::collections::Vector<T>&: y, const T&: confidence) -> ConfidenceInterval<T> {
+            detail::require_same_size(x, y, "slope_t_interval()");
+            return detail::interval(Native<T>::slope_t_interval(x, y, confidence));
+        } end function slope_t_interval
+
+        template <typename T = float>
+        requires Real<T>
+        function one_proportion_z_interval(const Proportion&: p, const T&: confidence) -> ConfidenceInterval<T> {
+            return detail::interval(Native<T>::one_proportion_z_interval(p.successes, p.size, p.population, confidence));
+        } end function one_proportion_z_interval
+
+        template <typename T = float>
+        requires Real<T>
+        function two_proportion_z_interval(const Proportion&: a, const Proportion&: b, const T&: confidence) -> ConfidenceInterval<T> {
+            return detail::interval(Native<T>::two_proportion_z_interval(a.successes, a.size, a.population, b.successes, b.size, b.population, confidence));
+        } end function two_proportion_z_interval
+
+        template <typename T>
+        requires Real<T>
+        function critical_z(const T&: alpha, Tail: tail = Tail::two) -> T {
+            return Native<T>::critical_z(alpha, static_cast<int>(tail));
+        } end function critical_z
+
+        template <typename T>
+        requires Real<T>
+        function critical_t(const T&: alpha, const T&: degrees_of_freedom, Tail: tail = Tail::two) -> T {
+            return Native<T>::critical_t(alpha, degrees_of_freedom, static_cast<int>(tail));
+        } end function critical_t
+
+        template <typename T>
+        requires Real<T>
+        function critical_chi_squared(const T&: alpha, const T&: degrees_of_freedom) -> T {
+            return Native<T>::critical_chi_squared(alpha, degrees_of_freedom);
+        } end function critical_chi_squared
+
+        template <typename T>
+        requires Real<T>
+        function critical_f(const T&: alpha, const T&: numerator_df, const T&: denominator_df) -> T {
+            return Native<T>::critical_f(alpha, numerator_df, denominator_df);
+        } end function critical_f
+
+        template <typename T>
+        requires Real<T>
+        function z_star(const T&: confidence) -> T {
+            return Native<T>::z_star(confidence);
+        } end function z_star
+
+        template <typename T>
+        requires Real<T>
+        function t_star(const T&: confidence, const T&: degrees_of_freedom) -> T {
+            return Native<T>::t_star(confidence, degrees_of_freedom);
+        } end function t_star
+
+        template <typename T>
+        requires Real<T>
+        function z_statistic(const T&: estimate, const T&: null_value, const T&: standard_error) -> T {
+            return Native<T>::z_statistic(estimate, null_value, standard_error);
+        } end function z_statistic
+
+        template <typename T>
+        requires Real<T>
+        function t_statistic(const Sample<T>&: sample, const T&: null_mean) -> T {
+            return Native<T>::t_statistic(sample, null_mean);
+        } end function t_statistic
+
+        template <typename T>
+        requires Real<T>
+        function t_statistic(const std::collections::Vector<T>&: data, const T&: null_mean) -> T {
+            return Native<T>::t_statistic(sample_of(data), null_mean);
+        } end function t_statistic
+
+        template <typename T>
+        requires Real<T>
+        function welch_degrees_of_freedom(const Sample<T>&: a, const Sample<T>&: b) -> T {
+            return Native<T>::welch_df(a, b);
+        } end function welch_degrees_of_freedom
+
+        template <typename T>
+        requires Real<T>
+        function welch_degrees_of_freedom(const std::collections::Vector<T>&: a, const std::collections::Vector<T>&: b) -> T {
+            return Native<T>::welch_df(sample_of(a), sample_of(b));
+        } end function welch_degrees_of_freedom
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_z_test_power(const T&: null_mean, const T&: true_mean, const T&: sigma, long int: size, const T&: alpha, Tail: tail = Tail::two) -> T {
+            return Native<T>::one_mean_z_power(null_mean, true_mean, sigma, size, alpha, static_cast<int>(tail));
+        } end function one_mean_z_test_power
+
+        template <typename T>
+        requires Real<T>
+        function one_mean_t_test_power(const T&: null_mean, const T&: true_mean, const T&: standard_deviation, long int: size, const T&: alpha, Tail: tail = Tail::two) -> T {
+            return Native<T>::one_mean_t_power(null_mean, true_mean, standard_deviation, size, alpha, static_cast<int>(tail));
+        } end function one_mean_t_test_power
+
+        template <typename T>
+        requires Real<T>
+        function paired_t_test_power(const T&: null_difference, const T&: true_difference, const T&: standard_deviation, long int: size, const T&: alpha, Tail: tail = Tail::two) -> T {
+            return Native<T>::one_mean_t_power(null_difference, true_difference, standard_deviation, size, alpha, static_cast<int>(tail));
+        } end function paired_t_test_power
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_z_test_power(const T&: null_difference, const T&: true_difference, const T&: sigma_a, long int: size_a, const T&: sigma_b, long int: size_b, const T&: alpha, Tail: tail = Tail::two) -> T {
+            return Native<T>::two_mean_z_power(null_difference, true_difference, sigma_a, size_a, sigma_b, size_b, alpha, static_cast<int>(tail));
+        } end function two_mean_z_test_power
+
+        template <typename T>
+        requires Real<T>
+        function two_mean_t_test_power(const T&: null_difference, const T&: true_difference, const T&: sd_a, long int: size_a, const T&: sd_b, long int: size_b, const T&: alpha, Tail: tail = Tail::two, Variances: variances = Variances::unequal) -> T {
+            return Native<T>::two_mean_t_power(null_difference, true_difference, sd_a, size_a, sd_b, size_b, alpha, static_cast<int>(tail), static_cast<int>(variances));
+        } end function two_mean_t_test_power
+
+        template <typename T>
+        requires Real<T>
+        function one_proportion_z_test_power(const T&: null_proportion, const T&: true_proportion, long int: size, const T&: alpha, Tail: tail = Tail::two) -> T {
+            return Native<T>::one_proportion_z_power(null_proportion, true_proportion, size, alpha, static_cast<int>(tail));
+        } end function one_proportion_z_test_power
+
+        template <typename T>
+        requires Real<T>
+        function two_proportion_z_test_power(const T&: p_a, const T&: p_b, long int: size_a, long int: size_b, const T&: alpha, Tail: tail = Tail::two) -> T {
+            return Native<T>::two_proportion_z_power(p_a, p_b, size_a, size_b, alpha, static_cast<int>(tail));
+        } end function two_proportion_z_test_power
+
+        template <typename T>
+        requires Real<T>
+        function sample_size_for_mean(const T&: margin, const T&: sigma, const T&: confidence) -> long int {
+            return Native<T>::size_for_mean(margin, sigma, confidence);
+        } end function sample_size_for_mean
+
+        template <typename T>
+        requires Real<T>
+        function sample_size_for_proportion(const T&: margin, const T&: confidence, const T&: p_guess = static_cast<T>(0.5)) -> long int {
+            return Native<T>::size_for_proportion(margin, confidence, p_guess);
+        } end function sample_size_for_proportion
+
+        template <typename T>
+        requires Real<T>
+        function probability_of_all(const std::collections::Vector<T>&: probabilities) -> T {
+            T: total = static_cast<T>(1);
+            for (const T&: p in probabilities) {
+                total *= p;
+            }
+            return total;
+        } end function probability_of_all
+
+        template <typename T>
+        requires Real<T>
+        function probability_of_any(const std::collections::Vector<T>&: probabilities) -> T {
+            T: none = static_cast<T>(1);
+            for (const T&: p in probabilities) {
+                none *= static_cast<T>(1) - p;
+            }
+            return static_cast<T>(1) - none;
+        } end function probability_of_any
+
+        template <typename T>
+        requires Real<T>
+        function probability_of_union(const T&: a, const T&: b, const T&: both) -> T {
+            return a + b - both;
+        } end function probability_of_union
+
+        template <typename T>
+        requires Real<T>
+        function conditional_probability(const T&: both, const T&: given) -> T {
+            return both / given;
+        } end function conditional_probability
+
+        template <typename T>
+        requires Real<T>
+        function bayes(const T&: likelihood, const T&: prior, const T&: evidence) -> T {
+            return likelihood * prior / evidence;
+        } end function bayes
+
+        template <typename T>
+        requires Real<T>
+        function complement(const T&: p) -> T {
+            return static_cast<T>(1) - p;
+        } end function complement
+    } end namespace statistics
+} end namespace std

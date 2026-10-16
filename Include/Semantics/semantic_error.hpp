@@ -57,11 +57,16 @@ public:
         std::string_view flag_list
     );
 
+    static std::string conversion_hint(const std::string& from, const std::string& to);
+
+    static std::string operands_hint(std::string_view op, const std::string& lhs, const std::string& rhs);
+
     static SemanticError unresolved_name(
         ErrorReporter& reporter,
         FileId file_id,
         std::size_t line,
-        std::string_view name
+        std::string_view name,
+        const std::string& suggestion = std::string()
     );
 
     static SemanticError duplicate_destructor(
@@ -70,6 +75,10 @@ public:
 
     static SemanticError no_matching_overload(
         ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name
+    );
+
+    static SemanticError no_matching_overload(
+        ErrorReporter& reporter, FileId file_id, std::size_t line, std::string_view name, const std::string& details
     );
 
     static SemanticError ambiguous_call(

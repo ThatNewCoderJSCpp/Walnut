@@ -1,4 +1,5 @@
 #include "Driver/linker.hpp"
+#include "Semantics/prelude.hpp"
 
 namespace walnut {
 namespace driver {
@@ -155,8 +156,8 @@ std::string Linker::nearest_export(const UnitFrontResult& tgt, const std::vector
         const std::string have_leaf  = lowered(parts.back());
         std::size_t score;
 
-        if (have_lower == want_lower)      score = 0;   // case-only difference
-        else if (have_leaf == leaf_lower)  score = 1;   // right leaf, wrong namespace
+        if (have_lower == want_lower)      score = 0;  
+        else if (have_leaf == leaf_lower)  score = 1;  
         else {
             const std::size_t d = edit_distance(have_leaf, leaf_lower, tol);
             if (d > tol) continue;
@@ -216,6 +217,7 @@ bool Linker::try_bind(const Pending& p) {
 
     semantics::Symbol* ph = semantics::resolve_qualified(imp->root, local_parts(it));
     if (!ph || !ph->is_imported) return true;
+    if (it.library_module) return bind_library_alias(p, it, ph);
     if (it.kind == IK::File) return bind_file(p, ph, *tgt);
     if (it.kind == IK::Module) return bind_module(p, it, ph, *tgt);
     return bind_named(p, it, ph, *tgt);
@@ -316,6 +318,21 @@ bool Linker::bind_module(const Pending& p, const nodes::ImportExportItem& it, se
 
     ph->inner_scope = ns;
     m_bound_files.insert(ph);
+    return true;
+}
+
+bool Linker::bind_library_alias(const Pending& p, const nodes::ImportExportItem& it, semantics::Symbol* ph) {
+    if (ph->import_target) return true;
+    const std::string_view name = it.module_parts.empty() ? std::string_view{} : it.module_parts.back();
+    semantics::Symbol* lib = semantics::resolve_qualified(semantics::prelude_scope(), { "std", name });
+
+    if (!lib || !lib->inner_scope) {
+        report(p, "the library module '" + std::string(name) + "' doesn't define 'std::" + std::string(name) + "'");
+        return true;
+    }
+
+    ph->import_target = lib;
+    ph->inner_scope   = lib->inner_scope;
     return true;
 }
 

@@ -25,6 +25,7 @@ public:
     semantics::Symbol* resolved = nullptr;  
     semantics::Type* canonical = nullptr;    
     bool has_angle_args = false;
+    bool pack_expansion = false;
 
 public:
     TypeInfo() = default;

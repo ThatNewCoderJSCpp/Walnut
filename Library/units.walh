@@ -1,0 +1,2800 @@
+import module.math
+
+namespace std {
+    namespace units {
+        template <int L, int M, int T, int I, int K, int N, int J, int A>
+        struct Dims {
+        } end struct Dims
+
+        namespace kind {
+            struct generic {
+                static constexpr bool: is_generic = true;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 0, 0, 0, 0, 0>;
+                using parent = generic;
+                using interval = generic;
+            } end struct generic
+
+            struct none {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 0, 0, 0, 0, 0>;
+                using parent = none;
+                using interval = none;
+            } end struct none
+        } end namespace kind
+
+        namespace detail {
+            template <typename Q, int L, int M, int T, int I, int K, int N, int J, int A>
+            constexpr bool: kind_matches = Q::is_generic || std::traits::is_same<Q::dims, Dims<L, M, T, I, K, N, J, A>>;
+
+            template <typename X, typename Y>
+            constexpr bool: kinds_compatible = std::traits::is_same<X, Y> || X::is_generic || Y::is_generic || std::traits::is_same<X::parent, Y> || std::traits::is_same<X, Y::parent>;
+
+            template <typename From, typename To>
+            constexpr bool: implicit_kind = std::traits::is_same<From, To> || From::is_generic || (To::is_generic && !From::is_affine) || (std::traits::is_same<To, From::parent> && !From::is_affine);
+
+            template <typename X, typename Y>
+            using common_kind = std::traits::conditional<std::traits::is_same<X, Y>, X,
+                                std::traits::conditional<X::is_generic, Y,
+                                std::traits::conditional<Y::is_generic, X,
+                                std::traits::conditional<std::traits::is_same<X::parent, Y>, Y,
+                                std::traits::conditional<std::traits::is_same<X, Y::parent>, X, kind::none>>>>>;
+
+            template <typename P, typename Q>
+            constexpr bool: offsets_point = Q::is_generic || std::traits::is_same<Q, P::interval> || std::traits::is_same<Q, P::parent>;
+
+            template <typename X, typename Y>
+            using add_kind = std::traits::conditional<X::is_affine && Y::is_affine, kind::none,
+                             std::traits::conditional<X::is_affine, std::traits::conditional<offsets_point<X, Y>, X, kind::none>,
+                             std::traits::conditional<Y::is_affine, std::traits::conditional<offsets_point<Y, X>, Y, kind::none>,
+                             common_kind<X, Y>>>>;
+
+            template <typename X, typename Y>
+            using sub_kind = std::traits::conditional<X::is_affine && Y::is_affine, std::traits::conditional<std::traits::is_same<X, Y>, X::interval, kind::none>,
+                             std::traits::conditional<X::is_affine, std::traits::conditional<offsets_point<X, Y>, X, kind::none>,
+                             std::traits::conditional<Y::is_affine, kind::none,
+                             common_kind<X, Y>>>>;
+
+            template <typename R>
+            using or_generic = std::traits::conditional<std::traits::is_same<R, kind::none>, kind::generic, R>;
+
+            template <typename Q, int P>
+            struct pow_kind_of {
+                using type = std::traits::conditional<P == 1, Q, kind::generic>;
+            } end struct pow_kind_of
+
+            template <typename Q, int P>
+            using pow_kind = pow_kind_of<Q, P>::type;
+
+            function tidy(float: x) -> float {
+                if (x == 0.0 || x != x) then {
+                    return x;
+                }
+                const float: m = std::math::abs(x);
+                if (m > 1.0e4000 || m < 1.0e-4000) then {
+                    return x;
+                }
+                const long int: k = 32 - static_cast<long int>(std::math::floor(std::math::log10(m)));
+                if (k >= 0) then {
+                    const float: p = std::math::pow(10.0, k);
+                    return std::math::round(x * p) / p;
+                }
+                const float: p = std::math::pow(10.0, -k);
+                return std::math::round(x / p) * p;
+            } end function tidy
+
+            function power_text(const string&: symbol, int: p) -> string {
+                if (p == 1) then {
+                    return symbol;
+                }
+                return static_cast<string>(`${symbol}^${p}`);
+            } end function power_text
+
+            function dimension_text(int: ll, int: mm, int: tt, int: ii, int: kk, int: nn, int: jj, int: aa) -> string {
+                string: out = "";
+                if (ll != 0) then {
+                    if (out.length() > 0) then {
+                        out = out + "·";
+                    }
+                    out = out + power_text("m", ll);
+                }
+                if (mm != 0) then {
+                    if (out.length() > 0) then {
+                        out = out + "·";
+                    }
+                    out = out + power_text("kg", mm);
+                }
+                if (tt != 0) then {
+                    if (out.length() > 0) then {
+                        out = out + "·";
+                    }
+                    out = out + power_text("s", tt);
+                }
+                if (ii != 0) then {
+                    if (out.length() > 0) then {
+                        out = out + "·";
+                    }
+                    out = out + power_text("A", ii);
+                }
+                if (kk != 0) then {
+                    if (out.length() > 0) then {
+                        out = out + "·";
+                    }
+                    out = out + power_text("K", kk);
+                }
+                if (nn != 0) then {
+                    if (out.length() > 0) then {
+                        out = out + "·";
+                    }
+                    out = out + power_text("mol", nn);
+                }
+                if (jj != 0) then {
+                    if (out.length() > 0) then {
+                        out = out + "·";
+                    }
+                    out = out + power_text("cd", jj);
+                }
+                if (aa != 0) then {
+                    if (out.length() > 0) then {
+                        out = out + "·";
+                    }
+                    out = out + power_text("rad", aa);
+                }
+                return out;
+            } end function dimension_text
+        } end namespace detail
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q = kind::generic>
+        struct Unit {
+            static_assert(detail::kind_matches<Q, L, M, T, I, K, N, J, A>, "std::units::Unit: the kind's dimension doesn't match the unit's dimension");
+
+            using kind_type = Q;
+            using dims = Dims<L, M, T, I, K, N, J, A>;
+            float: scale = 1.0;
+            float: offset = 0.0;
+
+            function to_base(float: x) const -> float {
+                return x * scale + offset;
+            } end function to_base
+
+            function from_base(float: b) const -> float {
+                return (b - offset) / scale;
+            } end function from_base
+
+            function has_offset() const -> bool {
+                return offset != 0.0;
+            } end function has_offset
+
+            function as_generic() const -> Unit<L, M, T, I, K, N, J, A> {
+                return Unit<L, M, T, I, K, N, J, A>{scale, offset};
+            } end function as_generic
+
+            template <int P>
+            function pow() const -> Unit<L * P, M * P, T * P, I * P, K * P, N * P, J * P, A * P, detail::pow_kind<Q, P>> {
+                static_assert(!Q::is_affine || P == 1, "std::units: a temperature point (celsius, fahrenheit...) can't be raised to a power; use a temperature interval unit or kelvin");
+                float: s = 1.0;
+                if (P >= 0) then {
+                    for (int: i = 0; i < P; i++) {
+                        s = s * scale;
+                    }
+                } else then {
+                    for (int: i = 0; i < -P; i++) {
+                        s = s / scale;
+                    }
+                }
+                return Unit<L * P, M * P, T * P, I * P, K * P, N * P, J * P, A * P, detail::pow_kind<Q, P>>{s, 0.0};
+            } end function pow
+
+            static function dimension_text() -> string {
+                return detail::dimension_text(L, M, T, I, K, N, J, A);
+            } end function dimension_text
+
+            template <typename Q2>
+            requires (!std::traits::is_same<Q, Q2> && detail::implicit_kind<Q, Q2>)
+            operator(Unit<L, M, T, I, K, N, J, A, Q2>) function() const {
+                return Unit<L, M, T, I, K, N, J, A, Q2>{scale, offset};
+            }
+        } end struct Unit
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q = kind::generic>
+        struct ReciprocalUnit {
+            static_assert(detail::kind_matches<Q, L, M, T, I, K, N, J, A>, "std::units::ReciprocalUnit: the kind's dimension doesn't match the unit's dimension");
+
+            using kind_type = Q;
+            using dims = Dims<L, M, T, I, K, N, J, A>;
+            float: scale = 1.0;
+
+            function to_base(float: x) const -> float {
+                return 1.0 / (x * scale);
+            } end function to_base
+
+            function from_base(float: b) const -> float {
+                return 1.0 / (b * scale);
+            } end function from_base
+
+            function has_offset() const -> bool {
+                return false;
+            } end function has_offset
+
+            static function dimension_text() -> string {
+                return detail::dimension_text(L, M, T, I, K, N, J, A);
+            } end function dimension_text
+
+            template <typename Q2>
+            requires (!std::traits::is_same<Q, Q2> && detail::implicit_kind<Q, Q2>)
+            operator(ReciprocalUnit<L, M, T, I, K, N, J, A, Q2>) function() const {
+                return ReciprocalUnit<L, M, T, I, K, N, J, A, Q2>{scale};
+            }
+        } end struct ReciprocalUnit
+
+        template <int L1, int M1, int T1, int I1, int K1, int N1, int J1, int A1, typename Q1, int L2, int M2, int T2, int I2, int K2, int N2, int J2, int A2, typename Q2>
+        operator(*) function(const Unit<L1, M1, T1, I1, K1, N1, J1, A1, Q1>&: a, const Unit<L2, M2, T2, I2, K2, N2, J2, A2, Q2>&: b) -> Unit<L1 + L2, M1 + M2, T1 + T2, I1 + I2, K1 + K2, N1 + N2, J1 + J2, A1 + A2> {
+            static_assert(!Q1::is_affine && !Q2::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be multiplied; use a temperature interval unit or kelvin");
+            return Unit<L1 + L2, M1 + M2, T1 + T2, I1 + I2, K1 + K2, N1 + N2, J1 + J2, A1 + A2>{a.scale * b.scale, 0.0};
+        }
+
+        template <int L1, int M1, int T1, int I1, int K1, int N1, int J1, int A1, typename Q1, int L2, int M2, int T2, int I2, int K2, int N2, int J2, int A2, typename Q2>
+        operator(/) function(const Unit<L1, M1, T1, I1, K1, N1, J1, A1, Q1>&: a, const Unit<L2, M2, T2, I2, K2, N2, J2, A2, Q2>&: b) -> Unit<L1 - L2, M1 - M2, T1 - T2, I1 - I2, K1 - K2, N1 - N2, J1 - J2, A1 - A2> {
+            static_assert(!Q1::is_affine && !Q2::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be divided; use a temperature interval unit or kelvin");
+            return Unit<L1 - L2, M1 - M2, T1 - T2, I1 - I2, K1 - K2, N1 - N2, J1 - J2, A1 - A2>{a.scale / b.scale, 0.0};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(*) function(float: k, const Unit<L, M, T, I, K, N, J, A, Q>&: u) -> Unit<L, M, T, I, K, N, J, A, Q> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be scaled; use a temperature interval unit or kelvin");
+            return Unit<L, M, T, I, K, N, J, A, Q>{u.scale * k, 0.0};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(*) function(const Unit<L, M, T, I, K, N, J, A, Q>&: u, float: k) -> Unit<L, M, T, I, K, N, J, A, Q> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be scaled; use a temperature interval unit or kelvin");
+            return Unit<L, M, T, I, K, N, J, A, Q>{u.scale * k, 0.0};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(/) function(const Unit<L, M, T, I, K, N, J, A, Q>&: u, float: k) -> Unit<L, M, T, I, K, N, J, A, Q> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be scaled; use a temperature interval unit or kelvin");
+            return Unit<L, M, T, I, K, N, J, A, Q>{u.scale / k, 0.0};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(/) function(float: k, const Unit<L, M, T, I, K, N, J, A, Q>&: u) -> Unit<0 - L, 0 - M, 0 - T, 0 - I, 0 - K, 0 - N, 0 - J, 0 - A> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be divided; use a temperature interval unit or kelvin");
+            return Unit<0 - L, 0 - M, 0 - T, 0 - I, 0 - K, 0 - N, 0 - J, 0 - A>{k / u.scale, 0.0};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        function prefixed(float: factor, const Unit<L, M, T, I, K, N, J, A, Q>&: base) -> Unit<L, M, T, I, K, N, J, A, Q> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be given a prefix; use a temperature interval unit or kelvin");
+            return Unit<L, M, T, I, K, N, J, A, Q>{base.scale * factor, 0.0};
+        } end function prefixed
+
+        template <typename Q2, int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        function kind_cast(const Unit<L, M, T, I, K, N, J, A, Q>&: u) -> Unit<L, M, T, I, K, N, J, A, Q2> {
+            return Unit<L, M, T, I, K, N, J, A, Q2>{u.scale, u.offset};
+        } end function kind_cast
+
+        template <typename Q2, int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        function kind_cast(const ReciprocalUnit<L, M, T, I, K, N, J, A, Q>&: u) -> ReciprocalUnit<L, M, T, I, K, N, J, A, Q2> {
+            return ReciprocalUnit<L, M, T, I, K, N, J, A, Q2>{u.scale};
+        } end function kind_cast
+
+        template <typename A, typename B>
+        function same_dimension(const A&: a, const B&: b) -> bool {
+            return std::traits::is_same<A::dims, B::dims>;
+        } end function same_dimension
+
+        template <typename A, typename B>
+        function same_kind(const A&: a, const B&: b) -> bool {
+            return same_dimension(a, b) && detail::kinds_compatible<A::kind_type, B::kind_type>;
+        } end function same_kind
+
+        template <typename A, typename B>
+        function convert(float: value, const A&: source, const B&: target) -> float {
+            static_assert(std::traits::is_same<A::dims, B::dims>, "std::units::convert: the units have different dimensions");
+            static_assert(detail::kinds_compatible<A::kind_type, B::kind_type>, "std::units::convert: the units are different kinds of quantity (energy and torque, say); use kind_cast if this is intended");
+            return detail::tidy(target.from_base(source.to_base(value)));
+        } end function convert
+
+        template <typename U>
+        function to_base(float: value, const U&: source) -> float {
+            return source.to_base(value);
+        } end function to_base
+
+        template <typename U>
+        function from_base(float: base, const U&: target) -> float {
+            return target.from_base(base);
+        } end function from_base
+
+        template <typename A, typename B>
+        function scale_ratio(const A&: source, const B&: target) -> float {
+            static_assert(std::traits::is_same<A::dims, B::dims>, "std::units::scale_ratio: the units have different dimensions");
+            static_assert(detail::kinds_compatible<A::kind_type, B::kind_type>, "std::units::scale_ratio: the units are different kinds of quantity (energy and torque, say); use kind_cast if this is intended");
+            return detail::tidy(source.scale / target.scale);
+        } end function scale_ratio
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q = kind::generic>
+        struct Quantity {
+            static_assert(detail::kind_matches<Q, L, M, T, I, K, N, J, A>, "std::units::Quantity: the kind's dimension doesn't match the quantity's dimension");
+
+            using kind_type = Q;
+            using dims = Dims<L, M, T, I, K, N, J, A>;
+
+            float: base = 0.0;
+
+            template <typename U>
+            function value_in(const U&: u) const -> float {
+                static_assert(std::traits::is_same<U::dims, Dims<L, M, T, I, K, N, J, A>>, "std::units::Quantity::value_in: the unit has a different dimension");
+                static_assert(detail::kinds_compatible<Q, U::kind_type>, "std::units::Quantity::value_in: the quantity and the unit are different kinds (energy and torque, say); use kind_cast if this is intended");
+                return detail::tidy(u.from_base(base));
+            } end function value_in
+
+            function as_generic() const -> Quantity<L, M, T, I, K, N, J, A> {
+                return Quantity<L, M, T, I, K, N, J, A>{base};
+            } end function as_generic
+
+            static function dimension_text() -> string {
+                return detail::dimension_text(L, M, T, I, K, N, J, A);
+            } end function dimension_text
+
+            function to_string() const -> string {
+                const string: dims = detail::dimension_text(L, M, T, I, K, N, J, A);
+                if (dims.length() == 0) then {
+                    return static_cast<string>(`${base}`);
+                }
+                return static_cast<string>(`${base} ${dims}`);
+            } end function to_string
+
+            template <typename Q2>
+            requires (!std::traits::is_same<Q, Q2> && detail::implicit_kind<Q, Q2>)
+            operator(Quantity<L, M, T, I, K, N, J, A, Q2>) function() const {
+                return Quantity<L, M, T, I, K, N, J, A, Q2>{base};
+            }
+        } end struct Quantity
+
+        namespace detail {
+            template <typename D, typename Q>
+            struct unit_from {
+            } end struct unit_from
+
+            template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+            struct unit_from<Dims<L, M, T, I, K, N, J, A>, Q> {
+                using type = Unit<L, M, T, I, K, N, J, A, Q>;
+            } end struct unit_from
+
+            template <typename D, typename Q>
+            struct reciprocal_from {
+            } end struct reciprocal_from
+
+            template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+            struct reciprocal_from<Dims<L, M, T, I, K, N, J, A>, Q> {
+                using type = ReciprocalUnit<L, M, T, I, K, N, J, A, Q>;
+            } end struct reciprocal_from
+
+            template <typename D, typename Q>
+            struct quantity_from {
+            } end struct quantity_from
+
+            template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+            struct quantity_from<Dims<L, M, T, I, K, N, J, A>, Q> {
+                using type = Quantity<L, M, T, I, K, N, J, A, Q>;
+            } end struct quantity_from
+        } end namespace detail
+
+        template <typename U>
+        function quantity(float: value, const U&: u) -> detail::quantity_from<U::dims, U::kind_type>::type {
+            return detail::quantity_from<U::dims, U::kind_type>::type{u.to_base(value)};
+        } end function quantity
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q, typename U>
+        function value_in(const Quantity<L, M, T, I, K, N, J, A, Q>&: q, const U&: u) -> float {
+            return q.value_in(u);
+        } end function value_in
+
+        template <typename Q2, int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        function kind_cast(const Quantity<L, M, T, I, K, N, J, A, Q>&: q) -> Quantity<L, M, T, I, K, N, J, A, Q2> {
+            return Quantity<L, M, T, I, K, N, J, A, Q2>{q.base};
+        } end function kind_cast
+
+        template <int L1, int M1, int T1, int I1, int K1, int N1, int J1, int A1, typename Q1, int L2, int M2, int T2, int I2, int K2, int N2, int J2, int A2, typename Q2>
+        operator(*) function(const Quantity<L1, M1, T1, I1, K1, N1, J1, A1, Q1>&: a, const Quantity<L2, M2, T2, I2, K2, N2, J2, A2, Q2>&: b) -> Quantity<L1 + L2, M1 + M2, T1 + T2, I1 + I2, K1 + K2, N1 + N2, J1 + J2, A1 + A2> {
+            static_assert(!Q1::is_affine && !Q2::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be multiplied; use a temperature interval unit or kelvin");
+            return Quantity<L1 + L2, M1 + M2, T1 + T2, I1 + I2, K1 + K2, N1 + N2, J1 + J2, A1 + A2>{a.base * b.base};
+        }
+
+        template <int L1, int M1, int T1, int I1, int K1, int N1, int J1, int A1, typename Q1, int L2, int M2, int T2, int I2, int K2, int N2, int J2, int A2, typename Q2>
+        operator(/) function(const Quantity<L1, M1, T1, I1, K1, N1, J1, A1, Q1>&: a, const Quantity<L2, M2, T2, I2, K2, N2, J2, A2, Q2>&: b) -> Quantity<L1 - L2, M1 - M2, T1 - T2, I1 - I2, K1 - K2, N1 - N2, J1 - J2, A1 - A2> {
+            static_assert(!Q1::is_affine && !Q2::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be divided; use a temperature interval unit or kelvin");
+            return Quantity<L1 - L2, M1 - M2, T1 - T2, I1 - I2, K1 - K2, N1 - N2, J1 - J2, A1 - A2>{a.base / b.base};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q1, typename Q2>
+        operator(+) function(const Quantity<L, M, T, I, K, N, J, A, Q1>&: a, const Quantity<L, M, T, I, K, N, J, A, Q2>&: b) -> Quantity<L, M, T, I, K, N, J, A, detail::or_generic<detail::add_kind<Q1, Q2>>> {
+            static_assert(!std::traits::is_same<detail::add_kind<Q1, Q2>, kind::none>, "std::units: these quantities can't be added (different kinds such as energy and torque, or two temperature points)");
+            return Quantity<L, M, T, I, K, N, J, A, detail::or_generic<detail::add_kind<Q1, Q2>>>{a.base + b.base};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q1, typename Q2>
+        operator(-) function(const Quantity<L, M, T, I, K, N, J, A, Q1>&: a, const Quantity<L, M, T, I, K, N, J, A, Q2>&: b) -> Quantity<L, M, T, I, K, N, J, A, detail::or_generic<detail::sub_kind<Q1, Q2>>> {
+            static_assert(!std::traits::is_same<detail::sub_kind<Q1, Q2>, kind::none>, "std::units: these quantities can't be subtracted (different kinds such as energy and torque, or an interval minus a temperature point)");
+            return Quantity<L, M, T, I, K, N, J, A, detail::or_generic<detail::sub_kind<Q1, Q2>>>{a.base - b.base};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(-) function(const Quantity<L, M, T, I, K, N, J, A, Q>&: a) -> Quantity<L, M, T, I, K, N, J, A, Q> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be negated; use a temperature interval unit or kelvin");
+            return Quantity<L, M, T, I, K, N, J, A, Q>{-a.base};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(*) function(const Quantity<L, M, T, I, K, N, J, A, Q>&: a, float: k) -> Quantity<L, M, T, I, K, N, J, A, Q> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be scaled; use a temperature interval unit or kelvin");
+            return Quantity<L, M, T, I, K, N, J, A, Q>{a.base * k};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(*) function(float: k, const Quantity<L, M, T, I, K, N, J, A, Q>&: a) -> Quantity<L, M, T, I, K, N, J, A, Q> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be scaled; use a temperature interval unit or kelvin");
+            return Quantity<L, M, T, I, K, N, J, A, Q>{a.base * k};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(/) function(const Quantity<L, M, T, I, K, N, J, A, Q>&: a, float: k) -> Quantity<L, M, T, I, K, N, J, A, Q> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be scaled; use a temperature interval unit or kelvin");
+            return Quantity<L, M, T, I, K, N, J, A, Q>{a.base / k};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        operator(/) function(float: k, const Quantity<L, M, T, I, K, N, J, A, Q>&: a) -> Quantity<0 - L, 0 - M, 0 - T, 0 - I, 0 - K, 0 - N, 0 - J, 0 - A> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be inverted; use a temperature interval unit or kelvin");
+            return Quantity<0 - L, 0 - M, 0 - T, 0 - I, 0 - K, 0 - N, 0 - J, 0 - A>{k / a.base};
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q>
+        function reciprocal(const Quantity<L, M, T, I, K, N, J, A, Q>&: a) -> Quantity<0 - L, 0 - M, 0 - T, 0 - I, 0 - K, 0 - N, 0 - J, 0 - A> {
+            static_assert(!Q::is_affine, "std::units: a temperature point (celsius, fahrenheit...) can't be inverted; use a temperature interval unit or kelvin");
+            return Quantity<0 - L, 0 - M, 0 - T, 0 - I, 0 - K, 0 - N, 0 - J, 0 - A>{1.0 / a.base};
+        } end function reciprocal
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q1, typename Q2>
+        operator(==) function(const Quantity<L, M, T, I, K, N, J, A, Q1>&: a, const Quantity<L, M, T, I, K, N, J, A, Q2>&: b) -> bool {
+            static_assert(detail::kinds_compatible<Q1, Q2>, "std::units: these quantities are different kinds (energy and torque, say) and can't be compared");
+            return a.base == b.base;
+        }
+
+        template <int L, int M, int T, int I, int K, int N, int J, int A, typename Q1, typename Q2>
+        operator(<) function(const Quantity<L, M, T, I, K, N, J, A, Q1>&: a, const Quantity<L, M, T, I, K, N, J, A, Q2>&: b) -> bool {
+            static_assert(detail::kinds_compatible<Q1, Q2>, "std::units: these quantities are different kinds (energy and torque, say) and can't be compared");
+            return a.base < b.base;
+        }
+
+        template <typename Q>
+        using KindUnit = detail::unit_from<Q::dims, Q>::type;
+
+        template <typename Q>
+        using KindReciprocalUnit = detail::reciprocal_from<Q::dims, Q>::type;
+
+        template <typename Q>
+        using KindQuantity = detail::quantity_from<Q::dims, Q>::type;
+
+        template <typename U>
+        using QuantityOf = detail::quantity_from<U::dims, U::kind_type>::type;
+
+        template <typename Self, int L_, int M_, int T_, int I_, int K_, int N_, int J_, int A_>
+        struct kind_of {
+            static constexpr bool: is_generic = false;
+            static constexpr bool: is_affine = false;
+            using dims = Dims<L_, M_, T_, I_, K_, N_, J_, A_>;
+            using parent = Self;
+            using interval = Self;
+        } end struct kind_of
+
+        template <typename Self, typename Like>
+        struct kind_like {
+            static constexpr bool: is_generic = false;
+            static constexpr bool: is_affine = false;
+            using dims = Like::dims;
+            using parent = Self;
+            using interval = Self;
+        } end struct kind_like
+
+        template <typename Self, typename Parent>
+        struct subkind_of {
+            static constexpr bool: is_generic = false;
+            static constexpr bool: is_affine = false;
+            using dims = Parent::dims;
+            using parent = Parent;
+            using interval = Self;
+        } end struct subkind_of
+
+        namespace kind {
+            struct dimensionless {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 0, 0, 0, 0, 0>;
+                using parent = dimensionless;
+                using interval = dimensionless;
+            } end struct dimensionless
+
+            struct length {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<1, 0, 0, 0, 0, 0, 0, 0>;
+                using parent = length;
+                using interval = length;
+            } end struct length
+
+            struct mass {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 1, 0, 0, 0, 0, 0, 0>;
+                using parent = mass;
+                using interval = mass;
+            } end struct mass
+
+            struct time {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 1, 0, 0, 0, 0, 0>;
+                using parent = time;
+                using interval = time;
+            } end struct time
+
+            struct current {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 1, 0, 0, 0, 0>;
+                using parent = current;
+                using interval = current;
+            } end struct current
+
+            struct temperature {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 0, 1, 0, 0, 0>;
+                using parent = temperature;
+                using interval = temperature;
+            } end struct temperature
+
+            struct temperature_interval {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 0, 1, 0, 0, 0>;
+                using parent = temperature;
+                using interval = temperature_interval;
+            } end struct temperature_interval
+
+            struct temperature_point {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = true;
+                using dims = Dims<0, 0, 0, 0, 1, 0, 0, 0>;
+                using parent = temperature;
+                using interval = temperature_interval;
+            } end struct temperature_point
+
+            struct amount {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 0, 0, 1, 0, 0>;
+                using parent = amount;
+                using interval = amount;
+            } end struct amount
+
+            struct luminous {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 0, 0, 0, 1, 0>;
+                using parent = luminous;
+                using interval = luminous;
+            } end struct luminous
+
+            struct angle {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 0, 0, 0, 0, 0, 1>;
+                using parent = angle;
+                using interval = angle;
+            } end struct angle
+
+            struct frequency {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, -1, 0, 0, 0, 0, 0>;
+                using parent = frequency;
+                using interval = frequency;
+            } end struct frequency
+
+            struct activity {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, -1, 0, 0, 0, 0, 0>;
+                using parent = activity;
+                using interval = activity;
+            } end struct activity
+
+            struct velocity {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<1, 0, -1, 0, 0, 0, 0, 0>;
+                using parent = velocity;
+                using interval = velocity;
+            } end struct velocity
+
+            struct acceleration {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<1, 0, -2, 0, 0, 0, 0, 0>;
+                using parent = acceleration;
+                using interval = acceleration;
+            } end struct acceleration
+
+            struct angular_velocity {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, -1, 0, 0, 0, 0, 1>;
+                using parent = angular_velocity;
+                using interval = angular_velocity;
+            } end struct angular_velocity
+
+            struct area {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 0, 0, 0, 0, 0, 0, 0>;
+                using parent = area;
+                using interval = area;
+            } end struct area
+
+            struct volume {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<3, 0, 0, 0, 0, 0, 0, 0>;
+                using parent = volume;
+                using interval = volume;
+            } end struct volume
+
+            struct density_2d {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims< -2, 1, 0, 0, 0, 0, 0, 0>;
+                using parent = density_2d;
+                using interval = density_2d;
+            } end struct density_2d
+
+            struct density_3d {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims< -3, 1, 0, 0, 0, 0, 0, 0>;
+                using parent = density_3d;
+                using interval = density_3d;
+            } end struct density_3d
+
+            struct momentum {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<1, 1, -1, 0, 0, 0, 0, 0>;
+                using parent = momentum;
+                using interval = momentum;
+            } end struct momentum
+
+            struct impulse {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<1, 1, -1, 0, 0, 0, 0, 0>;
+                using parent = momentum;
+                using interval = impulse;
+            } end struct impulse
+
+            struct force {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<1, 1, -2, 0, 0, 0, 0, 0>;
+                using parent = force;
+                using interval = force;
+            } end struct force
+
+            struct energy {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 1, -2, 0, 0, 0, 0, 0>;
+                using parent = energy;
+                using interval = energy;
+            } end struct energy
+
+            struct torque {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 1, -2, 0, 0, 0, 0, 0>;
+                using parent = torque;
+                using interval = torque;
+            } end struct torque
+
+            struct power {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 1, -3, 0, 0, 0, 0, 0>;
+                using parent = power;
+                using interval = power;
+            } end struct power
+
+            struct pressure {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims< -1, 1, -2, 0, 0, 0, 0, 0>;
+                using parent = pressure;
+                using interval = pressure;
+            } end struct pressure
+
+            struct absorbed_dose {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 0, -2, 0, 0, 0, 0, 0>;
+                using parent = absorbed_dose;
+                using interval = absorbed_dose;
+            } end struct absorbed_dose
+
+            struct equivalent_dose {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 0, -2, 0, 0, 0, 0, 0>;
+                using parent = equivalent_dose;
+                using interval = equivalent_dose;
+            } end struct equivalent_dose
+
+            struct charge {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, 1, 1, 0, 0, 0, 0>;
+                using parent = charge;
+                using interval = charge;
+            } end struct charge
+
+            struct voltage {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 1, -3, -1, 0, 0, 0, 0>;
+                using parent = voltage;
+                using interval = voltage;
+            } end struct voltage
+
+            struct resistance {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 1, -3, -2, 0, 0, 0, 0>;
+                using parent = resistance;
+                using interval = resistance;
+            } end struct resistance
+
+            struct conductance {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims< -2, -1, 3, 2, 0, 0, 0, 0>;
+                using parent = conductance;
+                using interval = conductance;
+            } end struct conductance
+
+            struct capacitance {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims< -2, -1, 4, 2, 0, 0, 0, 0>;
+                using parent = capacitance;
+                using interval = capacitance;
+            } end struct capacitance
+
+            struct inductance {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 1, -2, -2, 0, 0, 0, 0>;
+                using parent = inductance;
+                using interval = inductance;
+            } end struct inductance
+
+            struct magnetic_flux {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 1, -2, -1, 0, 0, 0, 0>;
+                using parent = magnetic_flux;
+                using interval = magnetic_flux;
+            } end struct magnetic_flux
+
+            struct mass_flow_rate {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 1, -1, 0, 0, 0, 0, 0>;
+                using parent = mass_flow_rate;
+                using interval = mass_flow_rate;
+            } end struct mass_flow_rate
+
+            struct volume_flow_rate {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<3, 0, -1, 0, 0, 0, 0, 0>;
+                using parent = volume_flow_rate;
+                using interval = volume_flow_rate;
+            } end struct volume_flow_rate
+
+            struct area_flow_rate {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, 0, -1, 0, 0, 0, 0, 0>;
+                using parent = area_flow_rate;
+                using interval = area_flow_rate;
+            } end struct area_flow_rate
+
+            struct molar_flow_rate {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, 0, -1, 0, 0, 1, 0, 0>;
+                using parent = molar_flow_rate;
+                using interval = molar_flow_rate;
+            } end struct molar_flow_rate
+
+            struct molarity_volume {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims< -3, 0, 0, 0, 0, 1, 0, 0>;
+                using parent = molarity_volume;
+                using interval = molarity_volume;
+            } end struct molarity_volume
+
+            struct molarity_mass {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<0, -1, 0, 0, 0, 1, 0, 0>;
+                using parent = molarity_mass;
+                using interval = molarity_mass;
+            } end struct molarity_mass
+
+            struct specific_area {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<2, -1, 0, 0, 0, 0, 0, 0>;
+                using parent = specific_area;
+                using interval = specific_area;
+            } end struct specific_area
+
+            struct specific_volume {
+                static constexpr bool: is_generic = false;
+                static constexpr bool: is_affine = false;
+                using dims = Dims<3, -1, 0, 0, 0, 0, 0, 0>;
+                using parent = specific_volume;
+                using interval = specific_volume;
+            } end struct specific_volume
+        } end namespace kind
+
+
+        namespace detail {
+            template <>
+            struct pow_kind_of<kind::length, 2> {
+                using type = kind::area;
+            } end struct pow_kind_of
+
+            template <>
+            struct pow_kind_of<kind::length, 3> {
+                using type = kind::volume;
+            } end struct pow_kind_of
+        } end namespace detail
+
+        using DimensionlessUnit           = KindUnit<kind::dimensionless>;
+        using LengthUnit                  = KindUnit<kind::length>;
+        using MassUnit                    = KindUnit<kind::mass>;
+        using TimeUnit                    = KindUnit<kind::time>;
+        using CurrentUnit                 = KindUnit<kind::current>;
+        using TemperatureUnit             = KindUnit<kind::temperature>;
+        using TemperatureIntervalUnit     = KindUnit<kind::temperature_interval>;
+        using TemperaturePointUnit        = KindUnit<kind::temperature_point>;
+        using AmountUnit                  = KindUnit<kind::amount>;
+        using LuminousUnit                = KindUnit<kind::luminous>;
+        using AngleUnit                   = KindUnit<kind::angle>;
+        using FrequencyUnit               = KindUnit<kind::frequency>;
+        using ActivityUnit                = KindUnit<kind::activity>;
+        using VelocityUnit                = KindUnit<kind::velocity>;
+        using AccelerationUnit            = KindUnit<kind::acceleration>;
+        using AngularVelocityUnit         = KindUnit<kind::angular_velocity>;
+        using AreaUnit                    = KindUnit<kind::area>;
+        using VolumeUnit                  = KindUnit<kind::volume>;
+        using Density2DUnit               = KindUnit<kind::density_2d>;
+        using Density3DUnit               = KindUnit<kind::density_3d>;
+        using MomentumUnit                = KindUnit<kind::momentum>;
+        using ImpulseUnit                 = KindUnit<kind::impulse>;
+        using ForceUnit                   = KindUnit<kind::force>;
+        using EnergyUnit                  = KindUnit<kind::energy>;
+        using TorqueUnit                  = KindUnit<kind::torque>;
+        using PowerUnit                   = KindUnit<kind::power>;
+        using PressureUnit                = KindUnit<kind::pressure>;
+        using AbsorbedDoseUnit            = KindUnit<kind::absorbed_dose>;
+        using EquivalentDoseUnit          = KindUnit<kind::equivalent_dose>;
+        using ChargeUnit                  = KindUnit<kind::charge>;
+        using VoltageUnit                 = KindUnit<kind::voltage>;
+        using ResistanceUnit              = KindUnit<kind::resistance>;
+        using ConductanceUnit             = KindUnit<kind::conductance>;
+        using CapacitanceUnit             = KindUnit<kind::capacitance>;
+        using InductanceUnit              = KindUnit<kind::inductance>;
+        using MagneticFluxUnit            = KindUnit<kind::magnetic_flux>;
+        using MassFlowRateUnit            = KindUnit<kind::mass_flow_rate>;
+        using VolumeFlowRateUnit          = KindUnit<kind::volume_flow_rate>;
+        using AreaFlowRateUnit            = KindUnit<kind::area_flow_rate>;
+        using MolarFlowRateUnit           = KindUnit<kind::molar_flow_rate>;
+        using MolarityVolumeUnit          = KindUnit<kind::molarity_volume>;
+        using MolarityMassUnit            = KindUnit<kind::molarity_mass>;
+        using SpecificAreaUnit            = KindUnit<kind::specific_area>;
+        using SpecificVolumeUnit          = KindUnit<kind::specific_volume>;
+
+        using DimensionlessQuantity       = KindQuantity<kind::dimensionless>;
+        using LengthQuantity              = KindQuantity<kind::length>;
+        using MassQuantity                = KindQuantity<kind::mass>;
+        using TimeQuantity                = KindQuantity<kind::time>;
+        using CurrentQuantity             = KindQuantity<kind::current>;
+        using TemperatureQuantity         = KindQuantity<kind::temperature>;
+        using TemperatureIntervalQuantity = KindQuantity<kind::temperature_interval>;
+        using TemperaturePointQuantity    = KindQuantity<kind::temperature_point>;
+        using AmountQuantity              = KindQuantity<kind::amount>;
+        using LuminousQuantity            = KindQuantity<kind::luminous>;
+        using AngleQuantity               = KindQuantity<kind::angle>;
+        using FrequencyQuantity           = KindQuantity<kind::frequency>;
+        using ActivityQuantity            = KindQuantity<kind::activity>;
+        using VelocityQuantity            = KindQuantity<kind::velocity>;
+        using AccelerationQuantity        = KindQuantity<kind::acceleration>;
+        using AngularVelocityQuantity     = KindQuantity<kind::angular_velocity>;
+        using AreaQuantity                = KindQuantity<kind::area>;
+        using VolumeQuantity              = KindQuantity<kind::volume>;
+        using Density2DQuantity           = KindQuantity<kind::density_2d>;
+        using Density3DQuantity           = KindQuantity<kind::density_3d>;
+        using MomentumQuantity            = KindQuantity<kind::momentum>;
+        using ImpulseQuantity             = KindQuantity<kind::impulse>;
+        using ForceQuantity               = KindQuantity<kind::force>;
+        using EnergyQuantity              = KindQuantity<kind::energy>;
+        using TorqueQuantity              = KindQuantity<kind::torque>;
+        using PowerQuantity               = KindQuantity<kind::power>;
+        using PressureQuantity            = KindQuantity<kind::pressure>;
+        using AbsorbedDoseQuantity        = KindQuantity<kind::absorbed_dose>;
+        using EquivalentDoseQuantity      = KindQuantity<kind::equivalent_dose>;
+        using ChargeQuantity              = KindQuantity<kind::charge>;
+        using VoltageQuantity             = KindQuantity<kind::voltage>;
+        using ResistanceQuantity          = KindQuantity<kind::resistance>;
+        using ConductanceQuantity         = KindQuantity<kind::conductance>;
+        using CapacitanceQuantity         = KindQuantity<kind::capacitance>;
+        using InductanceQuantity          = KindQuantity<kind::inductance>;
+        using MagneticFluxQuantity        = KindQuantity<kind::magnetic_flux>;
+        using MassFlowRateQuantity        = KindQuantity<kind::mass_flow_rate>;
+        using VolumeFlowRateQuantity      = KindQuantity<kind::volume_flow_rate>;
+        using AreaFlowRateQuantity        = KindQuantity<kind::area_flow_rate>;
+        using MolarFlowRateQuantity       = KindQuantity<kind::molar_flow_rate>;
+        using MolarityVolumeQuantity      = KindQuantity<kind::molarity_volume>;
+        using MolarityMassQuantity        = KindQuantity<kind::molarity_mass>;
+        using SpecificAreaQuantity        = KindQuantity<kind::specific_area>;
+        using SpecificVolumeQuantity      = KindQuantity<kind::specific_volume>;
+
+        namespace distance {
+            const LengthUnit: meter{1.0, 0.0};
+            const LengthUnit: quectometer{1.0e-30, 0.0};
+            const LengthUnit: rontometer{1.0e-27, 0.0};
+            const LengthUnit: yoctometer{1.0e-24, 0.0};
+            const LengthUnit: zeptometer{1.0e-21, 0.0};
+            const LengthUnit: attometer{1.0e-18, 0.0};
+            const LengthUnit: femtometer{1.0e-15, 0.0};
+            const LengthUnit: picometer{1.0e-12, 0.0};
+            const LengthUnit: nanometer{1.0e-9, 0.0};
+            const LengthUnit: micrometer{0.000001, 0.0};
+            const LengthUnit: millimeter{0.001, 0.0};
+            const LengthUnit: centimeter{0.01, 0.0};
+            const LengthUnit: decimeter{0.1, 0.0};
+            const LengthUnit: decameter{10.0, 0.0};
+            const LengthUnit: hectometer{100.0, 0.0};
+            const LengthUnit: kilometer{1000.0, 0.0};
+            const LengthUnit: megameter{1000000.0, 0.0};
+            const LengthUnit: gigameter{1000000000.0, 0.0};
+            const LengthUnit: terameter{1000000000000.0, 0.0};
+            const LengthUnit: petameter{1000000000000000.0, 0.0};
+            const LengthUnit: exameter{1.0e18, 0.0};
+            const LengthUnit: zettameter{1.0e21, 0.0};
+            const LengthUnit: yottameter{1.0e24, 0.0};
+            const LengthUnit: ronnameter{1.0e27, 0.0};
+            const LengthUnit: quettameter{1.0e30, 0.0};
+            const LengthUnit: angstrom{1.0e-10, 0.0};
+            const LengthUnit: micron{0.000001, 0.0};
+            const LengthUnit: bohr{5.29177210544e-11, 0.0};
+            const LengthUnit: planck{1.616255e-35, 0.0};
+            const LengthUnit: thou{0.0000254, 0.0};
+            const LengthUnit: barleycorn{0.00846666666666666666666666666666666667, 0.0};
+            const LengthUnit: inch{0.0254, 0.0};
+            const LengthUnit: hand{0.1016, 0.0};
+            const LengthUnit: foot{0.3048, 0.0};
+            const LengthUnit: yard{0.9144, 0.0};
+            const LengthUnit: fathom{1.8288, 0.0};
+            const LengthUnit: rod{5.0292, 0.0};
+            const LengthUnit: chain{20.1168, 0.0};
+            const LengthUnit: furlong{201.168, 0.0};
+            const LengthUnit: mile{1609.344, 0.0};
+            const LengthUnit: league{4828.032, 0.0};
+            const LengthUnit: link{0.201168, 0.0};
+            const LengthUnit: ell{1.143, 0.0};
+            const LengthUnit: nautical_mile{1852.0, 0.0};
+            const LengthUnit: international_cable{185.2, 0.0};
+            const LengthUnit: us_cable{219.456, 0.0};
+            const LengthUnit: shackle{27.432, 0.0};
+            const LengthUnit: point{0.000352777777777777777777777777777777778, 0.0};
+            const LengthUnit: pica{0.00423333333333333333333333333333333333, 0.0};
+            const LengthUnit: ligne{0.002256, 0.0};
+            const LengthUnit: smoot{1.7018, 0.0};
+            const LengthUnit: au{149597870700.0, 0.0};
+            const LengthUnit: light_second{299792458.0, 0.0};
+            const LengthUnit: light_minute{17987547480.0, 0.0};
+            const LengthUnit: light_hour{1079252848800.0, 0.0};
+            const LengthUnit: light_day{25902068371200.0, 0.0};
+            const LengthUnit: light_week{181314478598400.0, 0.0};
+            const LengthUnit: light_year{9460730472580800.0, 0.0};
+            const LengthUnit: parsec{3.08567758149136727891393795779647161e16, 0.0};
+            const LengthUnit: quectoparsec{3.08567758149136727891393795779647161e-14, 0.0};
+            const LengthUnit: rontoparsec{3.08567758149136727891393795779647161e-11, 0.0};
+            const LengthUnit: yoctoparsec{3.08567758149136727891393795779647161e-8, 0.0};
+            const LengthUnit: zeptoparsec{0.0000308567758149136727891393795779647161, 0.0};
+            const LengthUnit: attoparsec{0.0308567758149136727891393795779647161, 0.0};
+            const LengthUnit: femtoparsec{30.8567758149136727891393795779647161, 0.0};
+            const LengthUnit: picoparsec{30856.7758149136727891393795779647161, 0.0};
+            const LengthUnit: nanoparsec{30856775.8149136727891393795779647161, 0.0};
+            const LengthUnit: microparsec{30856775814.9136727891393795779647161, 0.0};
+            const LengthUnit: milliparsec{30856775814913.6727891393795779647161, 0.0};
+            const LengthUnit: centiparsec{308567758149136.727891393795779647161, 0.0};
+            const LengthUnit: deciparsec{3085677581491367.27891393795779647161, 0.0};
+            const LengthUnit: decaparsec{3.08567758149136727891393795779647161e17, 0.0};
+            const LengthUnit: hectoparsec{3.08567758149136727891393795779647161e18, 0.0};
+            const LengthUnit: kiloparsec{3.08567758149136727891393795779647161e19, 0.0};
+            const LengthUnit: megaparsec{3.08567758149136727891393795779647161e22, 0.0};
+            const LengthUnit: gigaparsec{3.08567758149136727891393795779647161e25, 0.0};
+            const LengthUnit: teraparsec{3.08567758149136727891393795779647161e28, 0.0};
+            const LengthUnit: petaparsec{3.08567758149136727891393795779647161e31, 0.0};
+            const LengthUnit: exaparsec{3.08567758149136727891393795779647161e34, 0.0};
+            const LengthUnit: zettaparsec{3.08567758149136727891393795779647161e37, 0.0};
+            const LengthUnit: yottaparsec{3.08567758149136727891393795779647161e40, 0.0};
+            const LengthUnit: ronnaparsec{3.08567758149136727891393795779647161e43, 0.0};
+            const LengthUnit: quettaparsec{3.08567758149136727891393795779647161e46, 0.0};
+
+            function light_time(float: seconds) -> LengthUnit {
+                return LengthUnit{299792458.0 * seconds, 0.0};
+            } end function light_time
+        } end namespace distance
+
+        namespace time {
+            const TimeUnit: second{1.0, 0.0};
+            const TimeUnit: quectosecond{1.0e-30, 0.0};
+            const TimeUnit: rontosecond{1.0e-27, 0.0};
+            const TimeUnit: yoctosecond{1.0e-24, 0.0};
+            const TimeUnit: zeptosecond{1.0e-21, 0.0};
+            const TimeUnit: attosecond{1.0e-18, 0.0};
+            const TimeUnit: femtosecond{1.0e-15, 0.0};
+            const TimeUnit: picosecond{1.0e-12, 0.0};
+            const TimeUnit: nanosecond{1.0e-9, 0.0};
+            const TimeUnit: microsecond{0.000001, 0.0};
+            const TimeUnit: millisecond{0.001, 0.0};
+            const TimeUnit: centisecond{0.01, 0.0};
+            const TimeUnit: decisecond{0.1, 0.0};
+            const TimeUnit: decasecond{10.0, 0.0};
+            const TimeUnit: hectosecond{100.0, 0.0};
+            const TimeUnit: kilosecond{1000.0, 0.0};
+            const TimeUnit: megasecond{1000000.0, 0.0};
+            const TimeUnit: gigasecond{1000000000.0, 0.0};
+            const TimeUnit: terasecond{1000000000000.0, 0.0};
+            const TimeUnit: petasecond{1000000000000000.0, 0.0};
+            const TimeUnit: exasecond{1.0e18, 0.0};
+            const TimeUnit: zettasecond{1.0e21, 0.0};
+            const TimeUnit: yottasecond{1.0e24, 0.0};
+            const TimeUnit: ronnasecond{1.0e27, 0.0};
+            const TimeUnit: quettasecond{1.0e30, 0.0};
+            const TimeUnit: minute{60.0, 0.0};
+            const TimeUnit: hour{3600.0, 0.0};
+            const TimeUnit: day{86400.0, 0.0};
+            const TimeUnit: week{604800.0, 0.0};
+            const TimeUnit: fortnight{1209600.0, 0.0};
+            const TimeUnit: year{31557600.0, 0.0};
+            const TimeUnit: decade{315576000.0, 0.0};
+            const TimeUnit: century{3155760000.0, 0.0};
+            const TimeUnit: millennium{31557600000.0, 0.0};
+            const TimeUnit: planck_time{5.391247e-44, 0.0};
+        } end namespace time
+
+        namespace mass {
+            const MassUnit: gram{0.001, 0.0};
+            const MassUnit: quectogram{1.0e-33, 0.0};
+            const MassUnit: rontogram{1.0e-30, 0.0};
+            const MassUnit: yoctogram{1.0e-27, 0.0};
+            const MassUnit: zeptogram{1.0e-24, 0.0};
+            const MassUnit: attogram{1.0e-21, 0.0};
+            const MassUnit: femtogram{1.0e-18, 0.0};
+            const MassUnit: picogram{1.0e-15, 0.0};
+            const MassUnit: nanogram{1.0e-12, 0.0};
+            const MassUnit: microgram{1.0e-9, 0.0};
+            const MassUnit: milligram{0.000001, 0.0};
+            const MassUnit: centigram{0.00001, 0.0};
+            const MassUnit: decigram{0.0001, 0.0};
+            const MassUnit: decagram{0.01, 0.0};
+            const MassUnit: hectogram{0.1, 0.0};
+            const MassUnit: kilogram{1.0, 0.0};
+            const MassUnit: megagram{1000.0, 0.0};
+            const MassUnit: gigagram{1000000.0, 0.0};
+            const MassUnit: teragram{1000000000.0, 0.0};
+            const MassUnit: petagram{1000000000000.0, 0.0};
+            const MassUnit: exagram{1000000000000000.0, 0.0};
+            const MassUnit: zettagram{1.0e18, 0.0};
+            const MassUnit: yottagram{1.0e21, 0.0};
+            const MassUnit: ronnagram{1.0e24, 0.0};
+            const MassUnit: quettagram{1.0e27, 0.0};
+            const MassUnit: tonne{1000.0, 0.0};
+            const MassUnit: metric_ton{1000.0, 0.0};
+            const MassUnit: quintal{100.0, 0.0};
+            const MassUnit: grain{0.00006479891, 0.0};
+            const MassUnit: dram{0.0017718451953125, 0.0};
+            const MassUnit: ounce{0.028349523125, 0.0};
+            const MassUnit: pound{0.45359237, 0.0};
+            const MassUnit: stone{6.35029318, 0.0};
+            const MassUnit: quarter_us{11.33980925, 0.0};
+            const MassUnit: quarter_uk{12.70058636, 0.0};
+            const MassUnit: hundredweight_us{45.359237, 0.0};
+            const MassUnit: hundredweight_uk{50.80234544, 0.0};
+            const MassUnit: ton_us{907.18474, 0.0};
+            const MassUnit: ton_uk{1016.0469088, 0.0};
+            const MassUnit: pennyweight{0.00155517384, 0.0};
+            const MassUnit: troy_ounce{0.0311034768, 0.0};
+            const MassUnit: troy_pound{0.3732417216, 0.0};
+            const MassUnit: scruple{0.0012959782, 0.0};
+            const MassUnit: drachm{0.0038879346, 0.0};
+            const MassUnit: dalton{1.66053906892e-27, 0.0};
+            const MassUnit: planck_mass{2.176434e-8, 0.0};
+            const MassUnit: slug{14.5939029372063648293963254593175853, 0.0};
+            const MassUnit: carat{0.0002, 0.0};
+            const MassUnit: pearl_grain{0.00005, 0.0};
+        } end namespace mass
+
+        namespace angle {
+            const AngleUnit: radian{1.0, 0.0};
+            const AngleUnit: degree{0.0174532925199432957692369076848861271, 0.0};
+            const AngleUnit: gradian{0.0157079632679489661923132169163975144, 0.0};
+            const AngleUnit: arcminute{0.000290888208665721596153948461414768786, 0.0};
+            const AngleUnit: arcsecond{0.00000484813681109535993589914102357947976, 0.0};
+            const AngleUnit: turn{6.28318530717958647692528676655900577, 0.0};
+            const AngleUnit: revolution{6.28318530717958647692528676655900577, 0.0};
+        } end namespace angle
+
+        namespace temperature {
+            const TemperatureUnit        : kelvin{1.0, 0.0};
+            const TemperaturePointUnit   : celsius{1.0, 273.15};
+            const TemperaturePointUnit   : fahrenheit{0.555555555555555555555555555555555556, 255.372222222222222222222222222222222};
+            const TemperatureUnit        : rankine{0.555555555555555555555555555555555556, 0.0};
+            const TemperaturePointUnit   : reaumur{1.25, 273.15};
+            const TemperaturePointUnit   : romer{1.90476190476190476190476190476190476, 258.864285714285714285714285714285714};
+            const TemperaturePointUnit   : delisle{-0.666666666666666666666666666666666667, 373.15};
+            const TemperaturePointUnit   : newton{3.0303030303030303030303030303030303, 273.15};
+            const TemperatureIntervalUnit: kelvin_interval{1.0, 0.0};
+            const TemperatureIntervalUnit: celsius_interval{1.0, 0.0};
+            const TemperatureIntervalUnit: fahrenheit_interval{0.555555555555555555555555555555555556, 0.0};
+        } end namespace temperature
+
+        namespace amount {
+            const AmountUnit: mole{1.0, 0.0};
+            const AmountUnit: quectomole{1.0e-30, 0.0};
+            const AmountUnit: rontomole{1.0e-27, 0.0};
+            const AmountUnit: yoctomole{1.0e-24, 0.0};
+            const AmountUnit: zeptomole{1.0e-21, 0.0};
+            const AmountUnit: attomole{1.0e-18, 0.0};
+            const AmountUnit: femtomole{1.0e-15, 0.0};
+            const AmountUnit: picomole{1.0e-12, 0.0};
+            const AmountUnit: nanomole{1.0e-9, 0.0};
+            const AmountUnit: micromole{0.000001, 0.0};
+            const AmountUnit: millimole{0.001, 0.0};
+            const AmountUnit: centimole{0.01, 0.0};
+            const AmountUnit: decimole{0.1, 0.0};
+            const AmountUnit: decamole{10.0, 0.0};
+            const AmountUnit: hectomole{100.0, 0.0};
+            const AmountUnit: kilomole{1000.0, 0.0};
+            const AmountUnit: megamole{1000000.0, 0.0};
+            const AmountUnit: gigamole{1000000000.0, 0.0};
+            const AmountUnit: teramole{1000000000000.0, 0.0};
+            const AmountUnit: petamole{1000000000000000.0, 0.0};
+            const AmountUnit: examole{1.0e18, 0.0};
+            const AmountUnit: zettamole{1.0e21, 0.0};
+            const AmountUnit: yottamole{1.0e24, 0.0};
+            const AmountUnit: ronnamole{1.0e27, 0.0};
+            const AmountUnit: quettamole{1.0e30, 0.0};
+        } end namespace amount
+
+        namespace area {
+            const AreaUnit: square_meter{1.0, 0.0};
+            const AreaUnit: square_quectometer{1.0e-60, 0.0};
+            const AreaUnit: square_rontometer{1.0e-54, 0.0};
+            const AreaUnit: square_yoctometer{1.0e-48, 0.0};
+            const AreaUnit: square_zeptometer{1.0e-42, 0.0};
+            const AreaUnit: square_attometer{1.0e-36, 0.0};
+            const AreaUnit: square_femtometer{1.0e-30, 0.0};
+            const AreaUnit: square_picometer{1.0e-24, 0.0};
+            const AreaUnit: square_nanometer{1.0e-18, 0.0};
+            const AreaUnit: square_micrometer{1.0e-12, 0.0};
+            const AreaUnit: square_millimeter{0.000001, 0.0};
+            const AreaUnit: square_centimeter{0.0001, 0.0};
+            const AreaUnit: square_decimeter{0.01, 0.0};
+            const AreaUnit: square_decameter{100.0, 0.0};
+            const AreaUnit: square_hectometer{10000.0, 0.0};
+            const AreaUnit: square_kilometer{1000000.0, 0.0};
+            const AreaUnit: square_megameter{1000000000000.0, 0.0};
+            const AreaUnit: square_gigameter{1.0e18, 0.0};
+            const AreaUnit: square_terameter{1.0e24, 0.0};
+            const AreaUnit: square_petameter{1.0e30, 0.0};
+            const AreaUnit: square_exameter{1.0e36, 0.0};
+            const AreaUnit: square_zettameter{1.0e42, 0.0};
+            const AreaUnit: square_yottameter{1.0e48, 0.0};
+            const AreaUnit: square_ronnameter{1.0e54, 0.0};
+            const AreaUnit: square_quettameter{1.0e60, 0.0};
+            const AreaUnit: square_foot{0.09290304, 0.0};
+            const AreaUnit: square_inch{0.00064516, 0.0};
+            const AreaUnit: square_yard{0.83612736, 0.0};
+            const AreaUnit: square_mile{2589988.110336, 0.0};
+            const AreaUnit: are{100.0, 0.0};
+            const AreaUnit: hectare{10000.0, 0.0};
+            const AreaUnit: barn{1.0e-28, 0.0};
+            const AreaUnit: acre{4046.8564224, 0.0};
+        } end namespace area
+
+        namespace volume {
+            const VolumeUnit: cubic_meter{1.0, 0.0};
+            const VolumeUnit: cubic_quectometer{1.0e-90, 0.0};
+            const VolumeUnit: cubic_rontometer{1.0e-81, 0.0};
+            const VolumeUnit: cubic_yoctometer{1.0e-72, 0.0};
+            const VolumeUnit: cubic_zeptometer{1.0e-63, 0.0};
+            const VolumeUnit: cubic_attometer{1.0e-54, 0.0};
+            const VolumeUnit: cubic_femtometer{1.0e-45, 0.0};
+            const VolumeUnit: cubic_picometer{1.0e-36, 0.0};
+            const VolumeUnit: cubic_nanometer{1.0e-27, 0.0};
+            const VolumeUnit: cubic_micrometer{1.0e-18, 0.0};
+            const VolumeUnit: cubic_millimeter{1.0e-9, 0.0};
+            const VolumeUnit: cubic_centimeter{0.000001, 0.0};
+            const VolumeUnit: cubic_decimeter{0.001, 0.0};
+            const VolumeUnit: cubic_decameter{1000.0, 0.0};
+            const VolumeUnit: cubic_hectometer{1000000.0, 0.0};
+            const VolumeUnit: cubic_kilometer{1000000000.0, 0.0};
+            const VolumeUnit: cubic_megameter{1.0e18, 0.0};
+            const VolumeUnit: cubic_gigameter{1.0e27, 0.0};
+            const VolumeUnit: cubic_terameter{1.0e36, 0.0};
+            const VolumeUnit: cubic_petameter{1.0e45, 0.0};
+            const VolumeUnit: cubic_exameter{1.0e54, 0.0};
+            const VolumeUnit: cubic_zettameter{1.0e63, 0.0};
+            const VolumeUnit: cubic_yottameter{1.0e72, 0.0};
+            const VolumeUnit: cubic_ronnameter{1.0e81, 0.0};
+            const VolumeUnit: cubic_quettameter{1.0e90, 0.0};
+            const VolumeUnit: liter{0.001, 0.0};
+            const VolumeUnit: quectoliter{1.0e-33, 0.0};
+            const VolumeUnit: rontoliter{1.0e-30, 0.0};
+            const VolumeUnit: yoctoliter{1.0e-27, 0.0};
+            const VolumeUnit: zeptoliter{1.0e-24, 0.0};
+            const VolumeUnit: attoliter{1.0e-21, 0.0};
+            const VolumeUnit: femtoliter{1.0e-18, 0.0};
+            const VolumeUnit: picoliter{1.0e-15, 0.0};
+            const VolumeUnit: nanoliter{1.0e-12, 0.0};
+            const VolumeUnit: microliter{1.0e-9, 0.0};
+            const VolumeUnit: milliliter{0.000001, 0.0};
+            const VolumeUnit: centiliter{0.00001, 0.0};
+            const VolumeUnit: deciliter{0.0001, 0.0};
+            const VolumeUnit: decaliter{0.01, 0.0};
+            const VolumeUnit: hectoliter{0.1, 0.0};
+            const VolumeUnit: kiloliter{1.0, 0.0};
+            const VolumeUnit: megaliter{1000.0, 0.0};
+            const VolumeUnit: gigaliter{1000000.0, 0.0};
+            const VolumeUnit: teraliter{1000000000.0, 0.0};
+            const VolumeUnit: petaliter{1000000000000.0, 0.0};
+            const VolumeUnit: exaliter{1000000000000000.0, 0.0};
+            const VolumeUnit: zettaliter{1.0e18, 0.0};
+            const VolumeUnit: yottaliter{1.0e21, 0.0};
+            const VolumeUnit: ronnaliter{1.0e24, 0.0};
+            const VolumeUnit: quettaliter{1.0e27, 0.0};
+            const VolumeUnit: us_fluid_ounce{0.0000295735295625, 0.0};
+            const VolumeUnit: us_tablespoon{0.00001478676478125, 0.0};
+            const VolumeUnit: us_teaspoon{0.00000492892159375, 0.0};
+            const VolumeUnit: us_cup{0.0002365882365, 0.0};
+            const VolumeUnit: us_pint{0.000473176473, 0.0};
+            const VolumeUnit: us_quart{0.000946352946, 0.0};
+            const VolumeUnit: us_gallon{0.003785411784, 0.0};
+            const VolumeUnit: cubic_foot{0.028316846592, 0.0};
+            const VolumeUnit: cubic_inch{0.000016387064, 0.0};
+            const VolumeUnit: cubic_yard{0.764554857984, 0.0};
+            const VolumeUnit: imperial_fluid_ounce{0.0000284130625, 0.0};
+            const VolumeUnit: imperial_tablespoon{0.0000177581640625, 0.0};
+            const VolumeUnit: imperial_teaspoon{0.00000591938802083333333333333333333333333, 0.0};
+            const VolumeUnit: imperial_cup{0.000284130625, 0.0};
+            const VolumeUnit: imperial_pint{0.00056826125, 0.0};
+            const VolumeUnit: imperial_quart{0.0011365225, 0.0};
+            const VolumeUnit: imperial_gallon{0.00454609, 0.0};
+            const VolumeUnit: uk_fluid_ounce{0.0000284130625, 0.0};
+            const VolumeUnit: uk_pint{0.00056826125, 0.0};
+            const VolumeUnit: uk_quart{0.0011365225, 0.0};
+            const VolumeUnit: uk_gallon{0.00454609, 0.0};
+            const VolumeUnit: oil_barrel{0.158987294928, 0.0};
+        } end namespace volume
+
+        namespace velocity {
+            const VelocityUnit: meters_per_second{1.0, 0.0};
+            const VelocityUnit: quectometers_per_second{1.0e-30, 0.0};
+            const VelocityUnit: rontometers_per_second{1.0e-27, 0.0};
+            const VelocityUnit: yoctometers_per_second{1.0e-24, 0.0};
+            const VelocityUnit: zeptometers_per_second{1.0e-21, 0.0};
+            const VelocityUnit: attometers_per_second{1.0e-18, 0.0};
+            const VelocityUnit: femtometers_per_second{1.0e-15, 0.0};
+            const VelocityUnit: picometers_per_second{1.0e-12, 0.0};
+            const VelocityUnit: nanometers_per_second{1.0e-9, 0.0};
+            const VelocityUnit: micrometers_per_second{0.000001, 0.0};
+            const VelocityUnit: millimeters_per_second{0.001, 0.0};
+            const VelocityUnit: centimeters_per_second{0.01, 0.0};
+            const VelocityUnit: decimeters_per_second{0.1, 0.0};
+            const VelocityUnit: decameters_per_second{10.0, 0.0};
+            const VelocityUnit: hectometers_per_second{100.0, 0.0};
+            const VelocityUnit: kilometers_per_second{1000.0, 0.0};
+            const VelocityUnit: megameters_per_second{1000000.0, 0.0};
+            const VelocityUnit: gigameters_per_second{1000000000.0, 0.0};
+            const VelocityUnit: terameters_per_second{1000000000000.0, 0.0};
+            const VelocityUnit: petameters_per_second{1000000000000000.0, 0.0};
+            const VelocityUnit: exameters_per_second{1.0e18, 0.0};
+            const VelocityUnit: zettameters_per_second{1.0e21, 0.0};
+            const VelocityUnit: yottameters_per_second{1.0e24, 0.0};
+            const VelocityUnit: ronnameters_per_second{1.0e27, 0.0};
+            const VelocityUnit: quettameters_per_second{1.0e30, 0.0};
+            const VelocityUnit: meters_per_hour{0.000277777777777777777777777777777777778, 0.0};
+            const VelocityUnit: quectometers_per_hour{2.77777777777777777777777777777777778e-34, 0.0};
+            const VelocityUnit: rontometers_per_hour{2.77777777777777777777777777777777778e-31, 0.0};
+            const VelocityUnit: yoctometers_per_hour{2.77777777777777777777777777777777778e-28, 0.0};
+            const VelocityUnit: zeptometers_per_hour{2.77777777777777777777777777777777778e-25, 0.0};
+            const VelocityUnit: attometers_per_hour{2.77777777777777777777777777777777778e-22, 0.0};
+            const VelocityUnit: femtometers_per_hour{2.77777777777777777777777777777777778e-19, 0.0};
+            const VelocityUnit: picometers_per_hour{2.77777777777777777777777777777777778e-16, 0.0};
+            const VelocityUnit: nanometers_per_hour{2.77777777777777777777777777777777778e-13, 0.0};
+            const VelocityUnit: micrometers_per_hour{2.77777777777777777777777777777777778e-10, 0.0};
+            const VelocityUnit: millimeters_per_hour{2.77777777777777777777777777777777778e-7, 0.0};
+            const VelocityUnit: centimeters_per_hour{0.00000277777777777777777777777777777777778, 0.0};
+            const VelocityUnit: decimeters_per_hour{0.0000277777777777777777777777777777777778, 0.0};
+            const VelocityUnit: decameters_per_hour{0.00277777777777777777777777777777777778, 0.0};
+            const VelocityUnit: hectometers_per_hour{0.0277777777777777777777777777777777778, 0.0};
+            const VelocityUnit: kilometers_per_hour{0.277777777777777777777777777777777778, 0.0};
+            const VelocityUnit: megameters_per_hour{277.777777777777777777777777777777778, 0.0};
+            const VelocityUnit: gigameters_per_hour{277777.777777777777777777777777777778, 0.0};
+            const VelocityUnit: terameters_per_hour{277777777.777777777777777777777777778, 0.0};
+            const VelocityUnit: petameters_per_hour{277777777777.777777777777777777777778, 0.0};
+            const VelocityUnit: exameters_per_hour{277777777777777.777777777777777777778, 0.0};
+            const VelocityUnit: zettameters_per_hour{2.77777777777777777777777777777777778e17, 0.0};
+            const VelocityUnit: yottameters_per_hour{2.77777777777777777777777777777777778e20, 0.0};
+            const VelocityUnit: ronnameters_per_hour{2.77777777777777777777777777777777778e23, 0.0};
+            const VelocityUnit: quettameters_per_hour{2.77777777777777777777777777777777778e26, 0.0};
+            const VelocityUnit: miles_per_hour{0.44704, 0.0};
+            const VelocityUnit: feet_per_second{0.3048, 0.0};
+            const VelocityUnit: knot{0.514444444444444444444444444444444444, 0.0};
+            const VelocityUnit: light_speed{299792458.0, 0.0};
+        } end namespace velocity
+
+        namespace acceleration {
+            const AccelerationUnit: meters_per_second_squared{1.0, 0.0};
+            const AccelerationUnit: quectometers_per_second_squared{1.0e-30, 0.0};
+            const AccelerationUnit: rontometers_per_second_squared{1.0e-27, 0.0};
+            const AccelerationUnit: yoctometers_per_second_squared{1.0e-24, 0.0};
+            const AccelerationUnit: zeptometers_per_second_squared{1.0e-21, 0.0};
+            const AccelerationUnit: attometers_per_second_squared{1.0e-18, 0.0};
+            const AccelerationUnit: femtometers_per_second_squared{1.0e-15, 0.0};
+            const AccelerationUnit: picometers_per_second_squared{1.0e-12, 0.0};
+            const AccelerationUnit: nanometers_per_second_squared{1.0e-9, 0.0};
+            const AccelerationUnit: micrometers_per_second_squared{0.000001, 0.0};
+            const AccelerationUnit: millimeters_per_second_squared{0.001, 0.0};
+            const AccelerationUnit: centimeters_per_second_squared{0.01, 0.0};
+            const AccelerationUnit: decimeters_per_second_squared{0.1, 0.0};
+            const AccelerationUnit: decameters_per_second_squared{10.0, 0.0};
+            const AccelerationUnit: hectometers_per_second_squared{100.0, 0.0};
+            const AccelerationUnit: kilometers_per_second_squared{1000.0, 0.0};
+            const AccelerationUnit: megameters_per_second_squared{1000000.0, 0.0};
+            const AccelerationUnit: gigameters_per_second_squared{1000000000.0, 0.0};
+            const AccelerationUnit: terameters_per_second_squared{1000000000000.0, 0.0};
+            const AccelerationUnit: petameters_per_second_squared{1000000000000000.0, 0.0};
+            const AccelerationUnit: exameters_per_second_squared{1.0e18, 0.0};
+            const AccelerationUnit: zettameters_per_second_squared{1.0e21, 0.0};
+            const AccelerationUnit: yottameters_per_second_squared{1.0e24, 0.0};
+            const AccelerationUnit: ronnameters_per_second_squared{1.0e27, 0.0};
+            const AccelerationUnit: quettameters_per_second_squared{1.0e30, 0.0};
+            const AccelerationUnit: feet_per_second_squared{0.3048, 0.0};
+            const AccelerationUnit: gal{0.01, 0.0};
+            const AccelerationUnit: standard_gravity{9.80665, 0.0};
+
+            function g_force(float: n) -> AccelerationUnit {
+                return AccelerationUnit{9.80665 * n, 0.0};
+            } end function g_force
+        } end namespace acceleration
+
+        namespace force {
+            const ForceUnit: newton{1.0, 0.0};
+            const ForceUnit: quectonewton{1.0e-30, 0.0};
+            const ForceUnit: rontonewton{1.0e-27, 0.0};
+            const ForceUnit: yoctonewton{1.0e-24, 0.0};
+            const ForceUnit: zeptonewton{1.0e-21, 0.0};
+            const ForceUnit: attonewton{1.0e-18, 0.0};
+            const ForceUnit: femtonewton{1.0e-15, 0.0};
+            const ForceUnit: piconewton{1.0e-12, 0.0};
+            const ForceUnit: nanonewton{1.0e-9, 0.0};
+            const ForceUnit: micronewton{0.000001, 0.0};
+            const ForceUnit: millinewton{0.001, 0.0};
+            const ForceUnit: centinewton{0.01, 0.0};
+            const ForceUnit: decinewton{0.1, 0.0};
+            const ForceUnit: decanewton{10.0, 0.0};
+            const ForceUnit: hectonewton{100.0, 0.0};
+            const ForceUnit: kilonewton{1000.0, 0.0};
+            const ForceUnit: meganewton{1000000.0, 0.0};
+            const ForceUnit: giganewton{1000000000.0, 0.0};
+            const ForceUnit: teranewton{1000000000000.0, 0.0};
+            const ForceUnit: petanewton{1000000000000000.0, 0.0};
+            const ForceUnit: exanewton{1.0e18, 0.0};
+            const ForceUnit: zettanewton{1.0e21, 0.0};
+            const ForceUnit: yottanewton{1.0e24, 0.0};
+            const ForceUnit: ronnanewton{1.0e27, 0.0};
+            const ForceUnit: quettanewton{1.0e30, 0.0};
+            const ForceUnit: dyne{0.00001, 0.0};
+            const ForceUnit: gram_force{0.00980665, 0.0};
+            const ForceUnit: quectogram_force{9.80665e-33, 0.0};
+            const ForceUnit: rontogram_force{9.80665e-30, 0.0};
+            const ForceUnit: yoctogram_force{9.80665e-27, 0.0};
+            const ForceUnit: zeptogram_force{9.80665e-24, 0.0};
+            const ForceUnit: attogram_force{9.80665e-21, 0.0};
+            const ForceUnit: femtogram_force{9.80665e-18, 0.0};
+            const ForceUnit: picogram_force{9.80665e-15, 0.0};
+            const ForceUnit: nanogram_force{9.80665e-12, 0.0};
+            const ForceUnit: microgram_force{9.80665e-9, 0.0};
+            const ForceUnit: milligram_force{0.00000980665, 0.0};
+            const ForceUnit: centigram_force{0.0000980665, 0.0};
+            const ForceUnit: decigram_force{0.000980665, 0.0};
+            const ForceUnit: decagram_force{0.0980665, 0.0};
+            const ForceUnit: hectogram_force{0.980665, 0.0};
+            const ForceUnit: kilogram_force{9.80665, 0.0};
+            const ForceUnit: megagram_force{9806.65, 0.0};
+            const ForceUnit: gigagram_force{9806650.0, 0.0};
+            const ForceUnit: teragram_force{9806650000.0, 0.0};
+            const ForceUnit: petagram_force{9806650000000.0, 0.0};
+            const ForceUnit: exagram_force{9806650000000000.0, 0.0};
+            const ForceUnit: zettagram_force{9.80665e18, 0.0};
+            const ForceUnit: yottagram_force{9.80665e21, 0.0};
+            const ForceUnit: ronnagram_force{9.80665e24, 0.0};
+            const ForceUnit: quettagram_force{9.80665e27, 0.0};
+            const ForceUnit: pound_force{4.4482216152605, 0.0};
+            const ForceUnit: poundal{0.138254954376, 0.0};
+            const ForceUnit: sthene{1000.0, 0.0};
+            const ForceUnit: ton_force{9806.65, 0.0};
+        } end namespace force
+
+        namespace power {
+            const PowerUnit: watt{1.0, 0.0};
+            const PowerUnit: quectowatt{1.0e-30, 0.0};
+            const PowerUnit: rontowatt{1.0e-27, 0.0};
+            const PowerUnit: yoctowatt{1.0e-24, 0.0};
+            const PowerUnit: zeptowatt{1.0e-21, 0.0};
+            const PowerUnit: attowatt{1.0e-18, 0.0};
+            const PowerUnit: femtowatt{1.0e-15, 0.0};
+            const PowerUnit: picowatt{1.0e-12, 0.0};
+            const PowerUnit: nanowatt{1.0e-9, 0.0};
+            const PowerUnit: microwatt{0.000001, 0.0};
+            const PowerUnit: milliwatt{0.001, 0.0};
+            const PowerUnit: centiwatt{0.01, 0.0};
+            const PowerUnit: deciwatt{0.1, 0.0};
+            const PowerUnit: decawatt{10.0, 0.0};
+            const PowerUnit: hectowatt{100.0, 0.0};
+            const PowerUnit: kilowatt{1000.0, 0.0};
+            const PowerUnit: megawatt{1000000.0, 0.0};
+            const PowerUnit: gigawatt{1000000000.0, 0.0};
+            const PowerUnit: terawatt{1000000000000.0, 0.0};
+            const PowerUnit: petawatt{1000000000000000.0, 0.0};
+            const PowerUnit: exawatt{1.0e18, 0.0};
+            const PowerUnit: zettawatt{1.0e21, 0.0};
+            const PowerUnit: yottawatt{1.0e24, 0.0};
+            const PowerUnit: ronnawatt{1.0e27, 0.0};
+            const PowerUnit: quettawatt{1.0e30, 0.0};
+            const PowerUnit: horsepower{745.69987158227022, 0.0};
+            const PowerUnit: metric_horsepower{735.49875, 0.0};
+            const PowerUnit: electric_horsepower{746.0, 0.0};
+        } end namespace power
+
+        namespace energy {
+            const EnergyUnit: joule{1.0, 0.0};
+            const EnergyUnit: quectojoule{1.0e-30, 0.0};
+            const EnergyUnit: rontojoule{1.0e-27, 0.0};
+            const EnergyUnit: yoctojoule{1.0e-24, 0.0};
+            const EnergyUnit: zeptojoule{1.0e-21, 0.0};
+            const EnergyUnit: attojoule{1.0e-18, 0.0};
+            const EnergyUnit: femtojoule{1.0e-15, 0.0};
+            const EnergyUnit: picojoule{1.0e-12, 0.0};
+            const EnergyUnit: nanojoule{1.0e-9, 0.0};
+            const EnergyUnit: microjoule{0.000001, 0.0};
+            const EnergyUnit: millijoule{0.001, 0.0};
+            const EnergyUnit: centijoule{0.01, 0.0};
+            const EnergyUnit: decijoule{0.1, 0.0};
+            const EnergyUnit: decajoule{10.0, 0.0};
+            const EnergyUnit: hectojoule{100.0, 0.0};
+            const EnergyUnit: kilojoule{1000.0, 0.0};
+            const EnergyUnit: megajoule{1000000.0, 0.0};
+            const EnergyUnit: gigajoule{1000000000.0, 0.0};
+            const EnergyUnit: terajoule{1000000000000.0, 0.0};
+            const EnergyUnit: petajoule{1000000000000000.0, 0.0};
+            const EnergyUnit: exajoule{1.0e18, 0.0};
+            const EnergyUnit: zettajoule{1.0e21, 0.0};
+            const EnergyUnit: yottajoule{1.0e24, 0.0};
+            const EnergyUnit: ronnajoule{1.0e27, 0.0};
+            const EnergyUnit: quettajoule{1.0e30, 0.0};
+            const EnergyUnit: watt_second{1.0, 0.0};
+            const EnergyUnit: quectowatt_second{1.0e-30, 0.0};
+            const EnergyUnit: rontowatt_second{1.0e-27, 0.0};
+            const EnergyUnit: yoctowatt_second{1.0e-24, 0.0};
+            const EnergyUnit: zeptowatt_second{1.0e-21, 0.0};
+            const EnergyUnit: attowatt_second{1.0e-18, 0.0};
+            const EnergyUnit: femtowatt_second{1.0e-15, 0.0};
+            const EnergyUnit: picowatt_second{1.0e-12, 0.0};
+            const EnergyUnit: nanowatt_second{1.0e-9, 0.0};
+            const EnergyUnit: microwatt_second{0.000001, 0.0};
+            const EnergyUnit: milliwatt_second{0.001, 0.0};
+            const EnergyUnit: centiwatt_second{0.01, 0.0};
+            const EnergyUnit: deciwatt_second{0.1, 0.0};
+            const EnergyUnit: decawatt_second{10.0, 0.0};
+            const EnergyUnit: hectowatt_second{100.0, 0.0};
+            const EnergyUnit: kilowatt_second{1000.0, 0.0};
+            const EnergyUnit: megawatt_second{1000000.0, 0.0};
+            const EnergyUnit: gigawatt_second{1000000000.0, 0.0};
+            const EnergyUnit: terawatt_second{1000000000000.0, 0.0};
+            const EnergyUnit: petawatt_second{1000000000000000.0, 0.0};
+            const EnergyUnit: exawatt_second{1.0e18, 0.0};
+            const EnergyUnit: zettawatt_second{1.0e21, 0.0};
+            const EnergyUnit: yottawatt_second{1.0e24, 0.0};
+            const EnergyUnit: ronnawatt_second{1.0e27, 0.0};
+            const EnergyUnit: quettawatt_second{1.0e30, 0.0};
+            const EnergyUnit: watt_minute{60.0, 0.0};
+            const EnergyUnit: quectowatt_minute{6.0e-29, 0.0};
+            const EnergyUnit: rontowatt_minute{6.0e-26, 0.0};
+            const EnergyUnit: yoctowatt_minute{6.0e-23, 0.0};
+            const EnergyUnit: zeptowatt_minute{6.0e-20, 0.0};
+            const EnergyUnit: attowatt_minute{6.0e-17, 0.0};
+            const EnergyUnit: femtowatt_minute{6.0e-14, 0.0};
+            const EnergyUnit: picowatt_minute{6.0e-11, 0.0};
+            const EnergyUnit: nanowatt_minute{6.0e-8, 0.0};
+            const EnergyUnit: microwatt_minute{0.00006, 0.0};
+            const EnergyUnit: milliwatt_minute{0.06, 0.0};
+            const EnergyUnit: centiwatt_minute{0.6, 0.0};
+            const EnergyUnit: deciwatt_minute{6.0, 0.0};
+            const EnergyUnit: decawatt_minute{600.0, 0.0};
+            const EnergyUnit: hectowatt_minute{6000.0, 0.0};
+            const EnergyUnit: kilowatt_minute{60000.0, 0.0};
+            const EnergyUnit: megawatt_minute{60000000.0, 0.0};
+            const EnergyUnit: gigawatt_minute{60000000000.0, 0.0};
+            const EnergyUnit: terawatt_minute{60000000000000.0, 0.0};
+            const EnergyUnit: petawatt_minute{6.0e16, 0.0};
+            const EnergyUnit: exawatt_minute{6.0e19, 0.0};
+            const EnergyUnit: zettawatt_minute{6.0e22, 0.0};
+            const EnergyUnit: yottawatt_minute{6.0e25, 0.0};
+            const EnergyUnit: ronnawatt_minute{6.0e28, 0.0};
+            const EnergyUnit: quettawatt_minute{6.0e31, 0.0};
+            const EnergyUnit: watt_hour{3600.0, 0.0};
+            const EnergyUnit: quectowatt_hour{3.6e-27, 0.0};
+            const EnergyUnit: rontowatt_hour{3.6e-24, 0.0};
+            const EnergyUnit: yoctowatt_hour{3.6e-21, 0.0};
+            const EnergyUnit: zeptowatt_hour{3.6e-18, 0.0};
+            const EnergyUnit: attowatt_hour{3.6e-15, 0.0};
+            const EnergyUnit: femtowatt_hour{3.6e-12, 0.0};
+            const EnergyUnit: picowatt_hour{3.6e-9, 0.0};
+            const EnergyUnit: nanowatt_hour{0.0000036, 0.0};
+            const EnergyUnit: microwatt_hour{0.0036, 0.0};
+            const EnergyUnit: milliwatt_hour{3.6, 0.0};
+            const EnergyUnit: centiwatt_hour{36.0, 0.0};
+            const EnergyUnit: deciwatt_hour{360.0, 0.0};
+            const EnergyUnit: decawatt_hour{36000.0, 0.0};
+            const EnergyUnit: hectowatt_hour{360000.0, 0.0};
+            const EnergyUnit: kilowatt_hour{3600000.0, 0.0};
+            const EnergyUnit: megawatt_hour{3600000000.0, 0.0};
+            const EnergyUnit: gigawatt_hour{3600000000000.0, 0.0};
+            const EnergyUnit: terawatt_hour{3600000000000000.0, 0.0};
+            const EnergyUnit: petawatt_hour{3.6e18, 0.0};
+            const EnergyUnit: exawatt_hour{3.6e21, 0.0};
+            const EnergyUnit: zettawatt_hour{3.6e24, 0.0};
+            const EnergyUnit: yottawatt_hour{3.6e27, 0.0};
+            const EnergyUnit: ronnawatt_hour{3.6e30, 0.0};
+            const EnergyUnit: quettawatt_hour{3.6e33, 0.0};
+            const EnergyUnit: erg{1.0e-7, 0.0};
+            const EnergyUnit: quectoerg{1.0e-37, 0.0};
+            const EnergyUnit: rontoerg{1.0e-34, 0.0};
+            const EnergyUnit: yoctoerg{1.0e-31, 0.0};
+            const EnergyUnit: zeptoerg{1.0e-28, 0.0};
+            const EnergyUnit: attoerg{1.0e-25, 0.0};
+            const EnergyUnit: femtoerg{1.0e-22, 0.0};
+            const EnergyUnit: picoerg{1.0e-19, 0.0};
+            const EnergyUnit: nanoerg{1.0e-16, 0.0};
+            const EnergyUnit: microerg{1.0e-13, 0.0};
+            const EnergyUnit: millierg{1.0e-10, 0.0};
+            const EnergyUnit: centierg{1.0e-9, 0.0};
+            const EnergyUnit: decierg{1.0e-8, 0.0};
+            const EnergyUnit: decaerg{0.000001, 0.0};
+            const EnergyUnit: hectoerg{0.00001, 0.0};
+            const EnergyUnit: kiloerg{0.0001, 0.0};
+            const EnergyUnit: megaerg{0.1, 0.0};
+            const EnergyUnit: gigaerg{100.0, 0.0};
+            const EnergyUnit: teraerg{100000.0, 0.0};
+            const EnergyUnit: petaerg{100000000.0, 0.0};
+            const EnergyUnit: exaerg{100000000000.0, 0.0};
+            const EnergyUnit: zettaerg{100000000000000.0, 0.0};
+            const EnergyUnit: yottaerg{1.0e17, 0.0};
+            const EnergyUnit: ronnaerg{1.0e20, 0.0};
+            const EnergyUnit: quettaerg{1.0e23, 0.0};
+            const EnergyUnit: calorie{4.1868, 0.0};
+            const EnergyUnit: quectocalorie{4.1868e-30, 0.0};
+            const EnergyUnit: rontocalorie{4.1868e-27, 0.0};
+            const EnergyUnit: yoctocalorie{4.1868e-24, 0.0};
+            const EnergyUnit: zeptocalorie{4.1868e-21, 0.0};
+            const EnergyUnit: attocalorie{4.1868e-18, 0.0};
+            const EnergyUnit: femtocalorie{4.1868e-15, 0.0};
+            const EnergyUnit: picocalorie{4.1868e-12, 0.0};
+            const EnergyUnit: nanocalorie{4.1868e-9, 0.0};
+            const EnergyUnit: microcalorie{0.0000041868, 0.0};
+            const EnergyUnit: millicalorie{0.0041868, 0.0};
+            const EnergyUnit: centicalorie{0.041868, 0.0};
+            const EnergyUnit: decicalorie{0.41868, 0.0};
+            const EnergyUnit: decacalorie{41.868, 0.0};
+            const EnergyUnit: hectocalorie{418.68, 0.0};
+            const EnergyUnit: kilocalorie{4186.8, 0.0};
+            const EnergyUnit: megacalorie{4186800.0, 0.0};
+            const EnergyUnit: gigacalorie{4186800000.0, 0.0};
+            const EnergyUnit: teracalorie{4186800000000.0, 0.0};
+            const EnergyUnit: petacalorie{4186800000000000.0, 0.0};
+            const EnergyUnit: exacalorie{4.1868e18, 0.0};
+            const EnergyUnit: zettacalorie{4.1868e21, 0.0};
+            const EnergyUnit: yottacalorie{4.1868e24, 0.0};
+            const EnergyUnit: ronnacalorie{4.1868e27, 0.0};
+            const EnergyUnit: quettacalorie{4.1868e30, 0.0};
+            const EnergyUnit: food_calorie{4184.0, 0.0};
+            const EnergyUnit: calorie_thermochem{4.184, 0.0};
+            const EnergyUnit: quectocalorie_thermochem{4.184e-30, 0.0};
+            const EnergyUnit: rontocalorie_thermochem{4.184e-27, 0.0};
+            const EnergyUnit: yoctocalorie_thermochem{4.184e-24, 0.0};
+            const EnergyUnit: zeptocalorie_thermochem{4.184e-21, 0.0};
+            const EnergyUnit: attocalorie_thermochem{4.184e-18, 0.0};
+            const EnergyUnit: femtocalorie_thermochem{4.184e-15, 0.0};
+            const EnergyUnit: picocalorie_thermochem{4.184e-12, 0.0};
+            const EnergyUnit: nanocalorie_thermochem{4.184e-9, 0.0};
+            const EnergyUnit: microcalorie_thermochem{0.000004184, 0.0};
+            const EnergyUnit: millicalorie_thermochem{0.004184, 0.0};
+            const EnergyUnit: centicalorie_thermochem{0.04184, 0.0};
+            const EnergyUnit: decicalorie_thermochem{0.4184, 0.0};
+            const EnergyUnit: decacalorie_thermochem{41.84, 0.0};
+            const EnergyUnit: hectocalorie_thermochem{418.4, 0.0};
+            const EnergyUnit: kilocalorie_thermochem{4184.0, 0.0};
+            const EnergyUnit: megacalorie_thermochem{4184000.0, 0.0};
+            const EnergyUnit: gigacalorie_thermochem{4184000000.0, 0.0};
+            const EnergyUnit: teracalorie_thermochem{4184000000000.0, 0.0};
+            const EnergyUnit: petacalorie_thermochem{4184000000000000.0, 0.0};
+            const EnergyUnit: exacalorie_thermochem{4.184e18, 0.0};
+            const EnergyUnit: zettacalorie_thermochem{4.184e21, 0.0};
+            const EnergyUnit: yottacalorie_thermochem{4.184e24, 0.0};
+            const EnergyUnit: ronnacalorie_thermochem{4.184e27, 0.0};
+            const EnergyUnit: quettacalorie_thermochem{4.184e30, 0.0};
+            const EnergyUnit: btu{1055.05585262, 0.0};
+            const EnergyUnit: therm{105505585.262, 0.0};
+            const EnergyUnit: electronvolt{1.602176634e-19, 0.0};
+            const EnergyUnit: quectoelectronvolt{1.602176634e-49, 0.0};
+            const EnergyUnit: rontoelectronvolt{1.602176634e-46, 0.0};
+            const EnergyUnit: yoctoelectronvolt{1.602176634e-43, 0.0};
+            const EnergyUnit: zeptoelectronvolt{1.602176634e-40, 0.0};
+            const EnergyUnit: attoelectronvolt{1.602176634e-37, 0.0};
+            const EnergyUnit: femtoelectronvolt{1.602176634e-34, 0.0};
+            const EnergyUnit: picoelectronvolt{1.602176634e-31, 0.0};
+            const EnergyUnit: nanoelectronvolt{1.602176634e-28, 0.0};
+            const EnergyUnit: microelectronvolt{1.602176634e-25, 0.0};
+            const EnergyUnit: millielectronvolt{1.602176634e-22, 0.0};
+            const EnergyUnit: centielectronvolt{1.602176634e-21, 0.0};
+            const EnergyUnit: decielectronvolt{1.602176634e-20, 0.0};
+            const EnergyUnit: decaelectronvolt{1.602176634e-18, 0.0};
+            const EnergyUnit: hectoelectronvolt{1.602176634e-17, 0.0};
+            const EnergyUnit: kiloelectronvolt{1.602176634e-16, 0.0};
+            const EnergyUnit: megaelectronvolt{1.602176634e-13, 0.0};
+            const EnergyUnit: gigaelectronvolt{1.602176634e-10, 0.0};
+            const EnergyUnit: teraelectronvolt{1.602176634e-7, 0.0};
+            const EnergyUnit: petaelectronvolt{0.0001602176634, 0.0};
+            const EnergyUnit: exaelectronvolt{0.1602176634, 0.0};
+            const EnergyUnit: zettaelectronvolt{160.2176634, 0.0};
+            const EnergyUnit: yottaelectronvolt{160217.6634, 0.0};
+            const EnergyUnit: ronnaelectronvolt{160217663.4, 0.0};
+            const EnergyUnit: quettaelectronvolt{160217663400.0, 0.0};
+            const EnergyUnit: foot_pound_force{1.3558179483314004, 0.0};
+            const EnergyUnit: foot_poundal{0.0421401100938048, 0.0};
+            const EnergyUnit: inch_pound_force{0.1129848290276167, 0.0};
+        } end namespace energy
+
+        namespace torque {
+            const TorqueUnit: newton_meter{1.0, 0.0};
+            const TorqueUnit: pound_foot{1.3558179483314004, 0.0};
+            const TorqueUnit: pound_inch{0.1129848290276167, 0.0};
+        } end namespace torque
+
+        namespace pressure {
+            const PressureUnit: pascal_{1.0, 0.0};
+            const PressureUnit: quectopascal_{1.0e-30, 0.0};
+            const PressureUnit: rontopascal_{1.0e-27, 0.0};
+            const PressureUnit: yoctopascal_{1.0e-24, 0.0};
+            const PressureUnit: zeptopascal_{1.0e-21, 0.0};
+            const PressureUnit: attopascal_{1.0e-18, 0.0};
+            const PressureUnit: femtopascal_{1.0e-15, 0.0};
+            const PressureUnit: picopascal_{1.0e-12, 0.0};
+            const PressureUnit: nanopascal_{1.0e-9, 0.0};
+            const PressureUnit: micropascal_{0.000001, 0.0};
+            const PressureUnit: millipascal_{0.001, 0.0};
+            const PressureUnit: centipascal_{0.01, 0.0};
+            const PressureUnit: decipascal_{0.1, 0.0};
+            const PressureUnit: decapascal_{10.0, 0.0};
+            const PressureUnit: hectopascal_{100.0, 0.0};
+            const PressureUnit: kilopascal_{1000.0, 0.0};
+            const PressureUnit: megapascal_{1000000.0, 0.0};
+            const PressureUnit: gigapascal_{1000000000.0, 0.0};
+            const PressureUnit: terapascal_{1000000000000.0, 0.0};
+            const PressureUnit: petapascal_{1000000000000000.0, 0.0};
+            const PressureUnit: exapascal_{1.0e18, 0.0};
+            const PressureUnit: zettapascal_{1.0e21, 0.0};
+            const PressureUnit: yottapascal_{1.0e24, 0.0};
+            const PressureUnit: ronnapascal_{1.0e27, 0.0};
+            const PressureUnit: quettapascal_{1.0e30, 0.0};
+            const PressureUnit: bar{100000.0, 0.0};
+            const PressureUnit: quectobar{1.0e-25, 0.0};
+            const PressureUnit: rontobar{1.0e-22, 0.0};
+            const PressureUnit: yoctobar{1.0e-19, 0.0};
+            const PressureUnit: zeptobar{1.0e-16, 0.0};
+            const PressureUnit: attobar{1.0e-13, 0.0};
+            const PressureUnit: femtobar{1.0e-10, 0.0};
+            const PressureUnit: picobar{1.0e-7, 0.0};
+            const PressureUnit: nanobar{0.0001, 0.0};
+            const PressureUnit: microbar{0.1, 0.0};
+            const PressureUnit: millibar{100.0, 0.0};
+            const PressureUnit: centibar{1000.0, 0.0};
+            const PressureUnit: decibar{10000.0, 0.0};
+            const PressureUnit: decabar{1000000.0, 0.0};
+            const PressureUnit: hectobar{10000000.0, 0.0};
+            const PressureUnit: kilobar{100000000.0, 0.0};
+            const PressureUnit: megabar{100000000000.0, 0.0};
+            const PressureUnit: gigabar{100000000000000.0, 0.0};
+            const PressureUnit: terabar{1.0e17, 0.0};
+            const PressureUnit: petabar{1.0e20, 0.0};
+            const PressureUnit: exabar{1.0e23, 0.0};
+            const PressureUnit: zettabar{1.0e26, 0.0};
+            const PressureUnit: yottabar{1.0e29, 0.0};
+            const PressureUnit: ronnabar{1.0e32, 0.0};
+            const PressureUnit: quettabar{1.0e35, 0.0};
+            const PressureUnit: atmosphere{101325.0, 0.0};
+            const PressureUnit: torr{133.322368421052631578947368421052632, 0.0};
+            const PressureUnit: mmHg{133.322387415, 0.0};
+            const PressureUnit: psi{6894.75729316836133672267344534689069, 0.0};
+        } end namespace pressure
+
+        namespace frequency {
+            const FrequencyUnit                      : hertz{1.0, 0.0};
+            const FrequencyUnit                      : quectohertz{1.0e-30, 0.0};
+            const FrequencyUnit                      : rontohertz{1.0e-27, 0.0};
+            const FrequencyUnit                      : yoctohertz{1.0e-24, 0.0};
+            const FrequencyUnit                      : zeptohertz{1.0e-21, 0.0};
+            const FrequencyUnit                      : attohertz{1.0e-18, 0.0};
+            const FrequencyUnit                      : femtohertz{1.0e-15, 0.0};
+            const FrequencyUnit                      : picohertz{1.0e-12, 0.0};
+            const FrequencyUnit                      : nanohertz{1.0e-9, 0.0};
+            const FrequencyUnit                      : microhertz{0.000001, 0.0};
+            const FrequencyUnit                      : millihertz{0.001, 0.0};
+            const FrequencyUnit                      : centihertz{0.01, 0.0};
+            const FrequencyUnit                      : decihertz{0.1, 0.0};
+            const FrequencyUnit                      : decahertz{10.0, 0.0};
+            const FrequencyUnit                      : hectohertz{100.0, 0.0};
+            const FrequencyUnit                      : kilohertz{1000.0, 0.0};
+            const FrequencyUnit                      : megahertz{1000000.0, 0.0};
+            const FrequencyUnit                      : gigahertz{1000000000.0, 0.0};
+            const FrequencyUnit                      : terahertz{1000000000000.0, 0.0};
+            const FrequencyUnit                      : petahertz{1000000000000000.0, 0.0};
+            const FrequencyUnit                      : exahertz{1.0e18, 0.0};
+            const FrequencyUnit                      : zettahertz{1.0e21, 0.0};
+            const FrequencyUnit                      : yottahertz{1.0e24, 0.0};
+            const FrequencyUnit                      : ronnahertz{1.0e27, 0.0};
+            const FrequencyUnit                      : quettahertz{1.0e30, 0.0};
+            const FrequencyUnit                      : rpm{0.0166666666666666666666666666666666667, 0.0};
+            const FrequencyUnit                      : bpm{0.0166666666666666666666666666666666667, 0.0};
+            const KindReciprocalUnit<kind::frequency>: period_second{1.0};
+            const KindReciprocalUnit<kind::frequency>: period_minute{60.0};
+            const KindReciprocalUnit<kind::frequency>: period_hour{3600.0};
+            const KindReciprocalUnit<kind::frequency>: period_day{86400.0};
+        } end namespace frequency
+
+        namespace momentum {
+            const MomentumUnit: kilogram_meter_per_second{1.0, 0.0};
+            const MomentumUnit: gram_centimeter_per_second{0.00001, 0.0};
+        } end namespace momentum
+
+        namespace impulse {
+            const ImpulseUnit: newton_second{1.0, 0.0};
+            const ImpulseUnit: pound_force_second{4.4482216152605, 0.0};
+        } end namespace impulse
+
+        namespace current {
+            const CurrentUnit: ampere{1.0, 0.0};
+            const CurrentUnit: quectoampere{1.0e-30, 0.0};
+            const CurrentUnit: rontoampere{1.0e-27, 0.0};
+            const CurrentUnit: yoctoampere{1.0e-24, 0.0};
+            const CurrentUnit: zeptoampere{1.0e-21, 0.0};
+            const CurrentUnit: attoampere{1.0e-18, 0.0};
+            const CurrentUnit: femtoampere{1.0e-15, 0.0};
+            const CurrentUnit: picoampere{1.0e-12, 0.0};
+            const CurrentUnit: nanoampere{1.0e-9, 0.0};
+            const CurrentUnit: microampere{0.000001, 0.0};
+            const CurrentUnit: milliampere{0.001, 0.0};
+            const CurrentUnit: centiampere{0.01, 0.0};
+            const CurrentUnit: deciampere{0.1, 0.0};
+            const CurrentUnit: decaampere{10.0, 0.0};
+            const CurrentUnit: hectoampere{100.0, 0.0};
+            const CurrentUnit: kiloampere{1000.0, 0.0};
+            const CurrentUnit: megaampere{1000000.0, 0.0};
+            const CurrentUnit: gigaampere{1000000000.0, 0.0};
+            const CurrentUnit: teraampere{1000000000000.0, 0.0};
+            const CurrentUnit: petaampere{1000000000000000.0, 0.0};
+            const CurrentUnit: exaampere{1.0e18, 0.0};
+            const CurrentUnit: zettaampere{1.0e21, 0.0};
+            const CurrentUnit: yottaampere{1.0e24, 0.0};
+            const CurrentUnit: ronnaampere{1.0e27, 0.0};
+            const CurrentUnit: quettaampere{1.0e30, 0.0};
+            const CurrentUnit: abampere{10.0, 0.0};
+            const CurrentUnit: biot{10.0, 0.0};
+            const CurrentUnit: statampere{3.33564095198152049575576714474918512e-10, 0.0};
+        } end namespace current
+
+        namespace charge {
+            const ChargeUnit: coulomb{1.0, 0.0};
+            const ChargeUnit: quectocoulomb{1.0e-30, 0.0};
+            const ChargeUnit: rontocoulomb{1.0e-27, 0.0};
+            const ChargeUnit: yoctocoulomb{1.0e-24, 0.0};
+            const ChargeUnit: zeptocoulomb{1.0e-21, 0.0};
+            const ChargeUnit: attocoulomb{1.0e-18, 0.0};
+            const ChargeUnit: femtocoulomb{1.0e-15, 0.0};
+            const ChargeUnit: picocoulomb{1.0e-12, 0.0};
+            const ChargeUnit: nanocoulomb{1.0e-9, 0.0};
+            const ChargeUnit: microcoulomb{0.000001, 0.0};
+            const ChargeUnit: millicoulomb{0.001, 0.0};
+            const ChargeUnit: centicoulomb{0.01, 0.0};
+            const ChargeUnit: decicoulomb{0.1, 0.0};
+            const ChargeUnit: decacoulomb{10.0, 0.0};
+            const ChargeUnit: hectocoulomb{100.0, 0.0};
+            const ChargeUnit: kilocoulomb{1000.0, 0.0};
+            const ChargeUnit: megacoulomb{1000000.0, 0.0};
+            const ChargeUnit: gigacoulomb{1000000000.0, 0.0};
+            const ChargeUnit: teracoulomb{1000000000000.0, 0.0};
+            const ChargeUnit: petacoulomb{1000000000000000.0, 0.0};
+            const ChargeUnit: exacoulomb{1.0e18, 0.0};
+            const ChargeUnit: zettacoulomb{1.0e21, 0.0};
+            const ChargeUnit: yottacoulomb{1.0e24, 0.0};
+            const ChargeUnit: ronnacoulomb{1.0e27, 0.0};
+            const ChargeUnit: quettacoulomb{1.0e30, 0.0};
+            const ChargeUnit: ampere_second{1.0, 0.0};
+            const ChargeUnit: quectoampere_second{1.0e-30, 0.0};
+            const ChargeUnit: rontoampere_second{1.0e-27, 0.0};
+            const ChargeUnit: yoctoampere_second{1.0e-24, 0.0};
+            const ChargeUnit: zeptoampere_second{1.0e-21, 0.0};
+            const ChargeUnit: attoampere_second{1.0e-18, 0.0};
+            const ChargeUnit: femtoampere_second{1.0e-15, 0.0};
+            const ChargeUnit: picoampere_second{1.0e-12, 0.0};
+            const ChargeUnit: nanoampere_second{1.0e-9, 0.0};
+            const ChargeUnit: microampere_second{0.000001, 0.0};
+            const ChargeUnit: milliampere_second{0.001, 0.0};
+            const ChargeUnit: centiampere_second{0.01, 0.0};
+            const ChargeUnit: deciampere_second{0.1, 0.0};
+            const ChargeUnit: decaampere_second{10.0, 0.0};
+            const ChargeUnit: hectoampere_second{100.0, 0.0};
+            const ChargeUnit: kiloampere_second{1000.0, 0.0};
+            const ChargeUnit: megaampere_second{1000000.0, 0.0};
+            const ChargeUnit: gigaampere_second{1000000000.0, 0.0};
+            const ChargeUnit: teraampere_second{1000000000000.0, 0.0};
+            const ChargeUnit: petaampere_second{1000000000000000.0, 0.0};
+            const ChargeUnit: exaampere_second{1.0e18, 0.0};
+            const ChargeUnit: zettaampere_second{1.0e21, 0.0};
+            const ChargeUnit: yottaampere_second{1.0e24, 0.0};
+            const ChargeUnit: ronnaampere_second{1.0e27, 0.0};
+            const ChargeUnit: quettaampere_second{1.0e30, 0.0};
+            const ChargeUnit: ampere_minute{60.0, 0.0};
+            const ChargeUnit: quectoampere_minute{6.0e-29, 0.0};
+            const ChargeUnit: rontoampere_minute{6.0e-26, 0.0};
+            const ChargeUnit: yoctoampere_minute{6.0e-23, 0.0};
+            const ChargeUnit: zeptoampere_minute{6.0e-20, 0.0};
+            const ChargeUnit: attoampere_minute{6.0e-17, 0.0};
+            const ChargeUnit: femtoampere_minute{6.0e-14, 0.0};
+            const ChargeUnit: picoampere_minute{6.0e-11, 0.0};
+            const ChargeUnit: nanoampere_minute{6.0e-8, 0.0};
+            const ChargeUnit: microampere_minute{0.00006, 0.0};
+            const ChargeUnit: milliampere_minute{0.06, 0.0};
+            const ChargeUnit: centiampere_minute{0.6, 0.0};
+            const ChargeUnit: deciampere_minute{6.0, 0.0};
+            const ChargeUnit: decaampere_minute{600.0, 0.0};
+            const ChargeUnit: hectoampere_minute{6000.0, 0.0};
+            const ChargeUnit: kiloampere_minute{60000.0, 0.0};
+            const ChargeUnit: megaampere_minute{60000000.0, 0.0};
+            const ChargeUnit: gigaampere_minute{60000000000.0, 0.0};
+            const ChargeUnit: teraampere_minute{60000000000000.0, 0.0};
+            const ChargeUnit: petaampere_minute{6.0e16, 0.0};
+            const ChargeUnit: exaampere_minute{6.0e19, 0.0};
+            const ChargeUnit: zettaampere_minute{6.0e22, 0.0};
+            const ChargeUnit: yottaampere_minute{6.0e25, 0.0};
+            const ChargeUnit: ronnaampere_minute{6.0e28, 0.0};
+            const ChargeUnit: quettaampere_minute{6.0e31, 0.0};
+            const ChargeUnit: ampere_hour{3600.0, 0.0};
+            const ChargeUnit: quectoampere_hour{3.6e-27, 0.0};
+            const ChargeUnit: rontoampere_hour{3.6e-24, 0.0};
+            const ChargeUnit: yoctoampere_hour{3.6e-21, 0.0};
+            const ChargeUnit: zeptoampere_hour{3.6e-18, 0.0};
+            const ChargeUnit: attoampere_hour{3.6e-15, 0.0};
+            const ChargeUnit: femtoampere_hour{3.6e-12, 0.0};
+            const ChargeUnit: picoampere_hour{3.6e-9, 0.0};
+            const ChargeUnit: nanoampere_hour{0.0000036, 0.0};
+            const ChargeUnit: microampere_hour{0.0036, 0.0};
+            const ChargeUnit: milliampere_hour{3.6, 0.0};
+            const ChargeUnit: centiampere_hour{36.0, 0.0};
+            const ChargeUnit: deciampere_hour{360.0, 0.0};
+            const ChargeUnit: decaampere_hour{36000.0, 0.0};
+            const ChargeUnit: hectoampere_hour{360000.0, 0.0};
+            const ChargeUnit: kiloampere_hour{3600000.0, 0.0};
+            const ChargeUnit: megaampere_hour{3600000000.0, 0.0};
+            const ChargeUnit: gigaampere_hour{3600000000000.0, 0.0};
+            const ChargeUnit: teraampere_hour{3600000000000000.0, 0.0};
+            const ChargeUnit: petaampere_hour{3.6e18, 0.0};
+            const ChargeUnit: exaampere_hour{3.6e21, 0.0};
+            const ChargeUnit: zettaampere_hour{3.6e24, 0.0};
+            const ChargeUnit: yottaampere_hour{3.6e27, 0.0};
+            const ChargeUnit: ronnaampere_hour{3.6e30, 0.0};
+            const ChargeUnit: quettaampere_hour{3.6e33, 0.0};
+            const ChargeUnit: faraday{96485.3321233100184, 0.0};
+            const ChargeUnit: elementary{1.602176634e-19, 0.0};
+            const ChargeUnit: abcoulomb{10.0, 0.0};
+            const ChargeUnit: statcoulomb{3.33564095198152049575576714474918512e-10, 0.0};
+        } end namespace charge
+
+        namespace voltage {
+            const VoltageUnit: volt{1.0, 0.0};
+            const VoltageUnit: quectovolt{1.0e-30, 0.0};
+            const VoltageUnit: rontovolt{1.0e-27, 0.0};
+            const VoltageUnit: yoctovolt{1.0e-24, 0.0};
+            const VoltageUnit: zeptovolt{1.0e-21, 0.0};
+            const VoltageUnit: attovolt{1.0e-18, 0.0};
+            const VoltageUnit: femtovolt{1.0e-15, 0.0};
+            const VoltageUnit: picovolt{1.0e-12, 0.0};
+            const VoltageUnit: nanovolt{1.0e-9, 0.0};
+            const VoltageUnit: microvolt{0.000001, 0.0};
+            const VoltageUnit: millivolt{0.001, 0.0};
+            const VoltageUnit: centivolt{0.01, 0.0};
+            const VoltageUnit: decivolt{0.1, 0.0};
+            const VoltageUnit: decavolt{10.0, 0.0};
+            const VoltageUnit: hectovolt{100.0, 0.0};
+            const VoltageUnit: kilovolt{1000.0, 0.0};
+            const VoltageUnit: megavolt{1000000.0, 0.0};
+            const VoltageUnit: gigavolt{1000000000.0, 0.0};
+            const VoltageUnit: teravolt{1000000000000.0, 0.0};
+            const VoltageUnit: petavolt{1000000000000000.0, 0.0};
+            const VoltageUnit: exavolt{1.0e18, 0.0};
+            const VoltageUnit: zettavolt{1.0e21, 0.0};
+            const VoltageUnit: yottavolt{1.0e24, 0.0};
+            const VoltageUnit: ronnavolt{1.0e27, 0.0};
+            const VoltageUnit: quettavolt{1.0e30, 0.0};
+            const VoltageUnit: abvolt{1.0e-8, 0.0};
+            const VoltageUnit: statvolt{299.792458, 0.0};
+        } end namespace voltage
+
+        namespace resistance {
+            const ResistanceUnit: ohm{1.0, 0.0};
+            const ResistanceUnit: quectoohm{1.0e-30, 0.0};
+            const ResistanceUnit: rontoohm{1.0e-27, 0.0};
+            const ResistanceUnit: yoctoohm{1.0e-24, 0.0};
+            const ResistanceUnit: zeptoohm{1.0e-21, 0.0};
+            const ResistanceUnit: attoohm{1.0e-18, 0.0};
+            const ResistanceUnit: femtoohm{1.0e-15, 0.0};
+            const ResistanceUnit: picoohm{1.0e-12, 0.0};
+            const ResistanceUnit: nanoohm{1.0e-9, 0.0};
+            const ResistanceUnit: microohm{0.000001, 0.0};
+            const ResistanceUnit: milliohm{0.001, 0.0};
+            const ResistanceUnit: centiohm{0.01, 0.0};
+            const ResistanceUnit: deciohm{0.1, 0.0};
+            const ResistanceUnit: decaohm{10.0, 0.0};
+            const ResistanceUnit: hectoohm{100.0, 0.0};
+            const ResistanceUnit: kiloohm{1000.0, 0.0};
+            const ResistanceUnit: megaohm{1000000.0, 0.0};
+            const ResistanceUnit: gigaohm{1000000000.0, 0.0};
+            const ResistanceUnit: teraohm{1000000000000.0, 0.0};
+            const ResistanceUnit: petaohm{1000000000000000.0, 0.0};
+            const ResistanceUnit: exaohm{1.0e18, 0.0};
+            const ResistanceUnit: zettaohm{1.0e21, 0.0};
+            const ResistanceUnit: yottaohm{1.0e24, 0.0};
+            const ResistanceUnit: ronnaohm{1.0e27, 0.0};
+            const ResistanceUnit: quettaohm{1.0e30, 0.0};
+            const ResistanceUnit: abohm{1.0e-9, 0.0};
+            const ResistanceUnit: statohm{89875517.873681764, 0.0};
+        } end namespace resistance
+
+        namespace capacitance {
+            const CapacitanceUnit: farad{1.0, 0.0};
+            const CapacitanceUnit: quectofarad{1.0e-30, 0.0};
+            const CapacitanceUnit: rontofarad{1.0e-27, 0.0};
+            const CapacitanceUnit: yoctofarad{1.0e-24, 0.0};
+            const CapacitanceUnit: zeptofarad{1.0e-21, 0.0};
+            const CapacitanceUnit: attofarad{1.0e-18, 0.0};
+            const CapacitanceUnit: femtofarad{1.0e-15, 0.0};
+            const CapacitanceUnit: picofarad{1.0e-12, 0.0};
+            const CapacitanceUnit: nanofarad{1.0e-9, 0.0};
+            const CapacitanceUnit: microfarad{0.000001, 0.0};
+            const CapacitanceUnit: millifarad{0.001, 0.0};
+            const CapacitanceUnit: centifarad{0.01, 0.0};
+            const CapacitanceUnit: decifarad{0.1, 0.0};
+            const CapacitanceUnit: decafarad{10.0, 0.0};
+            const CapacitanceUnit: hectofarad{100.0, 0.0};
+            const CapacitanceUnit: kilofarad{1000.0, 0.0};
+            const CapacitanceUnit: megafarad{1000000.0, 0.0};
+            const CapacitanceUnit: gigafarad{1000000000.0, 0.0};
+            const CapacitanceUnit: terafarad{1000000000000.0, 0.0};
+            const CapacitanceUnit: petafarad{1000000000000000.0, 0.0};
+            const CapacitanceUnit: exafarad{1.0e18, 0.0};
+            const CapacitanceUnit: zettafarad{1.0e21, 0.0};
+            const CapacitanceUnit: yottafarad{1.0e24, 0.0};
+            const CapacitanceUnit: ronnafarad{1.0e27, 0.0};
+            const CapacitanceUnit: quettafarad{1.0e30, 0.0};
+        } end namespace capacitance
+
+        namespace radiation {
+            const AbsorbedDoseUnit  : gray{1.0, 0.0};
+            const EquivalentDoseUnit: sievert{1.0, 0.0};
+            const AbsorbedDoseUnit  : rad{0.01, 0.0};
+            const EquivalentDoseUnit: rem{0.01, 0.0};
+            const ActivityUnit      : becquerel{1.0, 0.0};
+            const ActivityUnit      : curie{37000000000.0, 0.0};
+            const ActivityUnit      : rutherford{1000000.0, 0.0};
+        } end namespace radiation
+
+        namespace density {
+            const Density3DUnit: gram_per_cubic_meter{0.001, 0.0};
+            const Density3DUnit: quectogram_per_cubic_meter{1.0e-33, 0.0};
+            const Density3DUnit: rontogram_per_cubic_meter{1.0e-30, 0.0};
+            const Density3DUnit: yoctogram_per_cubic_meter{1.0e-27, 0.0};
+            const Density3DUnit: zeptogram_per_cubic_meter{1.0e-24, 0.0};
+            const Density3DUnit: attogram_per_cubic_meter{1.0e-21, 0.0};
+            const Density3DUnit: femtogram_per_cubic_meter{1.0e-18, 0.0};
+            const Density3DUnit: picogram_per_cubic_meter{1.0e-15, 0.0};
+            const Density3DUnit: nanogram_per_cubic_meter{1.0e-12, 0.0};
+            const Density3DUnit: microgram_per_cubic_meter{1.0e-9, 0.0};
+            const Density3DUnit: milligram_per_cubic_meter{0.000001, 0.0};
+            const Density3DUnit: centigram_per_cubic_meter{0.00001, 0.0};
+            const Density3DUnit: decigram_per_cubic_meter{0.0001, 0.0};
+            const Density3DUnit: decagram_per_cubic_meter{0.01, 0.0};
+            const Density3DUnit: hectogram_per_cubic_meter{0.1, 0.0};
+            const Density3DUnit: kilogram_per_cubic_meter{1.0, 0.0};
+            const Density3DUnit: megagram_per_cubic_meter{1000.0, 0.0};
+            const Density3DUnit: gigagram_per_cubic_meter{1000000.0, 0.0};
+            const Density3DUnit: teragram_per_cubic_meter{1000000000.0, 0.0};
+            const Density3DUnit: petagram_per_cubic_meter{1000000000000.0, 0.0};
+            const Density3DUnit: exagram_per_cubic_meter{1000000000000000.0, 0.0};
+            const Density3DUnit: zettagram_per_cubic_meter{1.0e18, 0.0};
+            const Density3DUnit: yottagram_per_cubic_meter{1.0e21, 0.0};
+            const Density3DUnit: ronnagram_per_cubic_meter{1.0e24, 0.0};
+            const Density3DUnit: quettagram_per_cubic_meter{1.0e27, 0.0};
+            const Density3DUnit: gram_per_cubic_centimeter{1000.0, 0.0};
+            const Density3DUnit: quectogram_per_cubic_centimeter{1.0e-27, 0.0};
+            const Density3DUnit: rontogram_per_cubic_centimeter{1.0e-24, 0.0};
+            const Density3DUnit: yoctogram_per_cubic_centimeter{1.0e-21, 0.0};
+            const Density3DUnit: zeptogram_per_cubic_centimeter{1.0e-18, 0.0};
+            const Density3DUnit: attogram_per_cubic_centimeter{1.0e-15, 0.0};
+            const Density3DUnit: femtogram_per_cubic_centimeter{1.0e-12, 0.0};
+            const Density3DUnit: picogram_per_cubic_centimeter{1.0e-9, 0.0};
+            const Density3DUnit: nanogram_per_cubic_centimeter{0.000001, 0.0};
+            const Density3DUnit: microgram_per_cubic_centimeter{0.001, 0.0};
+            const Density3DUnit: milligram_per_cubic_centimeter{1.0, 0.0};
+            const Density3DUnit: centigram_per_cubic_centimeter{10.0, 0.0};
+            const Density3DUnit: decigram_per_cubic_centimeter{100.0, 0.0};
+            const Density3DUnit: decagram_per_cubic_centimeter{10000.0, 0.0};
+            const Density3DUnit: hectogram_per_cubic_centimeter{100000.0, 0.0};
+            const Density3DUnit: kilogram_per_cubic_centimeter{1000000.0, 0.0};
+            const Density3DUnit: megagram_per_cubic_centimeter{1000000000.0, 0.0};
+            const Density3DUnit: gigagram_per_cubic_centimeter{1000000000000.0, 0.0};
+            const Density3DUnit: teragram_per_cubic_centimeter{1000000000000000.0, 0.0};
+            const Density3DUnit: petagram_per_cubic_centimeter{1.0e18, 0.0};
+            const Density3DUnit: exagram_per_cubic_centimeter{1.0e21, 0.0};
+            const Density3DUnit: zettagram_per_cubic_centimeter{1.0e24, 0.0};
+            const Density3DUnit: yottagram_per_cubic_centimeter{1.0e27, 0.0};
+            const Density3DUnit: ronnagram_per_cubic_centimeter{1.0e30, 0.0};
+            const Density3DUnit: quettagram_per_cubic_centimeter{1.0e33, 0.0};
+            const Density3DUnit: gram_per_liter{1.0, 0.0};
+            const Density3DUnit: quectogram_per_liter{1.0e-30, 0.0};
+            const Density3DUnit: rontogram_per_liter{1.0e-27, 0.0};
+            const Density3DUnit: yoctogram_per_liter{1.0e-24, 0.0};
+            const Density3DUnit: zeptogram_per_liter{1.0e-21, 0.0};
+            const Density3DUnit: attogram_per_liter{1.0e-18, 0.0};
+            const Density3DUnit: femtogram_per_liter{1.0e-15, 0.0};
+            const Density3DUnit: picogram_per_liter{1.0e-12, 0.0};
+            const Density3DUnit: nanogram_per_liter{1.0e-9, 0.0};
+            const Density3DUnit: microgram_per_liter{0.000001, 0.0};
+            const Density3DUnit: milligram_per_liter{0.001, 0.0};
+            const Density3DUnit: centigram_per_liter{0.01, 0.0};
+            const Density3DUnit: decigram_per_liter{0.1, 0.0};
+            const Density3DUnit: decagram_per_liter{10.0, 0.0};
+            const Density3DUnit: hectogram_per_liter{100.0, 0.0};
+            const Density3DUnit: kilogram_per_liter{1000.0, 0.0};
+            const Density3DUnit: megagram_per_liter{1000000.0, 0.0};
+            const Density3DUnit: gigagram_per_liter{1000000000.0, 0.0};
+            const Density3DUnit: teragram_per_liter{1000000000000.0, 0.0};
+            const Density3DUnit: petagram_per_liter{1000000000000000.0, 0.0};
+            const Density3DUnit: exagram_per_liter{1.0e18, 0.0};
+            const Density3DUnit: zettagram_per_liter{1.0e21, 0.0};
+            const Density3DUnit: yottagram_per_liter{1.0e24, 0.0};
+            const Density3DUnit: ronnagram_per_liter{1.0e27, 0.0};
+            const Density3DUnit: quettagram_per_liter{1.0e30, 0.0};
+            const Density3DUnit: gram_per_milliliter{1000.0, 0.0};
+            const Density3DUnit: quectogram_per_milliliter{1.0e-27, 0.0};
+            const Density3DUnit: rontogram_per_milliliter{1.0e-24, 0.0};
+            const Density3DUnit: yoctogram_per_milliliter{1.0e-21, 0.0};
+            const Density3DUnit: zeptogram_per_milliliter{1.0e-18, 0.0};
+            const Density3DUnit: attogram_per_milliliter{1.0e-15, 0.0};
+            const Density3DUnit: femtogram_per_milliliter{1.0e-12, 0.0};
+            const Density3DUnit: picogram_per_milliliter{1.0e-9, 0.0};
+            const Density3DUnit: nanogram_per_milliliter{0.000001, 0.0};
+            const Density3DUnit: microgram_per_milliliter{0.001, 0.0};
+            const Density3DUnit: milligram_per_milliliter{1.0, 0.0};
+            const Density3DUnit: centigram_per_milliliter{10.0, 0.0};
+            const Density3DUnit: decigram_per_milliliter{100.0, 0.0};
+            const Density3DUnit: decagram_per_milliliter{10000.0, 0.0};
+            const Density3DUnit: hectogram_per_milliliter{100000.0, 0.0};
+            const Density3DUnit: kilogram_per_milliliter{1000000.0, 0.0};
+            const Density3DUnit: megagram_per_milliliter{1000000000.0, 0.0};
+            const Density3DUnit: gigagram_per_milliliter{1000000000000.0, 0.0};
+            const Density3DUnit: teragram_per_milliliter{1000000000000000.0, 0.0};
+            const Density3DUnit: petagram_per_milliliter{1.0e18, 0.0};
+            const Density3DUnit: exagram_per_milliliter{1.0e21, 0.0};
+            const Density3DUnit: zettagram_per_milliliter{1.0e24, 0.0};
+            const Density3DUnit: yottagram_per_milliliter{1.0e27, 0.0};
+            const Density3DUnit: ronnagram_per_milliliter{1.0e30, 0.0};
+            const Density3DUnit: quettagram_per_milliliter{1.0e33, 0.0};
+            const Density3DUnit: tonne_per_cubic_meter{1000.0, 0.0};
+            const Density3DUnit: pound_per_cubic_yard{0.593276421257782947394632246465058909, 0.0};
+            const Density3DUnit: pound_per_cubic_foot{16.0184633739601395796550706545565905, 0.0};
+            const Density3DUnit: pound_per_cubic_inch{27679.9047102031211936439620910737884, 0.0};
+            const Density3DUnit: ounce_per_cubic_inch{1729.99404438769507460274763069211178, 0.0};
+            const Density3DUnit: ounce_per_cubic_foot{1.00115396087250872372844191590978691, 0.0};
+            const Density3DUnit: ounce_per_cubic_yard{0.0370797763286114342121645154040661818, 0.0};
+            const Density3DUnit: slug_per_cubic_foot{515.378818393196203441024929903239464, 0.0};
+            const Density3DUnit: slug_per_cubic_yard{19.0881043849331927200379603667866468, 0.0};
+            const Density3DUnit: slug_per_cubic_inch{890574.598183443039546091078872797794, 0.0};
+            const Density3DUnit: pound_per_us_gallon{119.826427316896628543913255805514236, 0.0};
+            const Density2DUnit: gram_per_square_meter{0.001, 0.0};
+            const Density2DUnit: quectogram_per_square_meter{1.0e-33, 0.0};
+            const Density2DUnit: rontogram_per_square_meter{1.0e-30, 0.0};
+            const Density2DUnit: yoctogram_per_square_meter{1.0e-27, 0.0};
+            const Density2DUnit: zeptogram_per_square_meter{1.0e-24, 0.0};
+            const Density2DUnit: attogram_per_square_meter{1.0e-21, 0.0};
+            const Density2DUnit: femtogram_per_square_meter{1.0e-18, 0.0};
+            const Density2DUnit: picogram_per_square_meter{1.0e-15, 0.0};
+            const Density2DUnit: nanogram_per_square_meter{1.0e-12, 0.0};
+            const Density2DUnit: microgram_per_square_meter{1.0e-9, 0.0};
+            const Density2DUnit: milligram_per_square_meter{0.000001, 0.0};
+            const Density2DUnit: centigram_per_square_meter{0.00001, 0.0};
+            const Density2DUnit: decigram_per_square_meter{0.0001, 0.0};
+            const Density2DUnit: decagram_per_square_meter{0.01, 0.0};
+            const Density2DUnit: hectogram_per_square_meter{0.1, 0.0};
+            const Density2DUnit: kilogram_per_square_meter{1.0, 0.0};
+            const Density2DUnit: megagram_per_square_meter{1000.0, 0.0};
+            const Density2DUnit: gigagram_per_square_meter{1000000.0, 0.0};
+            const Density2DUnit: teragram_per_square_meter{1000000000.0, 0.0};
+            const Density2DUnit: petagram_per_square_meter{1000000000000.0, 0.0};
+            const Density2DUnit: exagram_per_square_meter{1000000000000000.0, 0.0};
+            const Density2DUnit: zettagram_per_square_meter{1.0e18, 0.0};
+            const Density2DUnit: yottagram_per_square_meter{1.0e21, 0.0};
+            const Density2DUnit: ronnagram_per_square_meter{1.0e24, 0.0};
+            const Density2DUnit: quettagram_per_square_meter{1.0e27, 0.0};
+            const Density2DUnit: gram_per_square_centimeter{10.0, 0.0};
+            const Density2DUnit: quectogram_per_square_centimeter{1.0e-29, 0.0};
+            const Density2DUnit: rontogram_per_square_centimeter{1.0e-26, 0.0};
+            const Density2DUnit: yoctogram_per_square_centimeter{1.0e-23, 0.0};
+            const Density2DUnit: zeptogram_per_square_centimeter{1.0e-20, 0.0};
+            const Density2DUnit: attogram_per_square_centimeter{1.0e-17, 0.0};
+            const Density2DUnit: femtogram_per_square_centimeter{1.0e-14, 0.0};
+            const Density2DUnit: picogram_per_square_centimeter{1.0e-11, 0.0};
+            const Density2DUnit: nanogram_per_square_centimeter{1.0e-8, 0.0};
+            const Density2DUnit: microgram_per_square_centimeter{0.00001, 0.0};
+            const Density2DUnit: milligram_per_square_centimeter{0.01, 0.0};
+            const Density2DUnit: centigram_per_square_centimeter{0.1, 0.0};
+            const Density2DUnit: decigram_per_square_centimeter{1.0, 0.0};
+            const Density2DUnit: decagram_per_square_centimeter{100.0, 0.0};
+            const Density2DUnit: hectogram_per_square_centimeter{1000.0, 0.0};
+            const Density2DUnit: kilogram_per_square_centimeter{10000.0, 0.0};
+            const Density2DUnit: megagram_per_square_centimeter{10000000.0, 0.0};
+            const Density2DUnit: gigagram_per_square_centimeter{10000000000.0, 0.0};
+            const Density2DUnit: teragram_per_square_centimeter{10000000000000.0, 0.0};
+            const Density2DUnit: petagram_per_square_centimeter{1.0e16, 0.0};
+            const Density2DUnit: exagram_per_square_centimeter{1.0e19, 0.0};
+            const Density2DUnit: zettagram_per_square_centimeter{1.0e22, 0.0};
+            const Density2DUnit: yottagram_per_square_centimeter{1.0e25, 0.0};
+            const Density2DUnit: ronnagram_per_square_centimeter{1.0e28, 0.0};
+            const Density2DUnit: quettagram_per_square_centimeter{1.0e31, 0.0};
+            const Density2DUnit: gram_per_hectare{1.0e-7, 0.0};
+            const Density2DUnit: quectogram_per_hectare{1.0e-37, 0.0};
+            const Density2DUnit: rontogram_per_hectare{1.0e-34, 0.0};
+            const Density2DUnit: yoctogram_per_hectare{1.0e-31, 0.0};
+            const Density2DUnit: zeptogram_per_hectare{1.0e-28, 0.0};
+            const Density2DUnit: attogram_per_hectare{1.0e-25, 0.0};
+            const Density2DUnit: femtogram_per_hectare{1.0e-22, 0.0};
+            const Density2DUnit: picogram_per_hectare{1.0e-19, 0.0};
+            const Density2DUnit: nanogram_per_hectare{1.0e-16, 0.0};
+            const Density2DUnit: microgram_per_hectare{1.0e-13, 0.0};
+            const Density2DUnit: milligram_per_hectare{1.0e-10, 0.0};
+            const Density2DUnit: centigram_per_hectare{1.0e-9, 0.0};
+            const Density2DUnit: decigram_per_hectare{1.0e-8, 0.0};
+            const Density2DUnit: decagram_per_hectare{0.000001, 0.0};
+            const Density2DUnit: hectogram_per_hectare{0.00001, 0.0};
+            const Density2DUnit: kilogram_per_hectare{0.0001, 0.0};
+            const Density2DUnit: megagram_per_hectare{0.1, 0.0};
+            const Density2DUnit: gigagram_per_hectare{100.0, 0.0};
+            const Density2DUnit: teragram_per_hectare{100000.0, 0.0};
+            const Density2DUnit: petagram_per_hectare{100000000.0, 0.0};
+            const Density2DUnit: exagram_per_hectare{100000000000.0, 0.0};
+            const Density2DUnit: zettagram_per_hectare{100000000000000.0, 0.0};
+            const Density2DUnit: yottagram_per_hectare{1.0e17, 0.0};
+            const Density2DUnit: ronnagram_per_hectare{1.0e20, 0.0};
+            const Density2DUnit: quettagram_per_hectare{1.0e23, 0.0};
+            const Density2DUnit: tonne_per_hectare{0.1, 0.0};
+            const Density2DUnit: pound_per_square_inch{703.069579639159278318556637113274227, 0.0};
+            const Density2DUnit: pound_per_square_foot{4.8824276363830505438788655355088488, 0.0};
+            const Density2DUnit: pound_per_square_yard{0.542491959598116727097651726167649866, 0.0};
+            const Density2DUnit: ounce_per_square_inch{43.9418487274474548949097898195796392, 0.0};
+            const Density2DUnit: ounce_per_square_foot{0.30515172727394065899242909596930305, 0.0};
+            const Density2DUnit: ounce_per_square_yard{0.0339057474748822954436032328854781166, 0.0};
+        } end namespace density
+
+        namespace mass_flow {
+            const MassFlowRateUnit: gram_per_second{0.001, 0.0};
+            const MassFlowRateUnit: quectogram_per_second{1.0e-33, 0.0};
+            const MassFlowRateUnit: rontogram_per_second{1.0e-30, 0.0};
+            const MassFlowRateUnit: yoctogram_per_second{1.0e-27, 0.0};
+            const MassFlowRateUnit: zeptogram_per_second{1.0e-24, 0.0};
+            const MassFlowRateUnit: attogram_per_second{1.0e-21, 0.0};
+            const MassFlowRateUnit: femtogram_per_second{1.0e-18, 0.0};
+            const MassFlowRateUnit: picogram_per_second{1.0e-15, 0.0};
+            const MassFlowRateUnit: nanogram_per_second{1.0e-12, 0.0};
+            const MassFlowRateUnit: microgram_per_second{1.0e-9, 0.0};
+            const MassFlowRateUnit: milligram_per_second{0.000001, 0.0};
+            const MassFlowRateUnit: centigram_per_second{0.00001, 0.0};
+            const MassFlowRateUnit: decigram_per_second{0.0001, 0.0};
+            const MassFlowRateUnit: decagram_per_second{0.01, 0.0};
+            const MassFlowRateUnit: hectogram_per_second{0.1, 0.0};
+            const MassFlowRateUnit: kilogram_per_second{1.0, 0.0};
+            const MassFlowRateUnit: megagram_per_second{1000.0, 0.0};
+            const MassFlowRateUnit: gigagram_per_second{1000000.0, 0.0};
+            const MassFlowRateUnit: teragram_per_second{1000000000.0, 0.0};
+            const MassFlowRateUnit: petagram_per_second{1000000000000.0, 0.0};
+            const MassFlowRateUnit: exagram_per_second{1000000000000000.0, 0.0};
+            const MassFlowRateUnit: zettagram_per_second{1.0e18, 0.0};
+            const MassFlowRateUnit: yottagram_per_second{1.0e21, 0.0};
+            const MassFlowRateUnit: ronnagram_per_second{1.0e24, 0.0};
+            const MassFlowRateUnit: quettagram_per_second{1.0e27, 0.0};
+            const MassFlowRateUnit: gram_per_minute{0.0000166666666666666666666666666666666667, 0.0};
+            const MassFlowRateUnit: quectogram_per_minute{1.66666666666666666666666666666666667e-35, 0.0};
+            const MassFlowRateUnit: rontogram_per_minute{1.66666666666666666666666666666666667e-32, 0.0};
+            const MassFlowRateUnit: yoctogram_per_minute{1.66666666666666666666666666666666667e-29, 0.0};
+            const MassFlowRateUnit: zeptogram_per_minute{1.66666666666666666666666666666666667e-26, 0.0};
+            const MassFlowRateUnit: attogram_per_minute{1.66666666666666666666666666666666667e-23, 0.0};
+            const MassFlowRateUnit: femtogram_per_minute{1.66666666666666666666666666666666667e-20, 0.0};
+            const MassFlowRateUnit: picogram_per_minute{1.66666666666666666666666666666666667e-17, 0.0};
+            const MassFlowRateUnit: nanogram_per_minute{1.66666666666666666666666666666666667e-14, 0.0};
+            const MassFlowRateUnit: microgram_per_minute{1.66666666666666666666666666666666667e-11, 0.0};
+            const MassFlowRateUnit: milligram_per_minute{1.66666666666666666666666666666666667e-8, 0.0};
+            const MassFlowRateUnit: centigram_per_minute{1.66666666666666666666666666666666667e-7, 0.0};
+            const MassFlowRateUnit: decigram_per_minute{0.00000166666666666666666666666666666666667, 0.0};
+            const MassFlowRateUnit: decagram_per_minute{0.000166666666666666666666666666666666667, 0.0};
+            const MassFlowRateUnit: hectogram_per_minute{0.00166666666666666666666666666666666667, 0.0};
+            const MassFlowRateUnit: kilogram_per_minute{0.0166666666666666666666666666666666667, 0.0};
+            const MassFlowRateUnit: megagram_per_minute{16.6666666666666666666666666666666667, 0.0};
+            const MassFlowRateUnit: gigagram_per_minute{16666.6666666666666666666666666666667, 0.0};
+            const MassFlowRateUnit: teragram_per_minute{16666666.6666666666666666666666666667, 0.0};
+            const MassFlowRateUnit: petagram_per_minute{16666666666.6666666666666666666666667, 0.0};
+            const MassFlowRateUnit: exagram_per_minute{16666666666666.6666666666666666666667, 0.0};
+            const MassFlowRateUnit: zettagram_per_minute{1.66666666666666666666666666666666667e16, 0.0};
+            const MassFlowRateUnit: yottagram_per_minute{1.66666666666666666666666666666666667e19, 0.0};
+            const MassFlowRateUnit: ronnagram_per_minute{1.66666666666666666666666666666666667e22, 0.0};
+            const MassFlowRateUnit: quettagram_per_minute{1.66666666666666666666666666666666667e25, 0.0};
+            const MassFlowRateUnit: gram_per_hour{2.77777777777777777777777777777777778e-7, 0.0};
+            const MassFlowRateUnit: quectogram_per_hour{2.77777777777777777777777777777777778e-37, 0.0};
+            const MassFlowRateUnit: rontogram_per_hour{2.77777777777777777777777777777777778e-34, 0.0};
+            const MassFlowRateUnit: yoctogram_per_hour{2.77777777777777777777777777777777778e-31, 0.0};
+            const MassFlowRateUnit: zeptogram_per_hour{2.77777777777777777777777777777777778e-28, 0.0};
+            const MassFlowRateUnit: attogram_per_hour{2.77777777777777777777777777777777778e-25, 0.0};
+            const MassFlowRateUnit: femtogram_per_hour{2.77777777777777777777777777777777778e-22, 0.0};
+            const MassFlowRateUnit: picogram_per_hour{2.77777777777777777777777777777777778e-19, 0.0};
+            const MassFlowRateUnit: nanogram_per_hour{2.77777777777777777777777777777777778e-16, 0.0};
+            const MassFlowRateUnit: microgram_per_hour{2.77777777777777777777777777777777778e-13, 0.0};
+            const MassFlowRateUnit: milligram_per_hour{2.77777777777777777777777777777777778e-10, 0.0};
+            const MassFlowRateUnit: centigram_per_hour{2.77777777777777777777777777777777778e-9, 0.0};
+            const MassFlowRateUnit: decigram_per_hour{2.77777777777777777777777777777777778e-8, 0.0};
+            const MassFlowRateUnit: decagram_per_hour{0.00000277777777777777777777777777777777778, 0.0};
+            const MassFlowRateUnit: hectogram_per_hour{0.0000277777777777777777777777777777777778, 0.0};
+            const MassFlowRateUnit: kilogram_per_hour{0.000277777777777777777777777777777777778, 0.0};
+            const MassFlowRateUnit: megagram_per_hour{0.277777777777777777777777777777777778, 0.0};
+            const MassFlowRateUnit: gigagram_per_hour{277.777777777777777777777777777777778, 0.0};
+            const MassFlowRateUnit: teragram_per_hour{277777.777777777777777777777777777778, 0.0};
+            const MassFlowRateUnit: petagram_per_hour{277777777.777777777777777777777777778, 0.0};
+            const MassFlowRateUnit: exagram_per_hour{277777777777.777777777777777777777778, 0.0};
+            const MassFlowRateUnit: zettagram_per_hour{277777777777777.777777777777777777778, 0.0};
+            const MassFlowRateUnit: yottagram_per_hour{2.77777777777777777777777777777777778e17, 0.0};
+            const MassFlowRateUnit: ronnagram_per_hour{2.77777777777777777777777777777777778e20, 0.0};
+            const MassFlowRateUnit: quettagram_per_hour{2.77777777777777777777777777777777778e23, 0.0};
+            const MassFlowRateUnit: pound_per_second{0.45359237, 0.0};
+            const MassFlowRateUnit: pound_per_minute{0.00755987283333333333333333333333333333, 0.0};
+            const MassFlowRateUnit: pound_per_hour{0.000125997880555555555555555555555555556, 0.0};
+        } end namespace mass_flow
+
+        namespace volume_flow {
+            const VolumeFlowRateUnit: cubic_meter_per_second{1.0, 0.0};
+            const VolumeFlowRateUnit: cubic_meter_per_minute{0.0166666666666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: cubic_meter_per_hour{0.000277777777777777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: liter_per_second{0.001, 0.0};
+            const VolumeFlowRateUnit: quectoliter_per_second{1.0e-33, 0.0};
+            const VolumeFlowRateUnit: rontoliter_per_second{1.0e-30, 0.0};
+            const VolumeFlowRateUnit: yoctoliter_per_second{1.0e-27, 0.0};
+            const VolumeFlowRateUnit: zeptoliter_per_second{1.0e-24, 0.0};
+            const VolumeFlowRateUnit: attoliter_per_second{1.0e-21, 0.0};
+            const VolumeFlowRateUnit: femtoliter_per_second{1.0e-18, 0.0};
+            const VolumeFlowRateUnit: picoliter_per_second{1.0e-15, 0.0};
+            const VolumeFlowRateUnit: nanoliter_per_second{1.0e-12, 0.0};
+            const VolumeFlowRateUnit: microliter_per_second{1.0e-9, 0.0};
+            const VolumeFlowRateUnit: milliliter_per_second{0.000001, 0.0};
+            const VolumeFlowRateUnit: centiliter_per_second{0.00001, 0.0};
+            const VolumeFlowRateUnit: deciliter_per_second{0.0001, 0.0};
+            const VolumeFlowRateUnit: decaliter_per_second{0.01, 0.0};
+            const VolumeFlowRateUnit: hectoliter_per_second{0.1, 0.0};
+            const VolumeFlowRateUnit: kiloliter_per_second{1.0, 0.0};
+            const VolumeFlowRateUnit: megaliter_per_second{1000.0, 0.0};
+            const VolumeFlowRateUnit: gigaliter_per_second{1000000.0, 0.0};
+            const VolumeFlowRateUnit: teraliter_per_second{1000000000.0, 0.0};
+            const VolumeFlowRateUnit: petaliter_per_second{1000000000000.0, 0.0};
+            const VolumeFlowRateUnit: exaliter_per_second{1000000000000000.0, 0.0};
+            const VolumeFlowRateUnit: zettaliter_per_second{1.0e18, 0.0};
+            const VolumeFlowRateUnit: yottaliter_per_second{1.0e21, 0.0};
+            const VolumeFlowRateUnit: ronnaliter_per_second{1.0e24, 0.0};
+            const VolumeFlowRateUnit: quettaliter_per_second{1.0e27, 0.0};
+            const VolumeFlowRateUnit: liter_per_minute{0.0000166666666666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: quectoliter_per_minute{1.66666666666666666666666666666666667e-35, 0.0};
+            const VolumeFlowRateUnit: rontoliter_per_minute{1.66666666666666666666666666666666667e-32, 0.0};
+            const VolumeFlowRateUnit: yoctoliter_per_minute{1.66666666666666666666666666666666667e-29, 0.0};
+            const VolumeFlowRateUnit: zeptoliter_per_minute{1.66666666666666666666666666666666667e-26, 0.0};
+            const VolumeFlowRateUnit: attoliter_per_minute{1.66666666666666666666666666666666667e-23, 0.0};
+            const VolumeFlowRateUnit: femtoliter_per_minute{1.66666666666666666666666666666666667e-20, 0.0};
+            const VolumeFlowRateUnit: picoliter_per_minute{1.66666666666666666666666666666666667e-17, 0.0};
+            const VolumeFlowRateUnit: nanoliter_per_minute{1.66666666666666666666666666666666667e-14, 0.0};
+            const VolumeFlowRateUnit: microliter_per_minute{1.66666666666666666666666666666666667e-11, 0.0};
+            const VolumeFlowRateUnit: milliliter_per_minute{1.66666666666666666666666666666666667e-8, 0.0};
+            const VolumeFlowRateUnit: centiliter_per_minute{1.66666666666666666666666666666666667e-7, 0.0};
+            const VolumeFlowRateUnit: deciliter_per_minute{0.00000166666666666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: decaliter_per_minute{0.000166666666666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: hectoliter_per_minute{0.00166666666666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: kiloliter_per_minute{0.0166666666666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: megaliter_per_minute{16.6666666666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: gigaliter_per_minute{16666.6666666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: teraliter_per_minute{16666666.6666666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: petaliter_per_minute{16666666666.6666666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: exaliter_per_minute{16666666666666.6666666666666666666667, 0.0};
+            const VolumeFlowRateUnit: zettaliter_per_minute{1.66666666666666666666666666666666667e16, 0.0};
+            const VolumeFlowRateUnit: yottaliter_per_minute{1.66666666666666666666666666666666667e19, 0.0};
+            const VolumeFlowRateUnit: ronnaliter_per_minute{1.66666666666666666666666666666666667e22, 0.0};
+            const VolumeFlowRateUnit: quettaliter_per_minute{1.66666666666666666666666666666666667e25, 0.0};
+            const VolumeFlowRateUnit: liter_per_hour{2.77777777777777777777777777777777778e-7, 0.0};
+            const VolumeFlowRateUnit: quectoliter_per_hour{2.77777777777777777777777777777777778e-37, 0.0};
+            const VolumeFlowRateUnit: rontoliter_per_hour{2.77777777777777777777777777777777778e-34, 0.0};
+            const VolumeFlowRateUnit: yoctoliter_per_hour{2.77777777777777777777777777777777778e-31, 0.0};
+            const VolumeFlowRateUnit: zeptoliter_per_hour{2.77777777777777777777777777777777778e-28, 0.0};
+            const VolumeFlowRateUnit: attoliter_per_hour{2.77777777777777777777777777777777778e-25, 0.0};
+            const VolumeFlowRateUnit: femtoliter_per_hour{2.77777777777777777777777777777777778e-22, 0.0};
+            const VolumeFlowRateUnit: picoliter_per_hour{2.77777777777777777777777777777777778e-19, 0.0};
+            const VolumeFlowRateUnit: nanoliter_per_hour{2.77777777777777777777777777777777778e-16, 0.0};
+            const VolumeFlowRateUnit: microliter_per_hour{2.77777777777777777777777777777777778e-13, 0.0};
+            const VolumeFlowRateUnit: milliliter_per_hour{2.77777777777777777777777777777777778e-10, 0.0};
+            const VolumeFlowRateUnit: centiliter_per_hour{2.77777777777777777777777777777777778e-9, 0.0};
+            const VolumeFlowRateUnit: deciliter_per_hour{2.77777777777777777777777777777777778e-8, 0.0};
+            const VolumeFlowRateUnit: decaliter_per_hour{0.00000277777777777777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: hectoliter_per_hour{0.0000277777777777777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: kiloliter_per_hour{0.000277777777777777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: megaliter_per_hour{0.277777777777777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: gigaliter_per_hour{277.777777777777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: teraliter_per_hour{277777.777777777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: petaliter_per_hour{277777777.777777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: exaliter_per_hour{277777777777.777777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: zettaliter_per_hour{277777777777777.777777777777777777778, 0.0};
+            const VolumeFlowRateUnit: yottaliter_per_hour{2.77777777777777777777777777777777778e17, 0.0};
+            const VolumeFlowRateUnit: ronnaliter_per_hour{2.77777777777777777777777777777777778e20, 0.0};
+            const VolumeFlowRateUnit: quettaliter_per_hour{2.77777777777777777777777777777777778e23, 0.0};
+            const VolumeFlowRateUnit: us_gallon_per_second{0.003785411784, 0.0};
+            const VolumeFlowRateUnit: us_gallon_per_minute{0.0000630901964, 0.0};
+            const VolumeFlowRateUnit: us_gallon_per_hour{0.00000105150327333333333333333333333333333, 0.0};
+            const VolumeFlowRateUnit: cubic_foot_per_second{0.028316846592, 0.0};
+            const VolumeFlowRateUnit: cubic_foot_per_minute{0.0004719474432, 0.0};
+            const VolumeFlowRateUnit: cubic_foot_per_hour{0.00000786579072, 0.0};
+            const VolumeFlowRateUnit: cubic_inch_per_second{0.000016387064, 0.0};
+            const VolumeFlowRateUnit: cubic_inch_per_minute{2.73117733333333333333333333333333333e-7, 0.0};
+            const VolumeFlowRateUnit: cubic_inch_per_hour{4.55196222222222222222222222222222222e-9, 0.0};
+        } end namespace volume_flow
+
+        namespace area_flow {
+            const AreaFlowRateUnit: square_meter_per_second{1.0, 0.0};
+            const AreaFlowRateUnit: square_meter_per_minute{0.0166666666666666666666666666666666667, 0.0};
+            const AreaFlowRateUnit: square_meter_per_hour{0.000277777777777777777777777777777777778, 0.0};
+            const AreaFlowRateUnit: square_foot_per_second{0.09290304, 0.0};
+            const AreaFlowRateUnit: square_foot_per_minute{0.001548384, 0.0};
+            const AreaFlowRateUnit: square_foot_per_hour{0.0000258064, 0.0};
+            const AreaFlowRateUnit: square_inch_per_second{0.00064516, 0.0};
+            const AreaFlowRateUnit: square_inch_per_minute{0.0000107526666666666666666666666666666667, 0.0};
+            const AreaFlowRateUnit: square_inch_per_hour{1.79211111111111111111111111111111111e-7, 0.0};
+        } end namespace area_flow
+
+        namespace molar_flow {
+            const MolarFlowRateUnit: mole_per_second{1.0, 0.0};
+            const MolarFlowRateUnit: quectomole_per_second{1.0e-30, 0.0};
+            const MolarFlowRateUnit: rontomole_per_second{1.0e-27, 0.0};
+            const MolarFlowRateUnit: yoctomole_per_second{1.0e-24, 0.0};
+            const MolarFlowRateUnit: zeptomole_per_second{1.0e-21, 0.0};
+            const MolarFlowRateUnit: attomole_per_second{1.0e-18, 0.0};
+            const MolarFlowRateUnit: femtomole_per_second{1.0e-15, 0.0};
+            const MolarFlowRateUnit: picomole_per_second{1.0e-12, 0.0};
+            const MolarFlowRateUnit: nanomole_per_second{1.0e-9, 0.0};
+            const MolarFlowRateUnit: micromole_per_second{0.000001, 0.0};
+            const MolarFlowRateUnit: millimole_per_second{0.001, 0.0};
+            const MolarFlowRateUnit: centimole_per_second{0.01, 0.0};
+            const MolarFlowRateUnit: decimole_per_second{0.1, 0.0};
+            const MolarFlowRateUnit: decamole_per_second{10.0, 0.0};
+            const MolarFlowRateUnit: hectomole_per_second{100.0, 0.0};
+            const MolarFlowRateUnit: kilomole_per_second{1000.0, 0.0};
+            const MolarFlowRateUnit: megamole_per_second{1000000.0, 0.0};
+            const MolarFlowRateUnit: gigamole_per_second{1000000000.0, 0.0};
+            const MolarFlowRateUnit: teramole_per_second{1000000000000.0, 0.0};
+            const MolarFlowRateUnit: petamole_per_second{1000000000000000.0, 0.0};
+            const MolarFlowRateUnit: examole_per_second{1.0e18, 0.0};
+            const MolarFlowRateUnit: zettamole_per_second{1.0e21, 0.0};
+            const MolarFlowRateUnit: yottamole_per_second{1.0e24, 0.0};
+            const MolarFlowRateUnit: ronnamole_per_second{1.0e27, 0.0};
+            const MolarFlowRateUnit: quettamole_per_second{1.0e30, 0.0};
+            const MolarFlowRateUnit: mole_per_minute{0.0166666666666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: quectomole_per_minute{1.66666666666666666666666666666666667e-32, 0.0};
+            const MolarFlowRateUnit: rontomole_per_minute{1.66666666666666666666666666666666667e-29, 0.0};
+            const MolarFlowRateUnit: yoctomole_per_minute{1.66666666666666666666666666666666667e-26, 0.0};
+            const MolarFlowRateUnit: zeptomole_per_minute{1.66666666666666666666666666666666667e-23, 0.0};
+            const MolarFlowRateUnit: attomole_per_minute{1.66666666666666666666666666666666667e-20, 0.0};
+            const MolarFlowRateUnit: femtomole_per_minute{1.66666666666666666666666666666666667e-17, 0.0};
+            const MolarFlowRateUnit: picomole_per_minute{1.66666666666666666666666666666666667e-14, 0.0};
+            const MolarFlowRateUnit: nanomole_per_minute{1.66666666666666666666666666666666667e-11, 0.0};
+            const MolarFlowRateUnit: micromole_per_minute{1.66666666666666666666666666666666667e-8, 0.0};
+            const MolarFlowRateUnit: millimole_per_minute{0.0000166666666666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: centimole_per_minute{0.000166666666666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: decimole_per_minute{0.00166666666666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: decamole_per_minute{0.166666666666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: hectomole_per_minute{1.66666666666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: kilomole_per_minute{16.6666666666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: megamole_per_minute{16666.6666666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: gigamole_per_minute{16666666.6666666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: teramole_per_minute{16666666666.6666666666666666666666667, 0.0};
+            const MolarFlowRateUnit: petamole_per_minute{16666666666666.6666666666666666666667, 0.0};
+            const MolarFlowRateUnit: examole_per_minute{1.66666666666666666666666666666666667e16, 0.0};
+            const MolarFlowRateUnit: zettamole_per_minute{1.66666666666666666666666666666666667e19, 0.0};
+            const MolarFlowRateUnit: yottamole_per_minute{1.66666666666666666666666666666666667e22, 0.0};
+            const MolarFlowRateUnit: ronnamole_per_minute{1.66666666666666666666666666666666667e25, 0.0};
+            const MolarFlowRateUnit: quettamole_per_minute{1.66666666666666666666666666666666667e28, 0.0};
+            const MolarFlowRateUnit: mole_per_hour{0.000277777777777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: quectomole_per_hour{2.77777777777777777777777777777777778e-34, 0.0};
+            const MolarFlowRateUnit: rontomole_per_hour{2.77777777777777777777777777777777778e-31, 0.0};
+            const MolarFlowRateUnit: yoctomole_per_hour{2.77777777777777777777777777777777778e-28, 0.0};
+            const MolarFlowRateUnit: zeptomole_per_hour{2.77777777777777777777777777777777778e-25, 0.0};
+            const MolarFlowRateUnit: attomole_per_hour{2.77777777777777777777777777777777778e-22, 0.0};
+            const MolarFlowRateUnit: femtomole_per_hour{2.77777777777777777777777777777777778e-19, 0.0};
+            const MolarFlowRateUnit: picomole_per_hour{2.77777777777777777777777777777777778e-16, 0.0};
+            const MolarFlowRateUnit: nanomole_per_hour{2.77777777777777777777777777777777778e-13, 0.0};
+            const MolarFlowRateUnit: micromole_per_hour{2.77777777777777777777777777777777778e-10, 0.0};
+            const MolarFlowRateUnit: millimole_per_hour{2.77777777777777777777777777777777778e-7, 0.0};
+            const MolarFlowRateUnit: centimole_per_hour{0.00000277777777777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: decimole_per_hour{0.0000277777777777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: decamole_per_hour{0.00277777777777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: hectomole_per_hour{0.0277777777777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: kilomole_per_hour{0.277777777777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: megamole_per_hour{277.777777777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: gigamole_per_hour{277777.777777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: teramole_per_hour{277777777.777777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: petamole_per_hour{277777777777.777777777777777777777778, 0.0};
+            const MolarFlowRateUnit: examole_per_hour{277777777777777.777777777777777777778, 0.0};
+            const MolarFlowRateUnit: zettamole_per_hour{2.77777777777777777777777777777777778e17, 0.0};
+            const MolarFlowRateUnit: yottamole_per_hour{2.77777777777777777777777777777777778e20, 0.0};
+            const MolarFlowRateUnit: ronnamole_per_hour{2.77777777777777777777777777777777778e23, 0.0};
+            const MolarFlowRateUnit: quettamole_per_hour{2.77777777777777777777777777777777778e26, 0.0};
+        } end namespace molar_flow
+
+        namespace concentration {
+            const MolarityVolumeUnit: mole_per_cubic_meter{1.0, 0.0};
+            const MolarityVolumeUnit: quectomole_per_cubic_meter{1.0e-30, 0.0};
+            const MolarityVolumeUnit: rontomole_per_cubic_meter{1.0e-27, 0.0};
+            const MolarityVolumeUnit: yoctomole_per_cubic_meter{1.0e-24, 0.0};
+            const MolarityVolumeUnit: zeptomole_per_cubic_meter{1.0e-21, 0.0};
+            const MolarityVolumeUnit: attomole_per_cubic_meter{1.0e-18, 0.0};
+            const MolarityVolumeUnit: femtomole_per_cubic_meter{1.0e-15, 0.0};
+            const MolarityVolumeUnit: picomole_per_cubic_meter{1.0e-12, 0.0};
+            const MolarityVolumeUnit: nanomole_per_cubic_meter{1.0e-9, 0.0};
+            const MolarityVolumeUnit: micromole_per_cubic_meter{0.000001, 0.0};
+            const MolarityVolumeUnit: millimole_per_cubic_meter{0.001, 0.0};
+            const MolarityVolumeUnit: centimole_per_cubic_meter{0.01, 0.0};
+            const MolarityVolumeUnit: decimole_per_cubic_meter{0.1, 0.0};
+            const MolarityVolumeUnit: decamole_per_cubic_meter{10.0, 0.0};
+            const MolarityVolumeUnit: hectomole_per_cubic_meter{100.0, 0.0};
+            const MolarityVolumeUnit: kilomole_per_cubic_meter{1000.0, 0.0};
+            const MolarityVolumeUnit: megamole_per_cubic_meter{1000000.0, 0.0};
+            const MolarityVolumeUnit: gigamole_per_cubic_meter{1000000000.0, 0.0};
+            const MolarityVolumeUnit: teramole_per_cubic_meter{1000000000000.0, 0.0};
+            const MolarityVolumeUnit: petamole_per_cubic_meter{1000000000000000.0, 0.0};
+            const MolarityVolumeUnit: examole_per_cubic_meter{1.0e18, 0.0};
+            const MolarityVolumeUnit: zettamole_per_cubic_meter{1.0e21, 0.0};
+            const MolarityVolumeUnit: yottamole_per_cubic_meter{1.0e24, 0.0};
+            const MolarityVolumeUnit: ronnamole_per_cubic_meter{1.0e27, 0.0};
+            const MolarityVolumeUnit: quettamole_per_cubic_meter{1.0e30, 0.0};
+            const MolarityVolumeUnit: mole_per_cubic_centimeter{1000000.0, 0.0};
+            const MolarityVolumeUnit: quectomole_per_cubic_centimeter{1.0e-24, 0.0};
+            const MolarityVolumeUnit: rontomole_per_cubic_centimeter{1.0e-21, 0.0};
+            const MolarityVolumeUnit: yoctomole_per_cubic_centimeter{1.0e-18, 0.0};
+            const MolarityVolumeUnit: zeptomole_per_cubic_centimeter{1.0e-15, 0.0};
+            const MolarityVolumeUnit: attomole_per_cubic_centimeter{1.0e-12, 0.0};
+            const MolarityVolumeUnit: femtomole_per_cubic_centimeter{1.0e-9, 0.0};
+            const MolarityVolumeUnit: picomole_per_cubic_centimeter{0.000001, 0.0};
+            const MolarityVolumeUnit: nanomole_per_cubic_centimeter{0.001, 0.0};
+            const MolarityVolumeUnit: micromole_per_cubic_centimeter{1.0, 0.0};
+            const MolarityVolumeUnit: millimole_per_cubic_centimeter{1000.0, 0.0};
+            const MolarityVolumeUnit: centimole_per_cubic_centimeter{10000.0, 0.0};
+            const MolarityVolumeUnit: decimole_per_cubic_centimeter{100000.0, 0.0};
+            const MolarityVolumeUnit: decamole_per_cubic_centimeter{10000000.0, 0.0};
+            const MolarityVolumeUnit: hectomole_per_cubic_centimeter{100000000.0, 0.0};
+            const MolarityVolumeUnit: kilomole_per_cubic_centimeter{1000000000.0, 0.0};
+            const MolarityVolumeUnit: megamole_per_cubic_centimeter{1000000000000.0, 0.0};
+            const MolarityVolumeUnit: gigamole_per_cubic_centimeter{1000000000000000.0, 0.0};
+            const MolarityVolumeUnit: teramole_per_cubic_centimeter{1.0e18, 0.0};
+            const MolarityVolumeUnit: petamole_per_cubic_centimeter{1.0e21, 0.0};
+            const MolarityVolumeUnit: examole_per_cubic_centimeter{1.0e24, 0.0};
+            const MolarityVolumeUnit: zettamole_per_cubic_centimeter{1.0e27, 0.0};
+            const MolarityVolumeUnit: yottamole_per_cubic_centimeter{1.0e30, 0.0};
+            const MolarityVolumeUnit: ronnamole_per_cubic_centimeter{1.0e33, 0.0};
+            const MolarityVolumeUnit: quettamole_per_cubic_centimeter{1.0e36, 0.0};
+            const MolarityVolumeUnit: mole_per_cubic_millimeter{1000000000.0, 0.0};
+            const MolarityVolumeUnit: quectomole_per_cubic_millimeter{1.0e-21, 0.0};
+            const MolarityVolumeUnit: rontomole_per_cubic_millimeter{1.0e-18, 0.0};
+            const MolarityVolumeUnit: yoctomole_per_cubic_millimeter{1.0e-15, 0.0};
+            const MolarityVolumeUnit: zeptomole_per_cubic_millimeter{1.0e-12, 0.0};
+            const MolarityVolumeUnit: attomole_per_cubic_millimeter{1.0e-9, 0.0};
+            const MolarityVolumeUnit: femtomole_per_cubic_millimeter{0.000001, 0.0};
+            const MolarityVolumeUnit: picomole_per_cubic_millimeter{0.001, 0.0};
+            const MolarityVolumeUnit: nanomole_per_cubic_millimeter{1.0, 0.0};
+            const MolarityVolumeUnit: micromole_per_cubic_millimeter{1000.0, 0.0};
+            const MolarityVolumeUnit: millimole_per_cubic_millimeter{1000000.0, 0.0};
+            const MolarityVolumeUnit: centimole_per_cubic_millimeter{10000000.0, 0.0};
+            const MolarityVolumeUnit: decimole_per_cubic_millimeter{100000000.0, 0.0};
+            const MolarityVolumeUnit: decamole_per_cubic_millimeter{10000000000.0, 0.0};
+            const MolarityVolumeUnit: hectomole_per_cubic_millimeter{100000000000.0, 0.0};
+            const MolarityVolumeUnit: kilomole_per_cubic_millimeter{1000000000000.0, 0.0};
+            const MolarityVolumeUnit: megamole_per_cubic_millimeter{1000000000000000.0, 0.0};
+            const MolarityVolumeUnit: gigamole_per_cubic_millimeter{1.0e18, 0.0};
+            const MolarityVolumeUnit: teramole_per_cubic_millimeter{1.0e21, 0.0};
+            const MolarityVolumeUnit: petamole_per_cubic_millimeter{1.0e24, 0.0};
+            const MolarityVolumeUnit: examole_per_cubic_millimeter{1.0e27, 0.0};
+            const MolarityVolumeUnit: zettamole_per_cubic_millimeter{1.0e30, 0.0};
+            const MolarityVolumeUnit: yottamole_per_cubic_millimeter{1.0e33, 0.0};
+            const MolarityVolumeUnit: ronnamole_per_cubic_millimeter{1.0e36, 0.0};
+            const MolarityVolumeUnit: quettamole_per_cubic_millimeter{1.0e39, 0.0};
+            const MolarityVolumeUnit: molar{1000.0, 0.0};
+            const MolarityVolumeUnit: quectomolar{1.0e-27, 0.0};
+            const MolarityVolumeUnit: rontomolar{1.0e-24, 0.0};
+            const MolarityVolumeUnit: yoctomolar{1.0e-21, 0.0};
+            const MolarityVolumeUnit: zeptomolar{1.0e-18, 0.0};
+            const MolarityVolumeUnit: attomolar{1.0e-15, 0.0};
+            const MolarityVolumeUnit: femtomolar{1.0e-12, 0.0};
+            const MolarityVolumeUnit: picomolar{1.0e-9, 0.0};
+            const MolarityVolumeUnit: nanomolar{0.000001, 0.0};
+            const MolarityVolumeUnit: micromolar{0.001, 0.0};
+            const MolarityVolumeUnit: millimolar{1.0, 0.0};
+            const MolarityVolumeUnit: centimolar{10.0, 0.0};
+            const MolarityVolumeUnit: decimolar{100.0, 0.0};
+            const MolarityVolumeUnit: decamolar{10000.0, 0.0};
+            const MolarityVolumeUnit: hectomolar{100000.0, 0.0};
+            const MolarityVolumeUnit: kilomolar{1000000.0, 0.0};
+            const MolarityVolumeUnit: megamolar{1000000000.0, 0.0};
+            const MolarityVolumeUnit: gigamolar{1000000000000.0, 0.0};
+            const MolarityVolumeUnit: teramolar{1000000000000000.0, 0.0};
+            const MolarityVolumeUnit: petamolar{1.0e18, 0.0};
+            const MolarityVolumeUnit: examolar{1.0e21, 0.0};
+            const MolarityVolumeUnit: zettamolar{1.0e24, 0.0};
+            const MolarityVolumeUnit: yottamolar{1.0e27, 0.0};
+            const MolarityVolumeUnit: ronnamolar{1.0e30, 0.0};
+            const MolarityVolumeUnit: quettamolar{1.0e33, 0.0};
+            const MolarityVolumeUnit: mole_per_milliliter{1000000.0, 0.0};
+            const MolarityVolumeUnit: quectomole_per_milliliter{1.0e-24, 0.0};
+            const MolarityVolumeUnit: rontomole_per_milliliter{1.0e-21, 0.0};
+            const MolarityVolumeUnit: yoctomole_per_milliliter{1.0e-18, 0.0};
+            const MolarityVolumeUnit: zeptomole_per_milliliter{1.0e-15, 0.0};
+            const MolarityVolumeUnit: attomole_per_milliliter{1.0e-12, 0.0};
+            const MolarityVolumeUnit: femtomole_per_milliliter{1.0e-9, 0.0};
+            const MolarityVolumeUnit: picomole_per_milliliter{0.000001, 0.0};
+            const MolarityVolumeUnit: nanomole_per_milliliter{0.001, 0.0};
+            const MolarityVolumeUnit: micromole_per_milliliter{1.0, 0.0};
+            const MolarityVolumeUnit: millimole_per_milliliter{1000.0, 0.0};
+            const MolarityVolumeUnit: centimole_per_milliliter{10000.0, 0.0};
+            const MolarityVolumeUnit: decimole_per_milliliter{100000.0, 0.0};
+            const MolarityVolumeUnit: decamole_per_milliliter{10000000.0, 0.0};
+            const MolarityVolumeUnit: hectomole_per_milliliter{100000000.0, 0.0};
+            const MolarityVolumeUnit: kilomole_per_milliliter{1000000000.0, 0.0};
+            const MolarityVolumeUnit: megamole_per_milliliter{1000000000000.0, 0.0};
+            const MolarityVolumeUnit: gigamole_per_milliliter{1000000000000000.0, 0.0};
+            const MolarityVolumeUnit: teramole_per_milliliter{1.0e18, 0.0};
+            const MolarityVolumeUnit: petamole_per_milliliter{1.0e21, 0.0};
+            const MolarityVolumeUnit: examole_per_milliliter{1.0e24, 0.0};
+            const MolarityVolumeUnit: zettamole_per_milliliter{1.0e27, 0.0};
+            const MolarityVolumeUnit: yottamole_per_milliliter{1.0e30, 0.0};
+            const MolarityVolumeUnit: ronnamole_per_milliliter{1.0e33, 0.0};
+            const MolarityVolumeUnit: quettamole_per_milliliter{1.0e36, 0.0};
+        } end namespace concentration
+
+        namespace dosage {
+            const SpecificVolumeUnit: liter_per_kilogram{0.001, 0.0};
+            const SpecificVolumeUnit: quectoliter_per_kilogram{1.0e-33, 0.0};
+            const SpecificVolumeUnit: rontoliter_per_kilogram{1.0e-30, 0.0};
+            const SpecificVolumeUnit: yoctoliter_per_kilogram{1.0e-27, 0.0};
+            const SpecificVolumeUnit: zeptoliter_per_kilogram{1.0e-24, 0.0};
+            const SpecificVolumeUnit: attoliter_per_kilogram{1.0e-21, 0.0};
+            const SpecificVolumeUnit: femtoliter_per_kilogram{1.0e-18, 0.0};
+            const SpecificVolumeUnit: picoliter_per_kilogram{1.0e-15, 0.0};
+            const SpecificVolumeUnit: nanoliter_per_kilogram{1.0e-12, 0.0};
+            const SpecificVolumeUnit: microliter_per_kilogram{1.0e-9, 0.0};
+            const SpecificVolumeUnit: milliliter_per_kilogram{0.000001, 0.0};
+            const SpecificVolumeUnit: centiliter_per_kilogram{0.00001, 0.0};
+            const SpecificVolumeUnit: deciliter_per_kilogram{0.0001, 0.0};
+            const SpecificVolumeUnit: decaliter_per_kilogram{0.01, 0.0};
+            const SpecificVolumeUnit: hectoliter_per_kilogram{0.1, 0.0};
+            const SpecificVolumeUnit: kiloliter_per_kilogram{1.0, 0.0};
+            const SpecificVolumeUnit: megaliter_per_kilogram{1000.0, 0.0};
+            const SpecificVolumeUnit: gigaliter_per_kilogram{1000000.0, 0.0};
+            const SpecificVolumeUnit: teraliter_per_kilogram{1000000000.0, 0.0};
+            const SpecificVolumeUnit: petaliter_per_kilogram{1000000000000.0, 0.0};
+            const SpecificVolumeUnit: exaliter_per_kilogram{1000000000000000.0, 0.0};
+            const SpecificVolumeUnit: zettaliter_per_kilogram{1.0e18, 0.0};
+            const SpecificVolumeUnit: yottaliter_per_kilogram{1.0e21, 0.0};
+            const SpecificVolumeUnit: ronnaliter_per_kilogram{1.0e24, 0.0};
+            const SpecificVolumeUnit: quettaliter_per_kilogram{1.0e27, 0.0};
+            const SpecificVolumeUnit: liter_per_gram{1.0, 0.0};
+            const SpecificVolumeUnit: quectoliter_per_gram{1.0e-30, 0.0};
+            const SpecificVolumeUnit: rontoliter_per_gram{1.0e-27, 0.0};
+            const SpecificVolumeUnit: yoctoliter_per_gram{1.0e-24, 0.0};
+            const SpecificVolumeUnit: zeptoliter_per_gram{1.0e-21, 0.0};
+            const SpecificVolumeUnit: attoliter_per_gram{1.0e-18, 0.0};
+            const SpecificVolumeUnit: femtoliter_per_gram{1.0e-15, 0.0};
+            const SpecificVolumeUnit: picoliter_per_gram{1.0e-12, 0.0};
+            const SpecificVolumeUnit: nanoliter_per_gram{1.0e-9, 0.0};
+            const SpecificVolumeUnit: microliter_per_gram{0.000001, 0.0};
+            const SpecificVolumeUnit: milliliter_per_gram{0.001, 0.0};
+            const SpecificVolumeUnit: centiliter_per_gram{0.01, 0.0};
+            const SpecificVolumeUnit: deciliter_per_gram{0.1, 0.0};
+            const SpecificVolumeUnit: decaliter_per_gram{10.0, 0.0};
+            const SpecificVolumeUnit: hectoliter_per_gram{100.0, 0.0};
+            const SpecificVolumeUnit: kiloliter_per_gram{1000.0, 0.0};
+            const SpecificVolumeUnit: megaliter_per_gram{1000000.0, 0.0};
+            const SpecificVolumeUnit: gigaliter_per_gram{1000000000.0, 0.0};
+            const SpecificVolumeUnit: teraliter_per_gram{1000000000000.0, 0.0};
+            const SpecificVolumeUnit: petaliter_per_gram{1000000000000000.0, 0.0};
+            const SpecificVolumeUnit: exaliter_per_gram{1.0e18, 0.0};
+            const SpecificVolumeUnit: zettaliter_per_gram{1.0e21, 0.0};
+            const SpecificVolumeUnit: yottaliter_per_gram{1.0e24, 0.0};
+            const SpecificVolumeUnit: ronnaliter_per_gram{1.0e27, 0.0};
+            const SpecificVolumeUnit: quettaliter_per_gram{1.0e30, 0.0};
+            const SpecificVolumeUnit: liter_per_milligram{1000.0, 0.0};
+            const SpecificVolumeUnit: quectoliter_per_milligram{1.0e-27, 0.0};
+            const SpecificVolumeUnit: rontoliter_per_milligram{1.0e-24, 0.0};
+            const SpecificVolumeUnit: yoctoliter_per_milligram{1.0e-21, 0.0};
+            const SpecificVolumeUnit: zeptoliter_per_milligram{1.0e-18, 0.0};
+            const SpecificVolumeUnit: attoliter_per_milligram{1.0e-15, 0.0};
+            const SpecificVolumeUnit: femtoliter_per_milligram{1.0e-12, 0.0};
+            const SpecificVolumeUnit: picoliter_per_milligram{1.0e-9, 0.0};
+            const SpecificVolumeUnit: nanoliter_per_milligram{0.000001, 0.0};
+            const SpecificVolumeUnit: microliter_per_milligram{0.001, 0.0};
+            const SpecificVolumeUnit: milliliter_per_milligram{1.0, 0.0};
+            const SpecificVolumeUnit: centiliter_per_milligram{10.0, 0.0};
+            const SpecificVolumeUnit: deciliter_per_milligram{100.0, 0.0};
+            const SpecificVolumeUnit: decaliter_per_milligram{10000.0, 0.0};
+            const SpecificVolumeUnit: hectoliter_per_milligram{100000.0, 0.0};
+            const SpecificVolumeUnit: kiloliter_per_milligram{1000000.0, 0.0};
+            const SpecificVolumeUnit: megaliter_per_milligram{1000000000.0, 0.0};
+            const SpecificVolumeUnit: gigaliter_per_milligram{1000000000000.0, 0.0};
+            const SpecificVolumeUnit: teraliter_per_milligram{1000000000000000.0, 0.0};
+            const SpecificVolumeUnit: petaliter_per_milligram{1.0e18, 0.0};
+            const SpecificVolumeUnit: exaliter_per_milligram{1.0e21, 0.0};
+            const SpecificVolumeUnit: zettaliter_per_milligram{1.0e24, 0.0};
+            const SpecificVolumeUnit: yottaliter_per_milligram{1.0e27, 0.0};
+            const SpecificVolumeUnit: ronnaliter_per_milligram{1.0e30, 0.0};
+            const SpecificVolumeUnit: quettaliter_per_milligram{1.0e33, 0.0};
+            const SpecificVolumeUnit: cubic_meter_per_kilogram{1.0, 0.0};
+            const SpecificVolumeUnit: cubic_meter_per_gram{1000.0, 0.0};
+            const SpecificVolumeUnit: cubic_meter_per_milligram{1000000.0, 0.0};
+            const SpecificVolumeUnit: cubic_centimeter_per_kilogram{0.000001, 0.0};
+            const SpecificVolumeUnit: cubic_centimeter_per_gram{0.001, 0.0};
+            const SpecificVolumeUnit: cubic_centimeter_per_milligram{1.0, 0.0};
+            const SpecificVolumeUnit: cubic_millimeter_per_kilogram{1.0e-9, 0.0};
+            const SpecificVolumeUnit: cubic_millimeter_per_gram{0.000001, 0.0};
+            const SpecificVolumeUnit: cubic_millimeter_per_milligram{0.001, 0.0};
+            const SpecificAreaUnit  : square_meter_per_kilogram{1.0, 0.0};
+            const SpecificAreaUnit  : square_meter_per_gram{1000.0, 0.0};
+            const SpecificAreaUnit  : square_meter_per_milligram{1000000.0, 0.0};
+            const SpecificAreaUnit  : square_centimeter_per_kilogram{0.0001, 0.0};
+            const SpecificAreaUnit  : square_centimeter_per_gram{0.1, 0.0};
+            const SpecificAreaUnit  : square_centimeter_per_milligram{100.0, 0.0};
+            const SpecificAreaUnit  : square_millimeter_per_kilogram{0.000001, 0.0};
+            const SpecificAreaUnit  : square_millimeter_per_gram{0.001, 0.0};
+            const SpecificAreaUnit  : square_millimeter_per_milligram{1.0, 0.0};
+            const MolarityMassUnit  : mole_per_kilogram{1.0, 0.0};
+            const MolarityMassUnit  : quectomole_per_kilogram{1.0e-30, 0.0};
+            const MolarityMassUnit  : rontomole_per_kilogram{1.0e-27, 0.0};
+            const MolarityMassUnit  : yoctomole_per_kilogram{1.0e-24, 0.0};
+            const MolarityMassUnit  : zeptomole_per_kilogram{1.0e-21, 0.0};
+            const MolarityMassUnit  : attomole_per_kilogram{1.0e-18, 0.0};
+            const MolarityMassUnit  : femtomole_per_kilogram{1.0e-15, 0.0};
+            const MolarityMassUnit  : picomole_per_kilogram{1.0e-12, 0.0};
+            const MolarityMassUnit  : nanomole_per_kilogram{1.0e-9, 0.0};
+            const MolarityMassUnit  : micromole_per_kilogram{0.000001, 0.0};
+            const MolarityMassUnit  : millimole_per_kilogram{0.001, 0.0};
+            const MolarityMassUnit  : centimole_per_kilogram{0.01, 0.0};
+            const MolarityMassUnit  : decimole_per_kilogram{0.1, 0.0};
+            const MolarityMassUnit  : decamole_per_kilogram{10.0, 0.0};
+            const MolarityMassUnit  : hectomole_per_kilogram{100.0, 0.0};
+            const MolarityMassUnit  : kilomole_per_kilogram{1000.0, 0.0};
+            const MolarityMassUnit  : megamole_per_kilogram{1000000.0, 0.0};
+            const MolarityMassUnit  : gigamole_per_kilogram{1000000000.0, 0.0};
+            const MolarityMassUnit  : teramole_per_kilogram{1000000000000.0, 0.0};
+            const MolarityMassUnit  : petamole_per_kilogram{1000000000000000.0, 0.0};
+            const MolarityMassUnit  : examole_per_kilogram{1.0e18, 0.0};
+            const MolarityMassUnit  : zettamole_per_kilogram{1.0e21, 0.0};
+            const MolarityMassUnit  : yottamole_per_kilogram{1.0e24, 0.0};
+            const MolarityMassUnit  : ronnamole_per_kilogram{1.0e27, 0.0};
+            const MolarityMassUnit  : quettamole_per_kilogram{1.0e30, 0.0};
+            const MolarityMassUnit  : mole_per_gram{1000.0, 0.0};
+            const MolarityMassUnit  : quectomole_per_gram{1.0e-27, 0.0};
+            const MolarityMassUnit  : rontomole_per_gram{1.0e-24, 0.0};
+            const MolarityMassUnit  : yoctomole_per_gram{1.0e-21, 0.0};
+            const MolarityMassUnit  : zeptomole_per_gram{1.0e-18, 0.0};
+            const MolarityMassUnit  : attomole_per_gram{1.0e-15, 0.0};
+            const MolarityMassUnit  : femtomole_per_gram{1.0e-12, 0.0};
+            const MolarityMassUnit  : picomole_per_gram{1.0e-9, 0.0};
+            const MolarityMassUnit  : nanomole_per_gram{0.000001, 0.0};
+            const MolarityMassUnit  : micromole_per_gram{0.001, 0.0};
+            const MolarityMassUnit  : millimole_per_gram{1.0, 0.0};
+            const MolarityMassUnit  : centimole_per_gram{10.0, 0.0};
+            const MolarityMassUnit  : decimole_per_gram{100.0, 0.0};
+            const MolarityMassUnit  : decamole_per_gram{10000.0, 0.0};
+            const MolarityMassUnit  : hectomole_per_gram{100000.0, 0.0};
+            const MolarityMassUnit  : kilomole_per_gram{1000000.0, 0.0};
+            const MolarityMassUnit  : megamole_per_gram{1000000000.0, 0.0};
+            const MolarityMassUnit  : gigamole_per_gram{1000000000000.0, 0.0};
+            const MolarityMassUnit  : teramole_per_gram{1000000000000000.0, 0.0};
+            const MolarityMassUnit  : petamole_per_gram{1.0e18, 0.0};
+            const MolarityMassUnit  : examole_per_gram{1.0e21, 0.0};
+            const MolarityMassUnit  : zettamole_per_gram{1.0e24, 0.0};
+            const MolarityMassUnit  : yottamole_per_gram{1.0e27, 0.0};
+            const MolarityMassUnit  : ronnamole_per_gram{1.0e30, 0.0};
+            const MolarityMassUnit  : quettamole_per_gram{1.0e33, 0.0};
+            const MolarityMassUnit  : mole_per_milligram{1000000.0, 0.0};
+            const MolarityMassUnit  : quectomole_per_milligram{1.0e-24, 0.0};
+            const MolarityMassUnit  : rontomole_per_milligram{1.0e-21, 0.0};
+            const MolarityMassUnit  : yoctomole_per_milligram{1.0e-18, 0.0};
+            const MolarityMassUnit  : zeptomole_per_milligram{1.0e-15, 0.0};
+            const MolarityMassUnit  : attomole_per_milligram{1.0e-12, 0.0};
+            const MolarityMassUnit  : femtomole_per_milligram{1.0e-9, 0.0};
+            const MolarityMassUnit  : picomole_per_milligram{0.000001, 0.0};
+            const MolarityMassUnit  : nanomole_per_milligram{0.001, 0.0};
+            const MolarityMassUnit  : micromole_per_milligram{1.0, 0.0};
+            const MolarityMassUnit  : millimole_per_milligram{1000.0, 0.0};
+            const MolarityMassUnit  : centimole_per_milligram{10000.0, 0.0};
+            const MolarityMassUnit  : decimole_per_milligram{100000.0, 0.0};
+            const MolarityMassUnit  : decamole_per_milligram{10000000.0, 0.0};
+            const MolarityMassUnit  : hectomole_per_milligram{100000000.0, 0.0};
+            const MolarityMassUnit  : kilomole_per_milligram{1000000000.0, 0.0};
+            const MolarityMassUnit  : megamole_per_milligram{1000000000000.0, 0.0};
+            const MolarityMassUnit  : gigamole_per_milligram{1000000000000000.0, 0.0};
+            const MolarityMassUnit  : teramole_per_milligram{1.0e18, 0.0};
+            const MolarityMassUnit  : petamole_per_milligram{1.0e21, 0.0};
+            const MolarityMassUnit  : examole_per_milligram{1.0e24, 0.0};
+            const MolarityMassUnit  : zettamole_per_milligram{1.0e27, 0.0};
+            const MolarityMassUnit  : yottamole_per_milligram{1.0e30, 0.0};
+            const MolarityMassUnit  : ronnamole_per_milligram{1.0e33, 0.0};
+            const MolarityMassUnit  : quettamole_per_milligram{1.0e36, 0.0};
+        } end namespace dosage
+    } end namespace units
+} end namespace std

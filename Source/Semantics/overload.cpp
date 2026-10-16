@@ -64,7 +64,7 @@ CandidateMatch match_arguments(const std::vector<ParamShape>& params, const std:
 
             if (!P.is_pack) {
                 if (a < n) {
-                    ConversionRank r = rank_conversion(args[a], P.element, ctx);
+                    ConversionRank r = (!args[a] && ctx.brace_arg_rank) ? ctx.brace_arg_rank(a, P.element) : rank_conversion(args[a], P.element, ctx);
 
                     if (r != ConversionRank::None) {
                         std::vector<ConversionRank> v = prev[a].ranks; 
@@ -198,6 +198,27 @@ Selection select_overload(const std::vector<CandidateMatch>& cands, const std::v
 
         for (std::size_t n = 0; n < cands.size(); ++n) {
             if (!cands[n].viable || n >= from_template.size() || from_template[n]) continue;
+            if (better_candidate(cands[t], cands[n])) continue;
+            kept[t].viable = false;
+            dropped = true;
+            break;
+        }
+    }
+
+    return dropped ? select_overload(kept) : sel;
+}
+
+Selection select_overload(const std::vector<CandidateMatch>& cands, const std::vector<bool>& from_template, const std::vector<std::size_t>& fixed_params) {
+    Selection sel = select_overload(cands, from_template);
+    if (sel.status != SelectStatus::Ambiguous || fixed_params.size() != cands.size()) return sel;
+    std::vector<CandidateMatch> kept = cands;
+    bool dropped = false;
+
+    for (std::size_t t = 0; t < kept.size(); ++t) {
+        if (!kept[t].viable) continue;
+
+        for (std::size_t n = 0; n < cands.size(); ++n) {
+            if (n == t || !cands[n].viable || fixed_params[n] <= fixed_params[t]) continue;
             if (better_candidate(cands[t], cands[n])) continue;
             kept[t].viable = false;
             dropped = true;

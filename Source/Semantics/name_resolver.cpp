@@ -125,7 +125,7 @@ void NameResolver::check_symbols(const std::vector<Symbol*>& chain, const nodes:
 }
 
 void NameResolver::error_unresolved(const nodes::ASTNode* use, std::string_view name) {
-    if (use && !m_quiet) { SemanticError::unresolved_name(m_reporter, use->file_id, use->line, name); }
+    if (use && !m_quiet) { SemanticError::unresolved_name(m_reporter, use->file_id, use->line, name, suggest_similar(m_current, name, false)); }
 }
 
 void NameResolver::resolve_type(parser_types::TypeInfo& info, const nodes::ASTNode* use, bool allow_value) {
@@ -141,6 +141,17 @@ void NameResolver::resolve_type(parser_types::TypeInfo& info, const nodes::ASTNo
             if (c && !is_type_symbol(c->kind) && !value_ok) {
                 error_unresolved(use, join(ud->parts(), ud->is_global()));
             }
+        } else if (Symbol* head = (!ud->is_global() && ud->parts().size() == 2 && info.template_args.empty()) ? resolve_lexical_visible(m_current, ud->parts()[0], use) : nullptr;
+                   head && head->kind == SymbolKind::TemplateParam) {
+            auto* qt = make_in<parser_types::QualifiedType>(m_arena, false);
+            qt->add_component(ud->parts()[0]);
+            qt->add_component(ud->parts()[1]);
+            parser_types::TypeInfo prefix;
+            prefix.type = make_in<parser_types::UserDefinedType>(m_arena, ud->parts()[0]);
+            prefix.resolved = head;
+            qt->set_prefix(prefix);
+            info.type = qt;
+            return;
         } else if (!(ud->parts().size() == 1 && !ud->is_global() && info.template_args.size() == 1 && (ud->name() == "generator" || ud->name() == "task"))) {
             error_unresolved(use, join(ud->parts(), ud->is_global()));
         }
@@ -178,13 +189,17 @@ void NameResolver::resolve_type(parser_types::TypeInfo& info, const nodes::ASTNo
 
 void NameResolver::resolve_qualified(parser_types::TypeInfo& info, const nodes::ASTNode* use) {
     auto* qt = static_cast<parser_types::QualifiedType*>(info.type);
+    if (qt->has_prefix() && qt->prefix().resolved && qt->prefix().resolved->kind == SymbolKind::TemplateParam && qt->components().size() == 2) {
+        if (Symbol* head = resolve_lexical_visible(m_current, qt->components()[0].name, use); head && head->kind == SymbolKind::TemplateParam) qt->prefix().resolved = head;
+        return;
+    }
     const auto& comps = qt->components();
     std::vector<std::string_view> names;
     std::size_t last_args = comps.size();
 
     for (std::size_t i = 0; i < comps.size(); ++i) {
         names.push_back(comps[i].name);
-        if (comps[i].has_args()) last_args = i;
+        if (comps[i].has_args() && i + 1 < comps.size()) last_args = i;
         for (parser_types::TemplateArgument* a : comps[i].args) resolve_targ(a, use);
     }
 
@@ -257,8 +272,12 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
         case K::QualifiedIdentifier: {
             auto* q = static_cast<nodes::QualifiedIdentifier*>(e);
             Symbol* s = resolve_name(m_current, m_root, q->parts(), q->is_global(), q);
-            if (s) { check_visibility(q->parts(), q->is_global(), q); q->resolved = chase(s); }
-            else   { error_unresolved(q, join(q->parts(), q->is_global())); }
+            if (s) { check_visibility(q->parts(), q->is_global(), q); q->resolved = chase(s); break; }
+            if (!q->is_global() && q->parts().size() > 1) {
+                Symbol* head = resolve_lexical_visible(m_current, q->parts()[0], q);
+                if (head && (head->kind == SymbolKind::TemplateParam || (head->kind == SymbolKind::TypeAlias && head->type && !head->template_decl))) { q->dependent_head = head; break; }
+            }
+            error_unresolved(q, join(q->parts(), q->is_global()));
             break;
         }
 
@@ -333,6 +352,12 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
             auto* m = static_cast<nodes::MemberAccessExpression*>(e);
             walk_expr(m->m_object);
 
+            if (!m->qualifier.empty()) {
+                Symbol* q = chase(resolve_name(m_current, m_root, m->qualifier, m->qualifier_global, m));
+                if (!q) error_unresolved(m, join(m->qualifier, m->qualifier_global));
+                m->qualifier_symbol = q;
+            }
+
             if (m->m_op == nodes::MemberAccessExpression::Op::Scope) {
                 Symbol* base = chase(node_symbol(m->m_object));
 
@@ -350,7 +375,7 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
 
         case K::CastExpression: {
             auto* c = static_cast<nodes::CastExpression*>(e);
-            resolve_type(mut(c->get_target()), c);
+            if (!c->special_test) resolve_type(mut(c->get_target()), c);
             walk_expr(c->operand);
             break;
         }
@@ -459,6 +484,20 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
     }
 }
 
+namespace {
+
+bool is_template_friend(const nodes::ASTNode* n) {
+    if (!n || n->kind != nodes::ASTNode::Kind::TemplateDeclaration) return false;
+    const nodes::ASTNode* inner = static_cast<const nodes::TemplateDeclaration*>(n)->m_declaration;
+    using RM = modifiers::RawModifiers;
+    if (!inner) return false;
+    if (inner->kind == nodes::ASTNode::Kind::FunctionDeclaration) return static_cast<const nodes::FunctionDeclaration*>(inner)->get_modifiers().has(RM::Friend);
+    if (inner->kind == nodes::ASTNode::Kind::OperatorFunctionDeclaration) return static_cast<const nodes::OperatorFunctionDeclaration*>(inner)->get_modifiers().has(RM::Friend);
+    return false;
+}
+
+} // namespace
+
 void NameResolver::build(nodes::ASTNode* node) {
     if (!node) { return; }
     using K = nodes::ASTNode::Kind;
@@ -498,6 +537,10 @@ void NameResolver::build(nodes::ASTNode* node) {
         case K::ReturnStatement:
             walk_expr(static_cast<nodes::ReturnStatement*>(node)->m_value);
             break;
+        case K::InvalidateStatement:
+            for (nodes::ASTNode* t : static_cast<nodes::InvalidateStatement*>(node)->targets) walk_expr(t);
+            break;
+
         case K::CoReturnStatement:
             walk_expr(static_cast<nodes::CoReturnStatement*>(node)->m_value);
             break;
@@ -644,7 +687,10 @@ void NameResolver::build(nodes::ASTNode* node) {
 
             Scope* saved = m_current;
             if (Scope* rs = inner_of(rec->symbol)) { m_current = rs; }
-            for (const auto& member : rec->get_members()) { build(member.node); }
+            for (const auto& member : rec->get_members()) {
+                if (is_template_friend(member.node)) continue;
+                build(member.node);
+            }
             m_current = saved;
             break;
         }
@@ -704,10 +750,18 @@ void NameResolver::build(nodes::ASTNode* node) {
             }
 
             walk_expr(t->m_requires_clause);
+            if (t->has_friend_type) resolve_type(t->friend_type, t);
             resolve_spec_args(t->m_declaration);
 
             if (t->m_declaration && t->m_declaration->kind == K::ConceptDeclaration) {
                 walk_expr(static_cast<nodes::ConceptDeclaration*>(t->m_declaration)->constraint);
+                m_current = saved;
+                break;
+            }
+
+            if (t->m_declaration && t->m_declaration->kind == K::UsingDeclaration) {
+                auto* u = static_cast<nodes::UsingDeclaration*>(t->m_declaration);
+                if (u->is_typedef()) resolve_type(u->aliased_type, u);
                 m_current = saved;
                 break;
             }
@@ -739,6 +793,18 @@ void NameResolver::build(nodes::ASTNode* node) {
                         u->symbol->inner_scope   = c->inner_scope;
                         u->symbol->import_target = c;
                     }
+                }
+            } else if (u->is_name()) {
+                Symbol* target = resolve_name(m_current, m_root, u->target_parts, u->target_global, u);
+                if (target) check_visibility(u->target_parts, u->target_global, u);
+
+                if (!target) {
+                    error_unresolved(u, u->target_name());
+                } else if (u->symbol && u->symbol != target) {
+                    Symbol* c = chase(target);
+                    u->symbol->import_target = c;
+                    if (c && c->inner_scope) u->symbol->inner_scope = c->inner_scope;
+                    if (c && c->kind == SymbolKind::Namespace) u->symbol->kind = SymbolKind::Namespace;
                 }
             } else if (u->is_directive()) {                       // using namespace a::b;
                 Symbol* target = resolve_name(m_current, m_root, u->target_parts, u->target_global, u);

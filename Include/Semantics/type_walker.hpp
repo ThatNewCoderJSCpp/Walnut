@@ -41,6 +41,23 @@ public:
         m_types.expr_walk_hook = m_saved_walk_hook;
         m_types.type_error_hook = m_saved_error_hook;
         m_types.conversions_hook = m_saved_conversions_hook;
+        m_types.template_conversion_hook = nullptr;
+        if (m_saved_member_value_hook) {
+            m_types.member_value_hook = m_saved_member_value_hook;
+        } else {
+            TypeContext* ctx = &m_types;
+            m_types.member_value_hook = [ctx](Type* rec, std::string_view name, TemplateArg& out) {
+                auto it = ctx->member_value_memo.find({ rec, std::string(name) });
+                if (it == ctx->member_value_memo.end()) return false;
+                out = it->second;
+                return true;
+            };
+        }
+        if (m_inst) {
+            m_inst->evaluator().concept_value = m_saved_concept_value;
+            m_inst->evaluator().variable_template_value = m_saved_variable_template_value;
+            m_inst->evaluator().scoped_member_value = m_saved_scoped_member_value;
+        }
     }
 
     void type_pending_instances();
@@ -70,10 +87,13 @@ private:
 
     struct ControlContextGuard {
         TypeWalker& w; unsigned long long int loops, switches;
+        std::vector<std::string_view> labels;
+        std::vector<std::pair<const std::vector<nodes::ASTNode*>*, std::size_t>> path;
+        std::vector<std::pair<nodes::SingleStatement*, std::vector<std::pair<const std::vector<nodes::ASTNode*>*, std::size_t>>>> jump_labels, jumps;
 
         explicit ControlContextGuard(TypeWalker& tw);
 
-        ~ControlContextGuard() { w.m_loop_depth = loops; w.m_switch_depth = switches; }
+        ~ControlContextGuard();
     };
 
     struct ReturnFrame {
@@ -102,6 +122,10 @@ private:
     std::function<void(nodes::ASTNode*)> m_saved_walk_hook;
     std::function<void(const std::string&)> m_saved_error_hook;
     std::function<void(Type*)>              m_saved_conversions_hook;
+    std::function<bool(Type*, std::string_view, TemplateArg&)> m_saved_member_value_hook;
+    std::function<int(nodes::TemplateInstantiation*)> m_saved_concept_value;
+    std::function<ConstValue(nodes::TemplateInstantiation*)> m_saved_variable_template_value;
+    std::function<ConstValue(nodes::MemberAccessExpression*)> m_saved_scoped_member_value;
     nodes::ASTNode*              m_site = nullptr;
     bool                         m_quiet_deleted = false;
     std::set<std::tuple<std::uint32_t, std::size_t, std::string>> m_reported_type_errors;
@@ -111,7 +135,13 @@ private:
     std::vector<ReturnFrame>     m_returns;
     std::vector<nodes::ASTNode*> m_fn_bodies;
     std::size_t                  m_catch_depth  = 0; 
-    unsigned long long int       m_loop_depth   = 0;   
+    unsigned long long int       m_loop_depth   = 0;
+    std::vector<std::string_view> m_loop_labels;
+    using StmtPath = std::vector<std::pair<const std::vector<nodes::ASTNode*>*, std::size_t>>;
+    StmtPath m_stmt_path;
+    std::vector<std::pair<nodes::SingleStatement*, StmtPath>> m_jump_labels, m_jumps;
+    void resolve_gotos();
+    void build_list(const std::vector<nodes::ASTNode*>& stmts);   
     unsigned long long int       m_switch_depth = 0;
 
 private:
@@ -150,6 +180,7 @@ private:
     void check_cast(nodes::CastExpression* c, Type* src, Type* dst);
 
     Scope* member_scope_of(Type* t);
+    Type* record_iteration(nodes::ForEachStatement* s, Type* container);
 
     const SubstEnv* env_of_symbol(Symbol* s) {
         Instantiator::Instantiation* I = m_inst ? m_inst->owning(s) : nullptr;
@@ -266,14 +297,53 @@ private:
     void check_member_access(Symbol* found, nodes::ASTNode* site);
 
     Type* type_member_access(nodes::MemberAccessExpression* m);
+    void  finish_member_access(nodes::MemberAccessExpression* m, bool as_callee = false);
+    static std::size_t fixed_parameter_count(const Symbol* fn);
+    int call_object_constness(nodes::CallExpression* c);
+
+    struct DeferredBody {
+        nodes::ASTNode*              node  = nullptr;
+        Scope*                       scope = nullptr;
+        Instantiator::Instantiation* inst  = nullptr;
+    };
+
+    static inline std::unordered_map<Symbol*, DeferredBody> m_deferred;
+    static inline std::unordered_set<Symbol*> m_requested;
+
+public:
+    static void reset_deferred_bodies() {
+        m_deferred.clear();
+        m_requested.clear();
+    }
+
+private:
+    nodes::ASTNode* m_force_node = nullptr;
+    bool defer_member_body(nodes::ASTNode* node, Symbol* sym, bool has_body, bool eager);
+    void ensure_member_body(Symbol* sym);
+    bool in_friend_body() const;
+    Scope* qualified_base_scope(Scope* rs, Symbol* q, int depth);
+    void check_brace_init(nodes::BraceInitializerList* list, Type* target, nodes::ASTNode* site);
+    static bool is_static_member_function(const Symbol* fn);
+    bool  is_builtin_method_call(nodes::CallExpression* c);
+    bool  rewrite_extension_call(nodes::CallExpression* c);
+    void  refine_by_value_category(std::vector<CandidateMatch>& matches, const std::vector<std::vector<ParamShape>>& shapes_list, const std::vector<nodes::ASTNode*>& args, std::size_t offset);
+    void  substitute_pack_types(nodes::ASTNode* n, const std::vector<Symbol*>& pks, std::size_t k);
+    std::string candidate_notes(Symbol* head, const std::vector<Type*>& args, const std::vector<nodes::ASTNode*>* arg_nodes, std::string_view shown);
+    Type* type_builtin_method(nodes::CallExpression* c, const std::vector<Type*>& args);
 
     static bool is_instance_field(const Symbol* s);
+    static bool is_lazy_field(const Symbol* s);
+    std::string lazy_write_problem(nodes::ASTNode* target);
+    bool lazy_blocked(const Symbol* s, bool object_const);
 
     Type* add_const(Type* t);
 
     static bool is_const_method(const Symbol* fn);
 
     bool is_member_function(const Symbol* fn) const;
+    nodes::VariableDeclaration* pack_field_group(nodes::ASTNode* e);
+    void expand_pack_list(std::vector<nodes::ASTNode*>& items);
+    nodes::VariableDeclaration* pack_field_group_of(Symbol* s);
 
     void check_const_call(Symbol* chosen, nodes::CallExpression* c);
 
@@ -311,6 +381,11 @@ private:
     bool concept_args(nodes::TemplateInstantiation* t, Symbol*& cept, TemplateArgs& args);
 
     int concept_id_value(nodes::TemplateInstantiation* t);
+    bool is_variable_template(Symbol* g);
+    ConstValue scoped_member_value(nodes::MemberAccessExpression* m);
+    bool member_value(Type* rec, std::string_view name, TemplateArg& out);
+    void rebind_inherited(nodes::QualifiedIdentifier* q);
+    ConstValue variable_template_value(nodes::TemplateInstantiation* t);
 
     bool requires_satisfied(nodes::RequiresExpression* r);
 
@@ -322,6 +397,8 @@ private:
     nodes::ASTNode* m_statement_yield = nullptr;
     std::unordered_map<const Symbol*, Type*> m_array_types;
     bool m_in_const_method = false;
+    int  m_typing_depth = 0;
+    bool m_typing_depth_reported = false;
     bool m_allow_abstract = false;
 
     bool is_trivial_scalar(Type* t);
@@ -338,7 +415,7 @@ private:
 
     void check_constant_init(nodes::VariableDeclaration* v, Type* target);
 
-    enum class OperandClass : std::uint8_t { Unknown, Int, Char, Float, Bool, String, Pointer, Null, Enum, Other };
+    enum class OperandClass : std::uint8_t { Unknown, Int, Char, Float, Bool, String, Pointer, Null, Enum, Other, Special };
 
     OperandClass operand_class(Type* t);
 
@@ -356,6 +433,12 @@ private:
     Type* resolve_member_operator(Type* recv, nodes::OverloadableOperator wanted, const std::vector<Type*>& extra, Symbol** chosen = nullptr);
 
     OpResult resolve_operator(nodes::OverloadableOperator want, const std::vector<Type*>& operands);
+    Type* init_list_element(Type* t);
+    Symbol* init_list_constructor(Type* rec, const std::vector<nodes::ASTNode*>& els, Type*& il_type, nodes::ASTNode* site);
+    bool element_converts(nodes::ASTNode* el, Type* to);
+    ConversionRank rank_brace_arg(nodes::ASTNode* arg, Type* param);
+    void bind_brace_args(const std::vector<nodes::ASTNode*>* nodes, const std::vector<ParamShape>& shapes, nodes::ASTNode* site);
+    bool prefer_rvalue_ref_for_temporaries(std::vector<CandidateMatch>& matches, const std::vector<Symbol*>& cands, const std::vector<bool>& member, const std::vector<Type*>& operands);
     Type* synthesize_comparison(nodes::BinaryExpression* b, Type* l, Type* r, Symbol*& resolved_op);
     bool memberwise_equality(Type* t, int depth);
     std::string default_construct_failure(Type* t, int depth = 0);
@@ -364,6 +447,8 @@ private:
     std::string plain_value_failure(Type* t, int depth = 0);
     void check_union(nodes::RecordDeclaration* r);
     void type_type_test(nodes::CastExpression* c);
+    void type_special_test(nodes::CastExpression* c);
+    bool text_displayable(Type* t);
     void check_member_ambiguity(Scope* members, std::string_view name, nodes::ASTNode* site);
     nodes::ASTNode* m_operator_site = nullptr;
     void check_member_initialization(nodes::ConstructorDeclaration* ct, const std::vector<const Symbol*>& initialized);
@@ -409,6 +494,8 @@ private:
 
     FunctionType* as_function_type(Type* t);
 
+    const std::vector<nodes::ASTNode*>* m_ctor_arg_nodes = nullptr;
+
     static bool is_lvalue(const nodes::ASTNode* n) {
         return n && n->expr_type.vc == VC::LValue;
     }
@@ -434,7 +521,7 @@ private:
     static bool is_int_type(Type* t);
 
     bool is_switchable(Type* t) {
-        return t && (is_integral_t(t) || t->is_enum());
+        return t && (is_integral_t(t) || t->is_enum() || operand_class(t) == OperandClass::String);
     }
 
     static bool is_numeric_t(Type* t);

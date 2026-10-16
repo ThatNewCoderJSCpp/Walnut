@@ -1,0 +1,265 @@
+namespace std {
+    namespace errors {
+        class crypto_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class crypto_error
+    } end namespace errors
+
+    namespace crypto {
+        enum Algorithm { sha1, sha224, sha256, sha384, sha512 }
+
+        extern "C++" from "<walnut_crypto.hpp>" {
+            class Native as "walnut_rt::crypt::api" {
+            public:
+                static function sha1(const string&: data) -> string as "walnut_rt::crypt::sha1";
+                static function sha224(const string&: data) -> string as "walnut_rt::crypt::sha224";
+                static function sha256(const string&: data) -> string as "walnut_rt::crypt::sha256";
+                static function sha384(const string&: data) -> string as "walnut_rt::crypt::sha384";
+                static function sha512(const string&: data) -> string as "walnut_rt::crypt::sha512";
+                static function hmac(int: algorithm, const string&: key, const string&: data) -> string as "walnut_rt::crypt::hmac";
+                static function pbkdf2(int: algorithm, const string&: password, const string&: salt, long int: iterations, long int: length) -> string as "walnut_rt::crypt::pbkdf2";
+                static function hkdf(int: algorithm, const string&: salt, const string&: key, const string&: info, long int: length) -> string as "walnut_rt::crypt::hkdf";
+                static function to_hex(const string&: data, bool: upper) -> string as "walnut_rt::crypt::to_hex";
+                static function from_hex(const string&: input) -> string as "walnut_rt::crypt::from_hex";
+                static function is_hex(const string&: input) -> bool as "walnut_rt::crypt::is_hex";
+                static function base64_encode(const string&: data, bool: pad) -> string as "walnut_rt::crypt::base64_encode";
+                static function base64_decode(const string&: input) -> string as "walnut_rt::crypt::base64_decode";
+                static function base64url_encode(const string&: data, bool: pad) -> string as "walnut_rt::crypt::base64url_encode";
+                static function base64url_decode(const string&: input) -> string as "walnut_rt::crypt::base64url_decode";
+                static function base32_encode(const string&: data, bool: pad) -> string as "walnut_rt::crypt::base32_encode";
+                static function base32_decode(const string&: input) -> string as "walnut_rt::crypt::base32_decode";
+                static function url_encode(const string&: input, bool: plus) -> string as "walnut_rt::crypt::url_encode";
+                static function url_decode(const string&: input, bool: plus) -> string as "walnut_rt::crypt::url_decode";
+                static function random_token(long int: bytes) -> string as "walnut_rt::crypt::random_token";
+                static function random_token_base64url(long int: bytes) -> string as "walnut_rt::crypt::random_token_base64url";
+                static function random_bytes(long int: count) -> string as "walnut_rt::crypt::random_bytes";
+                static function uuid_v4() -> string as "walnut_rt::crypt::uuid_v4";
+                static function secure_equals(const string&: a, const string&: b) -> bool as "walnut_rt::crypt::secure_equals";
+                static function crc32(const string&: data) -> unsigned long int as "walnut_rt::crypt::crc32";
+                static function fnv1a64(const string&: data) -> unsigned long int as "walnut_rt::crypt::fnv1a64";
+                static function adler32(const string&: data) -> unsigned long int as "walnut_rt::crypt::adler32";
+            } end class Native
+
+            class Hasher as "walnut_rt::crypt::hasher" {
+            public:
+                constructor();
+                static function make(int: algorithm) -> Hasher as "walnut_rt::crypt::hasher::make";
+                function update(const string&: data) -> void;
+                function finish() -> string;
+                function reset() -> void;
+                function bytes_hashed() const -> long int;
+
+                static function of(Algorithm: algorithm) -> Hasher {
+                    return Hasher::make(static_cast<int>(algorithm));
+                } end function of
+
+                function finish_hex() -> string {
+                    return Native::to_hex(finish(), false);
+                } end function finish_hex
+            } end class Hasher
+
+            class Mac as "walnut_rt::crypt::mac" {
+            public:
+                constructor();
+                static function make(int: algorithm, const string&: key) -> Mac as "walnut_rt::crypt::mac::make";
+                function update(const string&: data) -> void;
+                function finish() -> string;
+                function reset() -> void;
+
+                static function of(Algorithm: algorithm, const string&: key) -> Mac {
+                    return Mac::make(static_cast<int>(algorithm), key);
+                } end function of
+
+                function finish_hex() -> string {
+                    return Native::to_hex(finish(), false);
+                } end function finish_hex
+            } end class Mac
+        } end extern
+
+        function to_hex(const string&: data, bool: upper = false) -> string {
+            return Native::to_hex(data, upper);
+        } end function to_hex
+
+        function from_hex(const string&: input) -> string {
+            return Native::from_hex(input);
+        } end function from_hex
+
+        function is_hex(const string&: input) -> bool {
+            return Native::is_hex(input);
+        } end function is_hex
+
+        function hash(Algorithm: algorithm, const string&: data) -> string {
+            if (algorithm == Algorithm::sha1) then {
+                return Native::sha1(data);
+            } else if (algorithm == Algorithm::sha224) then {
+                return Native::sha224(data);
+            } else if (algorithm == Algorithm::sha384) then {
+                return Native::sha384(data);
+            } else if (algorithm == Algorithm::sha512) then {
+                return Native::sha512(data);
+            }
+            return Native::sha256(data);
+        } end function hash
+
+        function hash_hex(Algorithm: algorithm, const string&: data) -> string {
+            return to_hex(hash(algorithm, data));
+        } end function hash_hex
+
+        function sha1(const string&: data) -> string {
+            return to_hex(Native::sha1(data));
+        } end function sha1
+
+        function sha224(const string&: data) -> string {
+            return to_hex(Native::sha224(data));
+        } end function sha224
+
+        function sha256(const string&: data) -> string {
+            return to_hex(Native::sha256(data));
+        } end function sha256
+
+        function sha384(const string&: data) -> string {
+            return to_hex(Native::sha384(data));
+        } end function sha384
+
+        function sha512(const string&: data) -> string {
+            return to_hex(Native::sha512(data));
+        } end function sha512
+
+        function sha1_bytes(const string&: data) -> string {
+            return Native::sha1(data);
+        } end function sha1_bytes
+
+        function sha224_bytes(const string&: data) -> string {
+            return Native::sha224(data);
+        } end function sha224_bytes
+
+        function sha256_bytes(const string&: data) -> string {
+            return Native::sha256(data);
+        } end function sha256_bytes
+
+        function sha384_bytes(const string&: data) -> string {
+            return Native::sha384(data);
+        } end function sha384_bytes
+
+        function sha512_bytes(const string&: data) -> string {
+            return Native::sha512(data);
+        } end function sha512_bytes
+
+        function hmac(Algorithm: algorithm, const string&: key, const string&: data) -> string {
+            return Native::hmac(static_cast<int>(algorithm), key, data);
+        } end function hmac
+
+        function hmac_hex(Algorithm: algorithm, const string&: key, const string&: data) -> string {
+            return to_hex(hmac(algorithm, key, data));
+        } end function hmac_hex
+
+        function hmac_sha256(const string&: key, const string&: data) -> string {
+            return hmac_hex(Algorithm::sha256, key, data);
+        } end function hmac_sha256
+
+        function hmac_sha512(const string&: key, const string&: data) -> string {
+            return hmac_hex(Algorithm::sha512, key, data);
+        } end function hmac_sha512
+
+        function hmac_sha1(const string&: key, const string&: data) -> string {
+            return hmac_hex(Algorithm::sha1, key, data);
+        } end function hmac_sha1
+
+        function verify_hmac(Algorithm: algorithm, const string&: key, const string&: data, const string&: expected_hex) -> bool {
+            return Native::secure_equals(hmac_hex(algorithm, key, data), expected_hex);
+        } end function verify_hmac
+
+        function pbkdf2(Algorithm: algorithm, const string&: password, const string&: salt, long int: iterations, long int: length) -> string {
+            if (algorithm != Algorithm::sha1 && algorithm != Algorithm::sha256 && algorithm != Algorithm::sha512) then {
+                throw std::errors::crypto_error("pbkdf2 works with sha1, sha256 or sha512");
+            }
+            return Native::pbkdf2(static_cast<int>(algorithm), password, salt, iterations, length);
+        } end function pbkdf2
+
+        function pbkdf2_sha256(const string&: password, const string&: salt, long int: iterations, long int: length = 32) -> string {
+            return pbkdf2(Algorithm::sha256, password, salt, iterations, length);
+        } end function pbkdf2_sha256
+
+        function hkdf(Algorithm: algorithm, const string&: salt, const string&: key, const string&: info, long int: length) -> string {
+            if (algorithm != Algorithm::sha256 && algorithm != Algorithm::sha512) then {
+                throw std::errors::crypto_error("hkdf works with sha256 or sha512");
+            }
+            return Native::hkdf(static_cast<int>(algorithm), salt, key, info, length);
+        } end function hkdf
+
+        function hkdf_sha256(const string&: salt, const string&: key, const string&: info, long int: length = 32) -> string {
+            return hkdf(Algorithm::sha256, salt, key, info, length);
+        } end function hkdf_sha256
+
+        function base64_encode(const string&: data, bool: pad = true) -> string {
+            return Native::base64_encode(data, pad);
+        } end function base64_encode
+
+        function base64_decode(const string&: input) -> string {
+            return Native::base64_decode(input);
+        } end function base64_decode
+
+        function base64url_encode(const string&: data, bool: pad = false) -> string {
+            return Native::base64url_encode(data, pad);
+        } end function base64url_encode
+
+        function base64url_decode(const string&: input) -> string {
+            return Native::base64url_decode(input);
+        } end function base64url_decode
+
+        function base32_encode(const string&: data, bool: pad = true) -> string {
+            return Native::base32_encode(data, pad);
+        } end function base32_encode
+
+        function base32_decode(const string&: input) -> string {
+            return Native::base32_decode(input);
+        } end function base32_decode
+
+        function url_encode(const string&: input, bool: space_as_plus = false) -> string {
+            return Native::url_encode(input, space_as_plus);
+        } end function url_encode
+
+        function url_decode(const string&: input, bool: plus_as_space = false) -> string {
+            return Native::url_decode(input, plus_as_space);
+        } end function url_decode
+
+        function random_bytes(long int: count) -> string {
+            return Native::random_bytes(count);
+        } end function random_bytes
+
+        function random_token(long int: bytes = 32) -> string {
+            return Native::random_token(bytes);
+        } end function random_token
+
+        function random_token_base64url(long int: bytes = 32) -> string {
+            return Native::random_token_base64url(bytes);
+        } end function random_token_base64url
+
+        function uuid_v4() -> string {
+            return Native::uuid_v4();
+        } end function uuid_v4
+
+        function secure_equals(const string&: a, const string&: b) -> bool {
+            return Native::secure_equals(a, b);
+        } end function secure_equals
+
+        function crc32(const string&: data) -> unsigned long int {
+            return Native::crc32(data);
+        } end function crc32
+
+        function fnv1a64(const string&: data) -> unsigned long int {
+            return Native::fnv1a64(data);
+        } end function fnv1a64
+
+        function adler32(const string&: data) -> unsigned long int {
+            return Native::adler32(data);
+        } end function adler32
+    } end namespace crypto
+} end namespace std

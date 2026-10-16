@@ -27,6 +27,9 @@ struct ConstructorDeclaration : ASTNode {
     modifiers::FunctionQualifiers m_qualifiers;
     Special                       m_special;
     semantics::Symbol* symbol = nullptr; 
+    std::vector<std::string_view> owner_parts;
+    bool                          owner_global = false;
+    std::string_view              native_name;
 
     ConstructorDeclaration(
         FunctionParameters* params,
@@ -76,6 +79,8 @@ struct DestructorDeclaration : ASTNode {
     modifiers::FunctionQualifiers m_qualifiers;
     Special                       m_special;
     semantics::Symbol* symbol = nullptr; 
+    std::vector<std::string_view> owner_parts;
+    bool                          owner_global = false;
 
     DestructorDeclaration(
         const modifiers::RawModifiers& mods,
@@ -126,6 +131,8 @@ struct RecordDeclaration : ASTNode {
     std::vector<Member>                          m_members;
     parser_types::TemplateArgument*              m_alignment = nullptr;
     modifiers::RawModifiers                      m_mods;
+    bool                                         m_native = false;
+    std::string_view                             m_native_name;
     semantics::Symbol* symbol = nullptr; 
     semantics::Scope* scope = nullptr;
 

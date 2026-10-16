@@ -1,0 +1,282 @@
+import module.math
+
+namespace std {
+    namespace constants {
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function sqrt2() -> T {
+            return std::math::detail::Fn<T>::sqrt2();
+        } end function sqrt2
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_sqrt2() -> T {
+            return std::math::detail::Fn<T>::inv_sqrt2();
+        } end function inv_sqrt2
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function sqrt3() -> T {
+            return std::math::detail::Fn<T>::sqrt3();
+        } end function sqrt3
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_sqrt3() -> T {
+            return std::math::detail::Fn<T>::inv_sqrt3();
+        } end function inv_sqrt3
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function sqrt5() -> T {
+            return std::math::detail::Fn<T>::sqrt5();
+        } end function sqrt5
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_sqrt5() -> T {
+            return std::math::detail::Fn<T>::inv_sqrt5();
+        } end function inv_sqrt5
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function ln2() -> T {
+            return std::math::detail::Fn<T>::ln2();
+        } end function ln2
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_ln2() -> T {
+            return std::math::detail::Fn<T>::inv_ln2();
+        } end function inv_ln2
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function ln10() -> T {
+            return std::math::detail::Fn<T>::ln10();
+        } end function ln10
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_ln10() -> T {
+            return std::math::detail::Fn<T>::inv_ln10();
+        } end function inv_ln10
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function e() -> T {
+            return std::math::detail::Fn<T>::e();
+        } end function e
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_e() -> T {
+            return std::math::detail::Fn<T>::inv_e();
+        } end function inv_e
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function phi() -> T {
+            return std::math::detail::Fn<T>::phi();
+        } end function phi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_phi() -> T {
+            return std::math::detail::Fn<T>::inv_phi();
+        } end function inv_phi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function psi() -> T {
+            return std::math::detail::Fn<T>::psi();
+        } end function psi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function pi() -> T {
+            return std::math::detail::Fn<T>::pi();
+        } end function pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function two_pi() -> T {
+            return std::math::detail::Fn<T>::two_pi();
+        } end function two_pi 
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function half_pi() -> T {
+            return std::math::detail::Fn<T>::half_pi();
+        } end function half_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function third_pi() -> T {
+            return std::math::detail::Fn<T>::third_pi();
+        } end function third_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function quarter_pi() -> T {
+            return std::math::detail::Fn<T>::quarter_pi();
+        } end function quarter_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function sixth_pi() -> T {
+            return std::math::detail::Fn<T>::sixth_pi();
+        } end function sixth_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function pi_180() -> T {
+            return std::math::detail::Fn<T>::pi_180();
+        } end function pi_180
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_pi() -> T {
+            return std::math::detail::Fn<T>::inv_pi();
+        } end function inv_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function two_inv_pi() -> T {
+            return std::math::detail::Fn<T>::two_inv_pi();
+        } end function two_inv_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_two_pi() -> T {
+            return std::math::detail::Fn<T>::inv_two_pi();
+        } end function inv_two_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_pi_180() -> T {
+            return std::math::detail::Fn<T>::inv_pi_180();
+        } end function inv_pi_180
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function zeta2() -> T {
+            return std::math::detail::Fn<T>::zeta2();
+        } end function zeta2
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function apery() -> T {
+            return std::math::detail::Fn<T>::apery();
+        } end function apery
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function sqrt_pi() -> T {
+            return std::math::detail::Fn<T>::sqrt_pi();
+        } end function sqrt_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_sqrt_pi() -> T {
+            return std::math::detail::Fn<T>::inv_sqrt_pi();
+        } end function inv_sqrt_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function two_inv_sqrt_pi() -> T {
+            return std::math::detail::Fn<T>::two_inv_sqrt_pi();
+        } end function two_inv_sqrt_pi
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function euler_mascheroni() -> T {
+            return std::math::detail::Fn<T>::euler_mascheroni();
+        } end function euler_mascheroni
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function catalan() -> T {
+            return std::math::detail::Fn<T>::catalan();
+        } end function catalan
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function silver_ratio() -> T {
+            return std::math::detail::Fn<T>::silver_ratio();
+        } end function silver_ratio
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function bronze_ratio() -> T {
+            return std::math::detail::Fn<T>::bronze_ratio();
+        } end function bronze_ratio
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function silver_constant() -> T {
+            return std::math::detail::Fn<T>::silver_constant();
+        } end function silver_constant
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function stieltjes(long int: n) -> T {
+            return std::math::detail::Fn<T>::stieltjes(n);
+        } end function stieltjes
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function bernoulli(long int: n) -> T {
+            return std::math::detail::Fn<T>::bernoulli(n);
+        } end function bernoulli
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function metallic_ratio(long int: n) -> T {
+            return std::math::detail::Fn<T>::metallic_ratio(n);
+        } end function metallic_ratio
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_metallic_ratio(long int: n) -> T {
+            return std::math::detail::Fn<T>::inv_metallic_ratio(n);
+        } end function inv_metallic_ratio
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function metallic_mean(long int: n) -> T {
+            return std::math::detail::Fn<T>::metallic_mean(n);
+        } end function metallic_mean
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function inv_metallic_mean(long int: n) -> T {
+            return std::math::detail::Fn<T>::inv_metallic_mean(n);
+        } end function inv_metallic_mean
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function beraha(long int: n) -> T {
+            return std::math::detail::Fn<T>::beraha(n);
+        } end function beraha
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function tangent_number(long int: n) -> T {
+            return std::math::detail::Fn<T>::tangent_number(n);
+        } end function tangent_number
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function secant_number(long int: n) -> T {
+            return std::math::detail::Fn<T>::secant_number(n);
+        } end function secant_number
+
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function euler_number(long int: n) -> T {
+            return std::math::detail::Fn<T>::euler_number(n);
+        } end function euler_number
+
+    } end namespace constants
+} end namespace std

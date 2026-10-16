@@ -1,0 +1,207 @@
+import module.colors
+
+namespace std {
+    namespace errors {
+        class image_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class image_error
+    } end namespace errors
+
+    namespace images {
+        using std::colors::Color;
+
+        extern "C++" from "<walnut_graphics.hpp>" {
+            class Image as "walnut_rt::gfx::image" {
+                static function native_load(const string&: path) -> Image as "walnut_rt::gfx::image::load";
+                static function native_load_error() -> string as "walnut_rt::gfx::image::load_error";
+                static function native_can_read(const string&: extension) -> bool as "walnut_rt::gfx::can_read_format";
+                static function native_can_write(const string&: extension) -> bool as "walnut_rt::gfx::can_write_format";
+                function valid() const -> bool;
+                function get(long int: x, long int: y) const -> long int;
+                function set(long int: x, long int: y, long int: rgba) -> void;
+                function native_fill(long int: rgba) -> void as "fill";
+                function native_fill_rect(long int: x, long int: y, long int: w, long int: h, long int: rgba) -> void as "fill_rect";
+                function native_save(const string&: path, long int: quality) const -> string as "save";
+                function native_resized(long int: w, long int: h) const -> Image as "resized";
+                function native_cropped(long int: x, long int: y, long int: w, long int: h) const -> Image as "cropped";
+                function native_flipped(bool: horizontal) const -> Image as "flipped";
+                function native_rotated(long int: quarter_turns) const -> Image as "rotated";
+                function native_draw(const Image&: other, long int: x, long int: y) -> void as "draw";
+                function native_grayscale(float: percent) const -> Image as "grayscale";
+                function native_inverted() const -> Image as "inverted";
+                function native_sepia(float: percent) const -> Image as "sepia";
+                function native_blurred(long int: radius) const -> Image as "blurred";
+                function native_brightness(long int: amount) const -> Image as "brightness";
+                function native_contrast(float: factor) const -> Image as "contrast";
+                function native_saturation(float: percent) const -> Image as "saturation";
+                function native_hue_rotated(float: degrees) const -> Image as "hue_rotated";
+                function native_opacity(float: percent) const -> Image as "opacity";
+                function native_replace(long int: old_rgba, long int: new_rgba) const -> Image as "replace_color";
+
+                function check(long int: x, long int: y, const string&: what) const -> void {
+                    if (!contains(x, y)) then {
+                        throw std::errors::image_error(static_cast<string>(`${what}: (${x}, ${y}) is outside the ${width()} by ${height()} image`));
+                    }
+                } end function check
+
+                function check_size(long int: w, long int: h, const string&: what) const -> void {
+                    if (w <= 0 || h <= 0) then {
+                        throw std::errors::image_error(static_cast<string>(`${what} needs a width and height above 0, not ${w} by ${h}`));
+                    }
+                } end function check_size
+
+            public:
+                constructor();
+                constructor(long int: w, long int: h, long int: rgba);
+
+                static function make(long int: w, long int: h, const Color&: fill = std::colors::transparent) -> Image {
+                    if (w <= 0 || h <= 0) then {
+                        throw std::errors::image_error(static_cast<string>(`an image needs a width and height above 0, not ${w} by ${h}`));
+                    }
+                    return Image(w, h, fill.packed());
+                } end function make
+
+                static function load(const string&: path) -> Image {
+                    Image: img = native_load(path);
+                    if (!img.valid()) then {
+                        throw std::errors::image_error(static_cast<string>(`can't load '${path}': ${native_load_error()}`));
+                    }
+                    return img;
+                } end function load
+
+                static function can_read(const string&: extension) -> bool {
+                    return native_can_read(extension);
+                } end function can_read
+
+                static function can_write(const string&: extension) -> bool {
+                    return native_can_write(extension);
+                } end function can_write
+
+                function width() const -> long int;
+                function height() const -> long int;
+                function contains(long int: x, long int: y) const -> bool;
+
+                function is_empty() const -> bool {
+                    return !valid();
+                } end function is_empty
+
+                function save(const string&: path, long int: quality = 90) const -> void {
+                    const string: problem = native_save(path, quality);
+                    if (problem.size() > 0) then {
+                        throw std::errors::image_error(static_cast<string>(`can't save '${path}': ${problem}`));
+                    }
+                } end function save
+
+                function pixel(long int: x, long int: y) const -> Color {
+                    check(x, y, "pixel()");
+                    return Color::from_packed(get(x, y));
+                } end function pixel
+
+                function set_pixel(long int: x, long int: y, const Color&: c) -> void {
+                    check(x, y, "set_pixel()");
+                    set(x, y, c.packed());
+                } end function set_pixel
+
+                function fill(const Color&: c) -> void {
+                    native_fill(c.packed());
+                } end function fill
+
+                function fill_rect(long int: x, long int: y, long int: w, long int: h, const Color&: c) -> void {
+                    native_fill_rect(x, y, w, h, c.packed());
+                } end function fill_rect
+
+                function draw(const Image&: other) -> void {
+                    native_draw(other, 0, 0);
+                } end function draw
+
+                function draw(const Image&: other, long int: x, long int: y) -> void {
+                    native_draw(other, x, y);
+                } end function draw
+
+                function resized(long int: w, long int: h) const -> Image {
+                    check_size(w, h, "resized()");
+                    return native_resized(w, h);
+                } end function resized
+
+                function scaled(float: factor) const -> Image {
+                    const long int: w = static_cast<long int>(static_cast<float>(width()) * factor + 0.5);
+                    const long int: h = static_cast<long int>(static_cast<float>(height()) * factor + 0.5);
+                    check_size(w, h, "scaled()");
+                    return native_resized(w, h);
+                } end function scaled
+
+                function cropped(long int: x, long int: y, long int: w, long int: h) const -> Image {
+                    check_size(w, h, "cropped()");
+                    return native_cropped(x, y, w, h);
+                } end function cropped
+
+                function flipped_horizontally() const -> Image {
+                    return native_flipped(true);
+                } end function flipped_horizontally
+
+                function flipped_vertically() const -> Image {
+                    return native_flipped(false);
+                } end function flipped_vertically
+
+                function rotated(long int: quarter_turns) const -> Image {
+                    return native_rotated(quarter_turns);
+                } end function rotated
+
+                function rotated_left() const -> Image {
+                    return native_rotated(3);
+                } end function rotated_left
+
+                function rotated_right() const -> Image {
+                    return native_rotated(1);
+                } end function rotated_right
+
+                function grayscale(float: amount = 1.0) const -> Image {
+                    return native_grayscale(amount * 100.0);
+                } end function grayscale
+
+                function inverted() const -> Image {
+                    return native_inverted();
+                } end function inverted
+
+                function sepia(float: amount = 1.0) const -> Image {
+                    return native_sepia(amount * 100.0);
+                } end function sepia
+
+                function blurred(long int: radius) const -> Image {
+                    return native_blurred(radius);
+                } end function blurred
+
+                function brightened(long int: amount) const -> Image {
+                    return native_brightness(amount);
+                } end function brightened
+
+                function with_contrast(float: factor) const -> Image {
+                    return native_contrast(factor);
+                } end function with_contrast
+
+                function with_saturation(float: amount) const -> Image {
+                    return native_saturation(amount * 100.0);
+                } end function with_saturation
+
+                function hue_rotated(float: degrees) const -> Image {
+                    return native_hue_rotated(degrees);
+                } end function hue_rotated
+
+                function with_opacity(float: amount) const -> Image {
+                    return native_opacity(amount * 100.0);
+                } end function with_opacity
+
+                function replace_color(const Color&: old_color, const Color&: new_color) const -> Image {
+                    return native_replace(old_color.packed(), new_color.packed());
+                } end function replace_color
+            } end class Image
+        } end extern
+    } end namespace images
+} end namespace std

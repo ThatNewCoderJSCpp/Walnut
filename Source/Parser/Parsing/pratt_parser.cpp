@@ -3,6 +3,20 @@
 namespace walnut {
 namespace parsing {
 
+namespace {
+
+std::string_view builtin_member_name(tokenizing::Token::Kind kind) {
+    switch (kind) {
+        case tokenizing::Token::Kind::SizeofKeyword:  return "sizeof";
+        case tokenizing::Token::Kind::AlignofKeyword: return "alignof";
+        case tokenizing::Token::Kind::CountOfKeyword: return "countof";
+        case tokenizing::Token::Kind::EndKeyword:     return "end";
+        default:                                      return {};
+    }
+}
+
+} // namespace
+
 Precedence get_infix_precedence(tokenizing::Token::Kind kind) {
     switch (kind) {
         case tokenizing::Token::Kind::Equal:
@@ -152,14 +166,16 @@ bool Parser::is_fold_operator(tokenizing::Token::Kind k) {
 }
 
 nodes::ASTNode* Parser::parse_expression_pratt(int min_precedence) {
+    const char* prefix_at = current_token().data();
     nodes::ASTNode* left = parse_prefix();
+    if (left && !left->at) left->at = prefix_at;
 
     while (true) {
         tokenizing::Token::Kind op = current_token().kind();
         const bool callable_lt   = (op == tokenizing::Token::Kind::LessThan) && is_callable_node(left);
         const bool template_call = callable_lt && template_call_ahead();
         const bool template_inst = callable_lt && !template_call && template_scope_ahead();
-        const bool template_val  = callable_lt && !template_call && !template_inst && (is_known_template(left) || template_value_ahead());
+        const bool template_val  = callable_lt && !template_call && !template_inst && ((is_known_template(left) && known_template_ahead()) || template_value_ahead());
         const bool template_ambig = callable_lt && !template_call && !template_inst && !template_val && template_ambiguous_ahead();
         const bool template_angle = template_call || template_inst || template_val || template_ambig;
         const bool brace_construct = (op == tokenizing::Token::Kind::LeftCurly) && (!m_no_brace_construct || initializer_brace_ahead()) && is_constructible_callee(left);
@@ -181,7 +197,10 @@ nodes::ASTNode* Parser::parse_expression_pratt(int min_precedence) {
 
         Precedence prec = (template_angle || brace_construct) ? Precedence::Postfix : get_infix_precedence(op);
         if (to_int(prec) < min_precedence || prec == Precedence::None) break;
-        left = parse_infix(left, op, prec);
+        const char* op_at = current_token().data();
+        nodes::ASTNode* made = parse_infix(left, op, prec);
+        if (made && made != left && !made->at) made->at = op_at;
+        left = made;
     }
 
     return left;
@@ -255,6 +274,8 @@ nodes::ASTNode* Parser::parse_prefix() {
 
 nodes::ASTNode* Parser::parse_atom() {
     const std::size_t line = current_token().line();
+    take_keyword_as_name(true);
+    if (current_token().kind() == tokenizing::Token::Kind::SelfKeyword) return make_self(line);
     
     if (current_token().kind() == tokenizing::Token::Kind::LeftCurly) {
         return parse_brace_initializer_list();
@@ -270,9 +291,17 @@ nodes::ASTNode* Parser::parse_atom() {
         tokenizing::Token::Kind::String, tokenizing::Token::Kind::TextLiteral,
         tokenizing::Token::Kind::Character, tokenizing::Token::Kind::True, tokenizing::Token::Kind::False,
         tokenizing::Token::Kind::NullptrKeyword, tokenizing::Token::Kind::InfinityKeyword,
+        tokenizing::Token::Kind::NanKeyword, tokenizing::Token::Kind::UndefinedKeyword, tokenizing::Token::Kind::IndeterminateKeyword,
         tokenizing::Token::Kind::ThisKeyword
     )) {
         if (current_token().is_one_of(tokenizing::Token::Kind::Integer, tokenizing::Token::Kind::Float)) validate_numeric_literal(current_token());
+
+        if (current_token().kind() == tokenizing::Token::Kind::TextLiteral && has_interpolation(current_token().lexeme())) {
+            const tokenizing::Token tok = current_token();
+            advance();
+            return parse_text_template(tok);
+        }
+
         auto literal = make<nodes::Literal>(current_token().lexeme(), current_token().kind(), line);
         advance();
         return literal;
@@ -283,7 +312,23 @@ nodes::ASTNode* Parser::parse_atom() {
     }
 
     if (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::LeftParen) {
-        if (const parser_types::TypeTraitInfo* trait = parser_types::find_type_trait(current_token().lexeme())) {
+        const std::string_view trait_spelling = current_token().lexeme();
+        const parser_types::TypeTraitInfo* trait = (trait_spelling.size() > 2 && trait_spelling.substr(0, 2) == "__") ? parser_types::find_type_trait(trait_spelling.substr(2)) : nullptr;
+
+        if (!trait && parser_types::find_type_trait(trait_spelling)) {
+            using TK = tokenizing::Token::Kind;
+            switch (lookahead(2).kind()) {
+                case TK::AutoDeclaration: case TK::DynamicDeclaration: case TK::BooleanDeclaration: case TK::CharacterDeclaration:
+                case TK::ConstantDeclaration: case TK::DecimalDeclaration: case TK::IntegerDeclaration: case TK::LongDeclaration:
+                case TK::StringDeclaration: case TK::ShortDeclaration: case TK::UnsignedDeclaration: case TK::TextDeclaration:
+                case TK::VoidKeyword:
+                    throw ParserError::invalid_expression(reporter, current_token(),
+                        "type traits are variable templates in std::traits: write 'std::traits::" + std::string(trait_spelling) + "<...>' instead of '" + std::string(trait_spelling) + "(...)'");
+                default: break;
+            }
+        }
+
+        if (trait) {
             const tokenizing::Token at = current_token();
             advance();
             advance();
@@ -379,6 +424,25 @@ nodes::ASTNode* Parser::parse_atom() {
     );
 }
 
+nodes::ASTNode* Parser::qualified_member(nodes::ASTNode* left, std::string_view member, nodes::MemberAccessExpression::Op op, std::size_t line) {
+    std::vector<std::string_view> qualifier;
+
+    while (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
+        std::string_view next = builtin_member_name(lookahead(1).kind());
+        if (next.empty() && loose_keyword(lookahead(1).kind())) next = lookahead(1).lexeme();
+        if (next.empty() && lookahead(1).kind() != tokenizing::Token::Kind::Identifier) break;
+        if (next.empty()) next = lookahead(1).lexeme();
+        advance();
+        advance();
+        qualifier.push_back(member);
+        member = next;
+    }
+
+    auto* m = make<nodes::MemberAccessExpression>(left, member, op, line);
+    m->qualifier = std::move(qualifier);
+    return m;
+}
+
 nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kind op, Precedence prec) {
     const std::size_t line = current_token().line();
 
@@ -397,6 +461,7 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
             AngleGuard _g(this, false);
             auto* call = make<nodes::CallExpression>(left, line);
             call->set_template_args(std::move(targs));
+            call->has_angle_args = true;
 
             if (!concrete_match(tokenizing::Token::Kind::RightParen)) {
                 call->add_argument(parse_call_argument());
@@ -413,7 +478,7 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
             return call;
         }
 
-        const bool known = is_known_template(left);
+        const bool known = is_known_template(left) && known_template_ahead();
 
         if (template_scope_ahead() || template_value_ahead() || known) {
             advance();
@@ -483,7 +548,10 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
     if (op == tokenizing::Token::Kind::Dot) {
         advance(); 
 
-        if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+        std::string_view member = builtin_member_name(current_token().kind());
+        if (member.empty() && current_token().is_keyword() && !current_token().lexeme().empty()) member = current_token().lexeme();
+
+        if (member.empty() && current_token().kind() != tokenizing::Token::Kind::Identifier) {
             throw ParserError::unexpected_token(
                 reporter,
                 current_token(),
@@ -492,15 +560,18 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
             );
         }
 
-        std::string_view member = current_token().lexeme();
+        if (member.empty()) member = current_token().lexeme();
         advance();
-        return make<nodes::MemberAccessExpression>(left, member, nodes::MemberAccessExpression::Op::Dot, line);
+        return qualified_member(left, member, nodes::MemberAccessExpression::Op::Dot, line);
     }
 
     if (op == tokenizing::Token::Kind::SingleRightArrow) {
         advance(); 
 
-        if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+        std::string_view member = builtin_member_name(current_token().kind());
+        if (member.empty() && current_token().is_keyword() && !current_token().lexeme().empty()) member = current_token().lexeme();
+
+        if (member.empty() && current_token().kind() != tokenizing::Token::Kind::Identifier) {
             throw ParserError::unexpected_token(
                 reporter,
                 current_token(),
@@ -509,9 +580,9 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
             );
         }
 
-        std::string_view member = current_token().lexeme();
+        if (member.empty()) member = current_token().lexeme();
         advance();
-        return make<nodes::MemberAccessExpression>(left, member, nodes::MemberAccessExpression::Op::Arrow, line);
+        return qualified_member(left, member, nodes::MemberAccessExpression::Op::Arrow, line);
     }
 
     if (op == tokenizing::Token::Kind::DoubleColon) {
@@ -523,6 +594,7 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
             return make<nodes::TemplateInstantiation>(left, std::move(targs), line);
         }
 
+        take_keyword_as_name(false);
         if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
             throw ParserError::unexpected_token(reporter, current_token(), {tokenizing::Token::Kind::Identifier}, "Expected name after '::'");
         }
@@ -547,6 +619,15 @@ nodes::ASTNode* Parser::parse_type_test(nodes::ASTNode* operand, bool is_test) {
     using K = tokenizing::Token::Kind;
     const std::size_t line = current_token().line();
     advance();
+
+    if (current_token().is_one_of(K::InfinityKeyword, K::NanKeyword, K::UndefinedKeyword, K::IndeterminateKeyword)) {
+        if (!is_test) throw ParserError::unexpected_token(reporter, current_token(), {K::Identifier}, "'as' needs a type; to check for a special value, use 'is' (for example 'x is undefined')");
+        const K which = current_token().kind();
+        advance();
+        auto* test = make<nodes::CastExpression>(nodes::CastExpression::CastKind::Is, parser_types::TypeInfo{}, operand, static_cast<std::uint32_t>(line));
+        test->special_test = which == K::InfinityKeyword ? 1 : which == K::NanKeyword ? 2 : which == K::UndefinedKeyword ? 3 : 4;
+        return test;
+    }
     parser_types::TypeInfo target = parse_type_info();
     const std::size_t end = tokens.position();
 
@@ -696,8 +777,8 @@ nodes::ASTNode* Parser::parse_new_expression() {
         AngleGuard _g(this, false);
 
         if (current_token().kind() != K::RightParen) {
-            args.push_back(parse_expression());
-            while (match(K::Comma)) { args.push_back(parse_expression()); }
+            args.push_back(parse_call_argument());
+            while (match(K::Comma)) { args.push_back(parse_call_argument()); }
         }
 
         if (!match(K::RightParen)) {

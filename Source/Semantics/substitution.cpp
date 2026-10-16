@@ -14,13 +14,19 @@ CV cv_union(CV a, CV b) {
 bool deduce_template_arg(const TemplateArg& p, const TemplateArg& a, SubstEnv& env, TypeContext& ctx) {
     if (p.is_type != a.is_type) return false;
     if (p.is_type) return deduce(p.type, a.type, env, ctx);
-    if (p.is_value()) return p.value == a.value && p.fvalue == a.fvalue;
+    if (p.is_value()) return p.value == a.value && p.fvalue == a.fvalue && p.svalue == a.svalue;
     if (!a.is_value()) return p == a;
     if (!p.param) return true;
 
     if (a.value) {
         if (const WideInt* prior = env.lookup_value(p.param); prior && prior != a.value) return false;
         env.values[p.param] = a.value;
+        return true;
+    }
+
+    if (a.svalue) {
+        if (const std::string* prior = env.lookup_svalue(p.param); prior && prior != a.svalue) return false;
+        env.svalues[p.param] = a.svalue;
         return true;
     }
 
@@ -74,6 +80,18 @@ bool deduce(Type* param, Type* arg, SubstEnv& env, TypeContext& ctx) {
             auto* pr = static_cast<RecordType*>(param);
             auto* ar = static_cast<RecordType*>(a);
             if (pr->decl() != ar->decl()) return false;
+            const TemplateArgs& pa = pr->args();
+            if (!pa.empty() && pa.back().is_type && pa.back().type && pa.back().type->kind() == TypeKind::PackExpansion) {
+                std::size_t head = pa.size() - 1;
+                if (ar->args().size() < head) return false;
+                for (std::size_t i = 0; i < head; ++i) if (!deduce_template_arg(pa[i], ar->args()[i], env, ctx)) return false;
+                std::vector<Type*> rest;
+                for (std::size_t i = head; i < ar->args().size(); ++i) {
+                    if (!ar->args()[i].is_type) return false;
+                    rest.push_back(ar->args()[i].type);
+                }
+                return deduce_pack(static_cast<PackExpansionType*>(pa.back().type)->pattern(), rest, env, ctx);
+            }
             if (pr->args().size() != ar->args().size()) return false;
             for (std::size_t i = 0; i < pr->args().size(); ++i) if (!deduce_template_arg(pr->args()[i], ar->args()[i], env, ctx)) return false;
             return true;
@@ -222,9 +240,25 @@ bool expand_into(Type* elem, const SubstEnv& env, TypeContext& ctx, std::vector<
 }
 
 bool subst_value_arg(const TemplateArg& a, const SubstEnv& env, TypeContext& ctx, TemplateArg& out) {
+    if (!a.is_type && a.type && a.type->kind() == TypeKind::Dependent) {
+        auto* d = static_cast<DependentType*>(a.type);
+        Type* base = d->base() ? ctx.strip_cv(subst(d->base(), env, ctx)) : nullptr;
+        if (!base || base->is_error()) return false;
+
+        if (base->is_dependent()) {
+            out = a;
+            out.type = ctx.dependent_name(base, d->name());
+            return true;
+        }
+
+        if (base->is_record() && ctx.member_value_hook && ctx.member_value_hook(base, d->name(), out)) return true;
+        return false;
+    }
+
     if (a.param) {
         if (const WideInt*   v = env.lookup_value(a.param))  { out = TemplateArg::of_int(v);   return true; }
         if (const WideFloat* f = env.lookup_fvalue(a.param)) { out = TemplateArg::of_float(f); return true; }
+        if (const std::string* sv = env.lookup_svalue(a.param)) { out = TemplateArg::of_string(sv); return true; }
         if (!a.expr) { out = a; return true; }
     }
 
@@ -278,6 +312,18 @@ Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
             args.reserve(r->args().size());
 
             for (const TemplateArg& a : r->args()) {
+                if (a.is_type && a.type && a.type->kind() == TypeKind::Dependent && ctx.member_value_hook) {
+                    auto* d = static_cast<DependentType*>(a.type);
+                    Type* base = d->base() ? ctx.strip_cv(subst(d->base(), env, ctx)) : nullptr;
+
+                    if (base && base->is_record() && !base->is_dependent() && !(ctx.member_type_hook && ctx.member_type_hook(base, d->name()))) {
+                        TemplateArg v;
+                        if (!ctx.member_value_hook(base, d->name(), v)) return ctx.error_();
+                        args.push_back(v);
+                        continue;
+                    }
+                }
+
                 if (a.is_type) {
                     std::vector<Type*> expanded;
                     if (!expand_into(a.type, env, ctx, expanded)) return ctx.error_();
@@ -291,7 +337,7 @@ Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
                 }
             }
 
-            return ctx.record(r->decl(), std::move(args), t->cv());
+            return ctx.record(r->decl(), std::move(args), t->cv(), r->empty_pack() || (args.empty() && !r->args().empty()));
         }
 
         case TypeKind::Function: {
@@ -307,7 +353,7 @@ Type* subst(Type* t, const SubstEnv& env, TypeContext& ctx) {
             std::vector<Type*> alts;
             alts.reserve(v->alternatives().size());
             for (Type* a : v->alternatives()) alts.push_back(subst(a, env, ctx));
-            return ctx.variant(std::move(alts));    
+            return ctx.variant(std::move(alts), t->cv());    
         }
 
         case TypeKind::Dependent: {

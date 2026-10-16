@@ -1,0 +1,282 @@
+import module.collections
+import module.math
+
+namespace std {
+    namespace errors {
+        class combinatorics_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class combinatorics_error
+    } end namespace errors
+
+    namespace combinatorics {
+        template <typename T>
+        concept Count = std::traits::is_builtin_integer<T>
+
+        template <typename T>
+        concept Probability = std::traits::is_float<T>
+
+        namespace detail {
+            template <typename T>
+            requires Count<T>
+            function require_nonnegative(const T&: n, const string&: what) -> void {
+                if constexpr (std::traits::is_signed<T>) then {
+                    if (n < static_cast<T>(0)) then {
+                        throw std::errors::combinatorics_error(static_cast<string>(`${what} needs whole numbers that are 0 or more`));
+                    }
+                }
+            } end function require_nonnegative
+
+            template <typename T>
+            requires Count<T>
+            function multiply(const T&: a, const T&: b, const string&: what) -> T {
+                if (a != static_cast<T>(0) && b > std::traits::integer_traits<T>::max / a) then {
+                    throw std::errors::combinatorics_error(static_cast<string>(`${what} is too large for its integer type; use a wider one such as long long integer`));
+                }
+                return a * b;
+            } end function multiply
+
+            template <typename T>
+            requires Count<T>
+            function add(const T&: a, const T&: b, const string&: what) -> T {
+                if (b > std::traits::integer_traits<T>::max - a) then {
+                    throw std::errors::combinatorics_error(static_cast<string>(`${what} is too large for its integer type; use a wider one such as long long integer`));
+                }
+                return a + b;
+            } end function add
+
+            template <typename T>
+            requires Count<T>
+            function gcd(const T&: a, const T&: b) -> T {
+                T: x = a;
+                T: y = b;
+                while (y != static_cast<T>(0)) {
+                    const T: r = x % y;
+                    x = y;
+                    y = r;
+                }
+                return x;
+            } end function gcd
+
+            template <typename T>
+            requires Count<T>
+            function choose(const T&: n, const T&: r, const string&: what) -> T {
+                require_nonnegative(n, what);
+                require_nonnegative(r, what);
+                if (r > n) then {
+                    return static_cast<T>(0);
+                }
+                T: k = r;
+                if (n - r < k) then {
+                    k = n - r;
+                }
+                T: result = static_cast<T>(1);
+                for (T: i = static_cast<T>(1); i <= k; ++i) {
+                    const T: g = gcd(result, i);
+                    result = multiply(result / g, (n - k + i) / (i / g), what);
+                }
+                return result;
+            } end function choose
+
+            template <typename T>
+            requires Count<T>
+            function arrange(const T&: n, const T&: r, const string&: what) -> T {
+                require_nonnegative(n, what);
+                require_nonnegative(r, what);
+                if (r > n) then {
+                    return static_cast<T>(0);
+                }
+                T: result = static_cast<T>(1);
+                for (T: i = static_cast<T>(0); i < r; ++i) {
+                    result = multiply(result, n - i, what);
+                }
+                return result;
+            } end function arrange
+
+            template <typename T>
+            requires Count<T>
+            function power(const T&: base, const T&: exponent, const string&: what) -> T {
+                require_nonnegative(base, what);
+                require_nonnegative(exponent, what);
+                T: result = static_cast<T>(1);
+                for (T: i = static_cast<T>(0); i < exponent; ++i) {
+                    result = multiply(result, base, what);
+                }
+                return result;
+            } end function power
+
+            template <typename T>
+            requires Probability<T>
+            function require_probability(const T&: p, const string&: what) -> void {
+                if (p < T(0) || p > T(1)) then {
+                    throw std::errors::combinatorics_error(static_cast<string>(`${what} needs probabilities between 0 and 1`));
+                }
+            } end function require_probability
+        } end namespace detail
+
+        template <typename T>
+        requires Count<T>
+        function factorial(const T&: n) -> T {
+            detail::require_nonnegative(n, "factorial()");
+            T: result = static_cast<T>(1);
+            for (T: i = static_cast<T>(2); i <= n; ++i) {
+                result = detail::multiply(result, i, "factorial()");
+            }
+            return result;
+        } end function factorial
+
+        template <typename T>
+        requires Count<T>
+        function ncr(const T&: n, const T&: r) -> T {
+            return detail::choose(n, r, "ncr()");
+        } end function ncr
+
+        template <typename T>
+        requires Count<T>
+        function npr(const T&: n, const T&: r) -> T {
+            return detail::arrange(n, r, "npr()");
+        } end function npr
+
+        template <typename T>
+        requires Count<T>
+        function combinations(const T&: n, const T&: r) -> T {
+            return detail::choose(n, r, "combinations()");
+        } end function combinations
+
+        template <typename T>
+        requires Count<T>
+        function permutations(const T&: n, const T&: r) -> T {
+            return detail::arrange(n, r, "permutations()");
+        } end function permutations
+
+        template <typename T>
+        requires Count<T>
+        function integer_power(const T&: base, const T&: exponent) -> T {
+            return detail::power(base, exponent, "integer_power()");
+        } end function integer_power
+
+        template <typename T>
+        requires Count<T>
+        function lock_combinations(const T&: positions, const T&: symbols) -> T {
+            detail::require_nonnegative(positions, "lock_combinations()");
+            detail::require_nonnegative(symbols, "lock_combinations()");
+            if (symbols == static_cast<T>(0)) then {
+                return positions == static_cast<T>(0) ? static_cast<T>(1) : static_cast<T>(0);
+            }
+            const T: top = detail::add(positions, symbols - static_cast<T>(1), "lock_combinations()");
+            return detail::choose(top, symbols - static_cast<T>(1), "lock_combinations()");
+        } end function lock_combinations
+
+        template <typename T>
+        requires Count<T>
+        function lock_permutations(const T&: positions, const T&: symbols) -> T {
+            return detail::power(symbols, positions, "lock_permutations()");
+        } end function lock_permutations
+
+        template <typename T>
+        requires Count<T>
+        function combinations_with_repetition(const T&: n, const T&: r) -> T {
+            return lock_combinations(r, n);
+        } end function combinations_with_repetition
+
+        template <typename T>
+        requires Count<T>
+        function permutations_with_repetition(const T&: n, const T&: r) -> T {
+            return detail::power(n, r, "permutations_with_repetition()");
+        } end function permutations_with_repetition
+
+        template <typename T>
+        requires Count<T>
+        function multinomial(const std::collections::Vector<T>&: groups) -> T {
+            T: total = static_cast<T>(0);
+            T: result = static_cast<T>(1);
+            for (const T&: g in groups) {
+                detail::require_nonnegative(g, "multinomial()");
+                total = detail::add(total, g, "multinomial()");
+                result = detail::multiply(result, detail::choose(total, g, "multinomial()"), "multinomial()");
+            }
+            return result;
+        } end function multinomial
+
+        template <typename T>
+        requires Count<T>
+        function derangements(const T&: n) -> T {
+            detail::require_nonnegative(n, "derangements()");
+            if (n == static_cast<T>(0)) then {
+                return static_cast<T>(1);
+            }
+            T: previous = static_cast<T>(1);
+            T: current = static_cast<T>(0);
+            for (T: i = static_cast<T>(2); i <= n; ++i) {
+                const T: next = detail::multiply(i - static_cast<T>(1), detail::add(current, previous, "derangements()"), "derangements()");
+                previous = current;
+                current = next;
+            }
+            return current;
+        } end function derangements
+
+        template <typename T>
+        requires Probability<T>
+        function binomial_coefficient(const T&: n, const T&: k) -> T {
+            return std::math::combination(n, k);
+        } end function binomial_coefficient
+
+        template <typename T>
+        requires Probability<T>
+        function probability_of_all(const std::collections::Vector<T>&: independent_probabilities) -> T {
+            T: result = T(1);
+            for (const T&: p in independent_probabilities) {
+                detail::require_probability(p, "probability_of_all()");
+                result = result * p;
+            }
+            return result;
+        } end function probability_of_all
+
+        template <typename T>
+        requires Probability<T>
+        function probability_of_any(const std::collections::Vector<T>&: independent_probabilities) -> T {
+            T: none = T(1);
+            for (const T&: p in independent_probabilities) {
+                detail::require_probability(p, "probability_of_any()");
+                none = none * (T(1) - p);
+            }
+            return T(1) - none;
+        } end function probability_of_any
+
+        template <typename T>
+        requires Probability<T>
+        function probability_of_union(const T&: a, const T&: b, const T&: both) -> T {
+            return a + b - both;
+        } end function probability_of_union
+
+        template <typename T>
+        requires Probability<T>
+        function conditional_probability(const T&: both, const T&: given) -> T {
+            if (given == T(0)) then {
+                throw std::errors::combinatorics_error("conditional_probability() needs the given event to have a probability above 0");
+            }
+            return both / given;
+        } end function conditional_probability
+
+        template <typename T>
+        requires Probability<T>
+        function bayes(const T&: likelihood, const T&: prior, const T&: evidence) -> T {
+            if (evidence == T(0)) then {
+                throw std::errors::combinatorics_error("bayes() needs the evidence to have a probability above 0");
+            }
+            return likelihood * prior / evidence;
+        } end function bayes
+
+        template <typename T>
+        requires Probability<T>
+        function complement(const T&: p) -> T {
+            return T(1) - p;
+        } end function complement
+    } end namespace combinatorics
+} end namespace std

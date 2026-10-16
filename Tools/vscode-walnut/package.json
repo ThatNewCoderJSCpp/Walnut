@@ -1,0 +1,174 @@
+{
+    "name": "walnut-language",
+    "displayName": "Walnut",
+    "description": "Coloring, error underlines, bracket matching and comment toggling for the Walnut language (.wal and .walh files)",
+    "version": "0.4.0",
+    "publisher": "walnut",
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Programming Languages",
+        "Themes"
+    ],
+    "main": "./extension.js",
+    "activationEvents": [
+        "onLanguage:walnut"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "walnut",
+                "aliases": [
+                    "Walnut",
+                    "walnut"
+                ],
+                "extensions": [
+                    ".wal",
+                    ".walh"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "walnut",
+                "scopeName": "source.walnut",
+                "path": "./syntaxes/walnut.tmLanguage.json",
+                "embeddedLanguages": {
+                    "meta.embedded.interpolation.walnut": "walnut"
+                }
+            }
+        ],
+        "themes": [
+            {
+                "label": "Walnut Dark",
+                "uiTheme": "vs-dark",
+                "path": "./themes/walnut-dark.json"
+            },
+            {
+                "label": "Walnut Dark+",
+                "uiTheme": "vs-dark",
+                "path": "./themes/walnut-dark-plus.json"
+            }
+        ],
+        "commands": [
+            {
+                "command": "walnut.editColors",
+                "title": "Edit Colors",
+                "category": "Walnut"
+            },
+            {
+                "command": "walnut.chooseColorsFile",
+                "title": "Choose Colors File...",
+                "category": "Walnut"
+            },
+            {
+                "command": "walnut.removeColors",
+                "title": "Remove Colors From Settings",
+                "category": "Walnut"
+            },
+            {
+                "command": "walnut.chooseCompiler",
+                "title": "Choose Compiler...",
+                "category": "Walnut"
+            },
+            {
+                "command": "walnut.refresh",
+                "title": "Refresh Highlighting",
+                "category": "Walnut"
+            }
+        ],
+        "configuration": {
+            "title": "Walnut",
+            "properties": {
+                "walnut.compilerPath": {
+                    "type": "string",
+                    "default": "",
+                    "markdownDescription": "The `walnut` compiler used for full coloring and error underlines. Empty means `walnut` found on your PATH."
+                },
+                "walnut.colorsFile": {
+                    "type": "string",
+                    "default": "",
+                    "markdownDescription": "The colors file to use. Empty means `Tools/vscode-walnut/colors.json` in the Walnut folder the compiler was built in, or else the copy that came with the extension. Changes to the file show up as soon as it's saved."
+                },
+                "walnut.colors.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Apply the colors file to Walnut code, whatever color theme is in use."
+                },
+                "walnut.semanticHighlighting": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Ask the compiler what each name and operator is, to color them exactly (variables, types, overloaded operators and so on)."
+                },
+                "walnut.markUnresolved": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Color names the compiler couldn't find (such as typos) with the `unresolved` color from the colors file, instead of as variables."
+                },
+                "walnut.diagnostics": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Underline the compiler's errors and warnings."
+                },
+                "walnut.highlightDelay": {
+                    "type": "number",
+                    "default": 300,
+                    "description": "How long to wait after typing stops before asking the compiler, in milliseconds."
+                },
+                "walnut.extraArguments": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [],
+                    "markdownDescription": "Extra options passed to the compiler, such as `-M` module folders or `-I` include folders."
+                }
+            }
+        },
+        "semanticTokenTypes": [
+            {
+                "id": "concept",
+                "superType": "type",
+                "description": "A Walnut concept"
+            },
+            {
+                "id": "unresolved",
+                "description": "A name the compiler couldn't find"
+            }
+        ],
+        "semanticTokenModifiers": [
+            {
+                "id": "overloaded",
+                "description": "An operator that calls a user-written operator function"
+            },
+            {
+                "id": "templateQualifier",
+                "description": "A template written before '::', as in float_traits<T>::digits"
+            }
+        ],
+        "semanticTokenScopes": [
+            {
+                "language": "walnut",
+                "scopes": {
+                    "operator.overloaded": [
+                        "entity.name.function.operator.walnut"
+                    ],
+                    "variable.declaration": [
+                        "meta.declaration.variable.name.walnut"
+                    ],
+                    "parameter.declaration": [
+                        "meta.declaration.variable.name.walnut"
+                    ],
+                    "property.declaration": [
+                        "meta.declaration.variable.name.walnut"
+                    ],
+                    "concept": [
+                        "entity.name.type.walnut"
+                    ]
+                }
+            }
+        ]
+    }
+}

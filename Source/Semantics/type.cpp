@@ -92,7 +92,7 @@ BuiltinType::BuiltinType(BaseKind base, int width, bool is_unsigned, CV cv) : Ty
 ArrayType::ArrayType(Type* element, std::optional<std::size_t> extent, CV cv, Symbol* extent_param) : Type(TypeKind::Array, cv), m_element(element), m_extent(extent), m_extent_param(extent_param) {}
 
 bool TemplateArg::operator==(const TemplateArg& o) const {
-    if (is_type != o.is_type || type != o.type || value != o.value || fvalue != o.fvalue) return false;
+    if (is_type != o.is_type || type != o.type || value != o.value || fvalue != o.fvalue || svalue != o.svalue) return false;
     if (param || o.param) return param == o.param;
     return expr == o.expr;
 }
@@ -125,6 +125,13 @@ void FunctionType::write_to(std::ostream& os) const {
 }
 
 void VariantType::write_to(std::ostream& os) const {
+    if (m_alts.size() == 2 && m_alts[1] && m_alts[1]->is_special_value()) {
+        os << "special(";
+        m_alts[0]->write_to(os);
+        os << ')';
+        return;
+    }
+
     os << "variant(";
 
     for (std::size_t i = 0; i < m_alts.size(); ++i) {
@@ -154,6 +161,7 @@ std::size_t TypeContext::H::operator()(const RecordKey& k) const {
         h = mix(h, std::hash<const void*>{}(a.type));
         h = mix(h, std::hash<const void*>{}(a.value));
         h = mix(h, std::hash<const void*>{}(a.fvalue));
+        h = mix(h, std::hash<const void*>{}(a.svalue));
         h = mix(h, a.param ? std::hash<const void*>{}(a.param) : std::hash<const void*>{}(a.expr));
     }
     return h;

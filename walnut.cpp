@@ -2,6 +2,7 @@
 #include "Codegen/cpp_emitter.hpp"
 #include "Common/file_kind.hpp"
 #include "Driver/build_cache.hpp"
+#include "Driver/highlight.hpp"
 #include "Preprocessor/native_headers.hpp"
 #include <algorithm>
 #include <atomic>
@@ -63,7 +64,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-enum class Command { Check, Emit, Build, Run, Clean };
+enum class Command { Check, Emit, Build, Run, Clean, Highlight };
 
 enum class DebugMode { None, Walnut, Cpp };
 
@@ -92,6 +93,8 @@ struct Options {
     std::string                                      errors_to;
     std::string                                      warnings_to;
     bool                                             keep_cpp = false;
+    bool                                             unbuffered = false;
+    bool                                             from_stdin = false;
     bool                                             no_cache = false;
     bool                                             opt_set = false;
     DebugMode                                        debug = DebugMode::None;
@@ -111,6 +114,7 @@ void print_usage(std::ostream& os) {
           "  build   compile the program to an executable (default: the input name without .wal)\n"
           "  run     build the program and run it\n"
           "  clean   delete walnut's build cache\n"
+          "  highlight  print what each name and operator in the file is, as JSON, for editors (with --stdin, the file's text is read from standard input)\n"
           "\n"
           "options:\n"
           "  -o <path>          output path\n"
@@ -119,6 +123,8 @@ void print_usage(std::ostream& os) {
           "  -D <name>[=value]  define a preprocessor macro\n"
           "  -O0 -O1 -O2 -O3    optimization level for the C++ compiler (default -O2, or -O0 with -g)\n"
           "  -g                 build for a debugger that steps through the .wal lines\n"
+          "  -u, --unbuffered   make the program flush cout and clog after every write (like python -u);\n"
+          "                     setting WALNUT_UNBUFFERED=1 when the program runs does the same\n"
           "  --debug-cpp        build for a debugger that steps through the generated C++ (kept next to the program)\n"
           "  --line-map[=file]  write which .wal line each generated C++ line came from (to stdout without a file)\n"
           "  --cxx <compiler>   C++ compiler used by build and run (default: " WALNUT_DEFAULT_CXX ")\n"
@@ -208,6 +214,7 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     else if (cmd == "build") o.command = Command::Build;
     else if (cmd == "run")   o.command = Command::Run;
     else if (cmd == "clean") { o.command = Command::Clean; return true; }
+    else if (cmd == "highlight") o.command = Command::Highlight;
     else { std::cerr << "walnut: unknown command '" << cmd << "'\n"; print_usage(std::cerr); exit_code = 2; return false; }
 
     auto need = [&](int& i, const std::string& flag) -> const char* {
@@ -236,6 +243,8 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         }
         else if (a == "-O0" || a == "-O1" || a == "-O2" || a == "-O3" || a == "-Os") { o.opt = a; o.opt_set = true; }
         else if (a == "-g")            o.debug = DebugMode::Walnut;
+        else if (a == "-u" || a == "--unbuffered") o.unbuffered = true;
+        else if (a == "--stdin")       o.from_stdin = true;
         else if (a == "--debug-cpp")   { o.debug = DebugMode::Cpp; o.keep_cpp = true; }
         else if (a == "--line-map")    o.line_map = true;
         else if (a.rfind("--line-map=", 0) == 0) { o.line_map = true; o.line_map_path = a.substr(11); }
@@ -265,6 +274,8 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
             } else if (kind == walnut::FileKind::Walnut) {
                 if (o.input.empty()) o.input = a;
                 else o.extra_inputs.push_back(a);
+            } else if (kind == walnut::FileKind::WalnutHeader && o.command == Command::Highlight && o.input.empty()) {
+                o.input = a;
             } else if (kind == walnut::FileKind::WalnutHeader) {
                 std::cerr << "walnut: '" << name << "' is a Walnut header; #include or import it from a .wal file instead of passing it to walnut\n";
                 exit_code = 2;
@@ -464,6 +475,7 @@ bool generate(const Options& o, std::string& cpp, walnut::codegen::SplitProgram*
     for (const auto& u : compiler.analyzed_units()) units.push_back({ u.file, u.ast, u.root });
     walnut::codegen::CppEmitter emitter(compiler.mutable_types(), compiler.mutable_instantiator(), compiler.error_reporter());
     emitter.source_path = [&compiler](walnut::FileId f) { return compiler.get_sources().absolute_path(f); };
+    emitter.unbuffered = o.unbuffered;
     emitter.path_of_text = [&compiler](const char* p) {
         const std::optional<walnut::FileId> f = compiler.get_sources().file_containing(p);
         return f ? compiler.get_sources().absolute_path(*f) : std::string();
@@ -1097,6 +1109,39 @@ bool build_with_cache(const Options& o, const walnut::codegen::SplitProgram& pro
     return true;
 }
 
+int highlight(const Options& o) {
+    std::string text;
+
+    if (o.from_stdin) {
+        std::ostringstream in;
+        in << std::cin.rdbuf();
+        text = in.str();
+    }
+
+    walnut::CompilerPipeline compiler(o.input);
+    compiler.set_path_style(walnut::PathStyle::Absolute);
+    compiler.report_silent();
+    compiler.warn_silent();
+    for (const auto& d : o.include_dirs) compiler.add_include_dir(d);
+    for (const auto& d : o.module_dirs) compiler.add_module_dir(d);
+    for (const auto& d : o.module_env_dirs) compiler.add_module_dir(d);
+    compiler.add_module_dir(o.runtime_dir);
+    for (const walnut_library::File& f : walnut_library::files) if (f.path) compiler.add_library_file(f.path, std::string(reinterpret_cast<const char*>(f.data), f.size));
+    for (const auto& [name, value] : o.defines) compiler.define_macro(name, value);
+    for (const std::string& extra : o.extra_inputs) compiler.add_input(extra);
+    compiler.set_native_header_args([&o](bool cpp) { return native_header_args(o, cpp); });
+    if (o.from_stdin) compiler.set_input_text(std::move(text));
+
+    try {
+        compiler.compile();
+    } catch (const std::exception&) {
+    }
+
+    std::cout << walnut::driver::highlight_json(compiler);
+    std::cout.flush();
+    return 0;
+}
+
 int run(const Options& o) {
     if (o.command == Command::Clean) {
         const fs::path root = walnut::build::default_cache_root();
@@ -1107,6 +1152,7 @@ int run(const Options& o) {
         return 0;
     }
 
+    if (o.command == Command::Highlight) return highlight(o);
     if (!fs::exists(o.input)) { std::cerr << "walnut: cannot open '" << o.input << "'\n"; return 1; }
     const bool cached = (o.command == Command::Build || o.command == Command::Run) && !o.no_cache && !o.keep_cpp && !o.line_map && o.debug != DebugMode::Cpp;
     std::string raw;

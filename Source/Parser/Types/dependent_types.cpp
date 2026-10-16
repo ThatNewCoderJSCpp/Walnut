@@ -78,11 +78,11 @@ Type* VariantType::clone_into(Arena& arena) const {
     std::vector<TypeInfo> cloned;
     cloned.reserve(m_alternatives.size());
     for (const auto& a : m_alternatives) { cloned.push_back(a.clone_into(arena)); }
-    return make_in<VariantType>(arena, std::move(cloned));
+    return make_in<VariantType>(arena, std::move(cloned), m_special);
 }
 
 void VariantType::write_to(std::ostream& os) const {
-    os << "variant(";
+    os << (m_special ? "special(" : "variant(");
 
     for (std::size_t i = 0; i < m_alternatives.size(); ++i) {
         if (i > 0) os << ", ";

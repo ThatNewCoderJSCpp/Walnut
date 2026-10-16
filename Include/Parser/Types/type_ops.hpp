@@ -77,6 +77,11 @@ inline const TypeOpInfo* find_type_op(std::string_view name) {
     return nullptr;
 }
 
+inline const TypeOpInfo* find_builtin_type_op(std::string_view spelling) {
+    if (spelling.size() <= 2 || spelling.substr(0, 2) != "__") return nullptr;
+    return find_type_op(spelling.substr(2));
+}
+
 inline std::string_view type_op_name(TypeOp op) {
     switch (op) {
         case TypeOp::Typeof:       return "typeof";
@@ -98,7 +103,7 @@ enum class TypeTrait : std::uint8_t {
     IsRvalueRef,
     IsPointer,
     IsArray,
-    IsIntegral,
+    IsInteger,
     IsFloating,
     IsArithmetic,
     IsSigned,
@@ -114,7 +119,26 @@ enum class TypeTrait : std::uint8_t {
     IsConvertible,
     IsBaseOf,
     IntegerRank,
-    FloatRank
+    FloatRank,
+    IsText,
+    IsStr,
+    IsNullPointer,
+    IsSpecial,
+    IsVariant,
+    IsUnion,
+    IsStruct,
+    IsClosure,
+    IsFixedArray,
+    IsRuntimeArray,
+    IsAbstract,
+    IsPolymorphic,
+    IsEmpty,
+    IsNative,
+    IntegerBits,
+    FloatBits,
+    FloatMantissaBits,
+    FloatExponentBits,
+    ArrayExtent
 };
 
 struct TypeTraitInfo {
@@ -134,7 +158,8 @@ inline constexpr TypeTraitInfo kTypeTraits[] = {
     { "is_rvalue_ref",  TypeTrait::IsRvalueRef,   1 },
     { "is_pointer",     TypeTrait::IsPointer,     1, false, OverloadPolicy::Warns },
     { "is_array",       TypeTrait::IsArray,       1, false, OverloadPolicy::Warns },
-    { "is_integral",    TypeTrait::IsIntegral,    1, false, OverloadPolicy::Allowed },
+    { "is_integer",     TypeTrait::IsInteger,     1, false, OverloadPolicy::Allowed },
+    { "is_float",       TypeTrait::IsFloating,    1, false, OverloadPolicy::Allowed },
     { "is_floating",    TypeTrait::IsFloating,    1, false, OverloadPolicy::Allowed },
     { "is_arithmetic",  TypeTrait::IsArithmetic,  1, false, OverloadPolicy::Allowed },
     { "is_signed",      TypeTrait::IsSigned,      1, false, OverloadPolicy::Allowed },
@@ -151,6 +176,25 @@ inline constexpr TypeTraitInfo kTypeTraits[] = {
     { "is_base_of",     TypeTrait::IsBaseOf,      2 },
     { "integer_rank",   TypeTrait::IntegerRank,   1, true, OverloadPolicy::Allowed },
     { "float_rank",     TypeTrait::FloatRank,     1, true, OverloadPolicy::Allowed },
+    { "is_text",        TypeTrait::IsText,        1, false, OverloadPolicy::Allowed },
+    { "is_str",         TypeTrait::IsStr,         1, false, OverloadPolicy::Allowed },
+    { "is_null_pointer", TypeTrait::IsNullPointer, 1 },
+    { "is_special",     TypeTrait::IsSpecial,     1 },
+    { "is_variant",     TypeTrait::IsVariant,     1 },
+    { "is_union",       TypeTrait::IsUnion,       1 },
+    { "is_struct",      TypeTrait::IsStruct,      1 },
+    { "is_closure",     TypeTrait::IsClosure,     1 },
+    { "is_fixed_array", TypeTrait::IsFixedArray,  1 },
+    { "is_runtime_array", TypeTrait::IsRuntimeArray, 1 },
+    { "is_abstract",    TypeTrait::IsAbstract,    1 },
+    { "is_polymorphic", TypeTrait::IsPolymorphic, 1 },
+    { "is_empty",       TypeTrait::IsEmpty,       1 },
+    { "is_native",      TypeTrait::IsNative,      1 },
+    { "integer_bits",   TypeTrait::IntegerBits,   1, true, OverloadPolicy::Allowed },
+    { "float_bits",     TypeTrait::FloatBits,     1, true, OverloadPolicy::Allowed },
+    { "float_mantissa_bits", TypeTrait::FloatMantissaBits, 1, true, OverloadPolicy::Allowed },
+    { "float_exponent_bits", TypeTrait::FloatExponentBits, 1, true, OverloadPolicy::Allowed },
+    { "array_extent",   TypeTrait::ArrayExtent,   1, true },
 };
 
 inline const TypeTraitInfo* find_type_trait(std::string_view name) {

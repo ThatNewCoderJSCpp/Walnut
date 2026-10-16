@@ -46,6 +46,7 @@ TypeInfo TypeInfo::clone_into(Arena& arena) const {
     copy.indirection = indirection;
     copy.resolved = resolved;
     copy.has_angle_args = has_angle_args;
+    copy.pack_expansion = pack_expansion;
     copy.template_args.reserve(template_args.size());
 
     for (const TemplateArgument* a : template_args) {

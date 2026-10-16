@@ -29,6 +29,7 @@ public:
         nodes::TemplateDeclaration* source = nullptr;
         nodes::ASTNode*             decl   = nullptr;  // deep clone (starts untyped)
         Symbol*                     sym    = nullptr;  // clone's entity symbol
+        Symbol*                     generic = nullptr;
         Scope*                      scope  = nullptr;  // private scope wrapping the clone
         SubstEnv                    env;               // ORIGINAL param symbols -> args
         std::vector<Arg>            args;              // post-default, canonical, packs flattened
@@ -36,6 +37,7 @@ public:
         std::vector<ParamShape>     fn_shapes;
         bool                        typed = false;     
         bool                        speculative = false;
+        std::vector<std::size_t>    forwarded_args;
     };
 
     enum class ArgCoerce : std::uint8_t {
@@ -69,6 +71,7 @@ public:
 
     std::function<void(nodes::ASTNode*, Scope*)> build_scopes;
     Arena& arena() { return m_arena; }
+    ConstEvaluator& evaluator() { return m_eval; }
     std::string_view keep_name(std::string name) { m_pack_names.push_back(std::move(name)); return m_pack_names.back(); }
     std::size_t kept_names() const { return m_pack_names.size(); }
     std::function<void(nodes::ASTNode*, Scope*)> resolve_names;
@@ -83,17 +86,34 @@ public:
     void for_each(Fn&& fn) const { for (Instantiation* I : m_created) fn(*I); }
 
     Instantiation* for_record(RecordType* rt, nodes::ASTNode* site);
+    Scope* friend_record_scope(nodes::TemplateDeclaration* tmpl, Instantiation* I, nodes::ASTNode* site);
+
+    Instantiation* instantiate_for_conversion(Symbol* generic, Type* target, nodes::ASTNode* site);
+
+    Symbol* primary_of_instance(Symbol* s) const;
+
+    void fill_default_arguments(nodes::TemplateDeclaration* tmpl, TemplateArgs& args);
 
     Instantiation* instantiate_for_call(
         Symbol* generic,
         const std::vector<parser_types::TemplateArgument*>& explicit_args,
         const std::vector<Type*>& call_args,
-        nodes::ASTNode* site
+        nodes::ASTNode* site,
+        const std::vector<bool>* lvalue_args = nullptr
     );
 
     std::vector<Arg> canon_args(const std::vector<parser_types::TemplateArgument*>& written, bool& ok);
 
     void refresh_function_type(Instantiation* I);
+
+    struct PackFieldGroup {
+        nodes::VariableDeclaration*   group = nullptr;
+        std::vector<std::string_view> names;
+        std::uint8_t                  access = 0;
+    };
+
+    std::vector<PackFieldGroup> expand_pack_fields(nodes::RecordDeclaration* rd, const SubstEnv& env);
+    void declare_pack_fields(nodes::RecordDeclaration* rd, const std::vector<PackFieldGroup>& groups);
 
     Instantiation* owning(Symbol* s) const;
 
@@ -108,13 +128,13 @@ private:
         std::size_t operator()(const Key& k) const;
     };
 
-    Symbol* primary_of_instance(Symbol* s) const;
-
     Instantiation* instantiate_impl(Symbol* generic, std::vector<Arg> args, nodes::ASTNode* site, bool quiet);
 
     SpecMatch select_specialization(Symbol* generic, const std::vector<Arg>& args, nodes::ASTNode* site, bool quiet);
 
     void finish_function_type(Instantiation* I, nodes::FunctionDeclaration* fd);
+    void finish_constructor_type(Instantiation* I, nodes::ConstructorDeclaration* cd);
+    std::vector<Type*> finish_parameter_shapes(Instantiation* I, const nodes::FunctionParameters* ps);
 
     bool flatten_packs(std::vector<Arg>& args);
 

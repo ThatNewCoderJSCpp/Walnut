@@ -20,6 +20,7 @@ static inline bool operator_spec_starts_type(tokenizing::Token::Kind k) {
         case K::FunctionKeyword:
         case K::ArrayKeyword:
         case K::VariantKeyword:
+        case K::SpecialKeyword:
             return true;
         default:
             return false;

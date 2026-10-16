@@ -1,0 +1,209 @@
+namespace std {
+    namespace random {
+        namespace detail {
+            extern "C++" from "<walnut_random.hpp>" {
+                class Engine as "fizmo::RandomGenerator" {
+                public:
+                    constructor();
+                    constructor(unsigned long int: seed);
+                    function seed(unsigned long int: value) -> void;
+                    function reseed() -> void;
+                } end class Engine
+
+                template <typename T>
+                class Ops as "walnut_rt::random::ops" {
+                public:
+                    static function int_between(const T&: lo, const T&: hi) -> T as "walnut_rt::random::int_between";
+                    static function int_any() -> T as "walnut_rt::random::int_any<T>";
+                    static function int_between_with(Engine&: engine, const T&: lo, const T&: hi) -> T as "walnut_rt::random::int_between_with";
+                    static function int_any_with(Engine&: engine) -> T as "walnut_rt::random::int_any_with<T>";
+                    static function float_between(const T&: lo, const T&: hi) -> T as "walnut_rt::random::float_between";
+                    static function float_unit() -> T as "walnut_rt::random::float_unit<T>";
+                    static function float_between_with(Engine&: engine, const T&: lo, const T&: hi) -> T as "walnut_rt::random::float_between_with";
+                    static function float_unit_with(Engine&: engine) -> T as "walnut_rt::random::float_unit_with<T>";
+                } end class Ops
+
+                class Api as "walnut_rt::random::api" {
+                public:
+                    static function bool_any() -> bool as "walnut_rt::random::bool_any";
+                    static function bool_chance(short float: probability) -> bool as "walnut_rt::random::bool_chance";
+                    static function char_any() -> char as "walnut_rt::random::char_any";
+                    static function char_between(char: lo, char: hi) -> char as "walnut_rt::random::char_between";
+                    static function char_from(const string&: alphabet) -> char as "walnut_rt::random::char_from";
+                    static function string_of(long int: length) -> string as "walnut_rt::random::string_of";
+                    static function string_from(long int: length, const string&: alphabet) -> string as "walnut_rt::random::string_from";
+                    static function index_below(long int: count) -> long int as "walnut_rt::random::index_below";
+                    static function bool_any_with(Engine&: engine) -> bool as "walnut_rt::random::bool_any_with";
+                    static function bool_chance_with(Engine&: engine, short float: probability) -> bool as "walnut_rt::random::bool_chance_with";
+                    static function char_any_with(Engine&: engine) -> char as "walnut_rt::random::char_any_with";
+                    static function char_between_with(Engine&: engine, char: lo, char: hi) -> char as "walnut_rt::random::char_between_with";
+                    static function char_from_with(Engine&: engine, const string&: alphabet) -> char as "walnut_rt::random::char_from_with";
+                    static function string_of_with(Engine&: engine, long int: length) -> string as "walnut_rt::random::string_of_with";
+                    static function string_from_with(Engine&: engine, long int: length, const string&: alphabet) -> string as "walnut_rt::random::string_from_with";
+                    static function index_below_with(Engine&: engine, long int: count) -> long int as "walnut_rt::random::index_below_with";
+                } end class Api
+            } end extern
+        } end namespace detail
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function random_int(const T&: lo, const T&: hi) -> T {
+            return detail::Ops<T>::int_between(lo, hi);
+        } end function random_int
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function random_int() -> T {
+            return detail::Ops<T>::int_any();
+        } end function random_int
+
+        template <typename T>
+        requires std::traits::is_builtin_float<T>
+        function random_float(const T&: lo, const T&: hi) -> T {
+            return detail::Ops<T>::float_between(lo, hi);
+        } end function random_float
+
+        template <typename T>
+        requires std::traits::is_builtin_float<T>
+        function random_float() -> T {
+            return detail::Ops<T>::float_unit();
+        } end function random_float
+
+        function random_bool() -> bool {
+            return detail::Api::bool_any();
+        } end function random_bool
+
+        function random_bool(short float: probability) -> bool {
+            return detail::Api::bool_chance(probability);
+        } end function random_bool
+
+        function random_char() -> char {
+            return detail::Api::char_any();
+        } end function random_char
+
+        function random_char(char: lo, char: hi) -> char {
+            return detail::Api::char_between(lo, hi);
+        } end function random_char
+
+        function random_char(const string&: alphabet) -> char {
+            return detail::Api::char_from(alphabet);
+        } end function random_char
+
+        function random_string(long int: length) -> string {
+            return detail::Api::string_of(length);
+        } end function random_string
+
+        function random_string(long int: length, const string&: alphabet) -> string {
+            return detail::Api::string_from(length, alphabet);
+        } end function random_string
+
+        function random_text(long int: length) -> text {
+            return static_cast<text>(detail::Api::string_of(length));
+        } end function random_text
+
+        function random_text(long int: length, const text&: alphabet) -> text {
+            return static_cast<text>(detail::Api::string_from(length, static_cast<string>(alphabet)));
+        } end function random_text
+
+        template <typename C>
+        function shuffle(C&: items) -> void {
+            for (long int: i = static_cast<long int>(items.size()) - 1; i > 0; i--) {
+                const long int: j = detail::Api::index_below(i + 1);
+                if (j != i) then {
+                    auto: held = std::core::move(items[i]);
+                    items[i] = std::core::move(items[j]);
+                    items[j] = std::core::move(held);
+                }
+            }
+        } end function shuffle
+
+        class Generator {
+            detail::Engine: m_engine;
+
+        public:
+            constructor() { }
+
+            constructor(unsigned long int: seed) : m_engine(seed) { }
+
+            function seed(unsigned long int: value) -> void {
+                m_engine.seed(value);
+            } end function seed
+
+            function reseed() -> void {
+                m_engine.reseed();
+            } end function reseed
+
+            template <typename T>
+            requires std::traits::is_builtin_integer<T>
+            function random_int(const T&: lo, const T&: hi) -> T {
+                return detail::Ops<T>::int_between_with(m_engine, lo, hi);
+            } end function random_int
+
+            template <typename T>
+            requires std::traits::is_builtin_integer<T>
+            function random_int() -> T {
+                return detail::Ops<T>::int_any_with(m_engine);
+            } end function random_int
+
+            template <typename T>
+            requires std::traits::is_builtin_float<T>
+            function random_float(const T&: lo, const T&: hi) -> T {
+                return detail::Ops<T>::float_between_with(m_engine, lo, hi);
+            } end function random_float
+
+            template <typename T>
+            requires std::traits::is_builtin_float<T>
+            function random_float() -> T {
+                return detail::Ops<T>::float_unit_with(m_engine);
+            } end function random_float
+
+            function random_bool() -> bool {
+                return detail::Api::bool_any_with(m_engine);
+            } end function random_bool
+
+            function random_bool(short float: probability) -> bool {
+                return detail::Api::bool_chance_with(m_engine, probability);
+            } end function random_bool
+
+            function random_char() -> char {
+                return detail::Api::char_any_with(m_engine);
+            } end function random_char
+
+            function random_char(char: lo, char: hi) -> char {
+                return detail::Api::char_between_with(m_engine, lo, hi);
+            } end function random_char
+
+            function random_char(const string&: alphabet) -> char {
+                return detail::Api::char_from_with(m_engine, alphabet);
+            } end function random_char
+
+            function random_string(long int: length) -> string {
+                return detail::Api::string_of_with(m_engine, length);
+            } end function random_string
+
+            function random_string(long int: length, const string&: alphabet) -> string {
+                return detail::Api::string_from_with(m_engine, length, alphabet);
+            } end function random_string
+
+            function random_text(long int: length) -> text {
+                return static_cast<text>(detail::Api::string_of_with(m_engine, length));
+            } end function random_text
+
+            function random_text(long int: length, const text&: alphabet) -> text {
+                return static_cast<text>(detail::Api::string_from_with(m_engine, length, static_cast<string>(alphabet)));
+            } end function random_text
+
+            template <typename C>
+            function shuffle(C&: items) -> void {
+                for (long int: i = static_cast<long int>(items.size()) - 1; i > 0; i--) {
+                    const long int: j = detail::Api::index_below_with(m_engine, i + 1);
+                    if (j != i) then {
+                        auto: held = std::core::move(items[i]);
+                        items[i] = std::core::move(items[j]);
+                        items[j] = std::core::move(held);
+                    }
+                }
+            } end function shuffle
+        } end class Generator
+    } end namespace random
+} end namespace std

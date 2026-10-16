@@ -11,7 +11,11 @@ nodes::BlockStatement* Parser::parse_block(bool require_body) {
     bool has_statements = false;
     
     while (current_token().kind() != tokenizing::Token::Kind::RightCurly && current_token().kind() != tokenizing::Token::Kind::End) {
+        const std::size_t mark = m_spliced.size();
+        m_list_level = true;
         block->add_statement(parse_statement());
+        m_list_level = false;
+        drain_spliced(block, mark);
         has_statements = true;
     }
     

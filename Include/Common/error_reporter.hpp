@@ -47,6 +47,8 @@ struct CompilerError {
     std::size_t line;
     ErrorPhase  phase;
     FileId      file_id = INVALID_FILE;
+    const char* at      = nullptr;
+    std::size_t width   = 0;
 
     constexpr const char* phase_name() const noexcept {
         switch (phase) {
@@ -82,6 +84,10 @@ public:
     PathStyle path_style() const noexcept { return m_path_style; }
 
     void report(ErrorPhase phase, FileId file_id, std::size_t line, std::string message);
+
+    void report_at(ErrorPhase phase, FileId file_id, std::size_t line, std::string message, const char* at, std::size_t width);
+
+    std::string source_excerpt(FileId file_id, std::size_t line, const char* at = nullptr, std::size_t width = 0) const;
 
     void report(ErrorPhase phase, std::size_t line, std::string message) {
         report(phase, m_current_file, line, std::move(message));

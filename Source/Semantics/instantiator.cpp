@@ -7,14 +7,55 @@ Instantiator::Instantiator(Arena& arena, TypeContext& types, ErrorReporter& repo
 {
     m_types.value_arg_hook  = [this](nodes::ASTNode* e, TemplateArg& out) { return classify_value_arg(e, out); };
     m_types.value_eval_hook = [this](nodes::ASTNode* e, TemplateArg& out) { return eval_value_arg(e, out); };
+    m_eval.env_of = [this](Symbol* s) -> const SubstEnv* {
+        Instantiation* I = owning(s);
+        return I ? &I->env : nullptr;
+    };
+    m_eval.variable_template_value = [this](nodes::TemplateInstantiation* t) -> ConstValue {
+        nodes::ASTNode* n = t->m_template;
+        Symbol* g = nullptr;
+        if (n && n->kind == nodes::ASTNode::Kind::Identifier) g = static_cast<nodes::Identifier*>(n)->resolved;
+        else if (n && n->kind == nodes::ASTNode::Kind::QualifiedIdentifier) g = static_cast<nodes::QualifiedIdentifier*>(n)->resolved;
+        if (!g || !g->decl || g->decl->kind != nodes::ASTNode::Kind::FunctionDeclaration) return {};
+        if (!static_cast<nodes::FunctionDeclaration*>(g->decl)->variable_template) return {};
+        bool ok = true;
+        std::vector<Arg> args = canon_args(t->m_args, ok);
+        if (!ok) return {};
+        for (const Arg& a : args) {
+            if (a.is_type && (!a.type || a.type->is_dependent())) return {};
+            if (a.is_dependent_value()) return {};
+        }
+        Instantiation* I = instantiate(g, std::move(args), t);
+        if (!I || !I->sym || !I->typed) return {};
+        return m_eval.eval_value_function(I->sym);
+    };
     m_types.value_symbol_hook = [this](Symbol* s, TemplateArg& out) { return classify_value_symbol(s, out); };
     m_types.member_type_hook = [this](Type* rec, std::string_view name) -> Type* { return member_type(rec, name); };
+    m_types.member_alias_type_hook = [this](Type* rec, std::string_view name, const std::vector<parser_types::TemplateArgument*>& args) -> Type* {
+        if (!rec || !rec->is_record()) return nullptr;
+        auto* rt = static_cast<RecordType*>(rec);
+        Instantiation* I = rt->is_instantiation() ? for_record(rt, nullptr) : nullptr;
+        Symbol* owner = I ? I->sym : rt->decl();
+        Scope* sc = owner ? owner->inner_scope : nullptr;
+        Symbol* m = sc ? sc->find_member(name) : nullptr;
+        if (!m || m->kind != SymbolKind::TypeAlias || !m->template_decl) return nullptr;
+        parser_types::TypeInfo use;
+        use.resolved = m;
+        use.template_args = args;
+        if (I) m_types.push_subst(&I->env);
+        Type* t = m_types.canonicalize(use);
+        if (I) m_types.pop_subst();
+        return t;
+    };
     m_types.callable_hook = [this](Type* rec, Type* sig) -> Symbol* { return call_operator_for(rec, sig); };
     m_types.type_query_overload_hook = [this](RecordType* rt, std::string_view name, const std::vector<Type*>& others) { return type_query_overload(rt, name, others); };
     m_types.extent_param_hook = [](nodes::ASTNode* e) -> Symbol* {
         if (!e || e->kind != nodes::ASTNode::Kind::Identifier) return nullptr;
         Symbol* s = static_cast<nodes::Identifier*>(e)->resolved;
         return is_value_param(s) ? s : nullptr;
+    };
+    m_types.default_args_hook = [this](Symbol* s, TemplateArgs& args) {
+        if (s && s->template_decl) fill_default_arguments(s->template_decl, args);
     };
     m_types.instance_primary_hook = [this](Symbol* s) -> Symbol* { return primary_of_instance(s); };
     m_types.default_instance_hook = [this](Symbol* s) -> Type* {
@@ -32,31 +73,56 @@ Instantiator::Instantiator(Arena& arena, TypeContext& types, ErrorReporter& repo
 }
 
 auto Instantiator::for_record(RecordType* rt, nodes::ASTNode* site) -> Instantiation* {
-    if (!rt || !rt->is_instantiation()) return nullptr;
+    if (!rt) return nullptr;
+    if (!rt->is_instantiation()) return nullptr;
     std::vector<Arg> args;
     args.reserve(rt->args().size());
 
     for (const TemplateArg& a : rt->args()) {
         if (a.is_dependent_value()) return nullptr;
+        if (a.is_type && a.type && a.type->is_dependent()) return nullptr;
         args.push_back(a);
     }
 
     return instantiate_impl(rt->decl(), std::move(args), site, false);
 }
 
+auto Instantiator::instantiate_for_conversion(Symbol* generic, Type* target, nodes::ASTNode* site) -> Instantiation* {
+    nodes::TemplateDeclaration* tmpl = generic ? generic->template_decl : nullptr;
+    if (!tmpl || !tmpl->m_declaration || tmpl->m_declaration->kind != nodes::ASTNode::Kind::FunctionDeclaration || !target) return nullptr;
+    auto* fd = static_cast<nodes::FunctionDeclaration*>(tmpl->m_declaration);
+    SubstEnv env;
+    std::vector<const SubstEnv*> saved = m_types.suspend_subst();
+    Type* pattern = m_types.canonicalize(fd->get_return_type());
+    const bool ok = pattern && deduce(m_types.strip_cv(pattern), target, env, m_types);
+    m_types.resume_subst(std::move(saved));
+    if (!ok) return nullptr;
+    std::vector<Arg> args;
+    if (!assemble_args(tmpl, env, args, site, true)) return nullptr;
+    const std::size_t before = m_memo.size();
+    Instantiation* I = instantiate_impl(generic, std::move(args), site, true);
+    if (I && m_memo.size() > before && !I->typed) I->speculative = true;
+    if (I && I->type && I->type->is_function() && m_types.strip_cv(static_cast<FunctionType*>(I->type)->ret()) != target) return nullptr;
+    return I;
+}
+
 auto Instantiator::instantiate_for_call(
     Symbol* generic,
     const std::vector<parser_types::TemplateArgument*>& explicit_args,
     const std::vector<Type*>& call_args,
-    nodes::ASTNode* site
+    nodes::ASTNode* site,
+    const std::vector<bool>* lvalue_args
 ) -> Instantiation* {
     nodes::TemplateDeclaration* tmpl = generic ? generic->template_decl : nullptr;
-    if (!tmpl || !tmpl->m_declaration || tmpl->m_declaration->kind != nodes::ASTNode::Kind::FunctionDeclaration) return nullptr;
+    if (!tmpl || !tmpl->m_declaration) return nullptr;
+    const bool is_ctor = tmpl->m_declaration->kind == nodes::ASTNode::Kind::ConstructorDeclaration;
+    if (tmpl->m_declaration->kind != nodes::ASTNode::Kind::FunctionDeclaration && !is_ctor) return nullptr;
     const auto& params = tmpl->params();
     if (has_nontrailing_pack(params)) return nullptr;
     nodes::TemplateParameter* tpack = trailing_pack(params);
     const std::size_t fixed = params.size() - (tpack ? 1 : 0);
     SubstEnv env;
+    std::vector<std::size_t> forwarded;
     if (!tpack && explicit_args.size() > params.size()) return nullptr;
     const std::size_t nfix_explicit = std::min(explicit_args.size(), fixed);
     for (std::size_t i = 0; i < nfix_explicit; ++i) if (!bind_written(params[i], explicit_args[i], env)) return nullptr;
@@ -72,7 +138,9 @@ auto Instantiator::instantiate_for_call(
         }
     }
 
-    auto* fd = static_cast<nodes::FunctionDeclaration*>(tmpl->m_declaration);
+    const nodes::FunctionParameters* fn_params = is_ctor
+        ? static_cast<nodes::ConstructorDeclaration*>(tmpl->m_declaration)->get_parameters()
+        : static_cast<nodes::FunctionDeclaration*>(tmpl->m_declaration)->get_parameters();
 
     struct SuspendGuard {
         TypeContext& t; std::vector<const SubstEnv*> saved;
@@ -80,7 +148,7 @@ auto Instantiator::instantiate_for_call(
         ~SuspendGuard() { t.resume_subst(std::move(saved)); }
     };
 
-    if (const nodes::FunctionParameters* ps = fd->get_parameters()) {
+    if (const nodes::FunctionParameters* ps = fn_params) {
         SuspendGuard suspend(m_types);
         std::size_t nfix_fn = ps->size();
         Type* last_pattern = nullptr;
@@ -96,13 +164,59 @@ auto Instantiator::instantiate_for_call(
 
         for (std::size_t i = 0; i < n; ++i) {
             Type* pt = m_types.canonicalize(ps->m_params[i]->get_type());
+
+            if (nfix_explicit > 0 && pt && pt->is_dependent()) {
+                m_types.push_subst(&env);
+                Type* bound = m_types.apply_subst(pt);
+                m_types.pop_subst();
+                if (bound && !bound->is_dependent()) continue;
+            }
+
+            if (lvalue_args && i < lvalue_args->size() && (*lvalue_args)[i] && pt && pt->is_reference()) {
+                auto* rt = static_cast<ReferenceType*>(pt);
+                Type* inner = rt->referent();
+
+                if (rt->ref_qual() == RefQual::RValue && inner && inner->kind() == TypeKind::TypeParam && inner->cv().bits() == 0) {
+                    Symbol* tp = static_cast<TypeParamType*>(inner)->param();
+                    bool own = false;
+                    for (nodes::TemplateParameter* p : params) own = own || (p->symbol == tp);
+
+                    if (own && call_args[i]) {
+                        Type* arg = call_args[i]->is_reference() ? call_args[i] : m_types.reference(call_args[i], RefQual::LValue);
+                        if (Type* prior = env.lookup_type(tp); prior && prior != arg) return nullptr;
+                        env.types[tp] = arg;
+                        forwarded.push_back(i);
+                        continue;
+                    }
+                }
+            }
+
             if (!deduce(pt, call_args[i], env, m_types)) return nullptr;
         }
 
         if (!last_pks.empty()) {
             const bool already = last_pks.size() == 1 && env.lookup_pack(last_pks[0]) != nullptr;
 
-            if (!already) {
+            Symbol* fwd_pack = nullptr;
+
+            if (!already && lvalue_args && last_pks.size() == 1 && last_pattern && last_pattern->is_reference()) {
+                auto* rt = static_cast<ReferenceType*>(last_pattern);
+                Type* inner = rt->referent();
+                if (rt->ref_qual() == RefQual::RValue && inner && inner->kind() == TypeKind::TypeParam && inner->cv().bits() == 0 && static_cast<TypeParamType*>(inner)->param() == last_pks[0]) fwd_pack = last_pks[0];
+            }
+
+            if (fwd_pack) {
+                std::vector<Type*>& pk = env.packs[fwd_pack];
+                pk.clear();
+
+                for (std::size_t i = nfix_fn; i < call_args.size(); ++i) {
+                    Type* a = call_args[i];
+                    if (!a) return nullptr;
+                    const bool lv = i < lvalue_args->size() && (*lvalue_args)[i];
+                    if (lv) { pk.push_back(a->is_reference() ? a : m_types.reference(a, RefQual::LValue)); forwarded.push_back(i); }
+                    else pk.push_back(a->is_reference() ? static_cast<ReferenceType*>(a)->referent() : a);
+                }
+            } else if (!already) {
                 std::vector<Type*> rest;
                 for (std::size_t i = nfix_fn; i < call_args.size(); ++i) rest.push_back(call_args[i]);
                 if (!deduce_pack(last_pattern, rest, env, m_types)) return nullptr;
@@ -115,6 +229,7 @@ auto Instantiator::instantiate_for_call(
     const std::size_t before = m_memo.size();
     Instantiation* I = instantiate_impl(generic, std::move(args), site, true);
     if (I && m_memo.size() > before && !I->typed) I->speculative = true;
+    if (I && !forwarded.empty()) I->forwarded_args = forwarded;
     return I;
 }
 
@@ -142,8 +257,71 @@ auto Instantiator::canon_args(const std::vector<parser_types::TemplateArgument*>
     return out;
 }
 
+auto Instantiator::expand_pack_fields(nodes::RecordDeclaration* rd, const SubstEnv& env) -> std::vector<PackFieldGroup> {
+    std::vector<PackFieldGroup> groups;
+    std::vector<nodes::RecordDeclaration::Member> members;
+    bool changed = false;
+
+    for (const nodes::RecordDeclaration::Member& m : rd->m_members) {
+        auto* v = m.node && m.node->kind == nodes::ASTNode::Kind::VariableDeclaration ? static_cast<nodes::VariableDeclaration*>(m.node) : nullptr;
+        if (!v || !v->pack_field) { members.push_back(m); continue; }
+
+        m_types.push_subst(&env);
+        Type* pattern = m_types.canonicalize(v->get_type_info());
+        std::vector<Symbol*> pks;
+        collect_pack_params(pattern, pks);
+        std::vector<Type*> elems;
+        const bool ok = !pks.empty() && expand_into(m_types.pack_expansion(pattern), env, m_types, elems);
+        m_types.pop_subst();
+
+        if (!ok) {
+            SemanticError::emit(m_reporter, file_of(v), v->line, "Template", "'" + std::string(v->get_name()) + "' is declared with '...', but its type isn't a template parameter pack");
+            members.push_back(m);
+            continue;
+        }
+
+        PackFieldGroup g;
+        g.group = v;
+        g.access = static_cast<std::uint8_t>(m.access);
+
+        for (std::size_t k = 0; k < elems.size(); ++k) {
+            auto* field = static_cast<nodes::VariableDeclaration*>(v->clone_into(m_arena));
+            field->pack_field = false;
+            field->m_name = keep_name(std::string(v->get_name()) + "#" + std::to_string(k));
+            field->get_type_info().canonical = elems[k];
+            g.names.push_back(field->m_name);
+            members.push_back({ m.access, field });
+        }
+
+        groups.push_back(std::move(g));
+        changed = true;
+    }
+
+    if (changed) rd->m_members = std::move(members);
+    return groups;
+}
+
+void Instantiator::declare_pack_fields(nodes::RecordDeclaration* rd, const std::vector<PackFieldGroup>& groups) {
+    Scope* rs = rd->scope;
+    if (!rs) return;
+
+    for (const PackFieldGroup& g : groups) {
+        auto* s = make_in<Symbol>(m_arena, g.group->get_name(), SymbolKind::Variable, g.group);
+        s->type = &g.group->get_type_info();
+        s->owner = rs;
+        s->bound_type = m_types.void_();
+        s->member_access = g.access;
+        rs->declare(s);
+        g.group->symbol = s;
+        g.group->pack_elements.clear();
+        for (std::string_view n : g.names) g.group->pack_elements.push_back(rs->find_local(n));
+    }
+}
+
 void Instantiator::refresh_function_type(Instantiation* I) {
-    if (!I || !I->decl || I->decl->kind != nodes::ASTNode::Kind::FunctionDeclaration) return;
+    if (!I || !I->decl) return;
+    if (I->decl->kind == nodes::ASTNode::Kind::ConstructorDeclaration) { finish_constructor_type(I, static_cast<nodes::ConstructorDeclaration*>(I->decl)); return; }
+    if (I->decl->kind != nodes::ASTNode::Kind::FunctionDeclaration) return;
     finish_function_type(I, static_cast<nodes::FunctionDeclaration*>(I->decl));
 }
 
@@ -161,6 +339,7 @@ std::size_t Instantiator::KeyHash::operator()(const Key& k) const {
         h = h * 1000003u ^ std::hash<const void*>{}(a.type);
         h = h * 1000003u ^ (std::hash<const void*>{}(a.value) + std::size_t(a.is_type));
         h = h * 1000003u ^ std::hash<const void*>{}(a.fvalue);
+        h = h * 1000003u ^ std::hash<const void*>{}(a.svalue);
     }
 
     return h;
@@ -169,10 +348,24 @@ std::size_t Instantiator::KeyHash::operator()(const Key& k) const {
 Symbol* Instantiator::primary_of_instance(Symbol* s) const {
     Instantiation* I = owning(s);
     if (!I || I->sym != s || !I->source || !I->source->m_declaration) return s;
+    if (I->generic) return I->generic;
     nodes::ASTNode* d = I->source->m_declaration;
     if (d->kind == nodes::ASTNode::Kind::RecordDeclaration) { if (Symbol* p = static_cast<nodes::RecordDeclaration*>(d)->symbol) return p; }
     if (d->kind == nodes::ASTNode::Kind::FunctionDeclaration) { if (Symbol* p = static_cast<nodes::FunctionDeclaration*>(d)->symbol) return p; }
     return s;
+}
+
+Scope* Instantiator::friend_record_scope(nodes::TemplateDeclaration* tmpl, Instantiation* I, nodes::ASTNode* site) {
+    parser_types::TypeInfo info = tmpl->friend_type;
+    info.canonical = nullptr;
+    m_types.push_subst(&I->env);
+    Type* t = m_types.apply_subst(m_types.canonicalize(info));
+    m_types.pop_subst();
+    if (!t || !t->is_record() || t->is_dependent()) return nullptr;
+    auto* rt = static_cast<RecordType*>(t);
+    if (!rt->is_instantiation()) return rt->decl() ? rt->decl()->inner_scope : nullptr;
+    Instantiation* R = for_record(rt, site);
+    return R && R->sym ? R->sym->inner_scope : nullptr;
 }
 
 auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, nodes::ASTNode* site, bool quiet) -> Instantiation* {
@@ -191,7 +384,7 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
     }
 
     if (!flatten_packs(args)) {
-        if (!quiet) unsupported(site, "unexpanded or mismatched pack arguments");
+        if (!quiet && m_types.active_subst()) unsupported(site, "unexpanded or mismatched pack arguments");
         return nullptr;
     }
 
@@ -208,8 +401,9 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
     if (spec.failed) return nullptr;
     nodes::TemplateDeclaration* chosen = spec.tmpl ? spec.tmpl : tmpl;
     auto* I   = make_in<Instantiation>(m_arena);
-    I->source = chosen;
-    I->args   = args;
+    I->source  = chosen;
+    I->args    = args;
+    I->generic = generic;
     m_memo.emplace(std::move(key), I);
     m_created.push_back(I);
 
@@ -225,6 +419,7 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
             if      (args[i].is_type) I->env.types  [ps[i]->symbol] = args[i].type;
             else if (args[i].value)   I->env.values [ps[i]->symbol] = args[i].value;
             else if (args[i].fvalue)  I->env.fvalues[ps[i]->symbol] = args[i].fvalue;
+            else if (args[i].svalue)  I->env.svalues[ps[i]->symbol] = args[i].svalue;
         }
 
         if (tpack && tpack->symbol) {
@@ -237,6 +432,7 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
         for (const auto& kv : outer->env.types)   I->env.types.emplace(kv.first, kv.second);
         for (const auto& kv : outer->env.values)  I->env.values.emplace(kv.first, kv.second);
         for (const auto& kv : outer->env.fvalues) I->env.fvalues.emplace(kv.first, kv.second);
+        for (const auto& kv : outer->env.svalues) I->env.svalues.emplace(kv.first, kv.second);
         for (const auto& kv : outer->env.packs)   I->env.packs.emplace(kv.first, kv.second);
     }
 
@@ -249,19 +445,29 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
     ++m_depth;
     I->decl = chosen->m_declaration ? chosen->m_declaration->clone_into(m_arena) : nullptr;
     Scope* parent = chosen->scope;
+    if (chosen->has_friend_type) {
+        if (Scope* rs = friend_record_scope(chosen, I, site)) {
+            parent = make_in<Scope>(m_arena, Scope::Kind::Template, rs);
+            parent->node = chosen;
+            if (chosen->scope) for (Symbol* s : chosen->scope->symbols) parent->symbols.push_back(s);
+        }
+    }
     I->scope = make_in<Scope>(m_arena, Scope::Kind::Template, parent);
+    std::vector<PackFieldGroup> pack_groups;
+    if (I->decl && I->decl->kind == K::RecordDeclaration) pack_groups = expand_pack_fields(static_cast<nodes::RecordDeclaration*>(I->decl), I->env);
     if (I->decl && build_scopes) build_scopes(I->decl, I->scope);
+    if (!pack_groups.empty()) declare_pack_fields(static_cast<nodes::RecordDeclaration*>(I->decl), pack_groups);
     if (I->decl && resolve_names) resolve_names(I->decl, I->scope);
     I->sym = entity_symbol(I->decl);
     m_scope_owner.emplace(I->scope, I);
     if (I->sym && I->sym->inner_scope) m_scope_owner.emplace(I->sym->inner_scope, I);
 
     if (I->decl && I->decl->kind == K::RecordDeclaration) {
-        I->type = m_types.record(generic, TemplateArgs(args.begin(), args.end()), CV{});
-    } else if (I->decl && I->decl->kind == K::FunctionDeclaration) {
-        auto* fd = static_cast<nodes::FunctionDeclaration*>(I->decl);
+        I->type = m_types.record(generic, TemplateArgs(args.begin(), args.end()), CV{}, args.empty());
+    } else if (I->decl && (I->decl->kind == K::FunctionDeclaration || I->decl->kind == K::ConstructorDeclaration)) {
         DiagnosticTrap trap(m_reporter);
-        finish_function_type(I, fd);
+        if (I->decl->kind == K::FunctionDeclaration) finish_function_type(I, static_cast<nodes::FunctionDeclaration*>(I->decl));
+        else finish_constructor_type(I, static_cast<nodes::ConstructorDeclaration*>(I->decl));
         const bool trapped  = quiet ? trap.discard() : trap.commit();
         const bool poisoned = trapped || contains_error(I->type);
 
@@ -350,13 +556,29 @@ auto Instantiator::select_specialization(Symbol* generic, const std::vector<Arg>
     return partial;
 }
 
+void Instantiator::finish_constructor_type(Instantiation* I, nodes::ConstructorDeclaration* cd) {
+    m_types.push_subst(&I->env);
+    std::vector<Type*> param_types = finish_parameter_shapes(I, cd->get_parameters());
+    I->type = m_types.function(m_types.void_(), std::move(param_types), false, RefQual::None, cd->qualifiers().has(modifiers::FunctionQualifiers::Noexcept));
+    m_types.pop_subst();
+}
+
 void Instantiator::finish_function_type(Instantiation* I, nodes::FunctionDeclaration* fd) {
     using FQ = modifiers::FunctionQualifiers;
     m_types.push_subst(&I->env);
+    std::vector<Type*> param_types = finish_parameter_shapes(I, fd->get_parameters());
+    Type* ret = m_types.canonicalize(fd->get_return_type());
+    modifiers::FunctionQualifiers q = fd->qualifiers();
+    RefQual rq = q.has(FQ::RValueRef) ? RefQual::RValue : q.has(FQ::LValueRef) ? RefQual::LValue : RefQual::None;
+    I->type = m_types.function(ret, std::move(param_types), q.has(FQ::Const), rq, q.has(FQ::Noexcept));
+    m_types.pop_subst();
+}
+
+std::vector<Type*> Instantiator::finish_parameter_shapes(Instantiation* I, const nodes::FunctionParameters* ps) {
     I->fn_shapes.clear();
     std::vector<Type*> param_types;
 
-    if (const nodes::FunctionParameters* ps = fd->get_parameters()) {
+    if (ps) {
         I->fn_shapes.reserve(ps->size());
 
         for (nodes::FunctionParameter* p : ps->m_params) {
@@ -391,11 +613,7 @@ void Instantiator::finish_function_type(Instantiation* I, nodes::FunctionDeclara
         }
     }
 
-    Type* ret = m_types.canonicalize(fd->get_return_type());
-    modifiers::FunctionQualifiers q = fd->qualifiers();
-    RefQual rq = q.has(FQ::RValueRef) ? RefQual::RValue : q.has(FQ::LValueRef) ? RefQual::LValue : RefQual::None;
-    I->type = m_types.function(ret, std::move(param_types), q.has(FQ::Const), rq, q.has(FQ::Noexcept));
-    m_types.pop_subst();
+    return param_types;
 }
 
 bool Instantiator::flatten_packs(std::vector<Arg>& args) {
@@ -457,7 +675,12 @@ bool Instantiator::refers_to_template_param(nodes::ASTNode* e) {
 
 bool Instantiator::classify_value_arg(nodes::ASTNode* e, TemplateArg& out) {
     if (Symbol* p = template_param_of(e)) { out = TemplateArg::dependent(p, e); return true; }
-    if (refers_to_template_param(e))      { out = TemplateArg::dependent(nullptr, e); return true; }
+    if (refers_to_template_param(e)) {
+        TemplateArg v;
+        if (m_types.active_subst() && eval_value_arg(e, v) && v.is_value()) { out = v; return true; }
+        out = TemplateArg::dependent(nullptr, e);
+        return true;
+    }
     return eval_value_arg(e, out);
 }
 
@@ -569,9 +792,11 @@ Type* Instantiator::member_type(Type* rec, std::string_view name) {
     switch (m->kind) {
         case SymbolKind::TypeAlias: {
             if (!m->type) return nullptr;
-            if (I) m_types.push_subst(&I->env);
+            Instantiation* MI = owning(m);
+            if (!MI) MI = I;
+            if (MI) m_types.push_subst(&MI->env);
             Type* t = m_types.canonicalize(*m->type);
-            if (I) m_types.pop_subst();
+            if (MI) m_types.pop_subst();
             return t;
         }
         case SymbolKind::Type:
@@ -605,6 +830,7 @@ bool Instantiator::const_to_arg(const ConstValue& v, Arg& a) {
         case ConstValue::Kind::Int:   a.is_type = false; a.value  = v.i; return true;
         case ConstValue::Kind::Float: a.is_type = false; a.fvalue = v.f; return true;
         case ConstValue::Kind::Bool:  a.is_type = false; a.value  = m_types.consts().from(std::uint64_t(v.b ? 1 : 0)); return true;
+        case ConstValue::Kind::String: a.is_type = false; a.svalue = v.s; return true;
         default: return false;
     }
 }
@@ -614,6 +840,13 @@ auto Instantiator::coerce_value_arg(nodes::TemplateParameter* p, Arg& a) -> Coer
     Type* pt = m_types.strip_cv(m_types.canonicalize(p->m_type));
     if (!pt || !pt->is_builtin()) return {};                 
     auto* b = static_cast<BuiltinType*>(pt);
+
+    if (b->base() == BK::String || b->base() == BK::Text) {
+        if (!a.svalue) return CoerceResult::fail(a.value || a.fvalue ? ArgCoerce::WrongForm : ArgCoerce::NotConstant);
+        return CoerceResult{};
+    }
+
+    if (a.svalue) return CoerceResult::fail(ArgCoerce::WrongForm);
 
     if (b->base() == BK::Float) {
         const unsigned bits = bit_width_of_rank(b->width());
@@ -642,6 +875,52 @@ auto Instantiator::coerce_value_arg(nodes::TemplateParameter* p, Arg& a) -> Coer
          : CoerceResult::fail(ArgCoerce::Overflow);
 }
 
+void Instantiator::fill_default_arguments(nodes::TemplateDeclaration* tmpl, TemplateArgs& args) {
+    const auto& params = tmpl->params();
+    nodes::TemplateParameter* tpack = trailing_pack(params);
+    const std::size_t fixed = params.size() - (tpack ? 1 : 0);
+    if (args.size() >= fixed) return;
+    for (const Arg& a : args) if (a.is_type && a.type && a.type->kind() == TypeKind::PackExpansion) return;
+
+    SubstEnv partial;
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        if (!params[i] || !params[i]->symbol || params[i]->is_type_param() != args[i].is_type) return;
+        if      (args[i].is_type) partial.types  [params[i]->symbol] = args[i].type;
+        else if (args[i].value)   partial.values [params[i]->symbol] = args[i].value;
+        else if (args[i].fvalue)  partial.fvalues[params[i]->symbol] = args[i].fvalue;
+        else if (args[i].svalue)  partial.svalues[params[i]->symbol] = args[i].svalue;
+    }
+
+    TemplateArgs extra;
+    m_types.push_subst(&partial);
+    DiagnosticTrap trap(m_reporter);
+
+    for (std::size_t i = args.size(); i < fixed; ++i) {
+        nodes::TemplateParameter* p = params[i];
+        Arg a;
+        if (p->is_type_param() && p->m_has_default_type) {
+            a.type = m_types.canonicalize(p->m_default_type);
+            if (!a.type || a.type->is_dependent() || contains_error(a.type)) break;
+            if (p->symbol) partial.types[p->symbol] = a.type;
+        } else if (p->is_non_type_param() && p->m_default_value) {
+            if (!eval_value_arg(p->m_default_value, a) || (!a.value && !a.fvalue && !a.svalue)) break;
+            if (p->symbol) {
+                if (a.value)  partial.values [p->symbol] = a.value;
+                if (a.fvalue) partial.fvalues[p->symbol] = a.fvalue;
+                if (a.svalue) partial.svalues[p->symbol] = a.svalue;
+            }
+        } else {
+            break;
+        }
+        extra.push_back(a);
+    }
+
+    const bool noisy = trap.discard();
+    m_types.pop_subst();
+    if (noisy) return;
+    for (const Arg& a : extra) args.push_back(a);
+}
+
 bool Instantiator::complete_arguments(nodes::TemplateDeclaration* tmpl, std::vector<Arg>& args, nodes::ASTNode* site, bool quiet) {
     const auto& params = tmpl->params();
     nodes::TemplateParameter* tpack = trailing_pack(params);
@@ -666,6 +945,7 @@ bool Instantiator::complete_arguments(nodes::TemplateDeclaration* tmpl, std::vec
             if      (args[i].is_type) partial.types  [params[i]->symbol] = args[i].type;
             else if (args[i].value)   partial.values [params[i]->symbol] = args[i].value;
             else if (args[i].fvalue)  partial.fvalues[params[i]->symbol] = args[i].fvalue;
+            else if (args[i].svalue)  partial.svalues[params[i]->symbol] = args[i].svalue;
         }
 
         m_types.push_subst(&partial);
@@ -686,6 +966,7 @@ bool Instantiator::complete_arguments(nodes::TemplateDeclaration* tmpl, std::vec
                 if (p->symbol) {
                     if (a.value)  partial.values [p->symbol] = a.value;
                     if (a.fvalue) partial.fvalues[p->symbol] = a.fvalue;
+                    if (a.svalue) partial.svalues[p->symbol] = a.svalue;
                 }
             } else {
                 m_types.pop_subst();
@@ -713,6 +994,7 @@ bool Instantiator::complete_arguments(nodes::TemplateDeclaration* tmpl, std::vec
                     const std::string shown =
                         args[i].value  ? args[i].value->to_string()
                       : args[i].fvalue ? args[i].fvalue->to_string()
+                      : args[i].svalue ? "\"" + *args[i].svalue + "\""
                       :                  "<value>";
 
                     const std::string pt = type_str_of(m_types.strip_cv(m_types.canonicalize(params[i]->m_type)));
@@ -773,6 +1055,8 @@ bool Instantiator::assemble_args(nodes::TemplateDeclaration* tmpl, const SubstEn
                 a.is_type = false; a.value = v;
             } else if (const WideFloat* f = p->symbol ? env.lookup_fvalue(p->symbol) : nullptr) {
                 a.is_type = false; a.fvalue = f;
+            } else if (const std::string* sv = p->symbol ? env.lookup_svalue(p->symbol) : nullptr) {
+                a.is_type = false; a.svalue = sv;
             } else break;
         }
 
@@ -810,6 +1094,7 @@ bool Instantiator::bind_written(nodes::TemplateParameter* p, const parser_types:
     if (!coerce_value_arg(p, a).ok()) return false;
     if (a.value)  env.values [p->symbol] = a.value;
     if (a.fvalue) env.fvalues[p->symbol] = a.fvalue;
+    if (a.svalue) env.svalues[p->symbol] = a.svalue;
     return true;
 }
 
@@ -820,6 +1105,7 @@ Symbol* Instantiator::entity_symbol(nodes::ASTNode* d) {
     switch (d->kind) {
         case K::RecordDeclaration:   return static_cast<nodes::RecordDeclaration*>(d)->symbol;
         case K::FunctionDeclaration: return static_cast<nodes::FunctionDeclaration*>(d)->symbol;
+        case K::ConstructorDeclaration: return static_cast<nodes::ConstructorDeclaration*>(d)->symbol;
         default: return nullptr;
     }
 }
@@ -874,7 +1160,7 @@ bool Instantiator::pattern_matches(const std::vector<parser_types::TemplateArgum
         TemplateArg resolved;
         if (pattern.is_dependent_value()) { subst_value_arg(pattern, env, m_types, resolved); }
         else                              { resolved = pattern; }
-        if (resolved.is_dependent_value() || resolved.value != args[i].value || resolved.fvalue != args[i].fvalue) return false;
+        if (resolved.is_dependent_value() || resolved.value != args[i].value || resolved.fvalue != args[i].fvalue || resolved.svalue != args[i].svalue) return false;
     }
 
     return true;
@@ -885,7 +1171,7 @@ bool Instantiator::bindings_complete(nodes::TemplateDeclaration* st, const Subst
         if (!p->symbol) return false;
         if (p->m_is_pack)            { if (!env.lookup_pack(p->symbol)) return false; }
         else if (p->is_type_param()) { if (!env.lookup_type(p->symbol)) return false; }
-        else if (!env.lookup_value(p->symbol) && !env.lookup_fvalue(p->symbol)) { return false; }
+        else if (!env.lookup_value(p->symbol) && !env.lookup_fvalue(p->symbol) && !env.lookup_svalue(p->symbol)) { return false; }
     }
     return true;
 }

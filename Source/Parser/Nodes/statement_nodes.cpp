@@ -38,6 +38,8 @@ ASTNode* VariableDeclaration::clone_into(Arena& a) const {
     VariableDeclaration* c;
     if (is_structured_binding()) c = make_in<VariableDeclaration>(a, m_type_info.clone_into(a), m_bindings, clone_child(m_initializer, a), line);
     else                         c = make_in<VariableDeclaration>(a, m_type_info.clone_into(a), m_name,     clone_child(m_initializer, a), line);
+    c->direct_init = direct_init;
+    c->pack_field = pack_field;
     copy_base_to(c);
     return c;
 }
@@ -184,6 +186,7 @@ ASTNode* ForStatement::clone_into(Arena& a) const {
     ForStatement* c;
     if (has_var_init) c = make_in<ForStatement>(a, clone_child(var_init, a), nullptr, clone_child(condition, a), clone_child(increment, a), clone_child(body, a));
     else              c = make_in<ForStatement>(a, clone_child(initializer, a), clone_child(condition, a), clone_child(increment, a), clone_child(body, a));
+    c->label = label;
     copy_base_to(c);
     return c;
 }
@@ -223,6 +226,7 @@ ASTNode* ForEachStatement::clone_into(Arena& a) const {
     ForEachStatement* c;
     if (is_structured_binding()) c = make_in<ForEachStatement>(a, m_element_type.clone_into(a), m_modifiers, m_bindings, clone_child(m_container, a), clone_child(m_body, a), line);
     else                         c = make_in<ForEachStatement>(a, m_element_type.clone_into(a), m_modifiers, m_var_name, clone_child(m_container, a), clone_child(m_body, a), line);
+    c->label = label;
     copy_base_to(c);
     return c;
 }
@@ -238,7 +242,7 @@ void WhileStatement::print(std::ostream& os, std::size_t indent) const {
     print_node(body, os, indent + 2);
 }
 
-ASTNode* WhileStatement::clone_into(Arena& a) const { auto* c = make_in<WhileStatement>(a, clone_child(body, a), clone_child(condition, a)); copy_base_to(c); return c; }
+ASTNode* WhileStatement::clone_into(Arena& a) const { auto* c = make_in<WhileStatement>(a, clone_child(body, a), clone_child(condition, a)); c->label = label; copy_base_to(c); return c; }
 
 ArrayDeclaration::ArrayDeclaration(
         std::string_view name,
@@ -320,6 +324,8 @@ const char* SingleStatement::variant_name() const {
         case Variant::Continue:    return "continue";
         case Variant::Fallthrough: return "fallthrough";
         case Variant::Repeat:      return "repeat";
+        case Variant::Goto:        return "goto";
+        case Variant::Label:       return "label";
     }
     return "unknown";
 }
@@ -335,7 +341,7 @@ void DoWhileStatement::print(std::ostream& os, std::size_t indent) const {
     print_node(condition, os, indent + 2);
 }
 
-ASTNode* DoWhileStatement::clone_into(Arena& a) const { auto* c = make_in<DoWhileStatement>(a, clone_child(body, a), clone_child(condition, a), line); copy_base_to(c); return c; }
+ASTNode* DoWhileStatement::clone_into(Arena& a) const { auto* c = make_in<DoWhileStatement>(a, clone_child(body, a), clone_child(condition, a), line); c->label = label; copy_base_to(c); return c; }
 
 void SwitchCase::print(std::ostream& os, std::size_t indent) const {
     print_indent(os, indent);
@@ -493,6 +499,7 @@ const char* UsingDeclaration::variant_name() const {
         case Variant::Typedef:            return "typedef";
         case Variant::NamespaceDirective: return "using-namespace";
         case Variant::NamespaceAlias:     return "namespace-alias";
+        case Variant::Name:               return "using-name";
     }
 
     return "unknown";
@@ -540,6 +547,7 @@ ASTNode* UsingDeclaration::clone_into(Arena& a) const {
         case Variant::Alias:          c = make_in<UsingDeclaration>(a, name, clone_child(aliased_expr, a), line); break;
         case Variant::Typedef:        c = make_in<UsingDeclaration>(a, name, aliased_type.clone_into(a), line);   break;
         case Variant::NamespaceAlias: c = make_in<UsingDeclaration>(a, name, target_parts, target_global, line);  break;
+        case Variant::Name:           c = make_in<UsingDeclaration>(a, name, target_parts, target_global, line); c->variant = Variant::Name; break;
         default:                      c = make_in<UsingDeclaration>(a, target_parts, line);                       break;
     }
 
@@ -717,6 +725,14 @@ ASTNode* ModuleDeclaration::clone_into(Arena& a) const {
     for (const auto& it : items) { ImportExportItem ni = it; ni.decl = clone_child(it.decl, a); c->items.push_back(std::move(ni)); }
     return c;
 }
+
+void InvalidateStatement::print(std::ostream& os, std::size_t indent) const {
+    print_indent(os, indent);
+    os << "InvalidateStatement\n";
+    for (ASTNode* t : targets) print_node(t, os, indent + 1);
+}
+
+ASTNode* InvalidateStatement::clone_into(Arena& a) const { auto* c = make_in<InvalidateStatement>(a, line); copy_base_to(c); c->targets = clone_list(targets, a); return c; }
 
 void CoReturnStatement::print(std::ostream& os, std::size_t indent) const {
     print_indent(os, indent);

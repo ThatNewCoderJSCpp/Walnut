@@ -1,0 +1,845 @@
+import module.collections
+
+namespace std {
+    namespace strings {
+        namespace detail {
+            extern "C++" from "<walnut_strings.hpp>" {
+                template <typename S, typename N = S>
+                class Native as "walnut_rt::str::ttag" {
+                public:
+                    static function find_from(const S&: s, const N&: needle, long int: start) -> long int as "walnut_rt::str::find_from";
+                    static function rfind(const S&: s, const N&: needle) -> long int as "walnut_rt::str::rfind";
+                    static function find_nth(const S&: s, const N&: needle, long int: nth) -> long int as "walnut_rt::str::find_nth";
+                    static function find_all(const S&: s, const N&: needle, std::collections::Vector<long int>&: out) -> void as "walnut_rt::str::find_all";
+                    static function count(const S&: s, const N&: needle) -> long int as "walnut_rt::str::count";
+                    static function find_first_of(const S&: s, const S&: chars) -> long int as "walnut_rt::str::find_first_of";
+                    static function find_last_of(const S&: s, const S&: chars) -> long int as "walnut_rt::str::find_last_of";
+                    static function find_first_not_of(const S&: s, const S&: chars) -> long int as "walnut_rt::str::find_first_not_of";
+                    static function find_last_not_of(const S&: s, const S&: chars) -> long int as "walnut_rt::str::find_last_not_of";
+                    static function contains_any(const S&: s, const S&: chars) -> bool as "walnut_rt::str::contains_any";
+                    static function split(const S&: s, const N&: separator, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split";
+                    static function split_n(const S&: s, const N&: separator, long int: limit, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split_n";
+                    static function split_whitespace(const S&: s, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split_whitespace";
+                    static function split_any(const S&: s, const S&: chars, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split_any";
+                    static function lines(const S&: s, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::lines";
+                    static function words(const S&: s, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::words";
+                    static function chunks(const S&: s, long int: size, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::chunks";
+                    static function chars(const S&: s, std::collections::Vector<char>&: out) -> void as "walnut_rt::str::chars";
+                    static function join(const std::collections::Vector<S>&: parts, const N&: separator) -> S as "walnut_rt::str::join";
+                    static function replace_n(const S&: s, const N&: old_text, const N&: new_text, long int: limit) -> S as "walnut_rt::str::replace_n";
+                    static function replace_last(const S&: s, const N&: old_text, const N&: new_text) -> S as "walnut_rt::str::replace_last";
+                    static function remove(const S&: s, const N&: needle) -> S as "walnut_rt::str::remove";
+                    static function remove_prefix(const S&: s, const N&: prefix) -> S as "walnut_rt::str::remove_prefix";
+                    static function remove_suffix(const S&: s, const N&: suffix) -> S as "walnut_rt::str::remove_suffix";
+                    static function trim_left(const S&: s) -> S as "walnut_rt::str::trim_left";
+                    static function trim_right(const S&: s) -> S as "walnut_rt::str::trim_right";
+                    static function trim_all(const S&: s) -> S as "walnut_rt::str::trim_all";
+                    static function trim_chars(const S&: s, const S&: chars) -> S as "walnut_rt::str::trim_chars";
+                    static function upper(const S&: s) -> S as "walnut_rt::str::upper";
+                    static function lower(const S&: s) -> S as "walnut_rt::str::lower";
+                    static function capitalize(const S&: s) -> S as "walnut_rt::str::capitalize";
+                    static function title_case(const S&: s) -> S as "walnut_rt::str::title_case";
+                    static function swap_case(const S&: s) -> S as "walnut_rt::str::swap_case";
+                    static function reverse(const S&: s) -> S as "walnut_rt::str::reverse";
+                    static function repeated(const S&: s, long int: times) -> S as "walnut_rt::str::repeated";
+                    static function pad_left(const S&: s, long int: width, char: fill) -> S as "walnut_rt::str::pad_left";
+                    static function pad_right(const S&: s, long int: width, char: fill) -> S as "walnut_rt::str::pad_right";
+                    static function center(const S&: s, long int: width, char: fill) -> S as "walnut_rt::str::center";
+                    static function zfill(const S&: s, long int: width) -> S as "walnut_rt::str::zfill";
+                    static function insert(const S&: s, long int: index, const S&: piece) -> S as "walnut_rt::str::insert";
+                    static function erase(const S&: s, long int: index, long int: count) -> S as "walnut_rt::str::erase";
+                    static function slice(const S&: s, long int: start, long int: stop) -> S as "walnut_rt::str::slice";
+                    static function left(const S&: s, long int: count) -> S as "walnut_rt::str::left";
+                    static function right(const S&: s, long int: count) -> S as "walnut_rt::str::right";
+                    static function truncate(const S&: s, long int: width, const S&: ellipsis) -> S as "walnut_rt::str::truncate";
+                    static function indent(const S&: s, long int: count) -> S as "walnut_rt::str::indent";
+                    static function wrap(const S&: s, long int: width) -> S as "walnut_rt::str::wrap";
+                    static function normalize_whitespace(const S&: s) -> S as "walnut_rt::str::normalize_whitespace";
+                    static function camel_to_snake(const S&: s) -> S as "walnut_rt::str::camel_to_snake";
+                    static function snake_to_camel(const S&: s) -> S as "walnut_rt::str::snake_to_camel";
+                    static function url_encode(const S&: s) -> S as "walnut_rt::str::url_encode";
+                    static function url_decode(const S&: s) -> S as "walnut_rt::str::url_decode";
+                    static function escape(const S&: s) -> S as "walnut_rt::str::escape";
+                    static function unescape(const S&: s) -> S as "walnut_rt::str::unescape";
+                    static function is_blank(const S&: s) -> bool as "walnut_rt::str::is_blank";
+                    static function is_digits(const S&: s) -> bool as "walnut_rt::str::is_digits";
+                    static function is_alpha(const S&: s) -> bool as "walnut_rt::str::is_alpha_text";
+                    static function is_alnum(const S&: s) -> bool as "walnut_rt::str::is_alnum_text";
+                    static function is_hex(const S&: s) -> bool as "walnut_rt::str::is_hex";
+                    static function is_ascii(const S&: s) -> bool as "walnut_rt::str::is_ascii";
+                    static function is_upper(const S&: s) -> bool as "walnut_rt::str::is_upper_text";
+                    static function is_lower(const S&: s) -> bool as "walnut_rt::str::is_lower_text";
+                    static function is_integer(const S&: s) -> bool as "walnut_rt::str::is_integer";
+                    static function is_number(const S&: s) -> bool as "walnut_rt::str::is_number";
+                    static function is_palindrome(const S&: s) -> bool as "walnut_rt::str::is_palindrome";
+                    static function matches_glob(const S&: s, const S&: pattern) -> bool as "walnut_rt::str::matches_glob";
+                    static function levenshtein(const S&: a, const S&: b) -> long int as "walnut_rt::str::levenshtein";
+                    static function common_prefix(const S&: a, const S&: b) -> S as "walnut_rt::str::common_prefix";
+                    static function common_suffix(const S&: a, const S&: b) -> S as "walnut_rt::str::common_suffix";
+                    static function word_count(const S&: s) -> long int as "walnut_rt::str::word_count";
+                    static function line_count(const S&: s) -> long int as "walnut_rt::str::line_count";
+                    static function equals_ignore_case(const S&: a, const S&: b) -> bool as "walnut_rt::str::equals_ignore_case";
+                    static function compare_ignore_case(const S&: a, const S&: b) -> long int as "walnut_rt::str::compare_ignore_case";
+                    static function starts_with_ignore_case(const S&: s, const S&: prefix) -> bool as "walnut_rt::str::starts_with_ignore_case";
+                    static function ends_with_ignore_case(const S&: s, const S&: suffix) -> bool as "walnut_rt::str::ends_with_ignore_case";
+                    static function contains_ignore_case(const S&: s, const S&: piece) -> bool as "walnut_rt::str::contains_ignore_case";
+                } end class Native
+
+                class Chars as "walnut_rt::str::tag" {
+                public:
+                    static function is_digit(char: c) -> bool as "walnut_rt::str::is_digit";
+                    static function is_alpha(char: c) -> bool as "walnut_rt::str::is_alpha";
+                    static function is_alnum(char: c) -> bool as "walnut_rt::str::is_alnum";
+                    static function is_space(char: c) -> bool as "walnut_rt::str::is_space";
+                    static function is_upper(char: c) -> bool as "walnut_rt::str::is_upper";
+                    static function is_lower(char: c) -> bool as "walnut_rt::str::is_lower";
+                    static function is_punct(char: c) -> bool as "walnut_rt::str::is_punct";
+                    static function is_letter(char: c) -> bool as "walnut_rt::str::is_letter";
+                    static function is_hex_digit(char: c) -> bool as "walnut_rt::str::is_hex_digit";
+                    static function is_ascii(char: c) -> bool as "walnut_rt::str::is_ascii_char";
+                    static function to_upper(char: c) -> char as "walnut_rt::str::upper_char";
+                    static function to_lower(char: c) -> char as "walnut_rt::str::lower_char";
+                } end class Chars
+            } end extern
+        } end namespace detail
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function find(const S&: s, const N&: needle) -> long int {
+            return detail::Native<S, N>::find_from(s, needle, 0);
+        } end function find
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function find_from(const S&: s, const N&: needle, long int: start) -> long int {
+            return detail::Native<S, N>::find_from(s, needle, start);
+        } end function find_from
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function rfind(const S&: s, const N&: needle) -> long int {
+            return detail::Native<S, N>::rfind(s, needle);
+        } end function rfind
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function find_last(const S&: s, const N&: needle) -> long int {
+            return detail::Native<S, N>::rfind(s, needle);
+        } end function find_last
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function find_nth(const S&: s, const N&: needle, long int: nth) -> long int {
+            return detail::Native<S, N>::find_nth(s, needle, nth);
+        } end function find_nth
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function find_all(const S&: s, const N&: needle) -> std::collections::Vector<long int> {
+            std::collections::Vector<long int>: out;
+            detail::Native<S, N>::find_all(s, needle, out);
+            return out;
+        } end function find_all
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function count(const S&: s, const N&: needle) -> long int {
+            return detail::Native<S, N>::count(s, needle);
+        } end function count
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function contains(const S&: s, const N&: needle) -> bool {
+            return detail::Native<S, N>::find_from(s, needle, 0) >= 0;
+        } end function contains
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function find_first_of(const S&: s, const S&: chars) -> long int {
+            return detail::Native<S>::find_first_of(s, chars);
+        } end function find_first_of
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function find_last_of(const S&: s, const S&: chars) -> long int {
+            return detail::Native<S>::find_last_of(s, chars);
+        } end function find_last_of
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function find_first_not_of(const S&: s, const S&: chars) -> long int {
+            return detail::Native<S>::find_first_not_of(s, chars);
+        } end function find_first_not_of
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function find_last_not_of(const S&: s, const S&: chars) -> long int {
+            return detail::Native<S>::find_last_not_of(s, chars);
+        } end function find_last_not_of
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function contains_any(const S&: s, const S&: chars) -> bool {
+            return detail::Native<S>::contains_any(s, chars);
+        } end function contains_any
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function starts_with(const S&: s, const N&: prefix) -> bool {
+            return s.starts_with(prefix);
+        } end function starts_with
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function ends_with(const S&: s, const N&: suffix) -> bool {
+            return s.ends_with(suffix);
+        } end function ends_with
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function split(const S&: s, const N&: separator) -> std::collections::Vector<S> {
+            std::collections::Vector<S>: out;
+            detail::Native<S, N>::split(s, separator, out);
+            return out;
+        } end function split
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function split_n(const S&: s, const N&: separator, long int: limit) -> std::collections::Vector<S> {
+            std::collections::Vector<S>: out;
+            detail::Native<S, N>::split_n(s, separator, limit, out);
+            return out;
+        } end function split_n
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function split_whitespace(const S&: s) -> std::collections::Vector<S> {
+            std::collections::Vector<S>: out;
+            detail::Native<S>::split_whitespace(s, out);
+            return out;
+        } end function split_whitespace
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function split_any(const S&: s, const S&: chars) -> std::collections::Vector<S> {
+            std::collections::Vector<S>: out;
+            detail::Native<S>::split_any(s, chars, out);
+            return out;
+        } end function split_any
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function lines(const S&: s) -> std::collections::Vector<S> {
+            std::collections::Vector<S>: out;
+            detail::Native<S>::lines(s, out);
+            return out;
+        } end function lines
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function words(const S&: s) -> std::collections::Vector<S> {
+            std::collections::Vector<S>: out;
+            detail::Native<S>::words(s, out);
+            return out;
+        } end function words
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function chunks(const S&: s, long int: size) -> std::collections::Vector<S> {
+            std::collections::Vector<S>: out;
+            detail::Native<S>::chunks(s, size, out);
+            return out;
+        } end function chunks
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function chars(const S&: s) -> std::collections::Vector<char> {
+            std::collections::Vector<char>: out;
+            detail::Native<S>::chars(s, out);
+            return out;
+        } end function chars
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function join(const std::collections::Vector<S>&: parts, const N&: separator) -> S {
+            return detail::Native<S, N>::join(parts, separator);
+        } end function join
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function join(const S&: separator, const std::collections::Vector<S>&: parts) -> S {
+            return detail::Native<S, S>::join(parts, separator);
+        } end function join
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function concat(const std::collections::Vector<S>&: parts) -> S {
+            return detail::Native<S, S>::join(parts, static_cast<S>(""));
+        } end function concat
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function replace(const S&: s, const N&: old_text, const N&: new_text) -> S {
+            return detail::Native<S, N>::replace_n(s, old_text, new_text, -1);
+        } end function replace
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function replace_first(const S&: s, const N&: old_text, const N&: new_text) -> S {
+            return detail::Native<S, N>::replace_n(s, old_text, new_text, 1);
+        } end function replace_first
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function replace_last(const S&: s, const N&: old_text, const N&: new_text) -> S {
+            return detail::Native<S, N>::replace_last(s, old_text, new_text);
+        } end function replace_last
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function replace_n(const S&: s, const N&: old_text, const N&: new_text, long int: limit) -> S {
+            return detail::Native<S, N>::replace_n(s, old_text, new_text, limit);
+        } end function replace_n
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function remove(const S&: s, const N&: needle) -> S {
+            return detail::Native<S, N>::remove(s, needle);
+        } end function remove
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function remove_prefix(const S&: s, const N&: prefix) -> S {
+            return detail::Native<S, N>::remove_prefix(s, prefix);
+        } end function remove_prefix
+
+        template <typename S, typename N>
+        requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
+        function remove_suffix(const S&: s, const N&: suffix) -> S {
+            return detail::Native<S, N>::remove_suffix(s, suffix);
+        } end function remove_suffix
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function trim(const S&: s) -> S {
+            return detail::Native<S>::trim_all(s);
+        } end function trim
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function trim_left(const S&: s) -> S {
+            return detail::Native<S>::trim_left(s);
+        } end function trim_left
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function trim_right(const S&: s) -> S {
+            return detail::Native<S>::trim_right(s);
+        } end function trim_right
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function ltrim(const S&: s) -> S {
+            return detail::Native<S>::trim_left(s);
+        } end function ltrim
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function rtrim(const S&: s) -> S {
+            return detail::Native<S>::trim_right(s);
+        } end function rtrim
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function to_upper(const S&: s) -> S {
+            return detail::Native<S>::upper(s);
+        } end function to_upper
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function to_lower(const S&: s) -> S {
+            return detail::Native<S>::lower(s);
+        } end function to_lower
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function capitalize(const S&: s) -> S {
+            return detail::Native<S>::capitalize(s);
+        } end function capitalize
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function title_case(const S&: s) -> S {
+            return detail::Native<S>::title_case(s);
+        } end function title_case
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function swap_case(const S&: s) -> S {
+            return detail::Native<S>::swap_case(s);
+        } end function swap_case
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function reverse(const S&: s) -> S {
+            return detail::Native<S>::reverse(s);
+        } end function reverse
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function reversed(const S&: s) -> S {
+            return detail::Native<S>::reverse(s);
+        } end function reversed
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function normalize_whitespace(const S&: s) -> S {
+            return detail::Native<S>::normalize_whitespace(s);
+        } end function normalize_whitespace
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function camel_to_snake(const S&: s) -> S {
+            return detail::Native<S>::camel_to_snake(s);
+        } end function camel_to_snake
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function snake_to_camel(const S&: s) -> S {
+            return detail::Native<S>::snake_to_camel(s);
+        } end function snake_to_camel
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function url_encode(const S&: s) -> S {
+            return detail::Native<S>::url_encode(s);
+        } end function url_encode
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function url_decode(const S&: s) -> S {
+            return detail::Native<S>::url_decode(s);
+        } end function url_decode
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function escape(const S&: s) -> S {
+            return detail::Native<S>::escape(s);
+        } end function escape
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function unescape(const S&: s) -> S {
+            return detail::Native<S>::unescape(s);
+        } end function unescape
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function trim_chars(const S&: s, const S&: chars) -> S {
+            return detail::Native<S>::trim_chars(s, chars);
+        } end function trim_chars
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function repeated(const S&: s, long int: times) -> S {
+            return detail::Native<S>::repeated(s, times);
+        } end function repeated
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function pad_left(const S&: s, long int: width, char: fill = ' ') -> S {
+            return detail::Native<S>::pad_left(s, width, fill);
+        } end function pad_left
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function pad_right(const S&: s, long int: width, char: fill = ' ') -> S {
+            return detail::Native<S>::pad_right(s, width, fill);
+        } end function pad_right
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function center(const S&: s, long int: width, char: fill = ' ') -> S {
+            return detail::Native<S>::center(s, width, fill);
+        } end function center
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function zfill(const S&: s, long int: width) -> S {
+            return detail::Native<S>::zfill(s, width);
+        } end function zfill
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function insert(const S&: s, long int: index, const S&: piece) -> S {
+            return detail::Native<S>::insert(s, index, piece);
+        } end function insert
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function erase(const S&: s, long int: index, long int: count = 1) -> S {
+            return detail::Native<S>::erase(s, index, count);
+        } end function erase
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function slice(const S&: s, long int: start, long int: stop) -> S {
+            return detail::Native<S>::slice(s, start, stop);
+        } end function slice
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function substring(const S&: s, long int: start, long int: stop) -> S {
+            return detail::Native<S>::slice(s, start, stop);
+        } end function substring
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function left(const S&: s, long int: count) -> S {
+            return detail::Native<S>::left(s, count);
+        } end function left
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function right(const S&: s, long int: count) -> S {
+            return detail::Native<S>::right(s, count);
+        } end function right
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function truncate(const S&: s, long int: width) -> S {
+            return detail::Native<S>::truncate(s, width, static_cast<S>("..."));
+        } end function truncate
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function truncate(const S&: s, long int: width, const S&: ellipsis) -> S {
+            return detail::Native<S>::truncate(s, width, ellipsis);
+        } end function truncate
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function indent(const S&: s, long int: count) -> S {
+            return detail::Native<S>::indent(s, count);
+        } end function indent
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function wrap(const S&: s, long int: width) -> S {
+            return detail::Native<S>::wrap(s, width);
+        } end function wrap
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_blank(const S&: s) -> bool {
+            return detail::Native<S>::is_blank(s);
+        } end function is_blank
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_digits(const S&: s) -> bool {
+            return detail::Native<S>::is_digits(s);
+        } end function is_digits
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_alpha(const S&: s) -> bool {
+            return detail::Native<S>::is_alpha(s);
+        } end function is_alpha
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_alnum(const S&: s) -> bool {
+            return detail::Native<S>::is_alnum(s);
+        } end function is_alnum
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_hex(const S&: s) -> bool {
+            return detail::Native<S>::is_hex(s);
+        } end function is_hex
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_ascii(const S&: s) -> bool {
+            return detail::Native<S>::is_ascii(s);
+        } end function is_ascii
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_upper(const S&: s) -> bool {
+            return detail::Native<S>::is_upper(s);
+        } end function is_upper
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_lower(const S&: s) -> bool {
+            return detail::Native<S>::is_lower(s);
+        } end function is_lower
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_integer(const S&: s) -> bool {
+            return detail::Native<S>::is_integer(s);
+        } end function is_integer
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_number(const S&: s) -> bool {
+            return detail::Native<S>::is_number(s);
+        } end function is_number
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function is_palindrome(const S&: s) -> bool {
+            return detail::Native<S>::is_palindrome(s);
+        } end function is_palindrome
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function matches_glob(const S&: s, const S&: pattern) -> bool {
+            return detail::Native<S>::matches_glob(s, pattern);
+        } end function matches_glob
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function levenshtein(const S&: a, const S&: b) -> long int {
+            return detail::Native<S>::levenshtein(a, b);
+        } end function levenshtein
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function distance(const S&: a, const S&: b) -> long int {
+            return detail::Native<S>::levenshtein(a, b);
+        } end function distance
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function common_prefix(const S&: a, const S&: b) -> S {
+            return detail::Native<S>::common_prefix(a, b);
+        } end function common_prefix
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function common_suffix(const S&: a, const S&: b) -> S {
+            return detail::Native<S>::common_suffix(a, b);
+        } end function common_suffix
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function word_count(const S&: s) -> long int {
+            return detail::Native<S>::word_count(s);
+        } end function word_count
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function line_count(const S&: s) -> long int {
+            return detail::Native<S>::line_count(s);
+        } end function line_count
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function equals_ignore_case(const S&: a, const S&: b) -> bool {
+            return detail::Native<S>::equals_ignore_case(a, b);
+        } end function equals_ignore_case
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function starts_with_ignore_case(const S&: a, const S&: b) -> bool {
+            return detail::Native<S>::starts_with_ignore_case(a, b);
+        } end function starts_with_ignore_case
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function ends_with_ignore_case(const S&: a, const S&: b) -> bool {
+            return detail::Native<S>::ends_with_ignore_case(a, b);
+        } end function ends_with_ignore_case
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function contains_ignore_case(const S&: a, const S&: b) -> bool {
+            return detail::Native<S>::contains_ignore_case(a, b);
+        } end function contains_ignore_case
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function compare_ignore_case(const S&: a, const S&: b) -> long int {
+            return detail::Native<S>::compare_ignore_case(a, b);
+        } end function compare_ignore_case
+
+        template <typename S, typename Pred>
+        requires std::traits::is_string<S>
+        function count_if(const S&: s, Pred: pred) -> long int {
+            long int: n = 0;
+            for (char: c in s) {
+                if (pred(c)) then {
+                    n += 1;
+                }
+            }
+            return n;
+        } end function count_if
+
+        template <typename S, typename Pred>
+        requires std::traits::is_string<S>
+        function all_of(const S&: s, Pred: pred) -> bool {
+            for (char: c in s) {
+                if (!pred(c)) then {
+                    return false;
+                }
+            }
+            return true;
+        } end function all_of
+
+        template <typename S, typename Pred>
+        requires std::traits::is_string<S>
+        function any_of(const S&: s, Pred: pred) -> bool {
+            for (char: c in s) {
+                if (pred(c)) then {
+                    return true;
+                }
+            }
+            return false;
+        } end function any_of
+
+        template <typename S, typename Pred>
+        requires std::traits::is_string<S>
+        function none_of(const S&: s, Pred: pred) -> bool {
+            return !any_of(s, pred);
+        } end function none_of
+
+        template <typename S, typename Pred>
+        requires std::traits::is_string<S>
+        function find_if(const S&: s, Pred: pred) -> long int {
+            long int: i = 0;
+            for (char: c in s) {
+                if (pred(c)) then {
+                    return i;
+                }
+                i += 1;
+            }
+            return -1;
+        } end function find_if
+
+        template <typename S, typename Pred>
+        requires std::traits::is_string<S>
+        function filter(const S&: s, Pred: pred) -> S {
+            S: out;
+            for (char: c in s) {
+                if (pred(c)) then {
+                    out += c;
+                }
+            }
+            return out;
+        } end function filter
+
+        template <typename S, typename Pred>
+        requires std::traits::is_string<S>
+        function remove_if(const S&: s, Pred: pred) -> S {
+            S: out;
+            for (char: c in s) {
+                if (!pred(c)) then {
+                    out += c;
+                }
+            }
+            return out;
+        } end function remove_if
+
+        template <typename S, typename Func>
+        requires std::traits::is_string<S>
+        function map_chars(const S&: s, Func: func) -> S {
+            S: out;
+            for (char: c in s) {
+                out += func(c);
+            }
+            return out;
+        } end function map_chars
+
+        template <typename S, typename Func>
+        requires std::traits::is_string<S>
+        function for_each(const S&: s, Func: func) -> void {
+            for (char: c in s) {
+                func(c);
+            }
+        } end function for_each
+
+        template <typename S, typename Pred>
+        requires std::traits::is_string<S> && !std::traits::is_char<Pred>
+        function where(S&: s, Pred: pred) -> std::collections::WhereQuery<S, char> {
+            return std::collections::WhereQuery<S, char>::matching(s, pred);
+        } end function where
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function where(S&: s, char: c) -> std::collections::WhereQuery<S, char> {
+            return std::collections::WhereQuery<S, char>::equal_to(s, c);
+        } end function where
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function char_at(const S&: s, long int: index) -> char {
+            return s[index];
+        } end function char_at
+
+        template <typename S>
+        requires std::traits::is_string<S>
+        function sorted(const S&: s) -> S {
+            S: out = s;
+            std::collections::Vector<char>: cs = chars(s);
+            std::algorithms::sort(cs.data(), cs.data() + cs.size());
+            out = static_cast<S>("");
+            for (char: c in cs) {
+                out += c;
+            }
+            return out;
+        } end function sorted
+
+        function is_digit(char: c) -> bool {
+            return detail::Chars::is_digit(c);
+        } end function is_digit
+
+        function is_alpha(char: c) -> bool {
+            return detail::Chars::is_alpha(c);
+        } end function is_alpha
+
+        function is_alnum(char: c) -> bool {
+            return detail::Chars::is_alnum(c);
+        } end function is_alnum
+
+        function is_space(char: c) -> bool {
+            return detail::Chars::is_space(c);
+        } end function is_space
+
+        function is_upper(char: c) -> bool {
+            return detail::Chars::is_upper(c);
+        } end function is_upper
+
+        function is_lower(char: c) -> bool {
+            return detail::Chars::is_lower(c);
+        } end function is_lower
+
+        function is_punct(char: c) -> bool {
+            return detail::Chars::is_punct(c);
+        } end function is_punct
+
+        function is_letter(char: c) -> bool {
+            return detail::Chars::is_letter(c);
+        } end function is_letter
+
+        function is_hex_digit(char: c) -> bool {
+            return detail::Chars::is_hex_digit(c);
+        } end function is_hex_digit
+
+        function is_ascii(char: c) -> bool {
+            return detail::Chars::is_ascii(c);
+        } end function is_ascii
+
+        function to_upper(char: c) -> char {
+            return detail::Chars::to_upper(c);
+        } end function to_upper
+
+        function to_lower(char: c) -> char {
+            return detail::Chars::to_lower(c);
+        } end function to_lower
+
+    } end namespace strings
+} end namespace std

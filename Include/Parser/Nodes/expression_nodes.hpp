@@ -44,6 +44,7 @@ struct QualifiedIdentifier : ASTNode {
     std::vector<std::string_view> m_parts;
     bool m_is_global;
     semantics::Symbol* resolved = nullptr; 
+    semantics::Symbol* dependent_head = nullptr;
 
     QualifiedIdentifier(std::uint32_t ln, bool is_global = false) : ASTNode(Kind::QualifiedIdentifier, ln), m_is_global(is_global) {}
 
@@ -183,6 +184,9 @@ struct CallExpression : ASTNode {
     semantics::Symbol* resolved = nullptr;
     bool returns_rvalue_ref = false;
     ASTNode* closure_spec = nullptr;
+    std::string_view builtin_method;
+    long long builtin_size = -1;
+    bool has_angle_args = false;
 
     CallExpression(ASTNode* callee, std::uint32_t ln = 0) : ASTNode(Kind::CallExpression, ln), m_callee(callee) {}
 
@@ -206,6 +210,7 @@ struct SubscriptExpression : ASTNode {
     ASTNode* m_array;
     ASTNode* m_index;
     semantics::Symbol* resolved = nullptr;
+    semantics::Symbol* pack_element = nullptr;
 
     SubscriptExpression(ASTNode* array, ASTNode* index, std::uint32_t ln) : ASTNode(Kind::SubscriptExpression, ln), m_array(array), m_index(index) {}
 
@@ -221,6 +226,10 @@ struct SubscriptExpression : ASTNode {
 
 struct BraceInitializerList : ASTNode {
     std::vector<ASTNode*> m_elements;
+    semantics::Symbol* ctor = nullptr;
+    semantics::Type* init_list_type = nullptr;
+    semantics::Symbol* init_list_ctor = nullptr;
+    bool parens = false;
 
     BraceInitializerList(std::uint32_t ln = 0) : ASTNode(Kind::BraceInitializerList, ln) {}
 
@@ -248,6 +257,10 @@ struct MemberAccessExpression : ASTNode {
     Op               m_op;
     semantics::Symbol* resolved = nullptr; 
     std::vector<semantics::Symbol*> arrow_ops;
+    std::vector<std::string_view> qualifier;
+    bool qualifier_global = false;
+    semantics::Symbol* qualifier_symbol = nullptr;
+    semantics::Scope* qualifier_scope = nullptr;
 
     MemberAccessExpression(ASTNode* object, std::string_view member, Op op, std::uint32_t ln) : ASTNode(Kind::MemberAccessExpression, ln), m_object(object), m_member(member), m_op(op) {}
 
@@ -274,6 +287,8 @@ struct CastExpression : ASTNode {
     parser_types::TypeInfo          target;   
     ASTNode*                        operand;
     semantics::Symbol*              conversion = nullptr;
+    std::uint8_t                    special_test = 0;
+    bool                            interpolation = false;
 
     CastExpression(CastKind ck, const parser_types::TypeInfo& tgt, ASTNode* op, std::uint32_t ln = 0) : ASTNode(Kind::CastExpression, ln), cast_kind(ck), target(tgt), operand(op) {}
 
@@ -296,6 +311,8 @@ struct CastExpression : ASTNode {
 struct TemplateInstantiation : ASTNode {
     ASTNode*                                      m_template; 
     std::vector<parser_types::TemplateArgument*>  m_args;
+    semantics::Symbol*                            var_instance = nullptr;
+    int                                           concept_result = -1;
 
     TemplateInstantiation(ASTNode* tmpl, std::vector<parser_types::TemplateArgument*> args, std::uint32_t ln = 0) : ASTNode(Kind::TemplateInstantiation, ln), m_template(tmpl), m_args(std::move(args)) {}
 

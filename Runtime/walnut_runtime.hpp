@@ -44,26 +44,6 @@ namespace walnut_rt {
 
 namespace mp = fizmo::multiprecision;
 
-using i8    = mp::int8;
-using i16   = mp::int16;
-using i32   = mp::int32;
-using i64   = mp::int64;
-using i128  = mp::int128;
-using i256  = mp::int256;
-using i512  = mp::int512;
-using i1024 = mp::int1024;
-using i2048 = mp::int2048;
-
-using u8    = mp::uint8;
-using u16   = mp::uint16;
-using u32   = mp::uint32;
-using u64   = mp::uint64;
-using u128  = mp::uint128;
-using u256  = mp::uint256;
-using u512  = mp::uint512;
-using u1024 = mp::uint1024;
-using u2048 = mp::uint2048;
-
 using f32   = mp::float32;
 using f64   = mp::float64;
 using f128  = mp::float128;
@@ -100,15 +80,228 @@ struct runtime_error : std::runtime_error {
 
 [[noreturn]] inline void fail(const std::string& message) { throw runtime_error(message); }
 
-template <typename T> struct int_info { static constexpr bool value = false; };
+enum class special_kind : std::uint8_t { none = 0, pos_inf, neg_inf, nan, undefined, indeterminate };
+
+enum class special_test : std::uint8_t { infinity = 0, nan, undefined, indeterminate };
+
+inline constexpr bool unordered_kind(special_kind k) noexcept {
+    return k == special_kind::nan || k == special_kind::undefined || k == special_kind::indeterminate;
+}
+
+inline constexpr bool infinite_kind(special_kind k) noexcept {
+    return k == special_kind::pos_inf || k == special_kind::neg_inf;
+}
+
+inline constexpr special_kind inf_kind(bool negative) noexcept {
+    return negative ? special_kind::neg_inf : special_kind::pos_inf;
+}
+
+inline constexpr special_kind unordered_of(special_kind a, special_kind b) noexcept {
+    return (a == special_kind::undefined     || b == special_kind::undefined)     ? special_kind::undefined
+         : (a == special_kind::indeterminate || b == special_kind::indeterminate) ? special_kind::indeterminate
+         : special_kind::nan;
+}
+
+inline constexpr bool special_matches(special_kind k, special_test t) noexcept {
+    switch (t) {
+        case special_test::infinity:      return infinite_kind(k);
+        case special_test::nan:           return k == special_kind::nan;
+        case special_test::undefined:     return k == special_kind::undefined;
+        case special_test::indeterminate: return k == special_kind::indeterminate;
+    }
+    return false;
+}
+
+inline const char* special_name(special_kind k) noexcept {
+    switch (k) {
+        case special_kind::pos_inf:       return "∞";
+        case special_kind::neg_inf:       return "-∞";
+        case special_kind::nan:           return "nan";
+        case special_kind::undefined:     return "undefined";
+        case special_kind::indeterminate: return "indeterminate";
+        default:                          return "";
+    }
+}
+
+struct special_value {
+    special_kind kind = special_kind::undefined;
+
+    constexpr special_value() noexcept = default;
+    constexpr special_value(special_kind k) noexcept : kind(k) {}
+
+    std::string to_string() const { return special_name(kind); }
+    friend std::ostream& operator<<(std::ostream& os, const special_value& s) { return os << special_name(s.kind); }
+};
+
+inline special_value op_neg(special_value v) {
+    if (v.kind == special_kind::pos_inf) return special_kind::neg_inf;
+    if (v.kind == special_kind::neg_inf) return special_kind::pos_inf;
+    return v;
+}
+
+inline special_value op_pos(special_value v) { return v; }
+
+template <typename F>
+inline special_kind float_kind(const F& f) {
+    if (f.is_nan())           return special_kind::nan;
+    if (f.is_undefined())     return special_kind::undefined;
+    if (f.is_indeterminate()) return special_kind::indeterminate;
+    if (f.is_infinite())      return inf_kind(f.is_negative());
+    return special_kind::none;
+}
+
+template <typename F>
+inline F float_special(special_kind k) {
+    switch (k) {
+        case special_kind::pos_inf:       return F::infinity();
+        case special_kind::neg_inf:       { const F r = F::infinity(true); return r.is_negative() ? r : F::zero(); }
+        case special_kind::nan:           return F::nan();
+        case special_kind::undefined:     return F::undefined();
+        case special_kind::indeterminate: return F::indeterminate();
+        default:                          return F();
+    }
+}
+
+template <typename T> struct raw_info { static constexpr bool value = false; };
 
 template <std::size_t B, mp::sign S>
-struct int_info<mp::integer<B, S>> {
+struct raw_info<mp::integer<B, S>> {
     static constexpr bool        value     = true;
     static constexpr std::size_t bits      = B;
     static constexpr bool        is_signed = (S == mp::sign::is_signed);
     using unsigned_type = mp::integer<B, mp::sign::is_unsigned>;
     using signed_type   = mp::integer<B, mp::sign::is_signed>;
+};
+
+template <std::size_t B, mp::sign S>
+class wint {
+public:
+    using raw_type = mp::integer<B, S>;
+    static constexpr std::size_t bits           = B;
+    static constexpr bool        is_signed_type = (S == mp::sign::is_signed);
+
+private:
+    template <typename A, typename... R>
+    struct forwardable : std::integral_constant<bool,
+        !std::is_same_v<std::decay_t<A>, wint> && !std::is_same_v<std::decay_t<A>, raw_type> && !std::is_same_v<std::decay_t<A>, special_value>
+        && std::is_constructible_v<raw_type, A&&, R&&...>> {};
+
+    template <typename A, typename... R>
+    struct implicit_from : std::integral_constant<bool, sizeof...(R) == 0 && std::is_convertible_v<A&&, raw_type>> {};
+
+public:
+    wint() noexcept = default;
+
+    wint(const raw_type& r) noexcept : m_v(r) {
+        if (r.is_undefined()) { m_v = raw_type(); m_k = special_kind::undefined; }
+    }
+
+    wint(special_value s) noexcept { *this = from_kind(s.kind); }
+
+    template <typename A, typename... R, std::enable_if_t<forwardable<A, R...>::value && implicit_from<A, R...>::value, int> = 0>
+    wint(A&& a, R&&... r) : wint(raw_type(std::forward<A>(a), std::forward<R>(r)...)) {}
+
+    template <typename A, typename... R, std::enable_if_t<forwardable<A, R...>::value && !implicit_from<A, R...>::value, int> = 0>
+    explicit wint(A&& a, R&&... r) : wint(raw_type(std::forward<A>(a), std::forward<R>(r)...)) {}
+
+    static wint from_kind(special_kind k) noexcept {
+        wint r;
+        if (k == special_kind::neg_inf && !is_signed_type) return r;
+        r.m_k = k;
+        return r;
+    }
+
+    static wint infinity(bool negative = false) noexcept { return from_kind(inf_kind(negative)); }
+    static wint nan()           noexcept { return from_kind(special_kind::nan); }
+    static wint undefined()     noexcept { return from_kind(special_kind::undefined); }
+    static wint indeterminate() noexcept { return from_kind(special_kind::indeterminate); }
+
+    special_kind    kind()             const noexcept { return m_k; }
+    bool            is_special()       const noexcept { return m_k != special_kind::none; }
+    bool            is_finite()        const noexcept { return m_k == special_kind::none; }
+    bool            is_infinite()      const noexcept { return infinite_kind(m_k); }
+    bool            is_nan()           const noexcept { return m_k == special_kind::nan; }
+    bool            is_undefined()     const noexcept { return m_k == special_kind::undefined; }
+    bool            is_indeterminate() const noexcept { return m_k == special_kind::indeterminate; }
+    bool            is_unordered()     const noexcept { return unordered_kind(m_k); }
+    const raw_type& raw()              const noexcept { return m_v; }
+
+    bool is_zero()     const noexcept { return m_k == special_kind::none && m_v.is_zero(); }
+    bool is_negative() const noexcept { return m_k == special_kind::neg_inf || (m_k == special_kind::none && m_v.is_negative()); }
+
+    decltype(auto) magnitude()       const noexcept { return m_v.magnitude(); }
+    std::uint64_t  get_lowest_bits() const noexcept { return m_v.get_lowest_bits(); }
+    bool           get_bit(std::size_t i) const noexcept { return m_v.get_bit(i); }
+    long long      highest_bit()     const noexcept { return static_cast<long long>(m_v.highest_bit()); }
+
+    std::string to_string(long long base = 10) const {
+        if (is_special()) return special_name(m_k);
+        return m_v.to_string(base);
+    }
+
+    double to_double() const noexcept {
+        if (m_k == special_kind::pos_inf) return std::numeric_limits<double>::infinity();
+        if (m_k == special_kind::neg_inf) return -std::numeric_limits<double>::infinity();
+        if (is_unordered()) return std::numeric_limits<double>::quiet_NaN();
+        return m_v.to_double();
+    }
+
+    friend std::ostream& operator<<(std::ostream& os, const wint& x) { return os << x.to_string(); }
+
+    friend bool operator==(const wint& a, const wint& b) noexcept {
+        if (a.is_unordered() || b.is_unordered()) return false;
+        if (a.m_k != b.m_k) return false;
+        return a.is_special() || a.m_v == b.m_v;
+    }
+
+    friend bool operator<(const wint& a, const wint& b) noexcept {
+        if (a.is_unordered() || b.is_unordered()) return false;
+        if (a.m_k == special_kind::neg_inf) return b.m_k != special_kind::neg_inf;
+        if (b.m_k == special_kind::pos_inf) return a.m_k != special_kind::pos_inf;
+        if (a.m_k == special_kind::pos_inf || b.m_k == special_kind::neg_inf) return false;
+        return a.m_v < b.m_v;
+    }
+
+    friend bool operator!=(const wint& a, const wint& b) noexcept { return !(a == b); }
+    friend bool operator> (const wint& a, const wint& b) noexcept { return b < a; }
+    friend bool operator<=(const wint& a, const wint& b) noexcept { return !a.is_unordered() && !b.is_unordered() && !(b < a); }
+    friend bool operator>=(const wint& a, const wint& b) noexcept { return !a.is_unordered() && !b.is_unordered() && !(a < b); }
+
+private:
+    raw_type     m_v;
+    special_kind m_k = special_kind::none;
+};
+
+using i8    = wint<8,    mp::sign::is_signed>;
+using i16   = wint<16,   mp::sign::is_signed>;
+using i32   = wint<32,   mp::sign::is_signed>;
+using i64   = wint<64,   mp::sign::is_signed>;
+using i128  = wint<128,  mp::sign::is_signed>;
+using i256  = wint<256,  mp::sign::is_signed>;
+using i512  = wint<512,  mp::sign::is_signed>;
+using i1024 = wint<1024, mp::sign::is_signed>;
+using i2048 = wint<2048, mp::sign::is_signed>;
+
+using u8    = wint<8,    mp::sign::is_unsigned>;
+using u16   = wint<16,   mp::sign::is_unsigned>;
+using u32   = wint<32,   mp::sign::is_unsigned>;
+using u64   = wint<64,   mp::sign::is_unsigned>;
+using u128  = wint<128,  mp::sign::is_unsigned>;
+using u256  = wint<256,  mp::sign::is_unsigned>;
+using u512  = wint<512,  mp::sign::is_unsigned>;
+using u1024 = wint<1024, mp::sign::is_unsigned>;
+using u2048 = wint<2048, mp::sign::is_unsigned>;
+
+template <typename T> struct int_info { static constexpr bool value = false; };
+
+template <std::size_t B, mp::sign S>
+struct int_info<wint<B, S>> {
+    static constexpr bool        value     = true;
+    static constexpr std::size_t bits      = B;
+    static constexpr bool        is_signed = (S == mp::sign::is_signed);
+    using raw_type      = mp::integer<B, S>;
+    using unsigned_type = wint<B, mp::sign::is_unsigned>;
+    using signed_type   = wint<B, mp::sign::is_signed>;
 };
 
 template <typename T> struct float_info { static constexpr bool value = false; };
@@ -133,34 +326,33 @@ template <typename T> inline constexpr bool is_float_v = float_info<std::decay_t
 template <typename T>
 using unsigned_of = typename int_info<T>::unsigned_type;
 
-template <typename T>
-inline T norm(const T& v) {
-    if constexpr (is_int_v<T> && int_info<T>::is_signed) {
-        using U = unsigned_of<T>;
+template <typename R>
+inline R raw_norm(const R& v) {
+    if constexpr (raw_info<R>::is_signed) {
+        using U = typename raw_info<R>::unsigned_type;
         if (v.is_undefined()) return v;
-        const auto& mag = v.magnitude();
-        U u(mag);
-        constexpr std::size_t B = int_info<T>::bits;
+        U u(v.magnitude());
+        constexpr std::size_t B = raw_info<R>::bits;
         const bool top = u.get_bit(B - 1);
         if (!v.is_negative()) {
             if (!top) return v;
             U neg_mag = U() - u;
-            return T(neg_mag.magnitude(), true);
+            return R(neg_mag.magnitude(), true);
         }
         if (!top) return v;
         U rest = U() - u;
         if (rest.is_zero()) return v;
         if (rest.get_bit(B - 1)) return v;
-        return T(rest.magnitude(), false);
+        return R(rest.magnitude(), false);
     } else {
         return v;
     }
 }
 
-template <typename T>
-inline unsigned_of<T> to_twos(const T& v) {
-    using U = unsigned_of<T>;
-    if constexpr (!int_info<T>::is_signed) {
+template <typename R>
+inline typename raw_info<R>::unsigned_type raw_to_twos(const R& v) {
+    using U = typename raw_info<R>::unsigned_type;
+    if constexpr (!raw_info<R>::is_signed) {
         return v;
     } else {
         U u(v.magnitude());
@@ -169,21 +361,42 @@ inline unsigned_of<T> to_twos(const T& v) {
     }
 }
 
-template <typename T>
-inline T from_twos(const unsigned_of<T>& u) {
-    if constexpr (!int_info<T>::is_signed) {
+template <typename R>
+inline R raw_from_twos(const typename raw_info<R>::unsigned_type& u) {
+    if constexpr (!raw_info<R>::is_signed) {
         return u;
     } else {
-        constexpr std::size_t B = int_info<T>::bits;
-        if (!u.get_bit(B - 1)) return T(u.magnitude(), false);
-        unsigned_of<T> m = unsigned_of<T>() - u;
-        return T(m.magnitude(), true);
+        constexpr std::size_t B = raw_info<R>::bits;
+        if (!u.get_bit(B - 1)) return R(u.magnitude(), false);
+        typename raw_info<R>::unsigned_type m = typename raw_info<R>::unsigned_type() - u;
+        return R(m.magnitude(), true);
     }
+}
+
+template <typename T>
+inline T norm(const T& v) {
+    if constexpr (is_int_v<T>) {
+        if (v.is_special()) return v;
+        return T(raw_norm(v.raw()));
+    } else {
+        return v;
+    }
+}
+
+template <typename T>
+inline unsigned_of<T> to_twos(const T& v) { return unsigned_of<T>(raw_to_twos(v.raw())); }
+
+template <typename T>
+inline T from_twos(const unsigned_of<T>& u) { return T(raw_from_twos<typename int_info<T>::raw_type>(u.raw())); }
+
+[[noreturn]] inline void fail_special(special_kind k, const char* where) {
+    fail(std::string("an integer holding ") + special_name(k) + " can't be used " + where);
 }
 
 template <typename T>
 inline long long to_ll(const T& v) {
     if constexpr (is_int_v<T>) {
+        if (v.is_special()) fail_special(v.kind(), "as an index, count or size");
         long long low = static_cast<long long>(v.get_lowest_bits() & 0x7fffffffffffffffULL);
         if constexpr (int_info<T>::is_signed) { if (v.is_negative()) return -low; }
         return low;
@@ -208,25 +421,26 @@ inline const mp::int4096& power_of_two_modulus() {
 
 template <typename T>
 inline long long to_ll_exact(const T& v) {
+    if constexpr (is_int_v<T>) { if (v.is_special()) fail_special(v.kind(), "as a C or C++ integer"); }
     const unsigned long long u = static_cast<unsigned long long>(v.get_lowest_bits());
     if (v.is_negative()) return u == (1ULL << 63) ? std::numeric_limits<long long>::min() : -static_cast<long long>(u);
     return static_cast<long long>(u);
 }
 
 template <typename To, typename From>
-inline To int_to_int(const From& v) {
+inline To raw_int_to_int(const From& v) {
     if constexpr (std::is_same_v<To, From>) {
         return v;
     } else {
-        constexpr std::size_t FB = int_info<From>::bits;
-        constexpr std::size_t TB = int_info<To>::bits;
-        constexpr bool        FS = int_info<From>::is_signed;
-        constexpr bool        TS = int_info<To>::is_signed;
+        constexpr std::size_t FB = raw_info<From>::bits;
+        constexpr std::size_t TB = raw_info<To>::bits;
+        constexpr bool        FS = raw_info<From>::is_signed;
+        constexpr bool        TS = raw_info<To>::is_signed;
 
         if constexpr (FS == TS && TB >= FB) {
             return To(v);
         } else if constexpr (TB <= 64 && FB <= 64) {
-            unsigned long long u = static_cast<unsigned long long>(to_twos(v).get_lowest_bits());
+            unsigned long long u = static_cast<unsigned long long>(raw_to_twos(v).get_lowest_bits());
             if constexpr (FS && TB > FB && FB < 64) { if (v.is_negative()) u |= (~0ULL << FB); }
             if constexpr (TB < 64) u &= ((1ULL << TB) - 1ULL);
 
@@ -234,7 +448,7 @@ inline To int_to_int(const From& v) {
                 long long sv = 0;
                 if constexpr (TB < 64) sv = ((u >> (TB - 1)) & 1ULL) ? static_cast<long long>(u | (~0ULL << TB)) : static_cast<long long>(u);
                 else sv = static_cast<long long>(u);
-                if (sv == std::numeric_limits<long long>::min()) return To(i64(sv + 1)) - To(1LL);
+                if (sv == std::numeric_limits<long long>::min()) return To(mp::int64(sv + 1)) - To(1LL);
                 return To(sv);
             } else {
                 return To(u);
@@ -244,9 +458,19 @@ inline To int_to_int(const From& v) {
             const W& modulus = power_of_two_modulus<TB>();
             W r = W(v) % modulus;
             if (r.is_negative()) r = r + modulus;
-            if constexpr (TS) return from_twos<To>(unsigned_of<To>(r));
+            if constexpr (TS) return raw_from_twos<To>(typename raw_info<To>::unsigned_type(r));
             else return To(r);
         }
+    }
+}
+
+template <typename To, typename From>
+inline To int_to_int(const From& v) {
+    if constexpr (std::is_same_v<To, From>) {
+        return v;
+    } else {
+        if (v.is_special()) return To::from_kind(v.kind());
+        return To(raw_int_to_int<typename int_info<To>::raw_type>(v.raw()));
     }
 }
 
@@ -258,22 +482,19 @@ inline f2048 widen_float(const F& f) {
 
 template <typename T>
 inline f2048 int_to_f2048(const T& v) {
-    i2048 w = int_to_int<i2048>(v);
-    if constexpr (int_info<T>::is_signed) {
-        return f2048(f2048::sstore_t(w));
-    } else {
-        return f2048(f2048::sstore_t(w));
-    }
+    if (v.is_special()) return float_special<f2048>(v.kind());
+    const mp::int2048 w = int_to_int<i2048>(v).raw();
+    return f2048(f2048::sstore_t(w));
 }
 
 template <typename To, typename F>
 inline To float_to_int(const F& f) {
-    f2048 w = widen_float(f);
-    if (!w.is_finite()) fail("float value cannot be converted to an integer");
-    auto ip = w.get_integer_part_as_int();
-    i2048 mag = i2048(ip);
-    i2048 v = w.is_negative() ? -mag : mag;
-    return int_to_int<To>(v);
+    const f2048 w = widen_float(f);
+    if (!w.is_finite()) return To::from_kind(float_kind(w));
+    const auto ip = w.get_integer_part_as_int();
+    const mp::int2048 mag = mp::int2048(ip);
+    const mp::int2048 v = w.is_negative() ? -mag : mag;
+    return int_to_int<To>(i2048(v));
 }
 
 template <typename To, typename From>
@@ -281,11 +502,17 @@ inline To cast(const From& v) {
     using T = std::decay_t<From>;
     if constexpr (std::is_same_v<To, T>) {
         return v;
+    } else if constexpr (std::is_same_v<T, special_value>) {
+        if constexpr (is_int_v<To>) return To::from_kind(v.kind);
+        else if constexpr (is_float_v<To>) return float_special<To>(v.kind);
+        else if constexpr (std::is_same_v<To, bool>) return true;
+        else return static_cast<To>(v);
     } else if constexpr (is_int_v<To> && is_int_v<T>) {
         return int_to_int<To>(v);
     } else if constexpr (is_float_v<To> && is_float_v<T>) {
         return To(v);
     } else if constexpr (is_float_v<To> && is_int_v<T>) {
+        if (v.is_special()) return float_special<To>(v.kind());
         if constexpr (int_info<T>::bits <= 64 && float_info<To>::bits == 32) {
             if constexpr (int_info<T>::is_signed) return To(static_cast<float>(to_ll_exact(v)));
             else return To(static_cast<float>(static_cast<unsigned long long>(v.get_lowest_bits())));
@@ -304,6 +531,7 @@ inline To cast(const From& v) {
     } else if constexpr (is_float_v<To> && (std::is_same_v<T, bool> || std::is_same_v<T, char32_t> || std::is_integral_v<T>)) {
         return cast<To>(i64(static_cast<long long>(v)));
     } else if constexpr (std::is_same_v<To, char32_t> && is_int_v<T>) {
+        if (v.is_special()) fail_special(v.kind(), "as a character");
         return static_cast<char32_t>(to_twos(v).get_lowest_bits() & 0xffffffffULL);
     } else {
         return static_cast<To>(v);
@@ -312,12 +540,16 @@ inline To cast(const From& v) {
 
 template <typename F>
 inline double float_to_double(const F& v) {
-    if (v.is_nan() || v.is_undefined()) return std::numeric_limits<double>::quiet_NaN();
+    if (v.is_unordered()) return std::numeric_limits<double>::quiet_NaN();
     if (v.is_infinite()) return v.is_negative() ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
     if (v.is_zero()) return v.is_negative() ? -0.0 : 0.0;
     const auto parts = v.frexp();
-    const double significand = static_cast<double>(static_cast<unsigned long long>(parts.first.get_lowest_bits()));
-    const double magnitude = std::ldexp(significand, static_cast<int>(to_ll(parts.second)) - static_cast<int>(F::mantissa_bits));
+    constexpr std::size_t wide = static_cast<std::size_t>(F::mantissa_bits) + 1;
+    constexpr std::size_t shift = wide > 64 ? wide - 64 : 0;
+    const auto top = shift ? (parts.first >> shift) : parts.first;
+    const double significand = static_cast<double>(static_cast<unsigned long long>(top.get_lowest_bits()));
+    const long long exponent = static_cast<long long>(parts.second.get_lowest_bits());
+    const double magnitude = std::ldexp(significand, static_cast<int>(parts.second.is_negative() ? -exponent : exponent) - static_cast<int>(F::mantissa_bits) + static_cast<int>(shift));
     return v.is_negative() ? -magnitude : magnitude;
 }
 
@@ -332,6 +564,7 @@ inline Native to_native(const W& v) {
     } else if constexpr (std::is_signed_v<Native>) {
         return static_cast<Native>(to_ll_exact(v));
     } else {
+        if constexpr (is_int_v<W>) { if (v.is_special()) fail_special(v.kind(), "as a C or C++ integer"); }
         return static_cast<Native>(v.get_lowest_bits());
     }
 }
@@ -355,16 +588,83 @@ template <typename T>
 inline bool truthy(const T& v) {
     if constexpr (std::is_same_v<T, bool>) return v;
     else if constexpr (is_int_v<T> || is_float_v<T>) return !v.is_zero();
+    else if constexpr (std::is_same_v<T, special_value>) return true;
     else if constexpr (std::is_pointer_v<T> || std::is_null_pointer_v<T>) return v != nullptr;
     else if constexpr (std::is_same_v<T, char32_t>) return v != 0;
     else return static_cast<bool>(v);
 }
 
-template <typename T> inline T op_add(const T& a, const T& b) { if constexpr (is_int_v<T>) return norm(a + b); else return a + b; }
-template <typename T> inline T op_sub(const T& a, const T& b) { if constexpr (is_int_v<T>) return norm(a - b); else return a - b; }
-template <typename T> inline T op_mul(const T& a, const T& b) { if constexpr (is_int_v<T>) return norm(a * b); else return a * b; }
-template <typename T> inline T op_neg(const T& a)             { if constexpr (is_int_v<T>) return norm(T() - a); else return -a; }
-template <typename T> inline T op_pos(const T& a)             { return a; }
+template <typename T>
+inline T special_add(const T& a, const T& b) {
+    if (a.is_unordered() || b.is_unordered()) return T::from_kind(unordered_of(a.kind(), b.kind()));
+    if (a.is_infinite() && b.is_infinite()) return a.kind() == b.kind() ? a : T::indeterminate();
+    return a.is_infinite() ? a : b;
+}
+
+template <typename T>
+inline T special_sub(const T& a, const T& b) {
+    if (a.is_unordered() || b.is_unordered()) return T::from_kind(unordered_of(a.kind(), b.kind()));
+    if (a.is_infinite() && b.is_infinite()) return a.kind() == b.kind() ? T::indeterminate() : a;
+    if (a.is_infinite()) return a;
+    return T::from_kind(inf_kind(b.kind() == special_kind::pos_inf));
+}
+
+template <typename T>
+inline T special_mul(const T& a, const T& b) {
+    if (a.is_unordered() || b.is_unordered()) return T::from_kind(unordered_of(a.kind(), b.kind()));
+    if (a.is_zero() || b.is_zero()) return T::indeterminate();
+    return T::infinity(a.is_negative() != b.is_negative());
+}
+
+template <typename T>
+inline T special_div(const T& a, const T& b) {
+    if (a.is_unordered() || b.is_unordered()) return T::from_kind(unordered_of(a.kind(), b.kind()));
+    if (b.is_zero()) return a.is_zero() ? T::indeterminate() : T::undefined();
+    if (a.is_infinite() && b.is_infinite()) return T::indeterminate();
+    if (a.is_infinite()) return T::infinity(a.is_negative() != b.is_negative());
+    return T();
+}
+
+template <typename T>
+inline T special_mod(const T& a, const T& b) {
+    if (a.is_unordered() || b.is_unordered()) return T::from_kind(unordered_of(a.kind(), b.kind()));
+    if (b.is_zero()) return a.is_zero() ? T::indeterminate() : T::undefined();
+    if (a.is_infinite()) return T::undefined();
+    return a;
+}
+
+template <typename T>
+inline T special_bits(const T& a, const T& b) {
+    if (a.is_unordered() || b.is_unordered()) return T::from_kind(unordered_of(a.kind(), b.kind()));
+    return T::undefined();
+}
+
+template <typename T> inline T op_add(const T& a, const T& b) {
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_add(a, b); return T(raw_norm(a.raw() + b.raw())); }
+    else return a + b;
+}
+
+template <typename T> inline T op_sub(const T& a, const T& b) {
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_sub(a, b); return T(raw_norm(a.raw() - b.raw())); }
+    else return a - b;
+}
+
+template <typename T> inline T op_mul(const T& a, const T& b) {
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_mul(a, b); return T(raw_norm(a.raw() * b.raw())); }
+    else return a * b;
+}
+
+template <typename T> inline T op_neg(const T& a) {
+    if constexpr (is_int_v<T>) {
+        if (a.is_unordered()) return a;
+        if (a.is_infinite()) return T::from_kind(inf_kind(a.kind() == special_kind::pos_inf));
+        return T(raw_norm(typename int_info<T>::raw_type() - a.raw()));
+    } else {
+        return -a;
+    }
+}
+
+template <typename T> inline T op_pos(const T& a) { return a; }
 
 inline std::string op_add(const std::string& a, const std::string& b) { return a + b; }
 
@@ -381,8 +681,8 @@ inline std::string op_add(char32_t c, const std::string& b) { std::string r; app
 template <typename T>
 inline T op_div(const T& a, const T& b) {
     if constexpr (is_int_v<T>) {
-        if (b.is_zero()) fail("integer division by zero");
-        return norm(a / b);
+        if (a.is_special() || b.is_special() || b.is_zero()) return special_div(a, b);
+        return T(raw_norm(a.raw() / b.raw()));
     } else {
         return a / b;
     }
@@ -390,41 +690,63 @@ inline T op_div(const T& a, const T& b) {
 
 template <typename T>
 inline T op_mod(const T& a, const T& b) {
-    if (b.is_zero()) fail("integer modulo by zero");
-    return a % b;
+    if (a.is_special() || b.is_special() || b.is_zero()) return special_mod(a, b);
+    return T(a.raw() % b.raw());
+}
+
+template <typename T>
+inline T special_pow(const T& a, const T& b) {
+    const T one(1);
+    if (a.is_unordered() || b.is_unordered()) return T::from_kind(unordered_of(a.kind(), b.kind()));
+    if (b.is_zero()) return (a.is_zero() || a.is_infinite()) ? T::indeterminate() : one;
+    if (a == one) return b.is_infinite() ? T::indeterminate() : one;
+
+    if (b.is_infinite()) {
+        if (a.is_zero()) return b.is_negative() ? T::undefined() : T();
+        if (b.is_negative()) return T();
+        if (a.is_negative()) return (a.is_finite() && a == op_neg(one)) ? T::indeterminate() : T::undefined();
+        return T::infinity();
+    }
+
+    if (b.is_negative()) return T();
+    return T::infinity(a.is_negative() && b.raw().get_bit(0));
 }
 
 template <typename T>
 inline T op_pow(const T& a, const T& b) {
     if constexpr (is_int_v<T>) {
+        if (a.is_special() || b.is_special() || b.is_zero()) return special_pow(a, b);
+        if (a.is_zero() && b.is_negative()) return T::undefined();
+        using R = typename int_info<T>::raw_type;
+        const R& ar = a.raw();
+        const R& br = b.raw();
+
         if constexpr (int_info<T>::is_signed) {
-            if (b.is_negative()) {
-                if (a.is_zero()) fail("zero raised to a negative power");
-                const T one(1);
-                if (a == one) return one;
-                if (a == -one) return to_twos(b).get_bit(0) ? -one : one;
+            if (br.is_negative()) {
+                const R one(1);
+                if (ar == one) return T(one);
+                if (ar == -one) return T(raw_to_twos(br).get_bit(0) ? -one : one);
                 fail("integer raised to a negative power");
             }
-            using U = unsigned_of<T>;
-            U base(a.magnitude());
+            using U = typename raw_info<R>::unsigned_type;
+            U base(ar.magnitude());
             U r(std::uint64_t(1));
-            U e(b.magnitude());
+            U e(br.magnitude());
             while (!e.is_zero()) {
                 if (e.get_bit(0)) r = r * base;
                 base = base * base;
                 e = e >> 1;
             }
-            const bool neg = a.is_negative() && b.magnitude().get_bit(0);
-            T out = from_twos<T>(neg ? U() - r : r);
-            return out;
+            const bool neg = ar.is_negative() && br.magnitude().get_bit(0);
+            return T(raw_from_twos<R>(neg ? U() - r : r));
         } else {
-            T base = a, r = T(std::uint64_t(1)), e = b;
+            R base = ar, r = R(std::uint64_t(1)), e = br;
             while (!e.is_zero()) {
                 if (e.get_bit(0)) r = r * base;
                 base = base * base;
                 e = e >> 1;
             }
-            return r;
+            return T(r);
         }
     } else {
         return T(mp::math::pow(a, b));
@@ -432,13 +754,13 @@ inline T op_pow(const T& a, const T& b) {
 }
 
 template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
-inline T op_bitand(const T& a, const T& b) { return from_twos<T>(to_twos(a) & to_twos(b)); }
+inline T op_bitand(const T& a, const T& b) { if (a.is_special() || b.is_special()) return special_bits(a, b); return from_twos<T>(unsigned_of<T>(to_twos(a).raw() & to_twos(b).raw())); }
 template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
-inline T op_bitor(const T& a, const T& b)  { return from_twos<T>(to_twos(a) | to_twos(b)); }
+inline T op_bitor(const T& a, const T& b)  { if (a.is_special() || b.is_special()) return special_bits(a, b); return from_twos<T>(unsigned_of<T>(to_twos(a).raw() | to_twos(b).raw())); }
 template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
-inline T op_bitxor(const T& a, const T& b) { return from_twos<T>(to_twos(a) ^ to_twos(b)); }
+inline T op_bitxor(const T& a, const T& b) { if (a.is_special() || b.is_special()) return special_bits(a, b); return from_twos<T>(unsigned_of<T>(to_twos(a).raw() ^ to_twos(b).raw())); }
 template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
-inline T op_bitnot(const T& a)             { return from_twos<T>(~to_twos(a)); }
+inline T op_bitnot(const T& a)             { if (a.is_special()) return special_bits(a, a); return from_twos<T>(unsigned_of<T>(~to_twos(a).raw())); }
 
 template <typename E, std::enable_if_t<std::is_enum_v<E>, int> = 0>
 inline E op_bitand(E a, E b) { return static_cast<E>(static_cast<std::underlying_type_t<E>>(a) & static_cast<std::underlying_type_t<E>>(b)); }
@@ -462,25 +784,77 @@ inline std::size_t shift_count(const S& s) {
 
 template <typename T, typename S>
 inline T op_shl(const T& a, const S& s) {
-    const std::size_t n = shift_count<T>(s);
-    return from_twos<T>(to_twos(a) << n);
+    if constexpr (std::is_same_v<S, special_value>) {
+        return a.is_unordered() ? a : T::undefined();
+    } else {
+        if constexpr (is_int_v<S>) { if (s.is_special()) return a.is_unordered() ? a : T::undefined(); }
+        if (a.is_special()) return a.is_unordered() ? a : T::undefined();
+        const std::size_t n = shift_count<T>(s);
+        return from_twos<T>(unsigned_of<T>(to_twos(a).raw() << n));
+    }
 }
 
 template <typename T, typename S>
 inline T op_shr(const T& a, const S& s) {
-    const std::size_t n = shift_count<T>(s);
-    if constexpr (int_info<T>::is_signed) {
-        if (a.is_negative()) {
-            using U = unsigned_of<T>;
-            U u = to_twos(a);
-            U shifted = u >> n;
-            U fill = (~U()) << (int_info<T>::bits - n);
-            if (n == 0) fill = U();
-            return from_twos<T>(shifted | fill);
+    if constexpr (std::is_same_v<S, special_value>) {
+        return a.is_unordered() ? a : T::undefined();
+    } else {
+        if constexpr (is_int_v<S>) { if (s.is_special()) return a.is_unordered() ? a : T::undefined(); }
+        if (a.is_special()) return a.is_unordered() ? a : T::undefined();
+        const std::size_t n = shift_count<T>(s);
+        using U = typename unsigned_of<T>::raw_type;
+        const U u = to_twos(a).raw();
+
+        if constexpr (int_info<T>::is_signed) {
+            if (a.is_negative()) {
+                const U shifted = u >> n;
+                U fill = (~U()) << (int_info<T>::bits - n);
+                if (n == 0) fill = U();
+                return from_twos<T>(unsigned_of<T>(shifted | fill));
+            }
         }
+
+        return from_twos<T>(unsigned_of<T>(u >> n));
     }
-    return from_twos<T>(to_twos(a) >> n);
 }
+
+template <typename T>
+inline bool is_special(const T& v, special_test t) {
+    if constexpr (is_int_v<T>) return special_matches(v.kind(), t);
+    else if constexpr (is_float_v<T>) return special_matches(float_kind(v), t);
+    else if constexpr (std::is_same_v<T, special_value>) return special_matches(v.kind, t);
+    else return false;
+}
+
+template <typename T>
+inline bool is_special(const std::variant<T, special_value>& v, special_test t) {
+    return std::holds_alternative<special_value>(v) && special_matches(std::get<special_value>(v).kind, t);
+}
+
+template <typename T>
+inline T& special_as(std::variant<T, special_value>& v, const std::string& name) {
+    if (!std::holds_alternative<T>(v)) fail("this special(" + name + ") holds " + special_name(std::get<special_value>(v).kind) + ", not a value of type '" + name + "'");
+    return std::get<T>(v);
+}
+
+template <typename T>
+inline const T& special_as(const std::variant<T, special_value>& v, const std::string& name) {
+    if (!std::holds_alternative<T>(v)) fail("this special(" + name + ") holds " + special_name(std::get<special_value>(v).kind) + ", not a value of type '" + name + "'");
+    return std::get<T>(v);
+}
+
+template <typename T>
+inline T special_as(std::variant<T, special_value>&& v, const std::string& name) {
+    if (!std::holds_alternative<T>(v)) fail("this special(" + name + ") holds " + special_name(std::get<special_value>(v).kind) + ", not a value of type '" + name + "'");
+    return std::get<T>(std::move(v));
+}
+
+inline bool operator==(const special_value& a, const special_value& b) { return float_special<f2048>(a.kind) == float_special<f2048>(b.kind); }
+inline bool operator!=(const special_value& a, const special_value& b) { return !(a == b); }
+inline bool operator< (const special_value& a, const special_value& b) { return float_special<f2048>(a.kind) <  float_special<f2048>(b.kind); }
+inline bool operator> (const special_value& a, const special_value& b) { return float_special<f2048>(a.kind) >  float_special<f2048>(b.kind); }
+inline bool operator<=(const special_value& a, const special_value& b) { return float_special<f2048>(a.kind) <= float_special<f2048>(b.kind); }
+inline bool operator>=(const special_value& a, const special_value& b) { return float_special<f2048>(a.kind) >= float_special<f2048>(b.kind); }
 
 template <typename T> inline T& pre_inc(T& x)  { x = op_add(x, T(1)); return x; }
 template <typename T> inline T& pre_dec(T& x)  { x = op_sub(x, T(1)); return x; }
@@ -548,6 +922,19 @@ inline std::vector<T> fill_from(std::vector<T> target, const std::vector<T>& val
     return target;
 }
 
+template <typename T, typename I>
+inline T& index(T* p, const I& i) {
+    return p[to_ll(i)];
+}
+
+struct native_tag {};
+
+template <typename P, typename C, typename R>
+inline P native_ptr(C& c, R&& r) {
+    if constexpr (std::is_pointer_v<std::decay_t<R>>) return r;
+    else return c.data() + (r - c.begin());
+}
+
 template <typename C, typename I>
 inline decltype(auto) index(C& c, const I& i) {
     long long n = to_ll(i);
@@ -569,6 +956,39 @@ struct dynamic_function {
     std::function<dynamic(std::vector<dynamic>&)> body;
 };
 
+template <typename F>
+inline std::string float_display(const F& f, std::int64_t precision = 0) {
+    if (!f.is_finite()) return f.to_string();
+    if (f.is_zero()) return f.is_negative() ? "-0" : "0";
+    const std::string sci = f.to_scientific_string(precision > 0 ? precision : 0);
+    const std::size_t ep = sci.find('e');
+    if (ep == std::string::npos) return f.to_string(precision);
+    const std::int64_t e10 = std::stoll(sci.substr(ep + 1));
+    std::string mant = sci.substr(0, ep);
+    const bool neg = !mant.empty() && mant[0] == '-';
+    if (neg) mant.erase(0, 1);
+    std::string digits;
+    for (char c : mant) if (c != '.') digits += c;
+    while (digits.size() > 1 && digits.back() == '0') digits.pop_back();
+    const bool scientific = precision > 0 ? (e10 < -4 || e10 >= precision) : (e10 < -7 || e10 >= 21);
+    std::string out;
+
+    if (scientific) {
+        out = digits.substr(0, 1);
+        if (digits.size() > 1) out += "." + digits.substr(1);
+        out += e10 < 0 ? "e-" : "e+";
+        out += std::to_string(e10 < 0 ? -e10 : e10);
+    } else if (e10 < 0) {
+        out = "0." + std::string(static_cast<std::size_t>(-e10 - 1), '0') + digits;
+    } else {
+        const std::size_t whole = static_cast<std::size_t>(e10 + 1);
+        if (digits.size() <= whole) out = digits + std::string(whole - digits.size(), '0');
+        else out = digits.substr(0, whole) + "." + digits.substr(whole);
+    }
+
+    return neg ? "-" + out : out;
+}
+
 template <typename T>
 inline std::string to_display(const T& v) {
     if constexpr (std::is_same_v<T, bool>) return v ? "true" : "false";
@@ -578,8 +998,15 @@ inline std::string to_display(const T& v) {
     else if constexpr (std::is_null_pointer_v<T>) return "nullptr";
     else if constexpr (std::is_pointer_v<T>) { std::ostringstream os; os << static_cast<const void*>(v); return os.str(); }
     else if constexpr (is_int_v<T>) return v.to_string();
-    else if constexpr (is_float_v<T>) { std::ostringstream os; os << v; return os.str(); }
+    else if constexpr (is_float_v<T>) return float_display(v);
+    else if constexpr (std::is_enum_v<T>) return std::to_string(static_cast<long long>(v));
     else { std::ostringstream os; os << v; return os.str(); }
+}
+
+template <typename T>
+inline std::string to_display(const std::variant<T, special_value>& v) {
+    if (std::holds_alternative<special_value>(v)) return special_name(std::get<special_value>(v).kind);
+    return to_display(std::get<T>(v));
 }
 
 class dynamic {
@@ -593,6 +1020,7 @@ public:
     dynamic(std::string&& s) : m_v(std::move(s)) {}
     dynamic(const char* s) : m_v(std::string(s)) {}
     dynamic(std::nullptr_t) : m_v(std::monostate{}) {}
+    dynamic(special_value s) : m_v(float_special<f2048>(s.kind)) {}
     dynamic(std::shared_ptr<dynamic_function> f) : m_v(std::move(f)) {}
 
     template <typename T, typename = std::enable_if_t<is_int_v<T>>>
@@ -609,6 +1037,18 @@ public:
     bool is_string() const { return std::holds_alternative<std::string>(m_v); }
     bool is_function() const { return std::holds_alternative<std::shared_ptr<dynamic_function>>(m_v); }
     bool is_number() const { return is_int() || is_float(); }
+
+    bool is_unordered_number() const {
+        if (is_int())   return std::get<i2048>(m_v).is_unordered();
+        if (is_float()) return std::get<f2048>(m_v).is_unordered();
+        return false;
+    }
+
+    bool matches_special(special_test t) const {
+        if (is_int())   return walnut_rt::special_matches(std::get<i2048>(m_v).kind(), t);
+        if (is_float()) return walnut_rt::special_matches(float_kind(std::get<f2048>(m_v)), t);
+        return false;
+    }
 
     const value_type& raw() const { return m_v; }
 
@@ -634,7 +1074,7 @@ public:
         if (is_bool())   return std::get<bool>(m_v) ? "true" : "false";
         if (is_char())   return utf8(std::get<char32_t>(m_v));
         if (is_int())    return std::get<i2048>(m_v).to_string();
-        if (is_float())  { std::ostringstream os; os << std::get<f2048>(m_v); return os.str(); }
+        if (is_float())  return float_display(std::get<f2048>(m_v));
         if (is_function()) return "function";
         return std::get<std::string>(m_v);
     }
@@ -751,7 +1191,7 @@ public:
     }
 
     friend bool operator==(const dynamic& a, const dynamic& b) {
-        if (a.is_number() && b.is_number()) return compare(a, b) == 0;
+        if (a.is_number() && b.is_number()) return !a.is_unordered_number() && !b.is_unordered_number() && compare(a, b) == 0;
         if (a.m_v.index() != b.m_v.index()) return false;
         if (a.is_none())   return true;
         if (a.is_bool())   return std::get<bool>(a.m_v) == std::get<bool>(b.m_v);
@@ -805,6 +1245,8 @@ inline void custom_delete_array(T* p, Release release) {
     for (long long i = count; i-- > 0;) p[i].~T();
     release(static_cast<void*>(memory));
 }
+
+inline bool is_special(const dynamic& d, special_test t) { return d.matches_special(t); }
 
 template <typename T>
 inline bool dynamic_is(const dynamic& d) {
@@ -1108,6 +1550,132 @@ inline char32_t set_char(std::string& s, const I& i, char32_t c) {
     return c;
 }
 
+namespace bm {
+
+inline std::string needle_of(const std::string& s) { return s; }
+inline std::string needle_of(char32_t c) { return utf8(c); }
+
+inline i32 cp_index(const std::string& s, std::size_t byte) {
+    long long n = 0;
+    for (std::size_t i = 0; i < byte && i < s.size(); ++i) if ((static_cast<unsigned char>(s[i]) & 0xC0) != 0x80) ++n;
+    return i32(n);
+}
+
+inline std::size_t cp_offset(const std::string& s, long long n) {
+    std::size_t i = 0;
+    while (i < s.size() && n > 0) {
+        ++i;
+        while (i < s.size() && (static_cast<unsigned char>(s[i]) & 0xC0) == 0x80) ++i;
+        --n;
+    }
+    return i;
+}
+
+inline i32 length(const std::string& s) { return count_of(s); }
+template <typename C> inline i32 length(const C& c) { return count_of(c); }
+inline i32 size(const std::string& s) { return i32(static_cast<long long>(s.size())); }
+template <typename C> inline i32 size(const C& c) { return count_of(c); }
+inline i32 countof(const std::string& s) { return count_of(s); }
+template <typename C> inline i32 countof(const C& c) { return count_of(c); }
+template <typename C> inline bool empty(const C& c) { return c.empty(); }
+
+inline i32 byte_size(const std::string& s) { return i32(static_cast<long long>(s.size())); }
+template <typename C> inline i32 byte_size(const C& c, long long element) { return i32(static_cast<long long>(c.size()) * element); }
+
+template <typename I>
+inline std::string substr(const std::string& s, const I& start) {
+    const long long b = to_ll(start);
+    const long long total = to_ll(count_of(s));
+    if (b < 0 || b > total) fail("substr start " + std::to_string(b) + " out of range for a string of length " + std::to_string(total));
+    return s.substr(cp_offset(s, b));
+}
+
+template <typename I, typename J>
+inline std::string substr(const std::string& s, const I& start, const J& count) {
+    const long long b = to_ll(start);
+    const long long n = to_ll(count);
+    const long long total = to_ll(count_of(s));
+    if (b < 0 || b > total) fail("substr start " + std::to_string(b) + " out of range for a string of length " + std::to_string(total));
+    if (n < 0) fail("substr count " + std::to_string(n) + " is negative");
+    const std::size_t from = cp_offset(s, b);
+    const std::size_t to = from + cp_offset(s.substr(from), n);
+    return s.substr(from, to - from);
+}
+
+template <typename N>
+inline i32 find(const std::string& s, const N& needle) {
+    const std::size_t at = s.find(needle_of(needle));
+    if (at == std::string::npos) return i32::from_kind(special_kind::undefined);
+    return cp_index(s, at);
+}
+
+template <typename N>
+inline bool contains(const std::string& s, const N& needle) { return s.find(needle_of(needle)) != std::string::npos; }
+
+template <typename N>
+inline bool starts_with(const std::string& s, const N& needle) {
+    const std::string n = needle_of(needle);
+    return s.size() >= n.size() && s.compare(0, n.size(), n) == 0;
+}
+
+template <typename N>
+inline bool ends_with(const std::string& s, const N& needle) {
+    const std::string n = needle_of(needle);
+    return s.size() >= n.size() && s.compare(s.size() - n.size(), n.size(), n) == 0;
+}
+
+inline char32_t upper_cp(char32_t c) {
+    if (c >= U'a' && c <= U'z') return c - 32;
+    if (c >= 0xE0 && c <= 0xFE && c != 0xF7) return c - 32;
+    if (c >= 0x3B1 && c <= 0x3C9 && c != 0x3C2) return c - 32;
+    if (c >= 0x430 && c <= 0x44F) return c - 32;
+    if (c >= 0x450 && c <= 0x45F) return c - 80;
+    return c;
+}
+
+inline char32_t lower_cp(char32_t c) {
+    if (c >= U'A' && c <= U'Z') return c + 32;
+    if (c >= 0xC0 && c <= 0xDE && c != 0xD7) return c + 32;
+    if (c >= 0x391 && c <= 0x3A9 && c != 0x3A2) return c + 32;
+    if (c >= 0x410 && c <= 0x42F) return c + 32;
+    if (c >= 0x400 && c <= 0x40F) return c + 80;
+    return c;
+}
+
+inline std::string to_upper(const std::string& s) {
+    std::string out;
+    for (char32_t c : decode_utf8(s)) append_utf8(out, upper_cp(c));
+    return out;
+}
+
+inline std::string to_lower(const std::string& s) {
+    std::string out;
+    for (char32_t c : decode_utf8(s)) append_utf8(out, lower_cp(c));
+    return out;
+}
+
+inline std::string trim(const std::string& s) {
+    const char* ws = " \t\n\r\f\v";
+    const std::size_t b = s.find_first_not_of(ws);
+    if (b == std::string::npos) return std::string();
+    return s.substr(b, s.find_last_not_of(ws) - b + 1);
+}
+
+template <typename C, typename V>
+inline i32 find(const C& c, const V& v) {
+    long long i = 0;
+    for (const auto& e : c) { if (e == v) return i32(i); ++i; }
+    return i32::from_kind(special_kind::undefined);
+}
+
+template <typename C, typename V>
+inline bool contains(const C& c, const V& v) {
+    for (const auto& e : c) if (e == v) return true;
+    return false;
+}
+
+} // namespace bm
+
 template <typename T>
 class late {
 public:
@@ -1145,6 +1713,44 @@ inline int exit_code(const T& v) {
     else return 0;
 }
 
+template <typename T>
+struct init_list_store {
+    std::vector<T> items;
+    explicit init_list_store(std::vector<T> v) : items(std::move(v)) {}
+    const T* data() const noexcept { return items.data(); }
+    std::size_t size() const noexcept { return items.size(); }
+};
+
+template <>
+struct init_list_store<bool> {
+    std::unique_ptr<bool[]> items;
+    std::size_t n = 0;
+    explicit init_list_store(const std::vector<bool>& v) : items(new bool[v.size() ? v.size() : 1]), n(v.size()) {
+        for (std::size_t i = 0; i < n; ++i) items[i] = v[i];
+    }
+    const bool* data() const noexcept { return items.get(); }
+    std::size_t size() const noexcept { return n; }
+};
+
+template <typename T>
+class init_list {
+public:
+    init_list() = default;
+    explicit init_list(std::vector<T> items) : m_store(std::make_shared<const init_list_store<T>>(std::move(items))) {}
+
+    long long size() const noexcept { return m_store ? static_cast<long long>(m_store->size()) : 0; }
+    const T* begin() const noexcept { return m_store ? m_store->data() : nullptr; }
+    const T* end() const noexcept { return m_store ? m_store->data() + m_store->size() : nullptr; }
+
+    const T& at(long long i) const {
+        if (i < 0 || i >= size()) fail("initializer_list index " + std::to_string(i) + " is out of range for size " + std::to_string(size()));
+        return m_store->data()[i];
+    }
+
+private:
+    std::shared_ptr<const init_list_store<T>> m_store;
+};
+
 template <typename F>
 inline int run_program(F&& body) {
     try {
@@ -1165,5 +1771,8 @@ inline int run_program(F&& body) {
 }
 
 } // namespace walnut_rt
+
+#include "walnut_io.hpp"
+#include "walnut_lazy.hpp"
 
 #endif // WALNUT_RUNTIME_HPP

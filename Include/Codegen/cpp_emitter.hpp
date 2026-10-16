@@ -73,6 +73,7 @@ public:
 
     static constexpr const char* kLineReset = "#pragma walnut_line_reset";
     std::function<std::string(FileId)> source_path;
+    bool unbuffered = false;
 
 private:
     struct RecordInfo {
@@ -81,6 +82,7 @@ private:
         Inst*                     inst = nullptr;
         Inst*                     env  = nullptr;
         std::string               cname;
+        bool                      native = false;
     };
 
     struct FuncInfo {
@@ -106,6 +108,7 @@ private:
     std::vector<RecordInfo*>                      m_record_order;
     std::unordered_map<const Sym*, RecordInfo*>   m_record_by_sym;
     std::vector<FuncInfo>                         m_functions;
+    std::vector<Inst*>                            m_ctor_insts;
     std::vector<nodes::EnumDeclaration*>          m_enum_decls;
     std::vector<nodes::ASTNode*>                  m_script;
     std::vector<nodes::ASTNode*>                  m_global_decls;
@@ -116,6 +119,10 @@ private:
     Sym*                                          m_main_fn = nullptr;
 
     std::unordered_map<const Sym*, std::string>   m_name_cache;
+    std::unordered_set<const Sym*>                m_used_globals;
+    std::unordered_set<const Sym*>                m_prunable;
+    bool                                          m_track_globals = false;
+    bool                                          m_prune_ready = false;
     std::set<std::string>                         m_used_global_names;
     std::ostringstream                            m_enums;
     std::ostringstream                            m_consts;
@@ -150,6 +157,7 @@ private:
     void collect_decl(nodes::ASTNode* n, bool top_level);
 
     void collect(const std::vector<CodegenUnit>& units);
+    static bool signature_failed(semantics::Type* t);
 
     void collect_locals(nodes::ASTNode* n, Inst* env);
 
@@ -202,6 +210,15 @@ private:
     std::string function_name(const Sym* fn);
 
     std::string global_var_name(const Sym* s);
+    bool prunable_global(nodes::ASTNode* n) const;
+    static bool is_lazy_field(const Sym* s);
+    static bool is_lazy_decl(const nodes::ASTNode* n);
+    std::string lazy_prefix(nodes::ASTNode* target);
+    void emit_lazy_fields(std::ostream& os, RecordInfo* r);
+    void emit_lazy_definitions(std::ostream& os, RecordInfo* r);
+    void note_global_uses(nodes::ASTNode* n);
+    void finish_global_usage();
+    bool pruned_global(const Sym* s) const { return m_prune_ready && s && m_prunable.count(s) && !m_used_globals.count(s); }
 
     std::string enum_name(const Sym* s);
 
@@ -272,6 +289,13 @@ private:
     std::string native_type(Type* t, bool c_linkage);
 
     void emit_native_externs(std::ostream& decls, std::ostream& wrappers);
+    void add_native_headers(const modifiers::RawModifiers& mods, std::uint32_t file_id, std::vector<std::string>& headers);
+    std::string native_record_type(RecordInfo* r);
+    std::string native_template_name(std::string_view name, RecordInfo* r);
+    bool declared_is_param(const parser_types::TypeInfo& info);
+    std::string native_args(const nodes::FunctionParameters* ps);
+    std::string native_body(const FuncInfo& f, const std::string& native_name);
+    void emit_native_record(std::ostream& os, RecordInfo* r);
 
     static nodes::VariableDeclaration* inline_variable(nodes::ASTNode* decl) {
         if (!decl || decl->kind != nodes::ASTNode::Kind::VariableDeclaration) return nullptr;
@@ -286,6 +310,8 @@ private:
     std::string truthy(nodes::ASTNode* cond);
 
     Type* common_type(Type* a, Type* b);
+    std::string special_code(semantics::SpecialKind k);
+    std::string interpolated_text(nodes::CastExpression* c);
 
     static const char* arith_helper(TK op);
 
@@ -309,6 +335,8 @@ private:
     }
 
     std::string invoke(const std::string& target, const std::vector<std::string>& codes, const std::vector<int>& classes);
+    bool is_temporary_value(nodes::ASTNode* e);
+    int borrow_bit(nodes::ASTNode* e);
 
     std::string arith(TK op, nodes::ASTNode* l, nodes::ASTNode* r, Type* result, const nodes::ASTNode* at);
 
@@ -321,6 +349,7 @@ private:
     void emit_special_members(std::ostream& os, RecordInfo* r, bool polymorphic);
     std::string align_prefix(const parser_types::TemplateArgument* a, const std::string& cpp_natural);
     std::string type_test(nodes::CastExpression* c);
+    RecordInfo* named_direct_base(RecordInfo* r, std::string_view name);
     RecordInfo* init_record(RecordInfo* r, Sym* target);
     std::string member_object(nodes::MemberAccessExpression* m);
     int self_ref_kind(RecordInfo* r, const nodes::FunctionParameters* ps);
@@ -343,17 +372,29 @@ private:
     std::string aggregate_args(Type* t, const std::vector<nodes::ASTNode*>& els, const nodes::ASTNode* at);
 
     std::string call(nodes::CallExpression* c);
+    std::string builtin_method_call(nodes::CallExpression* c);
 
     static bool is_generic_lambda(const nodes::LambdaExpression* l);
 
     std::string lambda(nodes::LambdaExpression* l);
 
     struct LoopLabel {
-        std::string name;
-        bool        used = false;
+        std::string      name;
+        bool             used = false;
+        std::string_view label;
+        std::string      cont;
+        std::string      brk;
+        bool             cont_used = false;
+        bool             brk_used = false;
     };
 
     std::vector<LoopLabel> m_loops;
+    LoopLabel*             m_next_loop = nullptr;
+
+    static std::string_view loop_label_of(const nodes::ASTNode* s);
+    LoopLabel* labelled_loop(std::string_view label);
+    void statement_body(std::ostream& os, nodes::ASTNode* s);
+    RecordInfo* qualifier_record(const nodes::MemberAccessExpression* m);
 
     void loop_body(std::ostream& os, nodes::ASTNode* body);
 
@@ -366,6 +407,8 @@ private:
     std::string param_type_list(const nodes::FunctionParameters* ps, const nodes::ASTNode* at);
 
     void nested_function(std::ostream& os, nodes::FunctionDeclaration* fd);
+    void nested_operator(std::ostream& os, nodes::OperatorFunctionDeclaration* od);
+    void nested_callable(std::ostream& os, nodes::ASTNode* at, Sym* fs, const nodes::FunctionParameters* params, nodes::ASTNode* body, bool async);
 
     void block(std::ostream& os, nodes::ASTNode* b);
 
@@ -429,6 +472,8 @@ private:
     void emit_record(std::ostream& os, RecordInfo* r);
 
     void emit_record_definitions(std::ostream& os, RecordInfo* r);
+    void emit_constructor_definition(std::ostream& os, RecordInfo* r, nodes::ConstructorDeclaration* c);
+    int  ctor_instance_self_kind(Inst* I);
 
     void emit_records(std::ostream& os) {
         emit_enums();

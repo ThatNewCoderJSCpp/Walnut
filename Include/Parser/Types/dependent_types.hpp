@@ -136,9 +136,12 @@ public:
 class VariantType : public Type {
 private:
     std::vector<TypeInfo> m_alternatives;   
+    bool                  m_special = false;
 
 public:
-    explicit VariantType(std::vector<TypeInfo> alternatives) : m_alternatives(std::move(alternatives)) {}
+    explicit VariantType(std::vector<TypeInfo> alternatives, bool special = false) : m_alternatives(std::move(alternatives)), m_special(special) {}
+
+    bool is_special() const { return m_special; }
 
     Kind kind() const override { return Kind::Variant; }
 

@@ -41,6 +41,12 @@ enum class Precedence : int {
 
 inline int to_int(Precedence p) { return static_cast<int>(p); }
 
+struct ParseNames {
+    std::unordered_set<std::string_view> templates;
+    std::unordered_set<std::string_view> concepts;
+    std::unordered_set<std::string_view> variable_templates;
+};
+
 class Parser {
 private:
     tokenizing::TokenStream& tokens;
@@ -52,8 +58,26 @@ private:
     std::size_t              m_pending_close_angle = 0;
     std::unordered_set<std::string_view> m_template_names;
     std::unordered_set<std::string_view> m_concept_names;
+    std::unordered_set<std::string_view> m_variable_template_names;
+    ParseNames*                          m_shared_names = nullptr;
     bool                     m_declaration_level = false;
     std::vector<nodes::ASTNode*> m_spliced;
+    bool                         m_hoist_friends = false;
+    bool                         m_nested_hoist = false;
+    bool                         m_list_level = false;
+    bool                         m_template_list_level = false;
+    bool                         m_injected_candidate = false;
+    bool                         m_template_injected = false;
+    bool                         m_member_template = false;
+    bool                         m_injected_active = false;
+    nodes::TemplateDeclaration*  m_pending_template = nullptr;
+    nodes::TemplateDeclaration*  m_record_template = nullptr;
+    std::string_view             m_injected_name;
+    nodes::TemplateDeclaration*  m_injected_template = nullptr;
+    const std::vector<parser_types::TemplateArgument*>* m_injected_spec = nullptr;
+    bool                         m_native_record_next = false;
+    modifiers::RawModifiers      m_native_record_mods;
+    int                          m_native_record_depth = 0;
     Arena&                   arena;
     ErrorReporter&           reporter;
 
@@ -82,7 +106,17 @@ private:
     };
 
 public:
-    Parser(tokenizing::TokenStream& stream, ErrorReporter& rep, Arena& ar) : tokens(stream), m_cur_tok(&tokens.current()), arena(ar), reporter(rep) {}
+    Parser(tokenizing::TokenStream& stream, ErrorReporter& rep, Arena& ar) : tokens(stream), m_cur_tok(&tokens.current()), arena(ar), reporter(rep) {
+        for (const parser_types::TypeTraitInfo& t : parser_types::kTypeTraits) {
+            m_template_names.insert(t.name);
+            m_variable_template_names.insert(t.name);
+        }
+        for (std::string_view c : { "same_as", "convertible_to", "derived_from", "integral", "signed_integral", "unsigned_integral",
+                                    "floating_point", "arithmetic", "equality_comparable", "totally_ordered", "has_to_string" }) {
+            m_template_names.insert(c);
+            m_concept_names.insert(c);
+        }
+    }
 
     nodes::BlockStatement*   parse_program();
     const tokenizing::Token& current_token() const noexcept { return *m_cur_tok; }
@@ -90,7 +124,22 @@ public:
     Arena&                   get_arena() { return arena; }
     ErrorReporter&           get_reporter() { return reporter; }
 
-    void register_concept_name(std::string_view name) { if (!name.empty()) { m_concept_names.insert(name); } }
+    void register_concept_name(std::string_view name) {
+        if (name.empty()) return;
+        m_concept_names.insert(name);
+        if (m_shared_names) m_shared_names->concepts.insert(name);
+    }
+
+    nodes::ASTNode* parse_import_at(std::size_t pos);
+    static void prescan_names(const tokenizing::Token* toks, std::size_t n, ParseNames& out);
+
+    void share_names(ParseNames* names) {
+        m_shared_names = names;
+        if (!names) return;
+        m_template_names.insert(names->templates.begin(), names->templates.end());
+        m_concept_names.insert(names->concepts.begin(), names->concepts.end());
+        m_variable_template_names.insert(names->variable_templates.begin(), names->variable_templates.end());
+    }
     bool is_known_concept(std::string_view name) const { return !name.empty() && m_concept_names.count(name) != 0; }
 
 private:
@@ -132,6 +181,9 @@ private:
     std::vector<std::string_view> parse_qualified_name(const char* what, bool* is_global = nullptr);
     std::string                   join_qualified_name(const std::vector<std::string_view>& parts);
     std::string_view              expect_string_literal(const char* what);
+    std::string_view              parse_native_name(const char* what);
+    nodes::ASTNode*               parse_brace_element();
+    void                          check_native_member(nodes::ASTNode* member, const tokenizing::Token& at);
 
 private:
     bool               looks_like_user_type_declaration();
@@ -171,6 +223,9 @@ private:
         std::size_t line_number,
         bool require_semicolon = false
     );
+    nodes::VariableDeclaration* parse_declarator(const parser_types::TypeInfo& type_info, std::size_t line_number);
+    bool parse_owner_name(std::vector<std::string_view>& parts, bool& global);
+    nodes::ASTNode* qualified_member(nodes::ASTNode* left, std::string_view member, nodes::MemberAccessExpression::Op op, std::size_t line);
 
     nodes::ASTNode* parse_function_declaration(
         const modifiers::RawModifiers& mods,
@@ -188,6 +243,8 @@ private:
 
 private:
     nodes::ASTNode* parse_expression();
+    nodes::ASTNode* parse_text_template(const tokenizing::Token& tok);
+    static bool has_interpolation(std::string_view raw);
     nodes::ASTNode* parse_primary_base();
     nodes::ASTNode* parse_primary();
     nodes::ASTNode* parse_expression_pratt(int min_precedence);
@@ -231,6 +288,11 @@ private:
 
 private:
     nodes::ASTNode* parse_record_declaration(const modifiers::RawModifiers& mods, std::size_t line_number);
+    nodes::ASTNode* hoist_friend_definition(nodes::ASTNode* member, nodes::TemplateDeclaration* owner, nodes::RecordDeclaration* record);
+    nodes::TemplateDeclaration* template_for_friend(nodes::TemplateDeclaration* owner, nodes::TemplateDeclaration* own, nodes::ASTNode* fn);
+    std::vector<parser_types::TemplateArgument*> injected_arguments();
+    void drain_spliced(nodes::BlockStatement* block, std::size_t mark);
+    nodes::ASTNode* reject_friend_definition(nodes::ASTNode* member);
     nodes::ASTNode* parse_constructor_declaration(const modifiers::RawModifiers& mods, std::size_t line_number);
     nodes::ASTNode* parse_destructor_declaration(const modifiers::RawModifiers& mods, std::size_t line_number);
 
@@ -251,8 +313,17 @@ private:
     bool                    template_scope_ahead();
     bool                    template_value_ahead();
     bool                    template_ambiguous_ahead();
+    bool                    known_template_ahead();
+    static bool             loose_keyword(tokenizing::Token::Kind k);
+    bool                    take_keyword_as_name(bool need_call);
+    nodes::ASTNode*         make_self(std::size_t line);
     bool                    is_known_template(const nodes::ASTNode* n) const;
     void                    register_template_name(std::string_view name);
+    nodes::ASTNode*         lower_variable_template(nodes::VariableDeclaration* v);
+    [[noreturn]] void       throw_type_op_moved(const tokenizing::Token& at) {
+        const std::string name(at.lexeme());
+        throw ParserError::invalid_expression(reporter, at, "type operations are alias templates in std::traits: write 'std::traits::" + name + "<...>' instead of '" + name + "(...)'");
+    }
     static std::string_view template_probe_key(const nodes::ASTNode* n);
 
 private:
@@ -264,7 +335,7 @@ private:
     nodes::ImportExportItem parse_import_export_item(bool is_import);
 
 private:
-    nodes::BlockStatement*       parse_block(bool require_body = true);
+    nodes::BlockStatement*       parse_block(bool require_body = false);
     nodes::BraceInitializerList* parse_brace_initializer_list();
 };
 

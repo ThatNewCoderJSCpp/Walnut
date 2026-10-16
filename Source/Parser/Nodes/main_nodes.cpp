@@ -63,6 +63,7 @@ bool is_statement(const ASTNode* n) {
         case ASTNode::Kind::TypeQueryOverload:
         case ASTNode::Kind::ForEachStatement:
         case ASTNode::Kind::CoReturnStatement:
+        case ASTNode::Kind::InvalidateStatement:
         case ASTNode::Kind::StaticAssertDeclaration:
         case ASTNode::Kind::NativeCodeBlock:
         case ASTNode::Kind::RecordDeclaration:    

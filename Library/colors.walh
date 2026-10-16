@@ -1,0 +1,1161 @@
+import module.math
+import module.random
+
+namespace std {
+    namespace errors {
+        class color_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class color_error
+    } end namespace errors
+
+    namespace colors {
+        namespace detail {
+            function clamp_channel(long int: v) -> int {
+                if (v < 0) then {
+                    return 0;
+                }
+                if (v > 255) then {
+                    return 255;
+                }
+                return static_cast<int>(v);
+            } end function clamp_channel
+
+            function clamp_unit(float: v) -> float {
+                if (v < 0.0) then {
+                    return 0.0;
+                }
+                if (v > 1.0) then {
+                    return 1.0;
+                }
+                return v;
+            } end function clamp_unit
+
+            function channel_of(float: unit) -> int {
+                return clamp_channel(static_cast<long int>(std::math::floor(clamp_unit(unit) * 255.0 + 0.5)));
+            } end function channel_of
+
+            function wrap_hue(float: h) -> float {
+                float: x = std::math::fmod(h, 360.0);
+                if (x < 0.0) then {
+                    x = x + 360.0;
+                }
+                return x;
+            } end function wrap_hue
+
+            function hex_digit(char: c) -> int {
+                if (c >= '0' && c <= '9') then {
+                    return static_cast<int>(c) - static_cast<int>('0');
+                }
+                if (c >= 'a' && c <= 'f') then {
+                    return static_cast<int>(c) - static_cast<int>('a') + 10;
+                }
+                if (c >= 'A' && c <= 'F') then {
+                    return static_cast<int>(c) - static_cast<int>('A') + 10;
+                }
+                return -1;
+            } end function hex_digit
+
+            function hex_pair(long int: v) -> string {
+                const string: digits = "0123456789abcdef";
+                return digits.substr(v / 16, 1) + digits.substr(v % 16, 1);
+            } end function hex_pair
+
+            function squash(const string&: s) -> string {
+                string: out = "";
+                for (char: c in s) {
+                    if (c == ' ' || c == '_' || c == '-') then {
+                        continue;
+                    }
+                    if (c >= 'A' && c <= 'Z') then {
+                        out = out + static_cast<char>(c + 32);
+                    } else then {
+                        out = out + c;
+                    }
+                }
+                return out;
+            } end function squash
+
+            function to_linear(float: c) -> float {
+                if (c <= 0.04045) then {
+                    return c / 12.92;
+                }
+                return std::math::pow((c + 0.055) / 1.055, 2.4);
+            } end function to_linear
+
+            function hue_part(float: p, float: q, float: t) -> float {
+                float: x = t;
+                if (x < 0.0) then {
+                    x = x + 1.0;
+                }
+                if (x > 1.0) then {
+                    x = x - 1.0;
+                }
+                if (x < 1.0 / 6.0) then {
+                    return p + (q - p) * 6.0 * x;
+                }
+                if (x < 0.5) then {
+                    return q;
+                }
+                if (x < 2.0 / 3.0) then {
+                    return p + (q - p) * (2.0 / 3.0 - x) * 6.0;
+                }
+                return p;
+            } end function hue_part
+
+            function max3(float: a, float: b, float: c) -> float {
+                float: m = a;
+                if (b > m) then {
+                    m = b;
+                }
+                if (c > m) then {
+                    m = c;
+                }
+                return m;
+            } end function max3
+
+            function min3(float: a, float: b, float: c) -> float {
+                float: m = a;
+                if (b < m) then {
+                    m = b;
+                }
+                if (c < m) then {
+                    m = c;
+                }
+                return m;
+            } end function min3
+        } end namespace detail
+
+        struct HSL {
+            float: hue = 0.0;
+            float: saturation = 0.0;
+            float: lightness = 0.0;
+            float: alpha = 1.0;
+
+            constructor() { }
+
+            constructor(float: h, float: s, float: l, float: a = 1.0) : hue = h, saturation = s, lightness = l, alpha = a { }
+
+            function to_string() const -> string {
+                return static_cast<string>(`hsl(${hue}, ${saturation}, ${lightness}, ${alpha})`);
+            } end function to_string
+        } end struct HSL
+
+        struct HSV {
+            float: hue = 0.0;
+            float: saturation = 0.0;
+            float: value = 0.0;
+            float: alpha = 1.0;
+
+            constructor() { }
+
+            constructor(float: h, float: s, float: v, float: a = 1.0) : hue = h, saturation = s, value = v, alpha = a { }
+
+            function to_string() const -> string {
+                return static_cast<string>(`hsv(${hue}, ${saturation}, ${value}, ${alpha})`);
+            } end function to_string
+        } end struct HSV
+
+        struct Color {
+            int: r = 0;
+            int: g = 0;
+            int: b = 0;
+            int: a = 255;
+
+            constructor() { }
+
+            constructor(long int: red, long int: green, long int: blue, long int: alpha = 255) : r = detail::clamp_channel(red), g = detail::clamp_channel(green), b = detail::clamp_channel(blue), a = detail::clamp_channel(alpha) { }
+
+            static function rgb(long int: red, long int: green, long int: blue) -> Color {
+                return Color(red, green, blue, 255);
+            } end function rgb
+
+            static function rgba(long int: red, long int: green, long int: blue, long int: alpha) -> Color {
+                return Color(red, green, blue, alpha);
+            } end function rgba
+
+            static function from_unit(float: red, float: green, float: blue, float: alpha = 1.0) -> Color {
+                return Color(detail::channel_of(red), detail::channel_of(green), detail::channel_of(blue), detail::channel_of(alpha));
+            } end function from_unit
+
+            static function gray(long int: level, long int: alpha = 255) -> Color {
+                return Color(level, level, level, alpha);
+            } end function gray
+
+            static function from_packed(long int: rgba) -> Color {
+                return Color((rgba / 16777216) % 256, (rgba / 65536) % 256, (rgba / 256) % 256, rgba % 256);
+            } end function from_packed
+
+            static function from_hex(const string&: hex) -> Color {
+                string: s = hex.trim();
+                if (s.starts_with("#")) then {
+                    s = s.substr(1);
+                }
+                const long int: n = s.length();
+                if (n != 3 && n != 4 && n != 6 && n != 8) then {
+                    throw std::errors::color_error(static_cast<string>(`'${hex}' is not a hex color; use #rgb, #rgba, #rrggbb or #rrggbbaa`));
+                }
+                array[8] int: d = {0, 0, 0, 0, 0, 0, 15, 15};
+                long int: k = 0;
+                for (char: c in s) {
+                    const int: v = detail::hex_digit(c);
+                    if (v < 0) then {
+                        throw std::errors::color_error(static_cast<string>(`'${hex}' is not a hex color; '${c}' is not a hex digit`));
+                    }
+                    d[k] = v;
+                    k++;
+                }
+                if (n == 3 || n == 4) then {
+                    const int: alpha = n == 4 ? d[3] * 17 : 255;
+                    return Color(d[0] * 17, d[1] * 17, d[2] * 17, alpha);
+                }
+                const int: alpha = n == 8 ? d[6] * 16 + d[7] : 255;
+                return Color(d[0] * 16 + d[1], d[2] * 16 + d[3], d[4] * 16 + d[5], alpha);
+            } end function from_hex
+
+            static function from_hsl(float: hue, float: saturation, float: lightness, float: alpha = 1.0) -> Color {
+                const float: h = detail::wrap_hue(hue) / 360.0;
+                const float: s = detail::clamp_unit(saturation);
+                const float: l = detail::clamp_unit(lightness);
+                if (s == 0.0) then {
+                    return Color::from_unit(l, l, l, alpha);
+                }
+                const float: q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+                const float: p = 2.0 * l - q;
+                return Color::from_unit(detail::hue_part(p, q, h + 1.0 / 3.0), detail::hue_part(p, q, h), detail::hue_part(p, q, h - 1.0 / 3.0), alpha);
+            } end function from_hsl
+
+            static function from_hsl(const HSL&: c) -> Color {
+                return Color::from_hsl(c.hue, c.saturation, c.lightness, c.alpha);
+            } end function from_hsl
+
+            static function from_hsv(float: hue, float: saturation, float: value, float: alpha = 1.0) -> Color {
+                const float: h = detail::wrap_hue(hue) / 60.0;
+                const float: s = detail::clamp_unit(saturation);
+                const float: v = detail::clamp_unit(value);
+                const float: c = v * s;
+                const float: x = c * (1.0 - std::math::abs(std::math::fmod(h, 2.0) - 1.0));
+                const float: m = v - c;
+                float: rr = 0.0;
+                float: gg = 0.0;
+                float: bb = 0.0;
+                if (h < 1.0) then {
+                    rr = c;
+                    gg = x;
+                } else if (h < 2.0) then {
+                    rr = x;
+                    gg = c;
+                } else if (h < 3.0) then {
+                    gg = c;
+                    bb = x;
+                } else if (h < 4.0) then {
+                    gg = x;
+                    bb = c;
+                } else if (h < 5.0) then {
+                    rr = x;
+                    bb = c;
+                } else then {
+                    rr = c;
+                    bb = x;
+                }
+                return Color::from_unit(rr + m, gg + m, bb + m, alpha);
+            } end function from_hsv
+
+            static function from_hsv(const HSV&: c) -> Color {
+                return Color::from_hsv(c.hue, c.saturation, c.value, c.alpha);
+            } end function from_hsv
+
+            static function random(bool: random_alpha = false) -> Color {
+                const long int: alpha = random_alpha ? std::random::random_int(0, 255) : 255;
+                return Color(std::random::random_int(0, 255), std::random::random_int(0, 255), std::random::random_int(0, 255), alpha);
+            } end function random
+
+            function red() const -> int {
+                return r;
+            } end function red
+
+            function green() const -> int {
+                return g;
+            } end function green
+
+            function blue() const -> int {
+                return b;
+            } end function blue
+
+            function alpha() const -> int {
+                return a;
+            } end function alpha
+
+            function red_unit() const -> float {
+                return static_cast<float>(r) / 255.0;
+            } end function red_unit
+
+            function green_unit() const -> float {
+                return static_cast<float>(g) / 255.0;
+            } end function green_unit
+
+            function blue_unit() const -> float {
+                return static_cast<float>(b) / 255.0;
+            } end function blue_unit
+
+            function alpha_unit() const -> float {
+                return static_cast<float>(a) / 255.0;
+            } end function alpha_unit
+
+            function packed() const -> long int {
+                return static_cast<long int>(r) * 16777216 + static_cast<long int>(g) * 65536 + static_cast<long int>(b) * 256 + static_cast<long int>(a);
+            } end function packed
+
+            function to_hex(bool: include_alpha = false) -> string {
+                string: out = "#" + detail::hex_pair(r) + detail::hex_pair(g) + detail::hex_pair(b);
+                if (include_alpha) then {
+                    out = out + detail::hex_pair(a);
+                }
+                return out;
+            } end function to_hex
+
+            function to_string() const -> string {
+                if (a == 255) then {
+                    return static_cast<string>(`rgb(${r}, ${g}, ${b})`);
+                }
+                return static_cast<string>(`rgba(${r}, ${g}, ${b}, ${a})`);
+            } end function to_string
+
+            function to_hsl() const -> HSL {
+                const float: rr = red_unit();
+                const float: gg = green_unit();
+                const float: bb = blue_unit();
+                const float: hi = detail::max3(rr, gg, bb);
+                const float: lo = detail::min3(rr, gg, bb);
+                const float: l = (hi + lo) / 2.0;
+                if (hi == lo) then {
+                    return HSL(0.0, 0.0, l, alpha_unit());
+                }
+                const float: dd = hi - lo;
+                const float: s = l > 0.5 ? dd / (2.0 - hi - lo) : dd / (hi + lo);
+                float: h = 0.0;
+                if (hi == rr) then {
+                    h = (gg - bb) / dd + (gg < bb ? 6.0 : 0.0);
+                } else if (hi == gg) then {
+                    h = (bb - rr) / dd + 2.0;
+                } else then {
+                    h = (rr - gg) / dd + 4.0;
+                }
+                return HSL(h * 60.0, s, l, alpha_unit());
+            } end function to_hsl
+
+            function to_hsv() const -> HSV {
+                const float: rr = red_unit();
+                const float: gg = green_unit();
+                const float: bb = blue_unit();
+                const float: hi = detail::max3(rr, gg, bb);
+                const float: lo = detail::min3(rr, gg, bb);
+                const float: dd = hi - lo;
+                const float: s = hi == 0.0 ? 0.0 : dd / hi;
+                if (dd == 0.0) then {
+                    return HSV(0.0, s, hi, alpha_unit());
+                }
+                float: h = 0.0;
+                if (hi == rr) then {
+                    h = (gg - bb) / dd + (gg < bb ? 6.0 : 0.0);
+                } else if (hi == gg) then {
+                    h = (bb - rr) / dd + 2.0;
+                } else then {
+                    h = (rr - gg) / dd + 4.0;
+                }
+                return HSV(h * 60.0, s, hi, alpha_unit());
+            } end function to_hsv
+
+            function hue() const -> float {
+                return to_hsl().hue;
+            } end function hue
+
+            function saturation() const -> float {
+                return to_hsl().saturation;
+            } end function saturation
+
+            function lightness() const -> float {
+                return to_hsl().lightness;
+            } end function lightness
+
+            function brightness() const -> float {
+                return to_hsv().value;
+            } end function brightness
+
+            function luminance() const -> float {
+                return 0.2126 * detail::to_linear(red_unit()) + 0.7152 * detail::to_linear(green_unit()) + 0.0722 * detail::to_linear(blue_unit());
+            } end function luminance
+
+            function contrast_ratio(const Color&: other) const -> float {
+                const float: x = luminance() + 0.05;
+                const float: y = other.luminance() + 0.05;
+                return x > y ? x / y : y / x;
+            } end function contrast_ratio
+
+            function is_dark() const -> bool {
+                return luminance() < 0.179;
+            } end function is_dark
+
+            function is_light() const -> bool {
+                return !is_dark();
+            } end function is_light
+
+            function is_opaque() const -> bool {
+                return a == 255;
+            } end function is_opaque
+
+            function is_transparent() const -> bool {
+                return a == 0;
+            } end function is_transparent
+
+            function with_red(long int: v) const -> Color {
+                return Color(v, g, b, a);
+            } end function with_red
+
+            function with_green(long int: v) const -> Color {
+                return Color(r, v, b, a);
+            } end function with_green
+
+            function with_blue(long int: v) const -> Color {
+                return Color(r, g, v, a);
+            } end function with_blue
+
+            function with_alpha(long int: v) const -> Color {
+                return Color(r, g, b, v);
+            } end function with_alpha
+
+            function with_opacity(float: unit) const -> Color {
+                return Color(r, g, b, detail::channel_of(unit));
+            } end function with_opacity
+
+            function lerp(const Color&: other, float: t) const -> Color {
+                const float: k = detail::clamp_unit(t);
+                return Color(static_cast<long int>(std::math::floor(static_cast<float>(r) + (static_cast<float>(other.r) - static_cast<float>(r)) * k + 0.5)),
+                             static_cast<long int>(std::math::floor(static_cast<float>(g) + (static_cast<float>(other.g) - static_cast<float>(g)) * k + 0.5)),
+                             static_cast<long int>(std::math::floor(static_cast<float>(b) + (static_cast<float>(other.b) - static_cast<float>(b)) * k + 0.5)),
+                             static_cast<long int>(std::math::floor(static_cast<float>(a) + (static_cast<float>(other.a) - static_cast<float>(a)) * k + 0.5)));
+            } end function lerp
+
+            function mix(const Color&: other, float: t = 0.5) const -> Color {
+                return lerp(other, t);
+            } end function mix
+
+            function lighten(float: amount) const -> Color {
+                const HSL: c = to_hsl();
+                return Color::from_hsl(c.hue, c.saturation, c.lightness + amount, c.alpha);
+            } end function lighten
+
+            function darken(float: amount) const -> Color {
+                const HSL: c = to_hsl();
+                return Color::from_hsl(c.hue, c.saturation, c.lightness - amount, c.alpha);
+            } end function darken
+
+            function saturate(float: amount) const -> Color {
+                const HSL: c = to_hsl();
+                return Color::from_hsl(c.hue, c.saturation + amount, c.lightness, c.alpha);
+            } end function saturate
+
+            function desaturate(float: amount) const -> Color {
+                const HSL: c = to_hsl();
+                return Color::from_hsl(c.hue, c.saturation - amount, c.lightness, c.alpha);
+            } end function desaturate
+
+            function rotate_hue(float: degrees) const -> Color {
+                const HSL: c = to_hsl();
+                return Color::from_hsl(c.hue + degrees, c.saturation, c.lightness, c.alpha);
+            } end function rotate_hue
+
+            function complement() const -> Color {
+                return rotate_hue(180.0);
+            } end function complement
+
+            function grayscale() const -> Color {
+                const long int: v = static_cast<long int>(std::math::floor(0.299 * static_cast<float>(r) + 0.587 * static_cast<float>(g) + 0.114 * static_cast<float>(b) + 0.5));
+                return Color(v, v, v, a);
+            } end function grayscale
+
+            function inverted() const -> Color {
+                return Color(255 - r, 255 - g, 255 - b, a);
+            } end function inverted
+
+            function blend_over(const Color&: background) const -> Color {
+                const float: sa = alpha_unit();
+                const float: da = background.alpha_unit();
+                const float: oa = sa + da * (1.0 - sa);
+                if (oa <= 0.0) then {
+                    return Color(0, 0, 0, 0);
+                }
+                const float: rr = (red_unit() * sa + background.red_unit() * da * (1.0 - sa)) / oa;
+                const float: gg = (green_unit() * sa + background.green_unit() * da * (1.0 - sa)) / oa;
+                const float: bb = (blue_unit() * sa + background.blue_unit() * da * (1.0 - sa)) / oa;
+                return Color::from_unit(rr, gg, bb, oa);
+            } end function blend_over
+
+            function premultiplied() const -> Color {
+                return Color((static_cast<long int>(r) * a + 127) / 255, (static_cast<long int>(g) * a + 127) / 255, (static_cast<long int>(b) * a + 127) / 255, a);
+            } end function premultiplied
+
+            function distance(const Color&: other) const -> float {
+                const float: dr = static_cast<float>(r - other.r);
+                const float: dg = static_cast<float>(g - other.g);
+                const float: db = static_cast<float>(b - other.b);
+                return std::math::sqrt(dr * dr + dg * dg + db * db);
+            } end function distance
+
+            operator(==) function(const Color&: o) const -> bool {
+                return r == o.r && g == o.g && b == o.b && a == o.a;
+            }
+
+            operator(!=) function(const Color&: o) const -> bool {
+                return !(r == o.r && g == o.g && b == o.b && a == o.a);
+            }
+
+            operator(+) function(const Color&: o) const -> Color {
+                return Color(r + o.r, g + o.g, b + o.b, a);
+            }
+
+            operator(-) function(const Color&: o) const -> Color {
+                return Color(r - o.r, g - o.g, b - o.b, a);
+            }
+
+            operator(*) function(float: k) const -> Color {
+                return Color::from_unit(red_unit() * k, green_unit() * k, blue_unit() * k, alpha_unit());
+            }
+        } end struct Color
+
+        const Color: transparent = Color(0, 0, 0, 0);
+
+        const Color: alice_blue = Color(240, 248, 255);
+        const Color: antique_white = Color(250, 235, 215);
+        const Color: aqua = Color(0, 255, 255);
+        const Color: aquamarine = Color(127, 255, 212);
+        const Color: azure = Color(240, 255, 255);
+        const Color: beige = Color(245, 245, 220);
+        const Color: bisque = Color(255, 228, 196);
+        const Color: black = Color(0, 0, 0);
+        const Color: blanched_almond = Color(255, 235, 205);
+        const Color: blue = Color(0, 0, 255);
+        const Color: blue_violet = Color(138, 43, 226);
+        const Color: brown = Color(165, 42, 42);
+        const Color: burlywood = Color(222, 184, 135);
+        const Color: cadet_blue = Color(95, 158, 160);
+        const Color: chartreuse = Color(127, 255, 0);
+        const Color: chocolate = Color(210, 105, 30);
+        const Color: coral = Color(255, 127, 80);
+        const Color: cornflower_blue = Color(100, 149, 237);
+        const Color: cornsilk = Color(255, 248, 220);
+        const Color: crimson = Color(220, 20, 60);
+        const Color: cyan = Color(0, 255, 255);
+        const Color: dark_blue = Color(0, 0, 139);
+        const Color: dark_cyan = Color(0, 139, 139);
+        const Color: dark_goldenrod = Color(184, 134, 11);
+        const Color: dark_gray = Color(169, 169, 169);
+        const Color: dark_green = Color(0, 100, 0);
+        const Color: dark_grey = Color(169, 169, 169);
+        const Color: dark_khaki = Color(189, 183, 107);
+        const Color: dark_magenta = Color(139, 0, 139);
+        const Color: dark_olive_green = Color(85, 107, 47);
+        const Color: dark_orange = Color(255, 140, 0);
+        const Color: dark_orchid = Color(153, 50, 204);
+        const Color: dark_red = Color(139, 0, 0);
+        const Color: dark_salmon = Color(233, 150, 122);
+        const Color: dark_sea_green = Color(143, 188, 143);
+        const Color: dark_slate_blue = Color(72, 61, 139);
+        const Color: dark_slate_gray = Color(47, 79, 79);
+        const Color: dark_slate_grey = Color(47, 79, 79);
+        const Color: dark_turquoise = Color(0, 206, 209);
+        const Color: dark_violet = Color(148, 0, 211);
+        const Color: deep_pink = Color(255, 20, 147);
+        const Color: deep_sky_blue = Color(0, 191, 255);
+        const Color: dim_gray = Color(105, 105, 105);
+        const Color: dim_grey = Color(105, 105, 105);
+        const Color: dodger_blue = Color(30, 144, 255);
+        const Color: firebrick = Color(178, 34, 34);
+        const Color: floral_white = Color(255, 250, 240);
+        const Color: forest_green = Color(34, 139, 34);
+        const Color: fuchsia = Color(255, 0, 255);
+        const Color: gainsboro = Color(220, 220, 220);
+        const Color: ghost_white = Color(248, 248, 255);
+        const Color: gold = Color(255, 215, 0);
+        const Color: goldenrod = Color(218, 165, 32);
+        const Color: gray = Color(128, 128, 128);
+        const Color: green = Color(0, 128, 0);
+        const Color: green_yellow = Color(173, 255, 47);
+        const Color: grey = Color(128, 128, 128);
+        const Color: honeydew = Color(240, 255, 240);
+        const Color: hot_pink = Color(255, 105, 180);
+        const Color: indian_red = Color(205, 92, 92);
+        const Color: indigo = Color(75, 0, 130);
+        const Color: ivory = Color(255, 255, 240);
+        const Color: khaki = Color(240, 230, 140);
+        const Color: lavender = Color(230, 230, 250);
+        const Color: lavender_blush = Color(255, 240, 245);
+        const Color: lawn_green = Color(124, 252, 0);
+        const Color: lemon_chiffon = Color(255, 250, 205);
+        const Color: light_blue = Color(173, 216, 230);
+        const Color: light_coral = Color(240, 128, 128);
+        const Color: light_cyan = Color(224, 255, 255);
+        const Color: light_goldenrod_yellow = Color(250, 250, 210);
+        const Color: light_gray = Color(211, 211, 211);
+        const Color: light_green = Color(144, 238, 144);
+        const Color: light_grey = Color(211, 211, 211);
+        const Color: light_pink = Color(255, 182, 193);
+        const Color: light_salmon = Color(255, 160, 122);
+        const Color: light_sea_green = Color(32, 178, 170);
+        const Color: light_sky_blue = Color(135, 206, 250);
+        const Color: light_slate_gray = Color(119, 136, 153);
+        const Color: light_slate_grey = Color(119, 136, 153);
+        const Color: light_steel_blue = Color(176, 196, 222);
+        const Color: light_yellow = Color(255, 255, 224);
+        const Color: lime = Color(0, 255, 0);
+        const Color: lime_green = Color(50, 205, 50);
+        const Color: linen = Color(250, 240, 230);
+        const Color: magenta = Color(255, 0, 255);
+        const Color: maroon = Color(128, 0, 0);
+        const Color: medium_aquamarine = Color(102, 205, 170);
+        const Color: medium_blue = Color(0, 0, 205);
+        const Color: medium_orchid = Color(186, 85, 211);
+        const Color: medium_purple = Color(147, 112, 219);
+        const Color: medium_sea_green = Color(60, 179, 113);
+        const Color: medium_slate_blue = Color(123, 104, 238);
+        const Color: medium_spring_green = Color(0, 250, 154);
+        const Color: medium_turquoise = Color(72, 209, 204);
+        const Color: medium_violet_red = Color(199, 21, 133);
+        const Color: midnight_blue = Color(25, 25, 112);
+        const Color: mint_cream = Color(245, 255, 250);
+        const Color: misty_rose = Color(255, 228, 225);
+        const Color: moccasin = Color(255, 228, 181);
+        const Color: navajo_white = Color(255, 222, 173);
+        const Color: navy = Color(0, 0, 128);
+        const Color: old_lace = Color(253, 245, 230);
+        const Color: olive = Color(128, 128, 0);
+        const Color: olive_drab = Color(107, 142, 35);
+        const Color: orange = Color(255, 165, 0);
+        const Color: orange_red = Color(255, 69, 0);
+        const Color: orchid = Color(218, 112, 214);
+        const Color: pale_goldenrod = Color(238, 232, 170);
+        const Color: pale_green = Color(152, 251, 152);
+        const Color: pale_turquoise = Color(175, 238, 238);
+        const Color: pale_violet_red = Color(219, 112, 147);
+        const Color: papaya_whip = Color(255, 239, 213);
+        const Color: peach_puff = Color(255, 218, 185);
+        const Color: peru = Color(205, 133, 63);
+        const Color: pink = Color(255, 192, 203);
+        const Color: plum = Color(221, 160, 221);
+        const Color: powder_blue = Color(176, 224, 230);
+        const Color: purple = Color(128, 0, 128);
+        const Color: rebecca_purple = Color(102, 51, 153);
+        const Color: red = Color(255, 0, 0);
+        const Color: rosy_brown = Color(188, 143, 143);
+        const Color: royal_blue = Color(65, 105, 225);
+        const Color: saddle_brown = Color(139, 69, 19);
+        const Color: salmon = Color(250, 128, 114);
+        const Color: sandy_brown = Color(244, 164, 96);
+        const Color: sea_green = Color(46, 139, 87);
+        const Color: seashell = Color(255, 245, 238);
+        const Color: sienna = Color(160, 82, 45);
+        const Color: silver = Color(192, 192, 192);
+        const Color: sky_blue = Color(135, 206, 235);
+        const Color: slate_blue = Color(106, 90, 205);
+        const Color: slate_gray = Color(112, 128, 144);
+        const Color: slate_grey = Color(112, 128, 144);
+        const Color: snow = Color(255, 250, 250);
+        const Color: spring_green = Color(0, 255, 127);
+        const Color: steel_blue = Color(70, 130, 180);
+        const Color: tan = Color(210, 180, 140);
+        const Color: teal = Color(0, 128, 128);
+        const Color: thistle = Color(216, 191, 216);
+        const Color: tomato = Color(255, 99, 71);
+        const Color: turquoise = Color(64, 224, 208);
+        const Color: violet = Color(238, 130, 238);
+        const Color: wheat = Color(245, 222, 179);
+        const Color: white = Color(255, 255, 255);
+        const Color: white_smoke = Color(245, 245, 245);
+        const Color: yellow = Color(255, 255, 0);
+        const Color: yellow_green = Color(154, 205, 50);
+
+        function named(const string&: name) -> Color {
+            const string: key = detail::squash(name);
+            if (key == "transparent") then {
+                return transparent;
+            }
+            if (key == "aliceblue") then {
+                return alice_blue;
+            }
+            if (key == "antiquewhite") then {
+                return antique_white;
+            }
+            if (key == "aqua") then {
+                return aqua;
+            }
+            if (key == "aquamarine") then {
+                return aquamarine;
+            }
+            if (key == "azure") then {
+                return azure;
+            }
+            if (key == "beige") then {
+                return beige;
+            }
+            if (key == "bisque") then {
+                return bisque;
+            }
+            if (key == "black") then {
+                return black;
+            }
+            if (key == "blanchedalmond") then {
+                return blanched_almond;
+            }
+            if (key == "blue") then {
+                return blue;
+            }
+            if (key == "blueviolet") then {
+                return blue_violet;
+            }
+            if (key == "brown") then {
+                return brown;
+            }
+            if (key == "burlywood") then {
+                return burlywood;
+            }
+            if (key == "cadetblue") then {
+                return cadet_blue;
+            }
+            if (key == "chartreuse") then {
+                return chartreuse;
+            }
+            if (key == "chocolate") then {
+                return chocolate;
+            }
+            if (key == "coral") then {
+                return coral;
+            }
+            if (key == "cornflowerblue") then {
+                return cornflower_blue;
+            }
+            if (key == "cornsilk") then {
+                return cornsilk;
+            }
+            if (key == "crimson") then {
+                return crimson;
+            }
+            if (key == "cyan") then {
+                return cyan;
+            }
+            if (key == "darkblue") then {
+                return dark_blue;
+            }
+            if (key == "darkcyan") then {
+                return dark_cyan;
+            }
+            if (key == "darkgoldenrod") then {
+                return dark_goldenrod;
+            }
+            if (key == "darkgray") then {
+                return dark_gray;
+            }
+            if (key == "darkgreen") then {
+                return dark_green;
+            }
+            if (key == "darkgrey") then {
+                return dark_grey;
+            }
+            if (key == "darkkhaki") then {
+                return dark_khaki;
+            }
+            if (key == "darkmagenta") then {
+                return dark_magenta;
+            }
+            if (key == "darkolivegreen") then {
+                return dark_olive_green;
+            }
+            if (key == "darkorange") then {
+                return dark_orange;
+            }
+            if (key == "darkorchid") then {
+                return dark_orchid;
+            }
+            if (key == "darkred") then {
+                return dark_red;
+            }
+            if (key == "darksalmon") then {
+                return dark_salmon;
+            }
+            if (key == "darkseagreen") then {
+                return dark_sea_green;
+            }
+            if (key == "darkslateblue") then {
+                return dark_slate_blue;
+            }
+            if (key == "darkslategray") then {
+                return dark_slate_gray;
+            }
+            if (key == "darkslategrey") then {
+                return dark_slate_grey;
+            }
+            if (key == "darkturquoise") then {
+                return dark_turquoise;
+            }
+            if (key == "darkviolet") then {
+                return dark_violet;
+            }
+            if (key == "deeppink") then {
+                return deep_pink;
+            }
+            if (key == "deepskyblue") then {
+                return deep_sky_blue;
+            }
+            if (key == "dimgray") then {
+                return dim_gray;
+            }
+            if (key == "dimgrey") then {
+                return dim_grey;
+            }
+            if (key == "dodgerblue") then {
+                return dodger_blue;
+            }
+            if (key == "firebrick") then {
+                return firebrick;
+            }
+            if (key == "floralwhite") then {
+                return floral_white;
+            }
+            if (key == "forestgreen") then {
+                return forest_green;
+            }
+            if (key == "fuchsia") then {
+                return fuchsia;
+            }
+            if (key == "gainsboro") then {
+                return gainsboro;
+            }
+            if (key == "ghostwhite") then {
+                return ghost_white;
+            }
+            if (key == "gold") then {
+                return gold;
+            }
+            if (key == "goldenrod") then {
+                return goldenrod;
+            }
+            if (key == "gray") then {
+                return gray;
+            }
+            if (key == "green") then {
+                return green;
+            }
+            if (key == "greenyellow") then {
+                return green_yellow;
+            }
+            if (key == "grey") then {
+                return grey;
+            }
+            if (key == "honeydew") then {
+                return honeydew;
+            }
+            if (key == "hotpink") then {
+                return hot_pink;
+            }
+            if (key == "indianred") then {
+                return indian_red;
+            }
+            if (key == "indigo") then {
+                return indigo;
+            }
+            if (key == "ivory") then {
+                return ivory;
+            }
+            if (key == "khaki") then {
+                return khaki;
+            }
+            if (key == "lavender") then {
+                return lavender;
+            }
+            if (key == "lavenderblush") then {
+                return lavender_blush;
+            }
+            if (key == "lawngreen") then {
+                return lawn_green;
+            }
+            if (key == "lemonchiffon") then {
+                return lemon_chiffon;
+            }
+            if (key == "lightblue") then {
+                return light_blue;
+            }
+            if (key == "lightcoral") then {
+                return light_coral;
+            }
+            if (key == "lightcyan") then {
+                return light_cyan;
+            }
+            if (key == "lightgoldenrodyellow") then {
+                return light_goldenrod_yellow;
+            }
+            if (key == "lightgray") then {
+                return light_gray;
+            }
+            if (key == "lightgreen") then {
+                return light_green;
+            }
+            if (key == "lightgrey") then {
+                return light_grey;
+            }
+            if (key == "lightpink") then {
+                return light_pink;
+            }
+            if (key == "lightsalmon") then {
+                return light_salmon;
+            }
+            if (key == "lightseagreen") then {
+                return light_sea_green;
+            }
+            if (key == "lightskyblue") then {
+                return light_sky_blue;
+            }
+            if (key == "lightslategray") then {
+                return light_slate_gray;
+            }
+            if (key == "lightslategrey") then {
+                return light_slate_grey;
+            }
+            if (key == "lightsteelblue") then {
+                return light_steel_blue;
+            }
+            if (key == "lightyellow") then {
+                return light_yellow;
+            }
+            if (key == "lime") then {
+                return lime;
+            }
+            if (key == "limegreen") then {
+                return lime_green;
+            }
+            if (key == "linen") then {
+                return linen;
+            }
+            if (key == "magenta") then {
+                return magenta;
+            }
+            if (key == "maroon") then {
+                return maroon;
+            }
+            if (key == "mediumaquamarine") then {
+                return medium_aquamarine;
+            }
+            if (key == "mediumblue") then {
+                return medium_blue;
+            }
+            if (key == "mediumorchid") then {
+                return medium_orchid;
+            }
+            if (key == "mediumpurple") then {
+                return medium_purple;
+            }
+            if (key == "mediumseagreen") then {
+                return medium_sea_green;
+            }
+            if (key == "mediumslateblue") then {
+                return medium_slate_blue;
+            }
+            if (key == "mediumspringgreen") then {
+                return medium_spring_green;
+            }
+            if (key == "mediumturquoise") then {
+                return medium_turquoise;
+            }
+            if (key == "mediumvioletred") then {
+                return medium_violet_red;
+            }
+            if (key == "midnightblue") then {
+                return midnight_blue;
+            }
+            if (key == "mintcream") then {
+                return mint_cream;
+            }
+            if (key == "mistyrose") then {
+                return misty_rose;
+            }
+            if (key == "moccasin") then {
+                return moccasin;
+            }
+            if (key == "navajowhite") then {
+                return navajo_white;
+            }
+            if (key == "navy") then {
+                return navy;
+            }
+            if (key == "oldlace") then {
+                return old_lace;
+            }
+            if (key == "olive") then {
+                return olive;
+            }
+            if (key == "olivedrab") then {
+                return olive_drab;
+            }
+            if (key == "orange") then {
+                return orange;
+            }
+            if (key == "orangered") then {
+                return orange_red;
+            }
+            if (key == "orchid") then {
+                return orchid;
+            }
+            if (key == "palegoldenrod") then {
+                return pale_goldenrod;
+            }
+            if (key == "palegreen") then {
+                return pale_green;
+            }
+            if (key == "paleturquoise") then {
+                return pale_turquoise;
+            }
+            if (key == "palevioletred") then {
+                return pale_violet_red;
+            }
+            if (key == "papayawhip") then {
+                return papaya_whip;
+            }
+            if (key == "peachpuff") then {
+                return peach_puff;
+            }
+            if (key == "peru") then {
+                return peru;
+            }
+            if (key == "pink") then {
+                return pink;
+            }
+            if (key == "plum") then {
+                return plum;
+            }
+            if (key == "powderblue") then {
+                return powder_blue;
+            }
+            if (key == "purple") then {
+                return purple;
+            }
+            if (key == "rebeccapurple") then {
+                return rebecca_purple;
+            }
+            if (key == "red") then {
+                return red;
+            }
+            if (key == "rosybrown") then {
+                return rosy_brown;
+            }
+            if (key == "royalblue") then {
+                return royal_blue;
+            }
+            if (key == "saddlebrown") then {
+                return saddle_brown;
+            }
+            if (key == "salmon") then {
+                return salmon;
+            }
+            if (key == "sandybrown") then {
+                return sandy_brown;
+            }
+            if (key == "seagreen") then {
+                return sea_green;
+            }
+            if (key == "seashell") then {
+                return seashell;
+            }
+            if (key == "sienna") then {
+                return sienna;
+            }
+            if (key == "silver") then {
+                return silver;
+            }
+            if (key == "skyblue") then {
+                return sky_blue;
+            }
+            if (key == "slateblue") then {
+                return slate_blue;
+            }
+            if (key == "slategray") then {
+                return slate_gray;
+            }
+            if (key == "slategrey") then {
+                return slate_grey;
+            }
+            if (key == "snow") then {
+                return snow;
+            }
+            if (key == "springgreen") then {
+                return spring_green;
+            }
+            if (key == "steelblue") then {
+                return steel_blue;
+            }
+            if (key == "tan") then {
+                return tan;
+            }
+            if (key == "teal") then {
+                return teal;
+            }
+            if (key == "thistle") then {
+                return thistle;
+            }
+            if (key == "tomato") then {
+                return tomato;
+            }
+            if (key == "turquoise") then {
+                return turquoise;
+            }
+            if (key == "violet") then {
+                return violet;
+            }
+            if (key == "wheat") then {
+                return wheat;
+            }
+            if (key == "white") then {
+                return white;
+            }
+            if (key == "whitesmoke") then {
+                return white_smoke;
+            }
+            if (key == "yellow") then {
+                return yellow;
+            }
+            if (key == "yellowgreen") then {
+                return yellow_green;
+            }
+            throw std::errors::color_error(static_cast<string>(`'${name}' is not a color name`));
+        } end function named
+
+        function is_named(const string&: name) -> bool {
+            const string: key = detail::squash(name);
+            if (key == "transparent") then {
+                return true;
+            }
+            const array[148] string: all = {"aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond", "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral", "cornflowerblue", "cornsilk", "crimson", "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray", "darkgreen", "darkgrey", "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred", "darksalmon", "darkseagreen", "darkslateblue", "darkslategray", "darkslategrey", "darkturquoise", "darkviolet", "deeppink", "deepskyblue", "dimgray", "dimgrey", "dodgerblue", "firebrick", "floralwhite", "forestgreen", "fuchsia", "gainsboro", "ghostwhite", "gold", "goldenrod", "gray", "green", "greenyellow", "grey", "honeydew", "hotpink", "indianred", "indigo", "ivory", "khaki", "lavender", "lavenderblush", "lawngreen", "lemonchiffon", "lightblue", "lightcoral", "lightcyan", "lightgoldenrodyellow", "lightgray", "lightgreen", "lightgrey", "lightpink", "lightsalmon", "lightseagreen", "lightskyblue", "lightslategray", "lightslategrey", "lightsteelblue", "lightyellow", "lime", "limegreen", "linen", "magenta", "maroon", "mediumaquamarine", "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen", "mediumslateblue", "mediumspringgreen", "mediumturquoise", "mediumvioletred", "midnightblue", "mintcream", "mistyrose", "moccasin", "navajowhite", "navy", "oldlace", "olive", "olivedrab", "orange", "orangered", "orchid", "palegoldenrod", "palegreen", "paleturquoise", "palevioletred", "papayawhip", "peachpuff", "peru", "pink", "plum", "powderblue", "purple", "rebeccapurple", "red", "rosybrown", "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell", "sienna", "silver", "skyblue", "slateblue", "slategray", "slategrey", "snow", "springgreen", "steelblue", "tan", "teal", "thistle", "tomato", "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow", "yellowgreen"};
+            for (const string&: candidate in all) {
+                if (candidate == key) then {
+                    return true;
+                }
+            }
+            return false;
+        } end function is_named
+
+        function parse(const string&: text_value) -> Color {
+            const string: key = detail::squash(text_value);
+            if (key.starts_with("#")) then {
+                return Color::from_hex(key);
+            }
+            return named(key);
+        } end function parse
+
+        function lerp(const Color&: x, const Color&: y, float: t) -> Color {
+            return x.lerp(y, t);
+        } end function lerp
+    } end namespace colors
+} end namespace std

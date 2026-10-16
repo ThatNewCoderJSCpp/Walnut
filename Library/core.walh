@@ -1,11 +1,1307 @@
 namespace std {
-    template <typename T>
-    constexpr function move(T&: value) noexcept -> T&& {
-        return static_cast<T&&>(value);
-    } end function move
+    template <typename T, T V>
+    struct value_constant {
+        static constexpr T: value = V;
+        using value_type = T;
+
+        constexpr operator(T) function() const {
+            return V;
+        }
+
+        constexpr operator(()) function() const -> T {
+            return V;
+        }
+    } end struct value_constant
+
+    template <bool V>
+    struct bool_constant {
+        static constexpr bool: value = V;
+        using value_type = bool;
+
+        constexpr operator(bool) function() const {
+            return V;
+        }
+
+        constexpr operator(()) function() const -> bool {
+            return V;
+        }
+    } end struct bool_constant
+
+    template <typename T, T V>
+        requires std::traits::is_integer<T>
+    struct integer_constant {
+        static constexpr T: value = V;
+        using value_type = T;
+
+        constexpr operator(T) function() const {
+            return V;
+        }
+
+        constexpr operator(()) function() const -> T {
+            return V;
+        }
+    } end struct integer_constant
+
+    template <typename T, T V>
+        requires std::traits::is_floating<T>
+    struct float_constant {
+        static constexpr T: value = V;
+        using value_type = T;
+
+        constexpr operator(T) function() const {
+            return V;
+        }
+
+        constexpr operator(()) function() const -> T {
+            return V;
+        }
+    } end struct float_constant
+
+    template <char V>
+    struct char_constant {
+        static constexpr char: value = V;
+        using value_type = char;
+
+        constexpr operator(char) function() const {
+            return V;
+        }
+
+        constexpr operator(()) function() const -> char {
+            return V;
+        }
+    } end struct char_constant
+
+    template <string V>
+    struct string_constant {
+        static constexpr string: value = V;
+        using value_type = string;
+
+        constexpr operator(string) function() const {
+            return V;
+        }
+
+        constexpr operator(()) function() const -> string {
+            return V;
+        }
+    } end struct string_constant
+
+    template <text V>
+    struct text_constant {
+        static constexpr text: value = V;
+        using value_type = text;
+
+        constexpr operator(text) function() const {
+            return V;
+        }
+
+        constexpr operator(()) function() const -> text {
+            return V;
+        }
+    } end struct text_constant
+
+    using true_type = bool_constant<true>;
+    using false_type = bool_constant<false>;
+
+    template <bool Condition, typename T = void>
+    struct enable_if {
+    } end struct enable_if
 
     template <typename T>
-    constexpr function move(T&&: value) noexcept -> T&& {
-        return static_cast<T&&>(value);
-    } end function move
+    struct enable_if<true, T> {
+        using type = T;
+    } end struct enable_if
+
+    template <bool Condition, typename T = void>
+    using enable_if_t = enable_if<Condition, T>::type;
+
+    namespace traits {
+        namespace extend {
+            template <typename T>
+            struct is_const inherits std::bool_constant<__is_const(T)> {
+            } end struct is_const
+
+            template <typename T>
+            struct is_volatile inherits std::bool_constant<__is_volatile(T)> {
+            } end struct is_volatile
+
+            template <typename T>
+            struct is_ref inherits std::bool_constant<__is_ref(T)> {
+            } end struct is_ref
+
+            template <typename T>
+            struct is_lvalue_ref inherits std::bool_constant<__is_lvalue_ref(T)> {
+            } end struct is_lvalue_ref
+
+            template <typename T>
+            struct is_rvalue_ref inherits std::bool_constant<__is_rvalue_ref(T)> {
+            } end struct is_rvalue_ref
+
+            template <typename T>
+            struct is_pointer inherits std::bool_constant<__is_pointer(T)> {
+            } end struct is_pointer
+
+            template <typename T>
+            struct is_null_pointer inherits std::bool_constant<__is_null_pointer(T)> {
+            } end struct is_null_pointer
+
+            template <typename T>
+            struct is_array inherits std::bool_constant<__is_array(T)> {
+            } end struct is_array
+
+            template <typename T>
+            struct is_fixed_array inherits std::bool_constant<__is_fixed_array(T)> {
+            } end struct is_fixed_array
+
+            template <typename T>
+            struct is_runtime_array inherits std::bool_constant<__is_runtime_array(T)> {
+            } end struct is_runtime_array
+
+            template <typename T>
+            struct is_integer inherits std::bool_constant<__is_integer(T)> {
+            } end struct is_integer
+
+            template <typename T>
+            struct is_float inherits std::bool_constant<__is_float(T)> {
+            } end struct is_float
+
+            template <typename T>
+            struct is_bool inherits std::bool_constant<__is_bool(T)> {
+            } end struct is_bool
+
+            template <typename T>
+            struct is_char inherits std::bool_constant<__is_char(T)> {
+            } end struct is_char
+
+            template <typename T>
+            struct is_string inherits std::bool_constant<__is_string(T)> {
+            } end struct is_string
+
+            template <typename T>
+            struct is_text inherits std::bool_constant<__is_text(T)> {
+            } end struct is_text
+
+            template <typename T>
+            struct is_str inherits std::bool_constant<__is_str(T)> {
+            } end struct is_str
+
+            template <typename T>
+            struct is_enum inherits std::bool_constant<__is_enum(T)> {
+            } end struct is_enum
+
+            template <typename T>
+            struct is_class inherits std::bool_constant<__is_class(T)> {
+            } end struct is_class
+
+            template <typename T>
+            struct is_struct inherits std::bool_constant<__is_struct(T)> {
+            } end struct is_struct
+
+            template <typename T>
+            struct is_union inherits std::bool_constant<__is_union(T)> {
+            } end struct is_union
+
+            template <typename T>
+            struct is_variant inherits std::bool_constant<__is_variant(T)> {
+            } end struct is_variant
+
+            template <typename T>
+            struct is_function inherits std::bool_constant<__is_function(T)> {
+            } end struct is_function
+
+            template <typename T>
+            struct is_closure inherits std::bool_constant<__is_closure(T)> {
+            } end struct is_closure
+
+            template <typename T>
+            struct is_void inherits std::bool_constant<__is_void(T)> {
+            } end struct is_void
+
+            template <typename T>
+            struct is_dynamic inherits std::bool_constant<__is_dynamic(T)> {
+            } end struct is_dynamic
+
+            template <typename T>
+            struct is_special inherits std::bool_constant<__is_special(T)> {
+            } end struct is_special
+
+            template <typename T>
+            struct is_abstract inherits std::bool_constant<__is_abstract(T)> {
+            } end struct is_abstract
+
+            template <typename T>
+            struct is_polymorphic inherits std::bool_constant<__is_polymorphic(T)> {
+            } end struct is_polymorphic
+
+            template <typename T>
+            struct is_empty inherits std::bool_constant<__is_empty(T)> {
+            } end struct is_empty
+
+            template <typename T>
+            struct is_native inherits std::bool_constant<__is_native(T)> {
+            } end struct is_native
+
+            template <typename T>
+            struct is_signed inherits std::bool_constant<__is_signed(T)> {
+            } end struct is_signed
+
+            template <typename T>
+            struct is_unsigned inherits std::bool_constant<__is_unsigned(T)> {
+            } end struct is_unsigned
+
+            template <typename A, typename B>
+            struct is_same inherits std::bool_constant<__is_same(A, B)> {
+            } end struct is_same
+
+            template <typename From, typename To>
+            struct is_convertible inherits std::bool_constant<__is_convertible(From, To)> {
+            } end struct is_convertible
+
+            template <typename Base, typename Derived>
+            struct is_base_of inherits std::bool_constant<__is_base_of(Base, Derived)> {
+            } end struct is_base_of
+
+            template <typename T>
+            struct is_floating inherits std::bool_constant<(std::traits::is_float<T>)> {
+            } end struct is_floating
+
+            template <typename T>
+            struct is_number inherits std::bool_constant<(__is_arithmetic(T) || std::traits::is_integer<T> || std::traits::is_float<T>)> {
+            } end struct is_number
+
+            template <typename T>
+            struct is_arithmetic inherits std::bool_constant<(__is_arithmetic(T) || std::traits::is_integer<T> || std::traits::is_float<T>)> {
+            } end struct is_arithmetic
+
+            template <typename T>
+            struct is_signed_integer inherits std::bool_constant<(std::traits::is_integer<T> && std::traits::is_signed<T>)> {
+            } end struct is_signed_integer
+
+            template <typename T>
+            struct is_unsigned_integer inherits std::bool_constant<(std::traits::is_integer<T> && std::traits::is_unsigned<T>)> {
+            } end struct is_unsigned_integer
+
+            template <typename T>
+            struct is_signed_float inherits std::bool_constant<(std::traits::is_float<T> && std::traits::is_signed<T>)> {
+            } end struct is_signed_float
+
+            template <typename T>
+            struct is_unsigned_float inherits std::bool_constant<(std::traits::is_float<T> && std::traits::is_unsigned<T>)> {
+            } end struct is_unsigned_float
+
+            template <typename T>
+            struct is_reference inherits std::bool_constant<(std::traits::is_ref<T>)> {
+            } end struct is_reference
+
+            template <typename T>
+            struct is_character inherits std::bool_constant<(std::traits::is_char<T>)> {
+            } end struct is_character
+
+            template <typename T>
+            struct is_boolean inherits std::bool_constant<(std::traits::is_bool<T>)> {
+            } end struct is_boolean
+
+            template <typename T>
+            struct is_text_like inherits std::bool_constant<(std::traits::is_string<T> || std::traits::is_char<T>)> {
+            } end struct is_text_like
+
+            template <typename T>
+            struct is_scalar inherits std::bool_constant<(std::traits::is_integer<T> || std::traits::is_float<T> || std::traits::is_bool<T> || std::traits::is_char<T> || std::traits::is_enum<T> || std::traits::is_pointer<T> || std::traits::is_null_pointer<T>)> {
+            } end struct is_scalar
+
+            template <typename T>
+            struct is_fundamental inherits std::bool_constant<(std::traits::is_scalar<T> || std::traits::is_void<T> || std::traits::is_string<T> || std::traits::is_dynamic<T>)> {
+            } end struct is_fundamental
+
+            template <typename T>
+            struct is_compound inherits std::bool_constant<(!std::traits::is_fundamental<T>)> {
+            } end struct is_compound
+
+            template <typename T>
+            struct is_object inherits std::bool_constant<(!std::traits::is_ref<T> && !std::traits::is_function<T> && !std::traits::is_void<T>)> {
+            } end struct is_object
+
+            template <typename T>
+            struct is_record inherits std::bool_constant<(std::traits::is_class<T>)> {
+            } end struct is_record
+
+            template <typename T>
+            struct is_callable_type inherits std::bool_constant<(std::traits::is_function<T> || std::traits::is_closure<T>)> {
+            } end struct is_callable_type
+
+            template <typename T>
+            struct is_default_constructible inherits std::bool_constant<(std::concepts::default_constructible<T>)> {
+            } end struct is_default_constructible
+
+            template <typename T>
+            struct is_copy_constructible inherits std::bool_constant<(std::concepts::copy_constructible<T>)> {
+            } end struct is_copy_constructible
+
+            template <typename T>
+            struct is_move_constructible inherits std::bool_constant<(std::concepts::move_constructible<T>)> {
+            } end struct is_move_constructible
+
+            template <typename T>
+            struct is_copy_assignable inherits std::bool_constant<(std::concepts::copy_assignable<T>)> {
+            } end struct is_copy_assignable
+
+            template <typename T>
+            struct is_move_assignable inherits std::bool_constant<(std::concepts::move_assignable<T>)> {
+            } end struct is_move_assignable
+
+            template <typename T>
+            struct is_copyable inherits std::bool_constant<(std::concepts::copyable<T>)> {
+            } end struct is_copyable
+
+            template <typename T>
+            struct is_movable inherits std::bool_constant<(std::concepts::movable<T>)> {
+            } end struct is_movable
+
+            template <typename T>
+            struct is_equality_comparable inherits std::bool_constant<(std::concepts::equality_comparable<T>)> {
+            } end struct is_equality_comparable
+
+            template <typename T>
+            struct is_totally_ordered inherits std::bool_constant<(std::concepts::totally_ordered<T>)> {
+            } end struct is_totally_ordered
+
+            template <typename T>
+            struct is_iterable inherits std::bool_constant<(std::concepts::iterable<T>)> {
+            } end struct is_iterable
+
+            template <typename T>
+            struct is_iterator inherits std::bool_constant<(std::concepts::iterator<T>)> {
+            } end struct is_iterator
+
+            template <typename T>
+            struct is_random_access_iterator inherits std::bool_constant<(std::concepts::random_access_iterator<T>)> {
+            } end struct is_random_access_iterator
+
+            template <typename T>
+            struct has_to_string inherits std::bool_constant<(std::concepts::has_to_string<T>)> {
+            } end struct has_to_string
+
+            template <typename T>
+            struct is_hashable inherits std::bool_constant<(std::concepts::hashable<T>)> {
+            } end struct is_hashable
+
+            template <typename Derived, typename Base>
+            struct is_derived_from inherits std::bool_constant<(std::traits::is_base_of<Base, Derived>)> {
+            } end struct is_derived_from
+
+            template <typename A, typename B>
+            struct is_same_ignoring_cv inherits std::bool_constant<(std::traits::is_same<std::traits::discard_cv<A>, std::traits::discard_cv<B>>)> {
+            } end struct is_same_ignoring_cv
+
+            template <typename A, typename B>
+            struct is_same_decayed inherits std::bool_constant<(std::traits::is_same<std::traits::decay<A>, std::traits::decay<B>>)> {
+            } end struct is_same_decayed
+        } end namespace extend
+
+        template <typename T>
+        constexpr bool: is_const = std::traits::extend::is_const<T>::value;
+
+        template <typename T>
+        constexpr bool: is_volatile = std::traits::extend::is_volatile<T>::value;
+
+        template <typename T>
+        constexpr bool: is_ref = std::traits::extend::is_ref<T>::value;
+
+        template <typename T>
+        constexpr bool: is_lvalue_ref = std::traits::extend::is_lvalue_ref<T>::value;
+
+        template <typename T>
+        constexpr bool: is_rvalue_ref = std::traits::extend::is_rvalue_ref<T>::value;
+
+        template <typename T>
+        constexpr bool: is_pointer = std::traits::extend::is_pointer<T>::value;
+
+        template <typename T>
+        constexpr bool: is_null_pointer = std::traits::extend::is_null_pointer<T>::value;
+
+        template <typename T>
+        constexpr bool: is_array = std::traits::extend::is_array<T>::value;
+
+        template <typename T>
+        constexpr bool: is_fixed_array = std::traits::extend::is_fixed_array<T>::value;
+
+        template <typename T>
+        constexpr bool: is_runtime_array = std::traits::extend::is_runtime_array<T>::value;
+
+        template <typename T>
+        constexpr bool: is_integer = std::traits::extend::is_integer<T>::value;
+
+        template <typename T>
+        constexpr bool: is_float = std::traits::extend::is_float<T>::value;
+
+        template <typename T>
+        constexpr bool: is_bool = std::traits::extend::is_bool<T>::value;
+
+        template <typename T>
+        constexpr bool: is_char = std::traits::extend::is_char<T>::value;
+
+        template <typename T>
+        constexpr bool: is_string = std::traits::extend::is_string<T>::value;
+
+        template <typename T>
+        constexpr bool: is_text = std::traits::extend::is_text<T>::value;
+
+        template <typename T>
+        constexpr bool: is_str = std::traits::extend::is_str<T>::value;
+
+        template <typename T>
+        constexpr bool: is_enum = std::traits::extend::is_enum<T>::value;
+
+        template <typename T>
+        constexpr bool: is_class = std::traits::extend::is_class<T>::value;
+
+        template <typename T>
+        constexpr bool: is_struct = std::traits::extend::is_struct<T>::value;
+
+        template <typename T>
+        constexpr bool: is_union = std::traits::extend::is_union<T>::value;
+
+        template <typename T>
+        constexpr bool: is_variant = std::traits::extend::is_variant<T>::value;
+
+        template <typename T>
+        constexpr bool: is_function = std::traits::extend::is_function<T>::value;
+
+        template <typename T>
+        constexpr bool: is_closure = std::traits::extend::is_closure<T>::value;
+
+        template <typename T>
+        constexpr bool: is_void = std::traits::extend::is_void<T>::value;
+
+        template <typename T>
+        constexpr bool: is_dynamic = std::traits::extend::is_dynamic<T>::value;
+
+        template <typename T>
+        constexpr bool: is_special = std::traits::extend::is_special<T>::value;
+
+        template <typename T>
+        constexpr bool: is_abstract = std::traits::extend::is_abstract<T>::value;
+
+        template <typename T>
+        constexpr bool: is_polymorphic = std::traits::extend::is_polymorphic<T>::value;
+
+        template <typename T>
+        constexpr bool: is_empty = std::traits::extend::is_empty<T>::value;
+
+        template <typename T>
+        constexpr bool: is_native = std::traits::extend::is_native<T>::value;
+
+        template <typename T>
+        constexpr bool: is_signed = std::traits::extend::is_signed<T>::value;
+
+        template <typename T>
+        constexpr bool: is_unsigned = std::traits::extend::is_unsigned<T>::value;
+
+        template <typename T>
+        constexpr bool: is_floating = std::traits::extend::is_floating<T>::value;
+
+        template <typename T>
+        constexpr bool: is_number = std::traits::extend::is_number<T>::value;
+
+        template <typename T>
+        constexpr bool: is_arithmetic = std::traits::extend::is_arithmetic<T>::value;
+
+        template <typename T>
+        constexpr bool: is_signed_integer = std::traits::extend::is_signed_integer<T>::value;
+
+        template <typename T>
+        constexpr bool: is_unsigned_integer = std::traits::extend::is_unsigned_integer<T>::value;
+
+        template <typename T>
+        constexpr bool: is_signed_float = std::traits::extend::is_signed_float<T>::value;
+
+        template <typename T>
+        constexpr bool: is_unsigned_float = std::traits::extend::is_unsigned_float<T>::value;
+
+        template <typename T>
+        constexpr bool: is_reference = std::traits::extend::is_reference<T>::value;
+
+        template <typename T>
+        constexpr bool: is_character = std::traits::extend::is_character<T>::value;
+
+        template <typename T>
+        constexpr bool: is_boolean = std::traits::extend::is_boolean<T>::value;
+
+        template <typename T>
+        constexpr bool: is_text_like = std::traits::extend::is_text_like<T>::value;
+
+        template <typename T>
+        constexpr bool: is_scalar = std::traits::extend::is_scalar<T>::value;
+
+        template <typename T>
+        constexpr bool: is_fundamental = std::traits::extend::is_fundamental<T>::value;
+
+        template <typename T>
+        constexpr bool: is_compound = std::traits::extend::is_compound<T>::value;
+
+        template <typename T>
+        constexpr bool: is_object = std::traits::extend::is_object<T>::value;
+
+        template <typename T>
+        constexpr bool: is_record = std::traits::extend::is_record<T>::value;
+
+        template <typename T>
+        constexpr bool: is_callable_type = std::traits::extend::is_callable_type<T>::value;
+
+        template <typename T>
+        constexpr bool: is_default_constructible = std::traits::extend::is_default_constructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_copy_constructible = std::traits::extend::is_copy_constructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_move_constructible = std::traits::extend::is_move_constructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_copy_assignable = std::traits::extend::is_copy_assignable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_move_assignable = std::traits::extend::is_move_assignable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_copyable = std::traits::extend::is_copyable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_movable = std::traits::extend::is_movable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_equality_comparable = std::traits::extend::is_equality_comparable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_totally_ordered = std::traits::extend::is_totally_ordered<T>::value;
+
+        template <typename T>
+        constexpr bool: is_iterable = std::traits::extend::is_iterable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_iterator = std::traits::extend::is_iterator<T>::value;
+
+        template <typename T>
+        constexpr bool: is_random_access_iterator = std::traits::extend::is_random_access_iterator<T>::value;
+
+        template <typename T>
+        constexpr bool: has_to_string = std::traits::extend::has_to_string<T>::value;
+
+        template <typename T>
+        constexpr bool: is_hashable = std::traits::extend::is_hashable<T>::value;
+
+        template <typename A, typename B>
+        constexpr bool: is_same = std::traits::extend::is_same<A, B>::value;
+
+        template <typename From, typename To>
+        constexpr bool: is_convertible = std::traits::extend::is_convertible<From, To>::value;
+
+        template <typename Base, typename Derived>
+        constexpr bool: is_base_of = std::traits::extend::is_base_of<Base, Derived>::value;
+
+        template <typename Derived, typename Base>
+        constexpr bool: is_derived_from = std::traits::extend::is_derived_from<Derived, Base>::value;
+
+        template <typename A, typename B>
+        constexpr bool: is_same_ignoring_cv = std::traits::extend::is_same_ignoring_cv<A, B>::value;
+
+        template <typename A, typename B>
+        constexpr bool: is_same_decayed = std::traits::extend::is_same_decayed<A, B>::value;
+
+        template <typename T>
+        constexpr bool: is_builtin_integer = __is_integer(T);
+
+        template <typename T>
+        constexpr bool: is_builtin_float = __is_float(T);
+
+        template <typename T>
+        constexpr bool: is_builtin_number = __is_integer(T) || __is_float(T);
+
+        template <typename T>
+        constexpr int: integer_rank = __integer_rank(T);
+
+        template <typename T>
+        constexpr int: float_rank = __float_rank(T);
+
+        template <typename T>
+        constexpr int: integer_bits = __integer_bits(T);
+
+        template <typename T>
+        constexpr int: float_bits = __float_bits(T);
+
+        template <typename T>
+        constexpr int: float_mantissa_bits = __float_mantissa_bits(T);
+
+        template <typename T>
+        constexpr int: float_exponent_bits = __float_exponent_bits(T);
+
+        template <typename T>
+        constexpr int: array_extent = __array_extent(T);
+
+
+        template <typename T>
+        using discard_volatile = __discard_volatile(T);
+
+        template <typename T>
+        using discard_cv = __discard_cv(T);
+
+        template <typename T>
+        using discard_ref = __discard_ref(T);
+
+        template <typename T>
+        using discard_pointer = __discard_pointer(T);
+
+        template <typename T>
+        using decay = __decay(T);
+
+        template <typename T>
+        using add_const = __add_const(T);
+
+        template <typename T>
+        using add_volatile = __add_volatile(T);
+
+        template <typename T>
+        using add_ref = __add_ref(T);
+
+        template <typename T>
+        using add_rvalue_ref = __add_rvalue_ref(T);
+
+        template <typename T>
+        using add_pointer = __add_pointer(T);
+
+        template <typename T>
+        using make_signed = __make_signed(T);
+
+        template <typename T>
+        using make_unsigned = __make_unsigned(T);
+
+        template <typename T>
+        using element_type = __element_type(T);
+
+        template <typename T>
+        using underlying_type = __underlying_type(T);
+
+        template <typename T>
+        using return_type = __return_type(T);
+
+        template <typename T>
+        using promote = __promote(T);
+
+        template <typename T>
+        using demote = __demote(T);
+
+        template <typename T>
+        using int_from_float = __int_from_float(T);
+
+        template <typename T>
+        using float_from_int = __float_from_int(T);
+
+        template <typename... Ts>
+        using common_type = __common_type(Ts...);
+
+        template <bool Condition, typename A, typename B>
+        using conditional = __conditional(Condition, A, B);
+        namespace detail {
+            extern "C++" from "<walnut_limits.hpp>" {
+                template <typename T>
+                class FloatLimits as "walnut_rt::num::tag" {
+                public:
+                    static function epsilon() -> T as "walnut_rt::num::epsilon<T>";
+                    static function smallest() -> T as "walnut_rt::num::smallest<T>";
+                    static function largest() -> T as "walnut_rt::num::largest<T>";
+                    static function lowest() -> T as "walnut_rt::num::lowest<T>";
+                    static function subnormal_min() -> T as "walnut_rt::num::subnormal_min<T>";
+                    static function infinity() -> T as "walnut_rt::num::infinity_of<T>";
+                    static function nan() -> T as "walnut_rt::num::nan_of<T>";
+                } end class FloatLimits
+            } end extern
+        } end namespace detail
+
+        template <typename T>
+        struct integer_traits {
+            static_assert(__is_integer(T), "integer_traits is only for the built-in integer types; use float_traits for float types");
+            using type = T;
+            using unsigned_type = std::traits::make_unsigned<T>;
+            using signed_type = std::traits::make_signed<T>;
+            static constexpr int: bits = __integer_bits(T);
+            static constexpr int: bytes = (__integer_bits(T) + 7) / 8;
+            static constexpr int: rank = __integer_rank(T);
+            static constexpr bool: is_signed = __is_signed(T);
+            static constexpr int: digits = __is_signed(T) ? __integer_bits(T) - 1 : __integer_bits(T);
+            static constexpr int: digits10 = digits * 30103 / 100000;
+            static constexpr int: radix = 2;
+            static constexpr bool: has_special_values = true;
+            static constexpr T: max = __is_signed(T) ? static_cast<T>(~static_cast<std::traits::make_unsigned<T>>(0) >> 1) : static_cast<T>(~static_cast<std::traits::make_unsigned<T>>(0));
+            static constexpr T: min = __is_signed(T) ? -max - 1 : static_cast<T>(0);
+            static constexpr T: lowest = min;
+            static constexpr T: zero = static_cast<T>(0);
+            static constexpr T: one = static_cast<T>(1);
+            static constexpr bool: is_integer = true;
+            static constexpr bool: is_exact = true;
+            static constexpr bool: is_bounded = true;
+        } end struct integer_traits
+
+        template <typename T>
+        struct float_traits {
+            static_assert(__is_float(T), "float_traits is only for the built-in float types; use integer_traits for integer types");
+            using type = T;
+            static constexpr int: bits = __float_bits(T);
+            static constexpr int: bytes = __float_bits(T) / 8;
+            static constexpr int: rank = __float_rank(T);
+            static constexpr bool: is_signed = __is_signed(T);
+            static constexpr int: mantissa_bits = __float_mantissa_bits(T);
+            static constexpr int: exponent_bits = __float_exponent_bits(T);
+            static constexpr int: digits = __float_mantissa_bits(T) + 1;
+            static constexpr int: digits10 = (__float_mantissa_bits(T)) * 30103 / 100000;
+            static constexpr int: max_digits10 = 2 + (__float_mantissa_bits(T) + 1) * 30103 / 100000;
+            static constexpr int: radix = 2;
+            static constexpr int: exponent_bias = (1 << (__float_exponent_bits(T) - 1)) - 1;
+            static constexpr int: max_exponent = exponent_bias;
+            static constexpr int: min_exponent = 1 - exponent_bias;
+            static constexpr int: max_exponent10 = static_cast<int>(static_cast<long int>(max_exponent) * 30103 / 100000);
+            static constexpr int: min_exponent10 = static_cast<int>(static_cast<long int>(min_exponent) * 30103 / 100000);
+            static constexpr bool: has_infinity = true;
+            static constexpr bool: has_nan = true;
+            static constexpr bool: has_subnormals = true;
+            static constexpr bool: has_special_values = true;
+            static constexpr bool: is_integer = false;
+            static constexpr bool: is_exact = false;
+            static constexpr bool: is_bounded = true;
+
+            static function epsilon() -> T {
+                return detail::FloatLimits<T>::epsilon();
+            } end function epsilon
+
+            static function min() -> T {
+                return detail::FloatLimits<T>::smallest();
+            } end function min
+
+            static function max() -> T {
+                return detail::FloatLimits<T>::largest();
+            } end function max
+
+            static function lowest() -> T {
+                return detail::FloatLimits<T>::lowest();
+            } end function lowest
+
+            static function subnormal_min() -> T {
+                return detail::FloatLimits<T>::subnormal_min();
+            } end function subnormal_min
+
+            static function infinity() -> T {
+                return detail::FloatLimits<T>::infinity();
+            } end function infinity
+
+            static function nan() -> T {
+                return detail::FloatLimits<T>::nan();
+            } end function nan
+
+            static function round_error() -> T {
+                return static_cast<T>(0.5);
+            } end function round_error
+        } end struct float_traits
+
+        template <typename T, bool IsFloat = std::traits::is_float<T>>
+        struct numeric_traits {
+            static_assert(__is_integer(T), "numeric_traits is only for the built-in integer and float types");
+            using type = T;
+            static constexpr int: bits = integer_traits<T>::bits;
+            static constexpr int: bytes = integer_traits<T>::bytes;
+            static constexpr bool: is_signed = integer_traits<T>::is_signed;
+            static constexpr bool: is_integer = true;
+            static constexpr bool: is_exact = true;
+            static constexpr bool: is_bounded = true;
+            static constexpr int: radix = 2;
+            static constexpr int: digits = integer_traits<T>::digits;
+            static constexpr int: digits10 = integer_traits<T>::digits10;
+            static constexpr int: max_digits10 = 0;
+            static constexpr int: min_exponent = 0;
+            static constexpr int: max_exponent = 0;
+            static constexpr int: min_exponent10 = 0;
+            static constexpr int: max_exponent10 = 0;
+            static constexpr bool: has_infinity = true;
+            static constexpr bool: has_nan = true;
+            static constexpr bool: has_subnormals = false;
+            static constexpr bool: has_special_values = true;
+
+            static constexpr function max() -> T {
+                return integer_traits<T>::max;
+            } end function max
+
+            static constexpr function min() -> T {
+                return integer_traits<T>::min;
+            } end function min
+
+            static constexpr function lowest() -> T {
+                return integer_traits<T>::lowest;
+            } end function lowest
+
+            static constexpr function epsilon() -> T {
+                return static_cast<T>(0);
+            } end function epsilon
+
+            static constexpr function round_error() -> T {
+                return static_cast<T>(0);
+            } end function round_error
+
+            static constexpr function subnormal_min() -> T {
+                return static_cast<T>(0);
+            } end function subnormal_min
+
+            static constexpr function infinity() -> T {
+                return inf;
+            } end function infinity
+
+            static constexpr function nan() -> T {
+                return nan;
+            } end function nan
+        } end struct numeric_traits
+
+        template <typename T>
+        struct numeric_traits<T, true> {
+            using type = T;
+            static constexpr int: bits = float_traits<T>::bits;
+            static constexpr int: bytes = float_traits<T>::bytes;
+            static constexpr bool: is_signed = float_traits<T>::is_signed;
+            static constexpr bool: is_integer = false;
+            static constexpr bool: is_exact = false;
+            static constexpr bool: is_bounded = true;
+            static constexpr int: radix = 2;
+            static constexpr int: digits = float_traits<T>::digits;
+            static constexpr int: digits10 = float_traits<T>::digits10;
+            static constexpr int: max_digits10 = float_traits<T>::max_digits10;
+            static constexpr int: min_exponent = float_traits<T>::min_exponent;
+            static constexpr int: max_exponent = float_traits<T>::max_exponent;
+            static constexpr int: min_exponent10 = float_traits<T>::min_exponent10;
+            static constexpr int: max_exponent10 = float_traits<T>::max_exponent10;
+            static constexpr bool: has_infinity = true;
+            static constexpr bool: has_nan = true;
+            static constexpr bool: has_subnormals = true;
+            static constexpr bool: has_special_values = true;
+
+            static function max() -> T {
+                return float_traits<T>::max();
+            } end function max
+
+            static function min() -> T {
+                return float_traits<T>::min();
+            } end function min
+
+            static function lowest() -> T {
+                return float_traits<T>::lowest();
+            } end function lowest
+
+            static function epsilon() -> T {
+                return float_traits<T>::epsilon();
+            } end function epsilon
+
+            static function round_error() -> T {
+                return float_traits<T>::round_error();
+            } end function round_error
+
+            static function subnormal_min() -> T {
+                return float_traits<T>::subnormal_min();
+            } end function subnormal_min
+
+            static function infinity() -> T {
+                return float_traits<T>::infinity();
+            } end function infinity
+
+            static function nan() -> T {
+                return float_traits<T>::nan();
+            } end function nan
+        } end struct numeric_traits
+    } end namespace traits
+
+    namespace concepts {
+        template <typename T, typename U>
+        concept same_as = std::traits::is_same<T, U>
+
+        template <typename From, typename To>
+        concept convertible_to = std::traits::is_convertible<From, To>
+
+        template <typename Derived, typename Base>
+        concept derived_from = std::traits::is_base_of<Base, Derived>
+
+        template <typename T>
+        concept integer_type = std::traits::is_integer<T>
+
+        template <typename T>
+        concept signed_integer = std::traits::is_integer<T> && std::traits::is_signed<T>
+
+        template <typename T>
+        concept unsigned_integer = std::traits::is_integer<T> && std::traits::is_unsigned<T>
+
+        template <typename T>
+        concept floating_point = std::traits::is_floating<T>
+
+        template <typename T>
+        concept real_float = std::traits::is_float<T>
+
+        template <typename T>
+        concept number = std::traits::is_number<T>
+
+        template <typename T>
+        concept arithmetic = std::traits::is_arithmetic<T>
+
+        template <typename T>
+        concept bool_type = std::traits::is_bool<T>
+
+        template <typename T>
+        concept char_type = std::traits::is_char<T>
+
+        template <typename T>
+        concept string_like = std::traits::is_string<T>
+
+        template <typename T>
+        concept enumeration = std::traits::is_enum<T>
+
+        template <typename T>
+        concept class_type = std::traits::is_class<T>
+
+        template <typename T>
+        concept scalar = std::traits::is_scalar<T>
+
+        template <typename T>
+        concept pointer = std::traits::is_pointer<T>
+
+        template <typename T>
+        concept default_constructible = requires () { T(); }
+
+        template <typename T>
+        concept copy_constructible = requires (const T&: value) { T(value); }
+
+        template <typename T>
+        concept move_constructible = requires (T&&: value) { T(std::core::move(value)); }
+
+        template <typename T>
+        concept copy_assignable = requires (T&: target, const T&: value) { target = value; }
+
+        template <typename T>
+        concept move_assignable = requires (T&: target, T&&: value) { target = std::core::move(value); }
+
+        template <typename T>
+        concept copyable = copy_constructible<T> && copy_assignable<T>
+
+        template <typename T>
+        concept movable = move_constructible<T> && move_assignable<T>
+
+        template <typename T>
+        concept hashable = requires (const T&: value) { value.hash(); }
+
+        template <typename T>
+        concept equality_comparable = requires (T: a, T: b) { a == b; a != b; }
+
+        template <typename T>
+        concept totally_ordered = equality_comparable<T> && requires (T: a, T: b) { a < b; a > b; a <= b; a >= b; }
+
+        template <typename T>
+        concept has_to_string = requires (T: value) { value.to_string(); }
+
+        template <typename C>
+        concept iterable = requires (C: items) { items.begin(); items.end(); }
+
+        template <typename I>
+        concept iterator = requires (I: it, I: other) { *it; ++it; it != other; }
+
+        template <typename I>
+        concept random_access_iterator = iterator<I> && requires (I: it, I: other) { it + 1; it - 1; it - other; it[0]; }
+    } end namespace concepts
+
+
+    extern "C++" {
+        template <typename T>
+        class initializer_list as "walnut_rt::init_list" {
+        public:
+            constructor();
+            constructor(T...: items);
+            function size() const -> long int;
+            function begin() const -> const T*;
+            function end() const -> const T*;
+            function at(long int: index) const -> const T&;
+
+            function empty() const -> bool {
+                return size() == 0;
+            } end function empty
+
+            function data() const -> const T* {
+                return begin();
+            } end function data
+
+            operator([]) function(long int: index) const -> const T& {
+                return at(index);
+            }
+        } end class initializer_list
+    } end extern
+
+    namespace core {
+        template <typename T>
+        constexpr function move(T&: value) noexcept -> T&& {
+            return static_cast<T&&>(value);
+        } end function move
+
+        template <typename T>
+        constexpr function move(T&&: value) noexcept -> T&& {
+            return static_cast<T&&>(value);
+        } end function move
+
+        template <typename T>
+        constexpr function forward(std::traits::discard_ref<T>&: value) noexcept -> T&& {
+            return static_cast<T&&>(value);
+        } end function forward
+
+        template <typename T>
+        constexpr function forward(std::traits::discard_ref<T>&&: value) noexcept -> T&& {
+            return static_cast<T&&>(value);
+        } end function forward
+
+        template <typename T>
+        requires std::traits::is_class<T> && std::concepts::has_to_string<T>
+        function to_string(const T&: value) -> string {
+            return static_cast<string>(value.to_string());
+        } end function to_string
+
+        template <typename T>
+        requires !std::traits::is_class<T>
+        function to_string(const T&: value) -> string {
+            return static_cast<string>(`${value}`);
+        } end function to_string
+
+        namespace detail {
+            template <typename T>
+            constexpr bool: checkable_number = (std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>) || std::traits::is_builtin_float<T>;
+
+            template <typename T>
+            constexpr bool: plain_integer = std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>;
+
+            template <typename T>
+            constexpr function special_value(T: x) -> bool {
+                return x is inf || x is nan || x is undefined || x is indeterminate;
+            } end function special_value
+
+            template <typename T>
+            constexpr function magnitude(T: x) -> T {
+                if (x < static_cast<T>(0)) then {
+                    return -x;
+                }
+                return x;
+            } end function magnitude
+
+            template <typename T, typename I>
+            constexpr function float_whole_parity(T: x, bool: want_parity) -> int {
+                const T: a = magnitude(x);
+                if (a >= static_cast<T>(std::traits::integer_traits<I>::max)) then {
+                    return want_parity ? 0 : 1;
+                }
+                const I: whole = static_cast<I>(a);
+                if (static_cast<T>(whole) != a) then {
+                    return -1;
+                }
+                if (!want_parity) then {
+                    return 1;
+                }
+                return whole % static_cast<I>(2) == static_cast<I>(0) ? 0 : 1;
+            } end function float_whole_parity
+
+            template <typename T>
+            constexpr function float_whole(T: x, bool: want_parity) -> int {
+                if (special_value(x)) then {
+                    return -1;
+                }
+                constexpr int: m = std::traits::float_traits<T>::mantissa_bits;
+                if constexpr (m < 61) then {
+                    return float_whole_parity<T, long int>(x, want_parity);
+                } else if constexpr (m < 125) then {
+                    return float_whole_parity<T, long long int>(x, want_parity);
+                } else if constexpr (m < 253) then {
+                    return float_whole_parity<T, short integer>(x, want_parity);
+                } else if constexpr (m < 509) then {
+                    return float_whole_parity<T, integer>(x, want_parity);
+                } else if constexpr (m < 1021) then {
+                    return float_whole_parity<T, long integer>(x, want_parity);
+                } else then {
+                    return float_whole_parity<T, long long integer>(x, want_parity);
+                }
+            } end function float_whole
+        } end namespace detail
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_integer(T: x) -> bool {
+            if constexpr (detail::plain_integer<T>) then {
+                return !detail::special_value(x);
+            } else then {
+                return detail::float_whole(x, false) == 1;
+            }
+        } end function is_integer
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_even(T: x) -> bool {
+            if constexpr (detail::plain_integer<T>) then {
+                if (detail::special_value(x)) then {
+                    return false;
+                }
+                return x % static_cast<T>(2) == static_cast<T>(0);
+            } else then {
+                return detail::float_whole(x, true) == 0;
+            }
+        } end function is_even
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_odd(T: x) -> bool {
+            if constexpr (detail::plain_integer<T>) then {
+                if (detail::special_value(x)) then {
+                    return false;
+                }
+                return x % static_cast<T>(2) != static_cast<T>(0);
+            } else then {
+                return detail::float_whole(x, true) == 1;
+            }
+        } end function is_odd
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_zero(T: x) -> bool {
+            return !detail::special_value(x) && x == static_cast<T>(0);
+        } end function is_zero
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_nonzero(T: x) -> bool {
+            return !detail::special_value(x) && x != static_cast<T>(0);
+        } end function is_nonzero
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_positive(T: x) -> bool {
+            if (x is nan || x is undefined || x is indeterminate) then {
+                return false;
+            }
+            return x > static_cast<T>(0);
+        } end function is_positive
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_negative(T: x) -> bool {
+            if (x is nan || x is undefined || x is indeterminate) then {
+                return false;
+            }
+            return x < static_cast<T>(0);
+        } end function is_negative
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_nonnegative(T: x) -> bool {
+            if (x is nan || x is undefined || x is indeterminate) then {
+                return false;
+            }
+            return x >= static_cast<T>(0);
+        } end function is_nonnegative
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_nonpositive(T: x) -> bool {
+            if (x is nan || x is undefined || x is indeterminate) then {
+                return false;
+            }
+            return x <= static_cast<T>(0);
+        } end function is_nonpositive
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_finite(T: x) -> bool {
+            return !detail::special_value(x);
+        } end function is_finite
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_infinite(T: x) -> bool {
+            return x is inf;
+        } end function is_infinite
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_nan(T: x) -> bool {
+            return x is nan;
+        } end function is_nan
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_undefined(T: x) -> bool {
+            return x is undefined;
+        } end function is_undefined
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_indeterminate(T: x) -> bool {
+            return x is indeterminate;
+        } end function is_indeterminate
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_special(T: x) -> bool {
+            return detail::special_value(x);
+        } end function is_special
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_power_of_two(T: x) -> bool {
+            if (detail::special_value(x) || !(x > static_cast<T>(0))) then {
+                return false;
+            }
+            if constexpr (detail::plain_integer<T>) then {
+                return (x & (x - static_cast<T>(1))) == static_cast<T>(0);
+            } else then {
+                T: v = x;
+                while (v >= static_cast<T>(2)) {
+                    v = v / static_cast<T>(2);
+                }
+                while (v < static_cast<T>(1)) {
+                    v = v * static_cast<T>(2);
+                }
+                return v == static_cast<T>(1);
+            }
+        } end function is_power_of_two
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_multiple_of(T: x, T: n) -> bool {
+            if (detail::special_value(x) || detail::special_value(n) || n == static_cast<T>(0)) then {
+                return false;
+            }
+            if constexpr (detail::plain_integer<T>) then {
+                return x % n == static_cast<T>(0);
+            } else then {
+                return detail::float_whole(x / n, false) == 1;
+            }
+        } end function is_multiple_of
+
+        template <typename T>
+        requires detail::checkable_number<T>
+        constexpr function is_between(T: x, T: low, T: high) -> bool {
+            if (x is nan || x is undefined || x is indeterminate) then {
+                return false;
+            }
+            return low <= x && x <= high;
+        } end function is_between
+
+        template <typename T>
+        requires std::traits::is_builtin_float<T>
+        function is_normal(T: x) -> bool {
+            if (detail::special_value(x) || x == static_cast<T>(0)) then {
+                return false;
+            }
+            return detail::magnitude(x) >= std::traits::float_traits<T>::min();
+        } end function is_normal
+
+        template <typename T>
+        requires std::traits::is_builtin_float<T>
+        function is_subnormal(T: x) -> bool {
+            if (detail::special_value(x) || x == static_cast<T>(0)) then {
+                return false;
+            }
+            return detail::magnitude(x) < std::traits::float_traits<T>::min();
+        } end function is_subnormal
+    } end namespace core
 } end namespace std

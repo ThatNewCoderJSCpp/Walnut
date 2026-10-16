@@ -81,6 +81,7 @@ void ImportResolver::import_item(const nodes::ImportExportItem& it, Scope* root,
             break;
         }
         case IK::File: {  
+            if (it.library_module && !it.has_alias) break;
             Scope* parent = namespace_path_parent(root, it.alias_parts, origin);
             if (parent && !it.alias_parts.empty()) declare_import(parent, it.alias_parts.back(), SymbolKind::Namespace, origin, it.source);
             break;

@@ -1,4 +1,7 @@
 #include "Semantics/scope_builder.hpp"
+#include "Semantics/resolve.hpp"
+
+#include <algorithm>
 
 namespace walnut {
 namespace semantics {
@@ -143,6 +146,10 @@ bool ScopeBuilder::is_friend_decl(const nodes::ASTNode* n) {
             return static_cast<const nodes::OperatorFunctionDeclaration*>(n)->get_modifiers().has(RawModifiers::Friend);
         case K::RecordDeclaration:
             return static_cast<const nodes::RecordDeclaration*>(n)->get_modifiers().has(RawModifiers::Friend);
+        case K::TemplateDeclaration: {
+            const nodes::ASTNode* inner = static_cast<const nodes::TemplateDeclaration*>(n)->m_declaration;
+            return inner && is_friend_decl(inner);
+        }
         default: return false;
     }
 }
@@ -209,7 +216,7 @@ void ScopeBuilder::build(ASTNode* node) {
 
         case K::RecordDeclaration: {
             auto* r = static_cast<nodes::RecordDeclaration*>(node);
-            check_declaration_modifiers(r->get_modifiers(), kValidRecordMods, m_reporter, r, "record");
+            if (!r->m_native) check_declaration_modifiers(r->get_modifiers(), kValidRecordMods, m_reporter, r, "record");
             build_record(r);
             break;
         }
@@ -310,6 +317,9 @@ void ScopeBuilder::build(ASTNode* node) {
                 m_current->using_directives.push_back(u);
             } else if (u->is_namespace_alias()) {
                 u->symbol = declare(*m_current, u->name, SymbolKind::Namespace, u, false);
+            } else if (u->is_name()) {
+                u->symbol = declare(*m_current, u->name, SymbolKind::Import, u, false);
+                if (u->symbol) u->symbol->is_imported = true;
             }
                 
             break;
@@ -351,6 +361,10 @@ void ScopeBuilder::build(ASTNode* node) {
             walk_expr(static_cast<nodes::CoReturnStatement*>(node)->m_value);   
             break;
 
+        case K::InvalidateStatement:
+            for (nodes::ASTNode* t : static_cast<nodes::InvalidateStatement*>(node)->targets) walk_expr(t);
+            break;
+
         case K::StaticAssertDeclaration:
             walk_expr(static_cast<nodes::StaticAssertDeclaration*>(node)->constraint);
             break;
@@ -371,6 +385,36 @@ void ScopeBuilder::build(ASTNode* node) {
             if (nodes::is_expression(node)) { walk_expr(node); }
             break;
     }
+}
+
+void ScopeBuilder::check_lazy_field(const modifiers::RawModifiers& mods, const ASTNode* site, bool in_record) {
+    (void)mods;
+    const auto bad = [&](const std::string& why) { SemanticError::modifier_rule_violation(m_reporter, site->file_id, site->line, site->kind == ASTNode::Kind::ArrayDeclaration ? "array" : "variable", why.c_str()); };
+
+    if (!in_record) { bad("only class and struct fields can be 'lazy'"); return; }
+    if (site->kind == ASTNode::Kind::ArrayDeclaration) { bad("arrays can't be 'lazy'; make the field a collection, such as 'lazy Vector<int>: values = ...'"); return; }
+
+    const Symbol* owner = m_current ? m_current->owner_symbol : nullptr;
+    if (owner && owner->decl && owner->decl->kind == ASTNode::Kind::RecordDeclaration && static_cast<const nodes::RecordDeclaration*>(owner->decl)->is_union()) {
+        bad("union fields can't be 'lazy'");
+        return;
+    }
+
+    if (site->kind != ASTNode::Kind::VariableDeclaration) return;
+    auto* v = static_cast<const nodes::VariableDeclaration*>(site);
+
+    if (!v->m_initializer) {
+        bad("a 'lazy' field needs an initializer; it computes the value the first time the field is read, as in 'lazy float: area = compute_area();'");
+        return;
+    }
+
+    if (v->m_initializer->kind == ASTNode::Kind::BraceInitializerList) {
+        bad("a 'lazy' field's initializer is computed when the field is read, so it has to be '= <expression>' rather than a brace list");
+        return;
+    }
+
+    const auto& ind = v->get_type_info().indirection;
+    if (!ind.empty() && !ind[ind.size() - 1].is_pointer()) bad("a 'lazy' field can't be a reference; it has to hold the value it computes");
 }
 
 void ScopeBuilder::build_variable(nodes::VariableDeclaration* var) {
@@ -432,7 +476,10 @@ Symbol* ScopeBuilder::declare_function(nodes::FunctionDeclaration* fn) {
 
 void ScopeBuilder::build_function_body(nodes::FunctionDeclaration* fn, Symbol* sym) {
     if (!fn->has_body()) { return; }
+    Scope* saved = m_current;
+    if (fn->friend_of && fn->friend_of->scope) { m_current = fn->friend_of->scope; }
     build_callable_scope(sym, fn->get_parameters(), fn->get_body());
+    m_current = saved;
 }
 
 void ScopeBuilder::build_operator(nodes::OperatorFunctionDeclaration* op) {
@@ -445,7 +492,10 @@ void ScopeBuilder::build_operator(nodes::OperatorFunctionDeclaration* op) {
     sym->type  = &op->get_return_type();
     op->symbol = sym;
     if (!op->has_body()) { return; }
+    Scope* saved = m_current;
+    if (op->friend_of && op->friend_of->scope) { m_current = op->friend_of->scope; }
     build_callable_scope(sym, op->get_parameters(), const_cast<nodes::ASTNode*>(op->get_body()));
+    m_current = saved;
 }
 
 void ScopeBuilder::build_constructor(nodes::ConstructorDeclaration* ctor) {
@@ -538,7 +588,8 @@ Symbol* ScopeBuilder::declare_record(nodes::RecordDeclaration* rec) {
             if (existing_is_def) {                       
                 SemanticError::redeclaration(m_reporter, rec->file_id, rec->line, rec->get_name(), existing->decl->file_id, existing->decl->line);
             } else {
-                existing->decl = rec;                    
+                existing->decl = rec;
+                existing->is_hoisted = true;
             }
         }
 
@@ -595,11 +646,74 @@ Scope* ScopeBuilder::entity_inner_scope(nodes::ASTNode* decl) {
     }
 }
 
+namespace {
+
+struct OrphanSpecialization {
+    nodes::TemplateDeclaration* tmpl;
+    nodes::RecordDeclaration* rec;
+    std::vector<std::string_view> path;
+};
+
+std::vector<OrphanSpecialization>& orphan_specializations() {
+    static std::vector<OrphanSpecialization> list;
+    return list;
+}
+
+} // namespace
+
+std::vector<std::string_view> ScopeBuilder::namespace_path() const {
+    std::vector<std::string_view> path;
+    for (Scope* s = m_current; s; s = s->parent) {
+        if (s->kind == Scope::Kind::Module) break;
+        if (s->kind != Scope::Kind::Namespace || !s->owner_symbol) return {};
+        path.push_back(s->owner_symbol->name);
+    }
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+
+void attach_orphan_specializations(ErrorReporter& reporter) {
+    for (const OrphanSpecialization& o : orphan_specializations()) {
+        std::vector<std::string_view> parts = o.path;
+        parts.push_back(o.rec->get_name());
+        Symbol* primary = resolve_qualified(prelude_scope(), parts);
+        while (primary && primary->is_imported && primary->import_target) primary = primary->import_target;
+        if (!primary || primary->kind != SymbolKind::Type || !primary->template_decl) {
+            SemanticError::specialization_without_primary(reporter, o.rec->file_id, o.rec->line, o.rec->get_name());
+            continue;
+        }
+        primary->specializations.push_back(o.tmpl);
+    }
+    orphan_specializations().clear();
+}
+
 void ScopeBuilder::build_record_specialization(nodes::TemplateDeclaration* tmpl, nodes::RecordDeclaration* rec) {
     Symbol* primary = m_current->find_local(rec->get_name());
+    const bool orphan = !primary || primary->kind != SymbolKind::Type || !primary->template_decl;
+    std::vector<std::string_view> path = orphan ? namespace_path() : std::vector<std::string_view>{};
 
-    if (!primary || primary->kind != SymbolKind::Type || !primary->template_decl) {
+    if (orphan && path.empty()) {
         SemanticError::specialization_without_primary(m_reporter, rec->file_id, rec->line, rec->get_name());
+        return;
+    }
+
+    if (orphan) {
+        orphan_specializations().push_back(OrphanSpecialization{ tmpl, rec, std::move(path) });
+        Scope* params = push_scope(Scope::Kind::Template);
+        tmpl->scope = params;
+        for (nodes::TemplateParameter* p : tmpl->params()) {
+            if (!p->get_name().empty()) p->symbol = declare(*params, p->get_name(), SymbolKind::TemplateParam, p, true);
+            walk_expr(p->m_default_value);
+        }
+        walk_expr(tmpl->m_requires_clause);
+        for (auto* a : rec->get_spec_args()) if (a && a->is_value()) walk_expr(a->value);
+        Symbol* sym = make_in<Symbol>(m_arena, rec->get_name(), SymbolKind::Type, rec);
+        sym->decl_order = m_order++;
+        sym->owner = params;
+        sym->template_decl = tmpl;
+        rec->symbol = sym;
+        build_record_body(rec, sym);
+        pop_scope();
         return;
     }
 
@@ -723,6 +837,13 @@ void ScopeBuilder::build_template(nodes::TemplateDeclaration* tmpl) {
     switch (decl ? decl->kind : K::Literal) {
         case K::RecordDeclaration:   entity = declare_record  (static_cast<nodes::RecordDeclaration*>(decl));   deferred_body = true; break;
         case K::FunctionDeclaration: entity = declare_function(static_cast<nodes::FunctionDeclaration*>(decl)); deferred_body = true; break;
+        case K::ConstructorDeclaration: {
+            auto* ctor = static_cast<nodes::ConstructorDeclaration*>(decl);
+            ctor->symbol = declare(*m_current, "constructor", SymbolKind::Function, ctor, false);
+            entity = ctor->symbol;
+            deferred_body = true;
+            break;
+        }
         case K::ConceptDeclaration: {
             auto* c = static_cast<nodes::ConceptDeclaration*>(decl);
             c->symbol = declare(*m_current, c->get_name(), SymbolKind::Concept, c, false);
@@ -730,12 +851,18 @@ void ScopeBuilder::build_template(nodes::TemplateDeclaration* tmpl) {
             deferred_body = true;
             break;
         }
-        default:                     build(decl); break;
+        default:
+            build(decl);
+            if (decl && decl->kind == K::UsingDeclaration) entity = static_cast<nodes::UsingDeclaration*>(decl)->symbol;
+            break;
     }
 
     if (entity) entity->template_decl = tmpl;
+    Scope* outside = m_current;
+    if (tmpl->friend_of && tmpl->friend_of->scope) { m_current = tmpl->friend_of->scope; }
     Scope* params = push_scope(Scope::Kind::Template);
     tmpl->scope = params;
+    if (tmpl->friend_of) { params->node = tmpl; }
 
     for (nodes::TemplateParameter* p : tmpl->params()) {
         if (!p->get_name().empty()) {
@@ -751,12 +878,18 @@ void ScopeBuilder::build_template(nodes::TemplateDeclaration* tmpl) {
         switch (decl->kind) {
             case K::RecordDeclaration:   build_record_body  (static_cast<nodes::RecordDeclaration*>(decl),   entity); break;
             case K::FunctionDeclaration: build_function_body(static_cast<nodes::FunctionDeclaration*>(decl), entity); break;
+            case K::ConstructorDeclaration: {
+                auto* ctor = static_cast<nodes::ConstructorDeclaration*>(decl);
+                if (ctor->has_body()) build_callable_scope(entity, ctor->get_parameters(), const_cast<nodes::ASTNode*>(ctor->get_body()), &ctor->get_init_list());
+                break;
+            }
             case K::ConceptDeclaration:  walk_expr(static_cast<nodes::ConceptDeclaration*>(decl)->constraint); break;
             default: break;
         }
     }
 
     pop_scope();
+    m_current = outside;
 }
 
 void ScopeBuilder::build_lambda(nodes::LambdaExpression* lam) {

@@ -33,7 +33,23 @@ private:
 
     static ParserError make_and_report(ErrorReporter& reporter, const tokenizing::Token& token, const std::string& message);
 
+    static bool previous_line_end(const tokenizing::Token& token, tokenizing::Token& out);
+
+    static ParserError missing_at_line_end(ErrorReporter& reporter, const tokenizing::Token& token, tokenizing::Token::Kind expected, const std::string& context);
+
+    static std::string keyword_as_name(const tokenizing::Token& token);
+
 public:
+    static void note_previous(const tokenizing::Token& token) noexcept;
+
+    static void forget_previous() noexcept;
+
+    static std::string spell(tokenizing::Token::Kind k);
+
+    static bool keyword_names_function(tokenizing::Token::Kind k);
+
+    static std::string describe(const tokenizing::Token& token);
+
     static ParserError unexpected_token(ErrorReporter& reporter, const tokenizing::Token& token, const std::vector<tokenizing::Token::Kind>& expected_tokens, const std::string& context);
 
     static ParserError unexpected_token(

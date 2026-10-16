@@ -45,6 +45,40 @@ nodes::ASTNode* Parser::parse_using_declaration() {
         return make<nodes::UsingDeclaration>(std::move(parts), line_number);
     }
 
+    const bool global = current_token().kind() == tokenizing::Token::Kind::DoubleColon;
+
+    if (global || (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::DoubleColon)) {
+        if (global) advance();
+        std::vector<std::string_view> parts;
+
+        while (true) {
+            if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
+                throw ParserError::unexpected_token(
+                    reporter, current_token(),
+                    {tokenizing::Token::Kind::Identifier},
+                    "Expected a name in 'using a::b;'"
+                );
+            }
+
+            parts.push_back(current_token().lexeme());
+            advance();
+            if (!match(tokenizing::Token::Kind::DoubleColon)) break;
+        }
+
+        if (!concrete_match(tokenizing::Token::Kind::Semicolon) && !concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
+            throw ParserError::missing_token(
+                reporter, current_token(), tokenizing::Token::Kind::Semicolon,
+                "'using a::b' must end with a semicolon"
+            );
+        }
+
+        consume_semicolons();
+        const std::string_view last = parts.back();
+        auto* u = make<nodes::UsingDeclaration>(last, std::move(parts), global, line_number);
+        u->variant = nodes::UsingDeclaration::Variant::Name;
+        return u;
+    }
+
     if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
         throw ParserError::unexpected_token(
             reporter, current_token(),

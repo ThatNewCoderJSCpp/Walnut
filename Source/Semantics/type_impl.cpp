@@ -20,6 +20,8 @@ void RecordType::write_to(std::ostream& os) const {
             if      (a.is_type && a.type) a.type->write_to(os);
             else if (a.value)             os << *a.value;
             else if (a.fvalue)            os << *a.fvalue;
+            else if (a.svalue)            os << '"' << *a.svalue << '"';
+            else if (a.type)              a.type->write_to(os);
             else if (a.param)             os << a.param->name;
             else                          os << "<expr>";
         }
@@ -49,6 +51,11 @@ Type* TypeContext::pointer(Type* pointee, CV cv) {
 }
 
 Type* TypeContext::reference(Type* referent, RefQual rq, CV cv) {
+    if (referent && referent->kind() == TypeKind::Reference) {
+        auto* inner = static_cast<ReferenceType*>(referent);
+        const RefQual collapsed = (rq == RefQual::LValue || inner->ref_qual() == RefQual::LValue) ? RefQual::LValue : RefQual::RValue;
+        return reference(inner->referent(), collapsed, inner->cv());
+    }
     UnaryKey key{ TypeKind::Reference, referent, std::uint8_t(cv.bits() | (std::uint8_t(rq) << 3)), 0, false };
     if (auto it = m_unary.find(key); it != m_unary.end()) return it->second;
     Type* t = make_in<ReferenceType>(m_arena, referent, rq, cv);
@@ -108,10 +115,11 @@ Type* TypeContext::enum_(Symbol* decl, CV cv) {
     return t;
 }
 
-Type* TypeContext::record(Symbol* decl, TemplateArgs args, CV cv) {
-    RecordKey key{ decl, args, cv.bits() };
+Type* TypeContext::record(Symbol* decl, TemplateArgs args, CV cv, bool empty_pack) {
+    empty_pack = empty_pack && args.empty();
+    RecordKey key{ decl, args, static_cast<std::uint8_t>(cv.bits() | (empty_pack ? 0x80 : 0)) };
     if (auto it = m_records.find(key); it != m_records.end()) return it->second;
-    Type* t = make_in<RecordType>(m_arena, decl, std::move(args), cv);
+    Type* t = make_in<RecordType>(m_arena, decl, std::move(args), cv, empty_pack);
     bool dep = false;
 
     for (const TemplateArg& a : static_cast<RecordType*>(t)->args()) {
@@ -146,6 +154,8 @@ bool TypeContext::default_key(nodes::ASTNode* e, std::string& key) {
     if (value_eval_hook && value_eval_hook(e, v)) {
         if (v.value) { key = "i:" + v.value->to_string(); return true; }
 
+        if (v.svalue) { key = "s:" + *v.svalue; return true; }
+
         if (v.fvalue) {
             std::ostringstream os;
             os.precision(60);
@@ -170,7 +180,16 @@ bool TypeContext::default_key(nodes::ASTNode* e, std::string& key) {
     return false;
 }
 
-Type* TypeContext::variant(std::vector<Type*> alternatives) {
+Type* TypeContext::variant(std::vector<Type*> alternatives, CV cv) {
+    if (cv.bits() != 0) {
+        Type* plain = variant(std::move(alternatives));
+        Type*& slot = m_cv_variants[plain][cv.bits()];
+        if (!slot) {
+            slot = make_in<VariantType>(m_arena, static_cast<VariantType*>(plain)->alternatives(), cv);
+            mark_dependent(slot, plain->is_dependent());
+        }
+        return slot;
+    }
     std::vector<Type*> unique;
     for (Type* a : alternatives) if (std::find(unique.begin(), unique.end(), a) == unique.end()) unique.push_back(a);
     alternatives = std::move(unique);
@@ -217,12 +236,13 @@ Type* TypeContext::with_cv(Type* base, CV cv) {
 
         case TypeKind::Record: {
             auto* r = static_cast<RecordType*>(base);
-            return record(r->decl(), r->args(), cv);
+            return record(r->decl(), r->args(), cv, r->empty_pack());
         }
 
         case TypeKind::Enum: return enum_(static_cast<EnumType*>(base)->decl(), cv);
         case TypeKind::TypeParam: return type_param(static_cast<TypeParamType*>(base)->param(), cv);
         case TypeKind::Coroutine: return coroutine(static_cast<CoroutineType*>(base)->value(), static_cast<CoroutineType*>(base)->is_generator(), cv);
+        case TypeKind::Variant:   return variant(static_cast<VariantType*>(base)->alternatives(), cv);
             
         default:
             return base;
@@ -282,8 +302,133 @@ Type* TypeContext::computed_expr_type(nodes::ASTNode* e, bool decltype_rules) {
     return t->is_reference() ? static_cast<ReferenceType*>(t)->referent() : t;
 }
 
+std::string TypeContext::special_held_problem(Type* held) {
+    using BK = parser_types::PrimitiveType::BaseKind;
+    if (!held || held->is_error() || held->is_dependent()) return {};
+    if (held->is_reference()) return "'special' can't hold a reference; write special(T) with a plain type";
+    if (held->is_special_value() || special_held_type(held)) return "'special' can't be nested; special(T) already holds every special value";
+    if (!held->is_builtin()) return {};
+
+    switch (static_cast<BuiltinType*>(held)->base()) {
+        case BK::Int:
+        case BK::Float:   return "'" + [&] { std::ostringstream os; held->write_to(os); return os.str(); }() + "' can already hold nan, undefined, indeterminate and infinity, so it doesn't need special(...)";
+        case BK::Dynamic: return "a 'var' can already hold nan, undefined, indeterminate and infinity, so it doesn't need special(...)";
+        case BK::Void:    return "'special' needs a value type, not 'void'";
+        case BK::Auto:    return "'special' needs a real type, not 'auto'";
+        default:          return {};
+    }
+}
+
+TemplateArg TypeContext::forward_alias_expr(const TemplateArg& v) {
+    if (!v.is_dependent_value() || !v.param) return v;
+    const TemplateArg* fwd = nullptr;
+    for (auto it = m_subst.rbegin(); it != m_subst.rend() && !fwd; ++it) {
+        if (!*it) continue;
+        auto found = (*it)->forwarded.find(v.param);
+        if (found != (*it)->forwarded.end()) fwd = &found->second;
+    }
+    if (!fwd) return v;
+    TemplateArg out;
+    if (fwd->expr && value_eval_hook && value_eval_hook(fwd->expr, out) && out.is_value()) return out;
+    return *fwd;
+}
+
+const std::vector<Type*>* TypeContext::find_pack(Symbol* param) const {
+    if (!param) return nullptr;
+    for (auto it = m_subst.rbegin(); it != m_subst.rend(); ++it) {
+        if (*it) if (const std::vector<Type*>* p = (*it)->lookup_pack(param)) return p;
+    }
+    return nullptr;
+}
+
+Type* TypeContext::alias_template_target(Symbol* alias, const parser_types::TypeInfo& info) {
+    nodes::TemplateDeclaration* tmpl = alias->template_decl;
+    if (!tmpl) return canonicalize(*alias->type);
+    const auto& params = tmpl->params();
+    SubstEnv env;
+    std::size_t next = 0;
+    push_subst(&env);
+    bool ok = true;
+
+    for (nodes::TemplateParameter* p : params) {
+        if (!p->symbol) { ok = false; break; }
+
+        if (p->is_pack()) {
+            std::vector<Type*> rest;
+            for (; next < info.template_args.size(); ++next) {
+                const parser_types::TemplateArgument* a = info.template_args[next];
+                if (!a || !a->is_type()) { ok = false; break; }
+                rest.push_back(canonicalize(a->type));
+            }
+            env.packs[p->symbol] = std::move(rest);
+            continue;
+        }
+
+        const parser_types::TemplateArgument* a = next < info.template_args.size() ? info.template_args[next] : nullptr;
+        ++next;
+
+        if (p->is_type_param()) {
+            Type* t = nullptr;
+            if (a && a->is_type()) t = canonicalize(a->type);
+            else if (!a && p->m_has_default_type) t = canonicalize(p->m_default_type);
+            if (!t) { ok = false; break; }
+            env.types[p->symbol] = t;
+            continue;
+        }
+
+        TemplateArg v;
+
+        if (a && a->is_type()) {
+            const bool prefixed = a->type.type && a->type.type->is_qualified() && static_cast<parser_types::QualifiedType*>(a->type.type)->has_prefix();
+
+            if (prefixed) {
+                auto* qt = static_cast<parser_types::QualifiedType*>(a->type.type);
+                Type* prefix = canonicalize(qt->prefix());
+                Type* plain = prefix ? strip_cv(prefix) : nullptr;
+
+                if (plain && plain->is_dependent()) {
+                    TemplateArg d;
+                    d.is_type = false;
+                    d.type = dependent_name(plain, qt->name());
+                    env.forwarded[p->symbol] = d;
+                    continue;
+                }
+
+                if (!plain || !plain->is_record() || !member_value_hook || !member_value_hook(plain, qt->name(), v)) { ok = false; break; }
+            } else if (!value_symbol_hook || value_symbol_hook(a->type.resolved, v) <= 0) {
+                ok = false;
+                break;
+            } else {
+                v = forward_alias_expr(v);
+                if (!v.is_value()) { env.forwarded[p->symbol] = v; continue; }
+            }
+        } else {
+            nodes::ASTNode* e = a ? a->value : p->m_default_value;
+            if (e && !e->expr_type.type && expr_walk_hook) expr_walk_hook(e);
+            if (!e || !value_eval_hook || !value_eval_hook(e, v)) {
+                if (!e) { ok = false; break; }
+                env.forwarded[p->symbol] = TemplateArg::dependent(nullptr, e);
+                continue;
+            }
+        }
+
+        if (v.value) env.values[p->symbol] = v.value;
+        else if (v.fvalue) env.fvalues[p->symbol] = v.fvalue;
+        else if (v.svalue) env.svalues[p->symbol] = v.svalue;
+        else { ok = false; break; }
+    }
+
+    if (ok && next < info.template_args.size() && !(params.size() && params.back()->is_pack())) ok = false;
+    ++m_no_type_cache;
+    Type* out = ok ? canonicalize(*alias->type) : nullptr;
+    --m_no_type_cache;
+    if (out) out = apply_subst(out);
+    pop_subst();
+    return out;
+}
+
 Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
-    if (info.canonical) return apply_subst(info.canonical);  
+    if (info.canonical && m_no_type_cache == 0) return apply_subst(info.canonical);  
     bool computed = false;
     const std::size_t dims_before = m_dim_evals;
     const CV base_cv = cv_from_modifiers(info.modifiers);
@@ -292,7 +437,8 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
     while (sym && sym->is_imported && sym->import_target) sym = sym->import_target;
 
     if (sym && sym->kind == SymbolKind::TypeAlias && sym->type && sym->type != &info) {
-        Type* target = canonicalize(*sym->type);
+        if (sym->template_decl) computed = true;
+        Type* target = sym->template_decl ? alias_template_target(sym, info) : canonicalize(*sym->type);
         if (target) {
             CV merged = target->cv();
             merged.is_const = merged.is_const || base_cv.is_const;
@@ -325,11 +471,26 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
                     if (!a) continue;
 
                     if (a->is_type()) {
-                        if (value_symbol_hook && !a->is_pack && a->type.indirection.empty() && a->type.template_args.empty()) {
+                        const bool prefixed = a->type.type && a->type.type->is_qualified() && static_cast<parser_types::QualifiedType*>(a->type.type)->has_prefix();
+
+                        if (value_symbol_hook && !a->is_pack && !prefixed && a->type.indirection.empty() && a->type.template_args.empty()) {
                             TemplateArg v;
                             const int r = value_symbol_hook(a->type.resolved, v);
                             if (r < 0) { bad_value = true; break; }
-                            if (r > 0) { args.push_back(v); continue; }
+                            if (r > 0) { args.push_back(forward_alias_expr(v)); continue; }
+                        }
+
+                        if (prefixed && !a->is_pack && member_value_hook) {
+                            auto* qt = static_cast<parser_types::QualifiedType*>(a->type.type);
+                            Type* prefix = canonicalize(qt->prefix());
+                            Type* plain = prefix ? strip_cv(prefix) : nullptr;
+
+                            if (plain && plain->is_record() && !plain->is_dependent() && !(member_type_hook && member_type_hook(plain, qt->name()))) {
+                                TemplateArg v;
+                                if (!member_value_hook(plain, qt->name(), v)) { bad_value = true; break; }
+                                args.push_back(v);
+                                continue;
+                            }
                         }
 
                         Type* t = canonicalize(a->type);
@@ -337,7 +498,7 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
                     } else if (a->is_value()) {
                         TemplateArg v;
                         if (!a->value || !value_arg_hook || !value_arg_hook(a->value, v)) { bad_value = true; break; }
-                        args.push_back(v);
+                        args.push_back(forward_alias_expr(v));
                     }
                 }
 
@@ -350,6 +511,7 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
                 }
 
                 if (!bad_value && !args.empty() && !sym->template_decl && instance_primary_hook) sym = instance_primary_hook(sym);
+                if (!bad_value && !args.empty() && sym && sym->template_decl && default_args_hook) default_args_hook(sym, args);
                 base = bad_value ? error_() : record(sym, std::move(args), base_cv);
                 break;
             }
@@ -359,6 +521,7 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
         Type* prefix = canonicalize(qt->prefix());
         Type* target = nullptr;
         if (prefix && prefix->is_dependent()) target = dependent_name(strip_cv(prefix), qt->name());
+        else if (prefix && strip_cv(prefix)->is_record() && !qt->components().empty() && qt->components().back().has_args() && member_alias_type_hook) target = member_alias_type_hook(strip_cv(prefix), qt->name(), qt->components().back().args);
         else if (prefix && strip_cv(prefix)->is_record() && member_type_hook) target = member_type_hook(strip_cv(prefix), qt->name());
 
         if (!target) {
@@ -421,8 +584,21 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
         } else {
             std::vector<Type*> types;
             types.reserve(ct->args().size());
-            for (const parser_types::TypeInfo& a : ct->args()) types.push_back(canonicalize(a));
-            t = apply_type_op(*this, ct->op(), types, error);
+            bool pending_pack = false;
+
+            for (const parser_types::TypeInfo& a : ct->args()) {
+                if (a.pack_expansion) {
+                    if (const std::vector<Type*>* pack = find_pack(a.resolved)) {
+                        types.insert(types.end(), pack->begin(), pack->end());
+                        continue;
+                    }
+                    pending_pack = true;
+                }
+                types.push_back(canonicalize(a));
+            }
+
+            if (pending_pack) t = dependent_name(types.empty() ? nullptr : types.front(), parser_types::type_op_name(ct->op()));
+            else t = apply_type_op(*this, ct->op(), types, error);
         }
 
         if (!error.empty() && type_error_hook) type_error_hook(error);
@@ -456,15 +632,24 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
             base = dependent_array(el, extent_param, base_cv);
         } else if (el && el->is_reference()) {
             auto* r = static_cast<ReferenceType*>(el);
-            base = reference(array(r->referent(), extent, CV{}), r->ref_qual(), base_cv);
+            base = reference(extent_param ? dependent_array(r->referent(), extent_param, CV{}) : array(r->referent(), extent, CV{}), r->ref_qual(), base_cv);
         } else {
             base = array(el, extent, base_cv);
         }
     } else if (info.type && info.type->is_variant()) {
         auto* vt = static_cast<parser_types::VariantType*>(info.type);
         std::vector<Type*> alts;
-        alts.reserve(vt->count());
+        alts.reserve(vt->count() + 1);
         for (const parser_types::TypeInfo& a : vt->alternatives()) alts.push_back(strip_cv(canonicalize(a)));
+
+        if (vt->is_special()) {
+            Type* held = alts.empty() ? nullptr : alts[0];
+            const std::string why = special_held_problem(held);
+            if (!why.empty() && type_error_hook) type_error_hook(why);
+            if (!why.empty()) alts[0] = error_();
+            alts.push_back(special_value());
+        }
+
         Type* v = variant(std::move(alts));
         base = base_cv.is_const || base_cv.is_volatile ? with_cv(v, base_cv) : v;
     } else if (info.type && info.type->is_function_pointer()) {
@@ -509,7 +694,7 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
         }
     }
 
-    if (m_dim_evals == dims_before && !computed) const_cast<parser_types::TypeInfo&>(info).canonical = result;    
+    if (m_dim_evals == dims_before && !computed && m_no_type_cache == 0) const_cast<parser_types::TypeInfo&>(info).canonical = result;    
     return apply_subst(result);   
 }
 

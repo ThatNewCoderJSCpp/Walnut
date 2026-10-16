@@ -77,6 +77,7 @@ ASTNode* ConstructorDeclaration::clone_into(Arena& a) const {
     }
 
     copy_base_to(c);
+    c->native_name = native_name;
     return c;
 }
 
@@ -219,6 +220,8 @@ ASTNode* RecordDeclaration::clone_into(Arena& a) const {
     c->m_is_specialization = m_is_specialization;
     c->m_spec_args         = clone_targs(m_spec_args, a);
     c->m_alignment         = clone_targ(m_alignment, a);
+    c->m_native            = m_native;
+    c->m_native_name       = m_native_name;
     for (const parser_types::TypeInfo& b : m_extra_bases) c->m_extra_bases.push_back(b.clone_into(a));
     c->m_members.reserve(m_members.size());
     for (const auto& m : m_members) c->m_members.push_back({ m.access, clone_child(m.node, a) });

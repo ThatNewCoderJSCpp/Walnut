@@ -33,6 +33,7 @@ nodes::ASTNode* Parser::parse_identifier_or_qualified() {
     if (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
         is_global = true;
         advance();
+        take_keyword_as_name(false);
 
         if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
             throw ParserError::unexpected_token(
@@ -48,7 +49,11 @@ nodes::ASTNode* Parser::parse_identifier_or_qualified() {
     advance();
 
     if (!is_global && current_token().kind() != tokenizing::Token::Kind::DoubleColon) {
-        return make<nodes::Identifier>(first, line_num);
+        nodes::ASTNode* id = make<nodes::Identifier>(first, line_num);
+        if (m_injected_active && first == m_injected_name && current_token().kind() != tokenizing::Token::Kind::LessThan) {
+            return make<nodes::TemplateInstantiation>(id, injected_arguments(), line_num);
+        }
+        return id;
     }
 
     auto* qualified = make<nodes::QualifiedIdentifier>(line_num, is_global);
@@ -57,6 +62,7 @@ nodes::ASTNode* Parser::parse_identifier_or_qualified() {
     while (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
         if (lookahead(1).kind() == tokenizing::Token::Kind::LessThan) { break; }  // turbofish: leave '::<' 
         advance();
+        take_keyword_as_name(false);
 
         if (current_token().kind() != tokenizing::Token::Kind::Identifier) {
             throw ParserError::unexpected_token(
@@ -88,13 +94,23 @@ nodes::ASTNode* Parser::parse_primary() {
     const std::size_t line_num = current_token().line();
     if (current_token().kind() == tokenizing::Token::Kind::LeftCurly) { return parse_brace_initializer_list(); }
     
+    take_keyword_as_name(true);
+    if (current_token().kind() == tokenizing::Token::Kind::SelfKeyword) return make_self(line_num);
+
     if (current_token().is_one_of(
         tokenizing::Token::Kind::Integer, tokenizing::Token::Kind::Float, 
         tokenizing::Token::Kind::String, tokenizing::Token::Kind::TextLiteral,
         tokenizing::Token::Kind::Character, tokenizing::Token::Kind::True, tokenizing::Token::Kind::False,
         tokenizing::Token::Kind::NullptrKeyword, tokenizing::Token::Kind::InfinityKeyword,
+        tokenizing::Token::Kind::NanKeyword, tokenizing::Token::Kind::UndefinedKeyword, tokenizing::Token::Kind::IndeterminateKeyword,
         tokenizing::Token::Kind::ThisKeyword   
     )) {
+        if (current_token().kind() == tokenizing::Token::Kind::TextLiteral && has_interpolation(current_token().lexeme())) {
+            const tokenizing::Token tok = current_token();
+            advance();
+            return parse_text_template(tok);
+        }
+
         if (current_token().is_one_of(tokenizing::Token::Kind::Integer, tokenizing::Token::Kind::Float)) {
             validate_numeric_literal(current_token());
         } else if (current_token().is_one_of(tokenizing::Token::Kind::String, tokenizing::Token::Kind::TextLiteral)) {

@@ -8,7 +8,7 @@ bool Parser::looks_like_declaration() {
     K k = current_token().kind();
     if (k == K::Colon) { return true; }                   
     if (is_variable_modifier(k)) { return true; }          
-    if (is_base_type_token(k) || k == K::FunctionKeyword || k == K::ArrayKeyword || k == K::VariantKeyword) { return true; }  
+    if (is_base_type_token(k) || k == K::FunctionKeyword || k == K::ArrayKeyword || k == K::VariantKeyword || k == K::SpecialKeyword) { return true; }  
     if (k == K::Identifier || k == K::DoubleColon) { return looks_like_user_type_declaration(); }
     return false;
 }
@@ -23,7 +23,7 @@ nodes::ASTNode* Parser::parse_if_statement() {
         const std::size_t cline = current_token().line();
         nodes::ASTNode* cond = looks_like_declaration() ? parse_variable_declaration({}, cline, false) : parse_expression();
         expect(K::RightParen, "Expected ')' to end the if condition)");
-        expect(K::ThenKeyword, "Expected 'then' to indicated if body");
+        expect(K::ThenKeyword, "An if needs 'then' before its body, as in 'if (x > 0) then { ... }'");
         nodes::IfBranch* branch = make<nodes::IfBranch>(cond, parse_block());
         branch->is_constexpr = is_constexpr;
         stmt->add_branch(branch);

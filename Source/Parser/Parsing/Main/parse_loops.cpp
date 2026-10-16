@@ -128,6 +128,7 @@ nodes::ASTNode* Parser::parse_for_each_loop() {
     std::string_view var_name = current_token().lexeme();
     advance();
     expect(tokenizing::Token::Kind::InKeyword, "Expected 'in' to indicate a for-each loop");           
+    if (mods.has(modifiers::RawModifiers::Const)) element_type.modifiers.add(modifiers::RawModifiers::Const);
 
     if (current_token().is_one_of(tokenizing::Token::Kind::RightParen, tokenizing::Token::Kind::End)) {
         throw ParserError::invalid_expression(reporter, current_token(), "Expected container expression in for-each loop");

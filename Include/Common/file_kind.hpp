@@ -26,7 +26,12 @@ inline std::string lower_extension(std::string_view path) {
     return ext;
 }
 
+inline bool is_system_header(std::string_view path) {
+    return path.size() > 2 && path.front() == '<' && path.back() == '>';
+}
+
 inline FileKind classify_file(std::string_view path) {
+    if (is_system_header(path)) return lower_extension(path.substr(1, path.size() - 2)) == ".h" ? FileKind::CHeader : FileKind::CppHeader;
     const std::string ext = lower_extension(path);
     if (ext == ".wal") return FileKind::Walnut;
     if (ext == ".walh") return FileKind::WalnutHeader;

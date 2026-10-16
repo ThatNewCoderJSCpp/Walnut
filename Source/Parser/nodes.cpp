@@ -61,6 +61,7 @@ void print_node(const ASTNode* node, std::ostream& os, std::size_t indent) {
         case ASTNode::Kind::AwaitExpression:             node_cast_unchecked<AwaitExpression>(node)->print(os, indent);             break;
         case ASTNode::Kind::CoYieldExpression:           node_cast_unchecked<CoYieldExpression>(node)->print(os, indent);           break;
         case ASTNode::Kind::CoReturnStatement:           node_cast_unchecked<CoReturnStatement>(node)->print(os, indent);           break;
+        case ASTNode::Kind::InvalidateStatement:         node_cast_unchecked<InvalidateStatement>(node)->print(os, indent);         break;
         case ASTNode::Kind::ModuleDeclaration:           node_cast_unchecked<ModuleDeclaration>(node)->print(os, indent);           break;
         case ASTNode::Kind::ConceptDeclaration:          node_cast_unchecked<ConceptDeclaration>(node)->print(os, indent);          break;
         case ASTNode::Kind::BraceConstructExpression:    node_cast_unchecked<BraceConstructExpression>(node)->print(os, indent);    break;

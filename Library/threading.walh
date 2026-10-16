@@ -1,0 +1,552 @@
+namespace std {
+    namespace threading {
+        namespace detail {
+            extern "C++" from "<walnut_threading.hpp>" {
+                class Api as "walnut_rt::threading::api" {
+                public:
+                    static function sleep_for(long int: milliseconds) -> void as "walnut_rt::threading::sleep_for";
+                    static function sleep_for_micros(long int: microseconds) -> void as "walnut_rt::threading::sleep_for_micros";
+                    static function yield_now() -> void as "walnut_rt::threading::yield";
+                    static function current_id() -> unsigned long int as "walnut_rt::threading::current_id";
+                    static function hardware_threads() -> long int as "walnut_rt::threading::hardware_threads";
+                } end class Api
+            } end extern
+        } end namespace detail
+
+        namespace this_thread {
+            function sleep_for(long int: milliseconds) -> void {
+                detail::Api::sleep_for(milliseconds);
+            } end function sleep_for
+
+            function sleep_for_micros(long int: microseconds) -> void {
+                detail::Api::sleep_for_micros(microseconds);
+            } end function sleep_for_micros
+
+            function yield() -> void {
+                detail::Api::yield_now();
+            } end function yield
+
+            function id() -> unsigned long int {
+                return detail::Api::current_id();
+            } end function id
+        } end namespace this_thread
+
+        function hardware_threads() -> long int {
+            return detail::Api::hardware_threads();
+        } end function hardware_threads
+
+        extern "C++" from "<walnut_threading.hpp>" {
+            class Thread as "walnut_rt::threading::thread" {
+            public:
+                constructor();
+                constructor(function() -> void: body);
+                constructor(const Thread&: other) = delete;
+                constructor(Thread&&: other);
+                operator(=) function(Thread&&: other) -> Thread&;
+                function join() -> void;
+                function detach() -> void;
+                function joinable() const -> bool;
+                function id() const -> unsigned long int;
+            } end class Thread
+
+            class Mutex as "std::mutex" {
+            public:
+                constructor();
+                constructor(const Mutex&: other) = delete;
+                function lock() -> void;
+                function unlock() -> void;
+                function try_lock() -> bool;
+            } end class Mutex
+
+            class RecursiveMutex as "std::recursive_mutex" {
+            public:
+                constructor();
+                constructor(const RecursiveMutex&: other) = delete;
+                function lock() -> void;
+                function unlock() -> void;
+                function try_lock() -> bool;
+            } end class RecursiveMutex
+
+            class TimedMutex as "std::timed_mutex" {
+            public:
+                constructor();
+                constructor(const TimedMutex&: other) = delete;
+                function lock() -> void;
+                function unlock() -> void;
+                function try_lock() -> bool;
+                function try_lock_for(long int: milliseconds) -> bool as "walnut_rt::threading::try_lock_for";
+            } end class TimedMutex
+
+            class RecursiveTimedMutex as "std::recursive_timed_mutex" {
+            public:
+                constructor();
+                constructor(const RecursiveTimedMutex&: other) = delete;
+                function lock() -> void;
+                function unlock() -> void;
+                function try_lock() -> bool;
+                function try_lock_for(long int: milliseconds) -> bool as "walnut_rt::threading::try_lock_for";
+            } end class RecursiveTimedMutex
+
+            class SharedMutex as "std::shared_mutex" {
+            public:
+                constructor();
+                constructor(const SharedMutex&: other) = delete;
+                function lock() -> void;
+                function unlock() -> void;
+                function try_lock() -> bool;
+                function lock_shared() -> void;
+                function unlock_shared() -> void;
+                function try_lock_shared() -> bool;
+            } end class SharedMutex
+
+            template <typename M>
+            class LockGuard as "walnut_rt::threading::lock_guard" {
+            public:
+                constructor(const LockGuard&: other) = delete;
+                constructor(M&: mutex);
+            } end class LockGuard
+
+            template <typename M>
+            class UniqueLock as "walnut_rt::threading::unique_lock" {
+            public:
+                constructor();
+                constructor(const UniqueLock&: other) = delete;
+                constructor(M&: mutex);
+                constructor(M&: mutex, bool: lock_now);
+                function lock() -> void;
+                function unlock() -> void;
+                function try_lock() -> bool;
+                function owns_lock() const -> bool;
+            } end class UniqueLock
+
+            template <typename M>
+            class SharedLock as "walnut_rt::threading::shared_lock" {
+            public:
+                constructor();
+                constructor(const SharedLock&: other) = delete;
+                constructor(M&: mutex);
+                constructor(M&: mutex, bool: lock_now);
+                function lock() -> void;
+                function unlock() -> void;
+                function try_lock() -> bool;
+                function owns_lock() const -> bool;
+            } end class SharedLock
+
+            class ConditionVariable as "walnut_rt::threading::condition_variable" {
+            public:
+                constructor();
+                constructor(const ConditionVariable&: other) = delete;
+                function wait(UniqueLock<Mutex>&: lock) -> void;
+                function wait(UniqueLock<Mutex>&: lock, function() -> bool: ready) -> void;
+                function wait_for(UniqueLock<Mutex>&: lock, long int: milliseconds) -> bool;
+                function wait_for(UniqueLock<Mutex>&: lock, long int: milliseconds, function() -> bool: ready) -> bool;
+                function wait(UniqueLock<TimedMutex>&: lock) -> void;
+                function wait(UniqueLock<TimedMutex>&: lock, function() -> bool: ready) -> void;
+                function wait_for(UniqueLock<TimedMutex>&: lock, long int: milliseconds) -> bool;
+                function wait_for(UniqueLock<TimedMutex>&: lock, long int: milliseconds, function() -> bool: ready) -> bool;
+                function wait(UniqueLock<SharedMutex>&: lock) -> void;
+                function wait(UniqueLock<SharedMutex>&: lock, function() -> bool: ready) -> void;
+                function wait_for(UniqueLock<SharedMutex>&: lock, long int: milliseconds) -> bool;
+                function wait_for(UniqueLock<SharedMutex>&: lock, long int: milliseconds, function() -> bool: ready) -> bool;
+                function wait(SharedLock<SharedMutex>&: lock) -> void;
+                function wait(SharedLock<SharedMutex>&: lock, function() -> bool: ready) -> void;
+                function wait_for(SharedLock<SharedMutex>&: lock, long int: milliseconds) -> bool;
+                function wait_for(SharedLock<SharedMutex>&: lock, long int: milliseconds, function() -> bool: ready) -> bool;
+                function notify_one() -> void;
+                function notify_all() -> void;
+            } end class ConditionVariable
+
+        } end extern
+
+        enum MemoryOrder { relaxed, acquire, release, acq_rel, seq_cst }
+
+        namespace detail {
+            template <typename T, bool Integer>
+            struct SmallInteger {
+                static constexpr bool: value = false;
+            } end struct SmallInteger
+
+            template <typename T>
+            struct SmallInteger<T, true> {
+                static constexpr bool: value = sizeof(T) <= 8;
+            } end struct SmallInteger
+
+            template <typename T>
+            constexpr bool: native_atomic = SmallInteger<T, (std::traits::is_builtin_integer<T>)>::value || std::traits::is_bool<T> || std::traits::is_char<T> || std::traits::is_pointer<T> || std::traits::is_enum<T>;
+
+            template <typename T>
+            constexpr bool: atomic_number = (std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>) || std::traits::is_builtin_float<T>;
+
+            template <typename T>
+            constexpr bool: atomic_bits = std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>;
+
+            template <typename T>
+            using atomic_delta = std::traits::conditional<std::traits::is_pointer<T>, long int, T>;
+
+            extern "C++" from "<walnut_threading.hpp>" {
+                template <typename T>
+                class NativeAtomic as "walnut_rt::threading::atomic" {
+                public:
+                    constructor();
+                    constructor(const T&: value);
+                    constructor(const NativeAtomic&: other) = delete;
+                    function load_with(long int: order) const -> T;
+                    function store_with(const T&: value, long int: order) -> void;
+                    function exchange_with(const T&: value, long int: order) -> T;
+                    function compare_exchange_with(T&: expected, const T&: desired, bool: weak, long int: order) -> bool;
+                    function fetch_add_with(const atomic_delta<T>&: value, long int: order) -> T;
+                    function fetch_sub_with(const atomic_delta<T>&: value, long int: order) -> T;
+                    function add_with(const atomic_delta<T>&: value, long int: order) -> T;
+                    function sub_with(const atomic_delta<T>&: value, long int: order) -> T;
+                    function fetch_and_with(const T&: value, long int: order) -> T;
+                    function fetch_or_with(const T&: value, long int: order) -> T;
+                    function fetch_xor_with(const T&: value, long int: order) -> T;
+                    function and_with(const T&: value, long int: order) -> T;
+                    function or_with(const T&: value, long int: order) -> T;
+                    function xor_with(const T&: value, long int: order) -> T;
+                    function fetch_min_with(const T&: value, long int: order) -> T;
+                    function fetch_max_with(const T&: value, long int: order) -> T;
+                    function wait_with(const T&: old, long int: order) const -> void;
+                    function notify() const -> void;
+                    function lock_free() const -> bool;
+                } end class NativeAtomic
+
+                class Parker as "walnut_rt::threading::parker" {
+                public:
+                    static function park_while(const void*: address, function() -> bool: unchanged) -> void;
+                    static function unpark(const void*: address) -> void;
+                } end class Parker
+
+                class SpinLock as "walnut_rt::threading::spin_lock" {
+                public:
+                    constructor();
+                    constructor(const SpinLock&: other) = delete;
+                    function lock() noexcept -> void;
+                    function try_lock() noexcept -> bool;
+                    function unlock() noexcept -> void;
+                } end class SpinLock
+
+            } end extern
+
+            class SpinGuard {
+                SpinLock*: held;
+            public:
+                constructor(SpinLock&: l) : held = &l {
+                    held->lock();
+                }
+                constructor(const SpinGuard&: other) = delete;
+                destructor() {
+                    held->unlock();
+                }
+            } end class SpinGuard
+
+            template <typename T>
+            class LockedAtomic {
+                T: value;
+                mutable SpinLock: guard;
+
+            public:
+                constructor() { }
+                constructor(const T&: v) : value = v { }
+                constructor(const LockedAtomic&: other) = delete;
+
+                function load_with(long int: order) const -> T {
+                    SpinGuard: g(guard);
+                    return value;
+                } end function load_with
+
+                function store_with(const T&: v, long int: order) -> void {
+                    SpinGuard: g(guard);
+                    value = v;
+                } end function store_with
+
+                function exchange_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    T: old = value;
+                    value = v;
+                    return old;
+                } end function exchange_with
+
+                function compare_exchange_with(T&: expected, const T&: desired, bool: weak, long int: order) -> bool {
+                    SpinGuard: g(guard);
+                    if (value == expected) then {
+                        value = desired;
+                        return true;
+                    }
+                    expected = value;
+                    return false;
+                } end function compare_exchange_with
+
+                function fetch_add_with(const atomic_delta<T>&: d, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    T: old = value;
+                    value = value + d;
+                    return old;
+                } end function fetch_add_with
+
+                function fetch_sub_with(const atomic_delta<T>&: d, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    T: old = value;
+                    value = value - d;
+                    return old;
+                } end function fetch_sub_with
+
+                function add_with(const atomic_delta<T>&: d, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    value = value + d;
+                    return value;
+                } end function add_with
+
+                function sub_with(const atomic_delta<T>&: d, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    value = value - d;
+                    return value;
+                } end function sub_with
+
+                function fetch_and_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    T: old = value;
+                    value = value & v;
+                    return old;
+                } end function fetch_and_with
+
+                function fetch_or_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    T: old = value;
+                    value = value | v;
+                    return old;
+                } end function fetch_or_with
+
+                function fetch_xor_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    T: old = value;
+                    value = value ^ v;
+                    return old;
+                } end function fetch_xor_with
+
+                function and_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    value = value & v;
+                    return value;
+                } end function and_with
+
+                function or_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    value = value | v;
+                    return value;
+                } end function or_with
+
+                function xor_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    value = value ^ v;
+                    return value;
+                } end function xor_with
+
+                function fetch_min_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    T: old = value;
+                    if (v < value) then {
+                        value = v;
+                    }
+                    return old;
+                } end function fetch_min_with
+
+                function fetch_max_with(const T&: v, long int: order) -> T {
+                    SpinGuard: g(guard);
+                    T: old = value;
+                    if (value < v) then {
+                        value = v;
+                    }
+                    return old;
+                } end function fetch_max_with
+
+                function wait_with(const T&: old, long int: order) const -> void {
+                    Parker::park_while(static_cast<const void*>(this), [&]() -> bool {
+                        return load_with(order) == old;
+                    });
+                } end function wait_with
+
+                function notify() const -> void {
+                    Parker::unpark(static_cast<const void*>(this));
+                } end function notify
+
+                function lock_free() const -> bool {
+                    return false;
+                } end function lock_free
+            } end class LockedAtomic
+        } end namespace detail
+
+        template <typename T>
+        class Atomic {
+            std::traits::conditional<detail::native_atomic<T>, detail::NativeAtomic<T>, detail::LockedAtomic<T>>: cell;
+
+        public:
+            constructor() { }
+
+            constructor(const T&: value) : cell(value) { }
+
+            constructor(const Atomic&: other) = delete;
+
+            function load(MemoryOrder: order = MemoryOrder::seq_cst) const -> T {
+                return cell.load_with(static_cast<long int>(order));
+            } end function load
+
+            function store(const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> void {
+                cell.store_with(value, static_cast<long int>(order));
+            } end function store
+
+            function exchange(const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
+                return cell.exchange_with(value, static_cast<long int>(order));
+            } end function exchange
+
+            function compare_exchange(T&: expected, const T&: desired, MemoryOrder: order = MemoryOrder::seq_cst) -> bool {
+                static_assert(std::concepts::equality_comparable<T>, "Atomic::compare_exchange needs a type that can be compared with ==");
+                return cell.compare_exchange_with(expected, desired, false, static_cast<long int>(order));
+            } end function compare_exchange
+
+            function compare_exchange_weak(T&: expected, const T&: desired, MemoryOrder: order = MemoryOrder::seq_cst) -> bool {
+                static_assert(std::concepts::equality_comparable<T>, "Atomic::compare_exchange_weak needs a type that can be compared with ==");
+                return cell.compare_exchange_with(expected, desired, true, static_cast<long int>(order));
+            } end function compare_exchange_weak
+
+            function fetch_add(const detail::atomic_delta<T>&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic::fetch_add needs a number or a pointer");
+                return cell.fetch_add_with(value, static_cast<long int>(order));
+            } end function fetch_add
+
+            function fetch_sub(const detail::atomic_delta<T>&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic::fetch_sub needs a number or a pointer");
+                return cell.fetch_sub_with(value, static_cast<long int>(order));
+            } end function fetch_sub
+
+            function fetch_and(const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
+                static_assert(detail::atomic_bits<T>, "Atomic::fetch_and needs an integer");
+                return cell.fetch_and_with(value, static_cast<long int>(order));
+            } end function fetch_and
+
+            function fetch_or(const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
+                static_assert(detail::atomic_bits<T>, "Atomic::fetch_or needs an integer");
+                return cell.fetch_or_with(value, static_cast<long int>(order));
+            } end function fetch_or
+
+            function fetch_xor(const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
+                static_assert(detail::atomic_bits<T>, "Atomic::fetch_xor needs an integer");
+                return cell.fetch_xor_with(value, static_cast<long int>(order));
+            } end function fetch_xor
+
+            function fetch_min(const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic::fetch_min needs a number or a pointer");
+                return cell.fetch_min_with(value, static_cast<long int>(order));
+            } end function fetch_min
+
+            function fetch_max(const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic::fetch_max needs a number or a pointer");
+                return cell.fetch_max_with(value, static_cast<long int>(order));
+            } end function fetch_max
+
+            function wait(const T&: old, MemoryOrder: order = MemoryOrder::seq_cst) const -> void {
+                static_assert(std::concepts::equality_comparable<T>, "Atomic::wait needs a type that can be compared with ==");
+                cell.wait_with(old, static_cast<long int>(order));
+            } end function wait
+
+            function notify_one() const -> void {
+                cell.notify();
+            } end function notify_one
+
+            function notify_all() const -> void {
+                cell.notify();
+            } end function notify_all
+
+            function is_lock_free() const -> bool {
+                return cell.lock_free();
+            } end function is_lock_free
+
+            operator(T) function() const {
+                return load();
+            }
+
+            operator(=) function(const T&: value) -> T {
+                store(value);
+                return value;
+            }
+
+            operator(++) function() -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic '++' needs a number or a pointer");
+                return cell.add_with(static_cast<detail::atomic_delta<T>>(1), 4);
+            }
+
+            operator(++) function(int: unused) -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic '++' needs a number or a pointer");
+                return cell.fetch_add_with(static_cast<detail::atomic_delta<T>>(1), 4);
+            }
+
+            operator(--) function() -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic '--' needs a number or a pointer");
+                return cell.sub_with(static_cast<detail::atomic_delta<T>>(1), 4);
+            }
+
+            operator(--) function(int: unused) -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic '--' needs a number or a pointer");
+                return cell.fetch_sub_with(static_cast<detail::atomic_delta<T>>(1), 4);
+            }
+
+            operator(+=) function(const detail::atomic_delta<T>&: value) -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic '+=' needs a number or a pointer");
+                return cell.add_with(value, 4);
+            }
+
+            operator(-=) function(const detail::atomic_delta<T>&: value) -> T {
+                static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic '-=' needs a number or a pointer");
+                return cell.sub_with(value, 4);
+            }
+
+            operator(&=) function(const T&: value) -> T {
+                static_assert(detail::atomic_bits<T>, "Atomic '&=' needs an integer");
+                return cell.and_with(value, 4);
+            }
+
+            operator(|=) function(const T&: value) -> T {
+                static_assert(detail::atomic_bits<T>, "Atomic '|=' needs an integer");
+                return cell.or_with(value, 4);
+            }
+
+            operator(^=) function(const T&: value) -> T {
+                static_assert(detail::atomic_bits<T>, "Atomic '^=' needs an integer");
+                return cell.xor_with(value, 4);
+            }
+        } end class Atomic
+
+        class AtomicFlag {
+            Atomic<bool>: flag;
+
+        public:
+            constructor() : flag(false) { }
+
+            constructor(const AtomicFlag&: other) = delete;
+
+            function test_and_set(MemoryOrder: order = MemoryOrder::seq_cst) -> bool {
+                return flag.exchange(true, order);
+            } end function test_and_set
+
+            function clear(MemoryOrder: order = MemoryOrder::seq_cst) -> void {
+                flag.store(false, order);
+            } end function clear
+
+            function test(MemoryOrder: order = MemoryOrder::seq_cst) const -> bool {
+                return flag.load(order);
+            } end function test
+
+            function wait(bool: old, MemoryOrder: order = MemoryOrder::seq_cst) const -> void {
+                flag.wait(old, order);
+            } end function wait
+
+            function notify_one() const -> void {
+                flag.notify_one();
+            } end function notify_one
+
+            function notify_all() const -> void {
+                flag.notify_all();
+            } end function notify_all
+        } end class AtomicFlag
+    } end namespace threading
+} end namespace std

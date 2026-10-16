@@ -211,6 +211,10 @@ void for_each_child(ASTNode* n, Fn&& fn) {
             yield(static_cast<CoReturnStatement*>(n)->m_value);
             break;
 
+        case K::InvalidateStatement:
+            yield_list(static_cast<InvalidateStatement*>(n)->targets);
+            break;
+
         case K::StaticAssertDeclaration:
             yield(static_cast<StaticAssertDeclaration*>(n)->constraint);
             break;

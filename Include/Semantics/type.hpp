@@ -10,6 +10,9 @@
 #include <ostream>
 #include <unordered_set>
 #include <functional>
+#include <deque>
+#include <map>
+#include <utility>
 
 #include "../Parser/Types/typename.hpp"  
 #include "../Common/arena_allocator.hpp"
@@ -18,7 +21,7 @@
 namespace walnut {
 namespace nodes        { struct ASTNode; }
 namespace semantics    { struct Symbol; }
-namespace parser_types { class  TypeInfo; }
+namespace parser_types { class  TypeInfo; struct TemplateArgument; }
 
 namespace semantics {
 
@@ -26,6 +29,7 @@ class UserConversionTable;
 struct Scope;
 class Type;
 class RecordType;
+enum class ConversionRank : std::uint8_t;
 class SubstEnv;
 
 struct TypeQueryOverloadResult {
@@ -50,7 +54,8 @@ enum class TypeKind : std::uint8_t {
     Null,       
     Error,
     Closure,
-    Coroutine
+    Coroutine,
+    SpecialValue
 };
 
 struct CV {
@@ -83,6 +88,7 @@ public:
     bool is_function()       const { return m_kind == TypeKind::Function; }
     bool is_variant()        const { return m_kind == TypeKind::Variant; }
     bool is_null()           const { return m_kind == TypeKind::Null; }
+    bool is_special_value()  const { return m_kind == TypeKind::SpecialValue; }
     bool is_error()          const { return m_kind == TypeKind::Error; }
     bool is_pack_expansion() const { return m_kind == TypeKind::PackExpansion; }
     bool is_dependent()      const { return m_dependent; }
@@ -179,6 +185,7 @@ struct TemplateArg {
     Type*            type    = nullptr;
     const WideInt*   value   = nullptr;
     const WideFloat* fvalue  = nullptr;
+    const std::string* svalue = nullptr;
     bool             is_type = true;
     Symbol*          param   = nullptr;
     nodes::ASTNode*  expr    = nullptr;
@@ -186,13 +193,14 @@ struct TemplateArg {
     static TemplateArg of_type(Type* t)              { TemplateArg a; a.type = t; return a; }
     static TemplateArg of_int(const WideInt* v)      { TemplateArg a; a.is_type = false; a.value = v; return a; }
     static TemplateArg of_float(const WideFloat* v)  { TemplateArg a; a.is_type = false; a.fvalue = v; return a; }
+    static TemplateArg of_string(const std::string* v) { TemplateArg a; a.is_type = false; a.svalue = v; return a; }
 
     static TemplateArg dependent(Symbol* p, nodes::ASTNode* e) {
         TemplateArg a; a.is_type = false; a.param = p; a.expr = e; return a;
     }
 
-    bool is_value()           const { return !is_type && (value || fvalue); }
-    bool is_dependent_value() const { return !is_type && !value && !fvalue && (param || expr); }
+    bool is_value()           const { return !is_type && (value || fvalue || svalue); }
+    bool is_dependent_value() const { return !is_type && !value && !fvalue && !svalue && (param || expr || type); }
 
     bool operator==(const TemplateArg& o) const;
 
@@ -203,14 +211,16 @@ using TemplateArgs = std::vector<TemplateArg>;
 
 class RecordType : public Type {
 public:
-    RecordType(Symbol* decl, TemplateArgs args, CV cv) : Type(TypeKind::Record, cv), m_decl(decl), m_args(std::move(args)) {}
+    RecordType(Symbol* decl, TemplateArgs args, CV cv, bool empty_pack = false) : Type(TypeKind::Record, cv), m_decl(decl), m_args(std::move(args)), m_empty_pack(empty_pack) {}
     Symbol*             decl() const { return m_decl; }
     const TemplateArgs& args() const { return m_args; }
-    bool is_instantiation() const { return !m_args.empty(); }
+    bool is_instantiation() const { return !m_args.empty() || m_empty_pack; }
+    bool empty_pack() const { return m_empty_pack; }
     void write_to(std::ostream& os) const override;  
 private:
     Symbol*      m_decl;
     TemplateArgs m_args;
+    bool         m_empty_pack = false;
 };
 
 class EnumType : public Type {
@@ -259,7 +269,7 @@ private:
 
 class VariantType : public Type {
 public:
-    explicit VariantType(std::vector<Type*> alts) : Type(TypeKind::Variant), m_alts(std::move(alts)) {}
+    explicit VariantType(std::vector<Type*> alts, CV cv = {}) : Type(TypeKind::Variant, cv), m_alts(std::move(alts)) {}
     const std::vector<Type*>& alternatives() const { return m_alts; }
     void write_to(std::ostream& os) const override;
 private:
@@ -291,6 +301,19 @@ public:
     NullType() : Type(TypeKind::Null) {}
     void write_to(std::ostream& os) const override { os << "nullptr_t"; }
 };
+
+class SpecialValueType : public Type {
+public:
+    SpecialValueType() : Type(TypeKind::SpecialValue) {}
+    void write_to(std::ostream& os) const override { os << "special value"; }
+};
+
+inline Type* special_held_type(Type* t) {
+    if (!t || t->kind() != TypeKind::Variant) return nullptr;
+    const std::vector<Type*>& alts = static_cast<VariantType*>(t)->alternatives();
+    if (alts.size() != 2 || !alts[1] || !alts[1]->is_special_value()) return nullptr;
+    return alts[0];
+}
 
 class ErrorType : public Type {
 public:
@@ -333,6 +356,7 @@ struct UserConversion {
     Type*              dst      = nullptr;  
     Symbol* op       = nullptr;  
     bool               explicit_ = false;    
+    Symbol*            generic  = nullptr;
 };
 
 class UserConversionTable {
@@ -358,6 +382,15 @@ public:
     ConstTable&          consts()           { return m_consts; }
     FloatTable&          floats()           { return m_floats; }
 
+    const std::string* intern_string(const std::string& s) {
+        auto it = m_string_index.find(s);
+        if (it != m_string_index.end()) return it->second;
+        m_strings.push_back(s);
+        const std::string* p = &m_strings.back();
+        m_string_index.emplace(s, p);
+        return p;
+    }
+
     Type* builtin(
         parser_types::PrimitiveType::BaseKind base,
         parser_types::LengthModifier length = parser_types::LengthModifier::None,
@@ -373,6 +406,7 @@ public:
     Type* dynamic_(){ return builtin(parser_types::PrimitiveType::BaseKind::Dynamic); }
     Type* bool_()   { return builtin(parser_types::PrimitiveType::BaseKind::Bool); }
     Type* null_()   { if (!m_null)  m_null  = make_in<NullType>(m_arena);  return m_null;  }
+    Type* special_value() { if (!m_special) m_special = make_in<SpecialValueType>(m_arena); return m_special; }
     Type* error_()  { if (!m_error) m_error = make_in<ErrorType>(m_arena); return m_error; }
 
     Type* pointer(Type* pointee, CV cv = {});
@@ -385,15 +419,19 @@ public:
     Type* dependent_array(Type* element, Symbol* extent_param, CV cv = {});
     Type* closure(nodes::ASTNode* lambda);
     Type* coroutine(Type* value, bool is_generator, CV cv = {});
-    Type* record(Symbol* decl, TemplateArgs args, CV cv = {});
+    Type* record(Symbol* decl, TemplateArgs args, CV cv = {}, bool empty_pack = false);
     Type* enum_(Symbol* decl, CV cv = {});
     Type* function(Type* ret, std::vector<Type*> params, bool is_const, RefQual rq, bool is_noexcept, std::vector<FnParamInfo> info = {});
     bool default_key(nodes::ASTNode* e, std::string& key);
-    Type* variant(std::vector<Type*> alternatives);
+    Type* variant(std::vector<Type*> alternatives, CV cv = {});
+    std::string special_held_problem(Type* held);
     Type* type_param(Symbol* param, CV cv = {}); 
     Type* dependent_name(Type* base, std::string_view name);
     Type* with_cv(Type* base, CV cv);
     Type* canonicalize(const parser_types::TypeInfo& info);
+    Type* alias_template_target(Symbol* alias, const parser_types::TypeInfo& info);
+    const std::vector<Type*>* find_pack(Symbol* param) const;
+    TemplateArg forward_alias_expr(const TemplateArg& v);
     Type* strip_cv(Type* t) { return t ? with_cv(t, CV{}) : t; }
     Type* apply_subst(Type* t);
     Type* pack_expansion(Type* pattern);
@@ -410,14 +448,21 @@ public:
     std::function<void(nodes::ASTNode*)>               expr_walk_hook;
     std::function<void(const std::string&)>            type_error_hook;
     std::function<void(Type*)>                         conversions_hook;
+    std::function<Symbol*(Symbol*, Type*)>             template_conversion_hook;
+    bool conversion_source_lvalue = false;
+    std::function<ConversionRank(std::size_t, Type*)> brace_arg_rank;
     std::function<TypeQueryOverloadResult(RecordType*, std::string_view, const std::vector<Type*>&)> type_query_overload_hook;
     std::function<int(Symbol*, TemplateArg&)>          value_symbol_hook;
     std::function<Scope*(RecordType*)>                 record_scope_hook;
     std::function<Type*(Symbol*)>                      instance_type_hook;
     std::function<Symbol*(Symbol*)>                    instance_primary_hook;
     std::function<Type*(Symbol*)>                      default_instance_hook;
+    std::function<void(Symbol*, TemplateArgs&)>         default_args_hook;
     std::function<Symbol*(nodes::ASTNode*)>            extent_param_hook;
     std::function<Type*(Type*, std::string_view)>      member_type_hook;
+    std::function<bool(Type*, std::string_view, TemplateArg&)> member_value_hook;
+    std::map<std::pair<Type*, std::string>, TemplateArg> member_value_memo;
+    std::function<Type*(Type*, std::string_view, const std::vector<parser_types::TemplateArgument*>&)> member_alias_type_hook;
     std::function<Symbol*(Type*, Type*)>               callable_hook;
     std::function<bool(Type*, Type*)>                  closure_hook;
 
@@ -426,7 +471,12 @@ private:
     UserConversionTable m_user_conv;
     ConstTable m_consts;
     FloatTable m_floats;
+    std::deque<std::string> m_strings;
+    int m_no_type_cache = 0;
+    std::unordered_map<Type*, std::unordered_map<std::uint8_t, Type*>> m_cv_variants;
+    std::unordered_map<std::string, const std::string*> m_string_index;
     Type* m_null = nullptr; 
+    Type* m_special = nullptr;
     Type* m_error = nullptr;
     std::vector<const SubstEnv*> m_subst; 
     std::size_t m_dim_evals = 0;

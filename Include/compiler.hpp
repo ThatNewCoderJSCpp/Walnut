@@ -9,11 +9,13 @@
 #include "Common/source_manager_lex.hpp"
 #include "Common/compiler_warning.hpp"
 #include "Common/scoped_timer.hpp"
+#include "Common/file_kind.hpp"
 
 #include "Preprocessor/preprocessor.hpp"
 
 #include "Driver/module_loader.hpp"
 #include "Driver/front_pass.hpp"
+#include "Semantics/scope_builder.hpp"
 #include "Driver/linker.hpp"
 #include "Driver/resolve_pass.hpp"
 #include "Driver/define_pass.hpp"
@@ -27,6 +29,17 @@
 #include <chrono>
 
 namespace walnut {
+
+inline void merge_library_scope(semantics::Scope* into, semantics::Scope* from) {
+    for (semantics::Symbol* sym : from->symbols) {
+        if (!sym || sym->visibility == semantics::Visibility::Hidden) continue;
+        semantics::Symbol* have = into->find_local(sym->name);
+        if (!have) { into->symbols.push_back(sym); continue; }
+        if (have == sym) continue;
+        const bool namespaces = have->kind == semantics::SymbolKind::Namespace && sym->kind == semantics::SymbolKind::Namespace;
+        if (namespaces && have->inner_scope && sym->inner_scope) merge_library_scope(have->inner_scope, sym->inner_scope);
+    }
+}
 
 class CompilerPipeline {
 private:
@@ -166,6 +179,9 @@ public:
     CompilerPipeline& suppress_warnings() { warnings.set_enabled(false); return *this; }
     CompilerPipeline& add_input(std::string path) { m_extra_inputs.push_back(std::move(path)); return *this; }
     CompilerPipeline& set_native_header_args(std::function<std::vector<std::string>(bool)> provider) { m_native_args = std::move(provider); return *this; }
+    CompilerPipeline& set_input_text(std::string text) { sources.add_virtual(std::filesystem::path(input_file).lexically_normal().generic_string(), std::move(text)); return *this; }
+    std::optional<FileId> load_input() { return sources.load(input_file); }
+    bool had_front_end_errors() const { return front_end_failed(); }
 
 private:
     bool front_end_failed() const {
@@ -199,14 +215,20 @@ private:
                 continue;
             }
 
-            if (s->kind != nodes::ASTNode::Kind::FunctionDeclaration) continue;
-            auto* f = static_cast<nodes::FunctionDeclaration*>(s);
-            const modifiers::RawModifiers& mods = f->get_modifiers();
+            const nodes::ASTNode* f = s;
+            if (f->kind == nodes::ASTNode::Kind::TemplateDeclaration) f = static_cast<const nodes::TemplateDeclaration*>(f)->get_declaration();
+            if (!f) continue;
+            const modifiers::RawModifiers* found = nullptr;
+            if (f->kind == nodes::ASTNode::Kind::FunctionDeclaration) found = &static_cast<const nodes::FunctionDeclaration*>(f)->get_modifiers();
+            else if (f->kind == nodes::ASTNode::Kind::RecordDeclaration && static_cast<const nodes::RecordDeclaration*>(f)->m_native) found = &static_cast<const nodes::RecordDeclaration*>(f)->m_mods;
+            if (!found) continue;
+            const modifiers::RawModifiers& mods = *found;
             if (!mods.native_file_count() || FileId(f->file_id) >= sources.file_count()) continue;
             const fs::path base = fs::path(sources.absolute_path(FileId(f->file_id))).parent_path();
 
             for (std::uint8_t i = 0; i < mods.native_file_count(); ++i) {
                 const std::string file(mods.native_file(i));
+                if (is_system_header(file)) continue;
                 std::error_code ec;
                 if (fs::is_regular_file(base / file, ec)) continue;
                 const std::string key = (base / file).generic_string();
@@ -261,12 +283,12 @@ public:
             if (m_native_args) pp.set_native_args(m_native_args);
             driver::ModuleLoader loader(sources, pp, reporter, ast_arena);
             for (const auto& dir : m_module_dirs) loader.add_module_dir(dir);
-            loader.load(*main_id);
+            std::vector<FileId> roots{ *main_id };
 
             for (const std::string& extra : m_extra_inputs) {
                 auto extra_id = sources.load(extra);
                 if (!extra_id) { reporter.report(ErrorPhase::Loader, INVALID_FILE, 0, "Could not open input file: " + extra); continue; }
-                loader.load(*extra_id);
+                roots.push_back(*extra_id);
             }
             std::optional<FileId> core_id;
 
@@ -274,19 +296,27 @@ public:
 
             if (sources.has_virtual(core_path)) {
                 core_id = sources.load(core_path);
-                if (core_id) loader.load(*core_id);
+                if (core_id) roots.push_back(*core_id);
             }
+
+            loader.load_all(roots);
 
             if (const driver::ParsedUnit* root = loader.unit(*main_id)) { ast = root->ast; }
             driver::FrontPass front(reporter, ast_arena);
             front.run(loader.units());
 
-            if (core_id) {
-                if (const driver::UnitFrontResult* core = front.result(*core_id); core && core->root) {
-                    semantics::Scope* prelude = semantics::prelude_scope();
-                    for (semantics::Symbol* sym : core->root->symbols) if (sym && !prelude->find_local(sym->name)) prelude->symbols.push_back(sym);
-                }
+            std::vector<FileId> library_units;
+            if (core_id) library_units.push_back(*core_id);
+
+            for (const auto& [id, unit] : loader.units()) {
+                if (core_id && id == *core_id) continue;
+                if (sources.absolute_path(id).rfind(SourceManager::LIBRARY_ROOT, 0) == 0) library_units.push_back(id);
             }
+
+            for (FileId id : library_units) {
+                if (const driver::UnitFrontResult* lib = front.result(id); lib && lib->root) merge_library_scope(semantics::prelude_scope(), lib->root);
+            }
+            semantics::attach_orphan_specializations(reporter);
             m_units.clear();
             m_main_file = *main_id;
             for (FileId id : front.order()) {

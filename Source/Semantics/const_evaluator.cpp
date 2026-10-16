@@ -24,6 +24,152 @@ const char* fail_message(ConstValue::Fail f) {
     }
 }
 
+const char* special_spelling(SpecialKind k) {
+    switch (k) {
+        case SpecialKind::PosInf:        return "inf";
+        case SpecialKind::NegInf:        return "-inf";
+        case SpecialKind::Nan:           return "nan";
+        case SpecialKind::Undefined:     return "undefined";
+        case SpecialKind::Indeterminate: return "indeterminate";
+    }
+    return "undefined";
+}
+
+WideFloat special_to_float(SpecialKind k) {
+    switch (k) {
+        case SpecialKind::PosInf:        return WideFloat::infinity(false);
+        case SpecialKind::NegInf:        return WideFloat::infinity(true);
+        case SpecialKind::Nan:           return WideFloat::nan();
+        case SpecialKind::Undefined:     return WideFloat::undefined();
+        case SpecialKind::Indeterminate: return WideFloat::indeterminate();
+    }
+    return WideFloat::undefined();
+}
+
+static ConstValue::Fail warning_for(SpecialKind k) {
+    switch (k) {
+        case SpecialKind::Undefined:     return ConstValue::Fail::Undefined;
+        case SpecialKind::Indeterminate: return ConstValue::Fail::Indeterminate;
+        case SpecialKind::Nan:           return ConstValue::Fail::Domain;
+        default:                         return ConstValue::Fail::NotConstant;
+    }
+}
+
+static bool unordered_kind(SpecialKind k) {
+    return k == SpecialKind::Nan || k == SpecialKind::Undefined || k == SpecialKind::Indeterminate;
+}
+
+ConstValue ConstEvaluator::special_result(SpecialKind k, const ConstValue& l, const ConstValue& r) {
+    const bool inherited = l.is_unordered() || r.is_unordered();
+    return make_special(k, (unordered_kind(k) && !inherited) ? warning_for(k) : ConstValue::Fail::NotConstant);
+}
+
+ConstValue ConstEvaluator::special_of_float(const WideFloat& f, bool inputs_unordered) {
+    SpecialKind k = SpecialKind::Undefined;
+    if      (f.is_nan())           k = SpecialKind::Nan;
+    else if (f.is_indeterminate()) k = SpecialKind::Indeterminate;
+    else if (f.is_infinite())      k = f.is_negative() ? SpecialKind::NegInf : SpecialKind::PosInf;
+    return make_special(k, (unordered_kind(k) && !inputs_unordered) ? warning_for(k) : ConstValue::Fail::NotConstant);
+}
+
+bool ConstEvaluator::as_wide_float(const ConstValue& v, WideFloat& out) {
+    if (v.is_float())   { out = *v.f; return true; }
+    if (v.is_int())     { out = wf_from_int(*v.i); return true; }
+    if (v.is_special()) { out = special_to_float(v.sp); return true; }
+    return false;
+}
+
+static SpecialKind unordered_of(const ConstValue& a, const ConstValue& b) {
+    auto has = [&](SpecialKind k) { return (a.is_special() && a.sp == k) || (b.is_special() && b.sp == k); };
+    if (has(SpecialKind::Undefined))     return SpecialKind::Undefined;
+    if (has(SpecialKind::Indeterminate)) return SpecialKind::Indeterminate;
+    return SpecialKind::Nan;
+}
+
+ConstValue ConstEvaluator::special_int_op(TK op, const ConstValue& l, const ConstValue& r) {
+    auto neg = [](const ConstValue& v) { return v.is_special() ? v.sp == SpecialKind::NegInf : v.i->is_negative(); };
+    auto zero = [](const ConstValue& v) { return v.is_int() && v.i->is_zero(); };
+    auto inf = [&](bool n) { return special_result(n ? SpecialKind::NegInf : SpecialKind::PosInf, l, r); };
+    auto sp = [&](SpecialKind k) { return special_result(k, l, r); };
+
+    if (l.is_unordered() || r.is_unordered()) return sp(unordered_of(l, r));
+
+    switch (op) {
+        case TK::Plus:
+            if (l.is_infinite() && r.is_infinite()) return l.sp == r.sp ? l : sp(SpecialKind::Indeterminate);
+            return l.is_infinite() ? l : r;
+
+        case TK::Minus:
+            if (l.is_infinite() && r.is_infinite()) return l.sp == r.sp ? sp(SpecialKind::Indeterminate) : l;
+            return l.is_infinite() ? l : inf(r.sp == SpecialKind::PosInf);
+
+        case TK::Asterisk:
+            if (zero(l) || zero(r)) return sp(SpecialKind::Indeterminate);
+            return inf(neg(l) != neg(r));
+
+        case TK::Slash:
+            if (zero(r)) return sp(zero(l) ? SpecialKind::Indeterminate : SpecialKind::Undefined);
+            if (l.is_infinite() && r.is_infinite()) return sp(SpecialKind::Indeterminate);
+            if (l.is_infinite()) return inf(neg(l) != neg(r));
+            return make_int(WideInt());
+
+        case TK::Percent:
+            if (zero(r)) return sp(zero(l) ? SpecialKind::Indeterminate : SpecialKind::Undefined);
+            if (l.is_infinite()) return sp(SpecialKind::Undefined);
+            return l;
+
+        case TK::DoubleAsterisk: {
+            const bool one = l.is_int() && *l.i == WideInt(1);
+            const bool minus_one = l.is_int() && *l.i == WideInt(-1);
+            if (zero(r)) return (zero(l) || l.is_infinite()) ? sp(SpecialKind::Indeterminate) : make_int(WideInt(1));
+            if (one) return r.is_infinite() ? sp(SpecialKind::Indeterminate) : make_int(WideInt(1));
+
+            if (r.is_infinite()) {
+                if (zero(l)) return neg(r) ? sp(SpecialKind::Undefined) : make_int(WideInt());
+                if (neg(r)) return make_int(WideInt());
+                if (neg(l)) return minus_one ? sp(SpecialKind::Indeterminate) : sp(SpecialKind::Undefined);
+                return inf(false);
+            }
+
+            if (neg(r)) return make_int(WideInt());
+            return inf(neg(l) && r.i->get_bit(0));
+        }
+
+        case TK::Ampersand: case TK::Pipe: case TK::Caret:
+        case TK::DoubleLessThan: case TK::DoubleGreaterThan:
+            return sp(SpecialKind::Undefined);
+
+        default: {
+            WideFloat a, b;
+            if (!as_wide_float(l, a) || !as_wide_float(r, b)) return {};
+            switch (op) {
+                case TK::LogicEqual:   return make_bool(a == b);
+                case TK::NotEqual:     return make_bool(a != b);
+                case TK::LessThan:     return make_bool(a <  b);
+                case TK::LessEqual:    return make_bool(a <= b);
+                case TK::GreaterThan:  return make_bool(a >  b);
+                case TK::GreaterEqual: return make_bool(a >= b);
+                default:               return {};
+            }
+        }
+    }
+}
+
+ConstValue ConstEvaluator::apply_special(TK op, const ConstValue& l, const ConstValue& r, nodes::BinaryExpression* b) {
+    using BK = parser_types::PrimitiveType::BaseKind;
+    Type* site = b ? b->expr_type.type : nullptr;
+    const bool int_site = site && site->is_builtin() && static_cast<BuiltinType*>(site)->base() == BK::Int;
+    const bool compare = op == TK::LogicEqual || op == TK::NotEqual || op == TK::LessThan || op == TK::LessEqual || op == TK::GreaterThan || op == TK::GreaterEqual;
+
+    if (int_site && !l.is_float() && !r.is_float() && !compare) return special_int_op(op, l, r);
+
+    WideFloat a, c;
+    if (!as_wide_float(l, a) || !as_wide_float(r, c)) return {};
+    if (compare) return eval_float_op(op, a, c);
+    if (op == TK::Percent || op == TK::Ampersand || op == TK::Pipe || op == TK::Caret || op == TK::DoubleLessThan || op == TK::DoubleGreaterThan) return special_int_op(op, l, r);
+    return eval_float_op(op, a, c);
+}
+
 bool ConstEvaluator::is_constant_type(Type* t) {
     using BK = parser_types::PrimitiveType::BaseKind;
     if (!t || !t->is_builtin()) return false;
@@ -39,6 +185,14 @@ ConstValue ConstEvaluator::coerce(const ConstValue& v, Type* dst) {
     dst = m_types.strip_cv(dst);
     if (!is_constant_type(dst)) return v;
     auto* b = static_cast<BuiltinType*>(dst);
+
+    if (v.is_special()) {
+        if (b->base() == BK::Bool) return make_bool(true);
+        if (b->base() != BK::Int && b->base() != BK::Float) return {};
+        if (v.sp == SpecialKind::NegInf && b->is_unsigned()) return ConstValue::error(ConstValue::Fail::Overflow);
+        return v;
+    }
+
     if (b->base() == BK::Float && b->is_unsigned()) {
         if ((v.is_int() && v.i->is_negative()) || (v.is_float() && v.f->is_negative() && !v.f->is_zero())) return ConstValue::error(ConstValue::Fail::Overflow);
     }
@@ -55,6 +209,7 @@ bool ConstEvaluator::truthy(const ConstValue& v, bool& ok) {
         case ConstValue::Kind::Bool:  return v.b;
         case ConstValue::Kind::Int:   return !v.i->is_zero();
         case ConstValue::Kind::Float: return !v.f->is_zero();
+        case ConstValue::Kind::Special: return true;
         default: ok = false; return false;
     }
 }
@@ -126,6 +281,7 @@ bool ConstEvaluator::record_layout(RecordType* rt, long long& size, long long& a
     }
     if (!owner || !owner->decl || owner->decl->kind != K::RecordDeclaration) return false;
     auto* rd = static_cast<nodes::RecordDeclaration*>(owner->decl);
+    if (rd->m_native) { layout_hit_native = true; return false; }
     const SubstEnv* env = env_of ? env_of(owner) : nullptr;
     if (env) m_types.push_subst(env);
     struct Pop { TypeContext& t; bool on; ~Pop() { if (on) t.pop_subst(); } } pop{ m_types, env != nullptr };
@@ -181,6 +337,7 @@ bool ConstEvaluator::record_layout(RecordType* rt, long long& size, long long& a
         long long fs = 0, fa = 0;
         if (!ft || ft->is_reference() || !layout_of(ft, fs, fa, depth + 1)) return false;
         if (forced > fa) fa = forced;
+        if (n->kind == K::VariableDeclaration && static_cast<nodes::VariableDeclaration*>(n)->get_type_info().modifiers.has(RM::Lazy)) fs = (fs + 1 + fa - 1) / fa * fa;
         if (rd->is_union()) offset = fs > offset ? fs : offset;
         else offset = (offset + fa - 1) / fa * fa + fs;
         if (fa > align) align = fa;
@@ -273,7 +430,7 @@ ConstValue ConstEvaluator::make_int(const WideInt& v) {
 }
 
 ConstValue ConstEvaluator::make_float(const WideFloat& v) {
-    if (v.is_undefined()) return {};
+    if (!v.is_finite()) return special_of_float(v, true);
     ConstValue c; c.kind = ConstValue::Kind::Float; c.f = m_types.floats().intern(v);
     return c;
 }
@@ -306,6 +463,9 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
 
             if (q->pack_count >= 0) return make_int(WideInt(std::uint64_t(q->pack_count)));
             Type* t = q->queried ? m_types.strip_cv(m_types.apply_subst(q->queried)) : nullptr;
+            if (!t && q->operand && q->operand->form == parser_types::TemplateArgument::Form::Type && q->operand->type.has_type()) {
+                if (Type* c = m_types.canonicalize(q->operand->type)) t = m_types.strip_cv(c);
+            }
             if (!t || t->is_dependent()) return {};
 
             if (q->op == QOp::Countof) {
@@ -327,6 +487,10 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
         }
 
         case K::TemplateInstantiation: {
+            if (variable_template_value) {
+                ConstValue v = variable_template_value(static_cast<nodes::TemplateInstantiation*>(e));
+                if (v.ok() || v.is_error()) return v;
+            }
             if (!concept_value) return {};
             const int r = concept_value(static_cast<nodes::TemplateInstantiation*>(e));
             return r < 0 ? ConstValue{} : make_bool(r == 1);
@@ -336,6 +500,10 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
 
         case K::MemberAccessExpression: {   
             auto* m = static_cast<nodes::MemberAccessExpression*>(e);
+            if (scoped_member_value && m->is_scope() && m->m_object && m->m_object->kind == K::TemplateInstantiation) {
+                ConstValue v = scoped_member_value(m);
+                if (v.ok() || v.is_error()) return v;
+            }
             return m->resolved ? eval_symbol(m->resolved) : ConstValue{};
         }
 
@@ -355,9 +523,14 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
                         return make_int(-*v.i);
                     }
                     if (v.is_float()) return make_float(-*v.f);
+                    if (v.is_special()) {
+                        if (v.sp == SpecialKind::PosInf) return make_special(SpecialKind::NegInf);
+                        if (v.sp == SpecialKind::NegInf) return make_special(SpecialKind::PosInf);
+                        return v;
+                    }
                     return {};
                 case TK::Plus:
-                    return (v.is_int() || v.is_float()) ? v : ConstValue{};
+                    return (v.is_int() || v.is_float() || v.is_special()) ? v : ConstValue{};
                 case TK::ExclamationMark: {
                     bool ok = false; bool t = truthy(v, ok);
                     return ok ? make_bool(!t) : ConstValue{};
@@ -390,6 +563,17 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
         case K::CastExpression: {
             auto* c = static_cast<nodes::CastExpression*>(e);
             ConstValue v = eval(c->operand);
+            if (c->get_cast_kind() == nodes::CastExpression::CastKind::Is && c->special_test) {
+                if (v.is_error() || v.kind == ConstValue::Kind::None) return v.is_error() ? v : ConstValue{};
+                if (v.kind == ConstValue::Kind::Int || v.kind == ConstValue::Kind::Float) return make_bool(false);
+                if (!v.is_special()) return {};
+                switch (c->special_test) {
+                    case 1: return make_bool(v.sp == SpecialKind::PosInf || v.sp == SpecialKind::NegInf);
+                    case 2: return make_bool(v.sp == SpecialKind::Nan);
+                    case 3: return make_bool(v.sp == SpecialKind::Undefined);
+                    default: return make_bool(v.sp == SpecialKind::Indeterminate);
+                }
+            }
             if (c->get_cast_kind() == nodes::CastExpression::CastKind::Is || c->get_cast_kind() == nodes::CastExpression::CastKind::As) return {};
             if (!v.ok()) return v;
             if (Type* target = m_types.canonicalize(c->get_target()); target && target->is_reference()) return v;
@@ -437,13 +621,24 @@ auto ConstEvaluator::eval_literal(nodes::Literal* lit) -> ConstValue {
             if (!wf_round_to_width(*f, bit_width_of_rank(n.rank), r)) return make_float(f);
             return make_float(r);
         }
-        case TK::InfinityKeyword: return make_float(m_types.floats().intern(WideFloat::positive_infinity()));
+        case TK::InfinityKeyword:      return make_special(SpecialKind::PosInf);
+        case TK::NanKeyword:           return make_special(SpecialKind::Nan);
+        case TK::UndefinedKeyword:     return make_special(SpecialKind::Undefined);
+        case TK::IndeterminateKeyword: return make_special(SpecialKind::Indeterminate);
 
         case TK::Character: {
             std::uint32_t cp = 0;
             tokenizing::EscapeError err = tokenizing::EscapeError::None;
             if (!tokenizing::decode_char(lit->value, cp, err)) return {};
             return make_int(WideInt(std::uint64_t(cp)));
+        }
+
+        case TK::String:
+        case TK::TextLiteral: {
+            std::string bytes;
+            tokenizing::EscapeError err = tokenizing::EscapeError::None;
+            if (!tokenizing::decode_literal(lit->value, bytes, err)) return {};
+            return make_string(m_types.intern_string(bytes));
         }
 
         case TK::True:  return make_bool(true);
@@ -466,6 +661,7 @@ ConstValue ConstEvaluator::eval_symbol(Symbol* s) {
             for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
                 if (const WideInt*   v = (*it)->lookup_value(s))  return make_int(v);
                 if (const WideFloat* f = (*it)->lookup_fvalue(s)) return make_float(f);
+                if (const std::string* sv = (*it)->lookup_svalue(s)) return make_string(sv);
             }
             return {};
         }
@@ -485,6 +681,7 @@ ConstValue ConstEvaluator::eval_symbol(Symbol* s) {
             if (!m_visiting.insert(s).second) return {};          
             if (env) m_types.push_subst(env);
             ConstValue v = coerce(eval(vd->m_initializer), m_types.canonicalize(vd->get_type_info()));
+            if (v.is_special()) v.fail = ConstValue::Fail::NotConstant;
             if (env) m_types.pop_subst();
             m_visiting.erase(s);
             if (cacheable && v.ok()) m_symbol_cache.emplace(s, v);
@@ -611,6 +808,25 @@ ConstValue ConstEvaluator::eval_call(nodes::CallExpression* c) {
     return coerce(result, ret);
 }
 
+ConstValue ConstEvaluator::eval_value_function(Symbol* fn) {
+    if (!fn || fn->kind != SymbolKind::Function || !fn->decl || fn->decl->kind != K::FunctionDeclaration) return {};
+    auto* fd = static_cast<nodes::FunctionDeclaration*>(fn->decl);
+    if (!is_constexpr_function(fd) || !fd->has_body()) return {};
+    if (m_frames.size() >= kMaxCallDepth) return ConstValue::error(ConstValue::Fail::StepLimit);
+    const SubstEnv* env = env_of ? env_of(fn) : nullptr;
+    if (env) m_types.push_subst(env);
+    Type* ret = m_types.canonicalize(fd->get_return_type());
+    m_frames.push_back(Frame{});
+    const Flow flow = exec(fd->get_body());
+    ConstValue result = m_frames.back().result;
+    m_frames.pop_back();
+    if (env) m_types.pop_subst();
+    if (flow == Flow::Fail)   return m_failure;
+    if (flow != Flow::Return) return ConstValue::error(ConstValue::Fail::NoReturn);
+    if (ret && ret->is_reference()) ret = static_cast<ReferenceType*>(ret)->referent();
+    return coerce(result, ret);
+}
+
 bool ConstEvaluator::test(nodes::ASTNode* cond, bool& taken) {
     ConstValue v = eval(cond);
     bool ok = false;
@@ -619,10 +835,16 @@ bool ConstEvaluator::test(nodes::ASTNode* cond, bool& taken) {
     return true;
 }
 
-auto ConstEvaluator::exec_loop_body(nodes::ASTNode* body, bool& stop) -> Flow {
+auto ConstEvaluator::exec_loop_body(nodes::ASTNode* body, bool& stop, std::string_view label) -> Flow {
     stop = false;
     const Flow f = exec(body);
     if (f == Flow::Return || f == Flow::Fail) { stop = true; return f; }
+
+    if ((f == Flow::Break || f == Flow::Continue) && !m_jump_label.empty()) {
+        if (m_jump_label != label) { stop = true; return f; }
+        m_jump_label = {};
+    }
+
     if (f == Flow::Break) stop = true;
     return Flow::Normal;
 }
@@ -699,7 +921,7 @@ auto ConstEvaluator::exec(nodes::ASTNode* s) -> Flow {
                 bool taken = false, stop = false;
                 if (!test(w->condition, taken)) return Flow::Fail;
                 if (!taken) return Flow::Normal;
-                const Flow f = exec_loop_body(w->body, stop);
+                const Flow f = exec_loop_body(w->body, stop, w->label);
                 if (stop) return f == Flow::Normal ? Flow::Normal : f;
                 if (++m_steps > kMaxSteps) return fail(ConstValue::error(ConstValue::Fail::StepLimit));
             }
@@ -710,7 +932,7 @@ auto ConstEvaluator::exec(nodes::ASTNode* s) -> Flow {
 
             for (;;) {
                 bool taken = false, stop = false;
-                const Flow f = exec_loop_body(w->body, stop);
+                const Flow f = exec_loop_body(w->body, stop, w->label);
                 if (stop) return f == Flow::Normal ? Flow::Normal : f;
                 if (!test(w->condition, taken)) return Flow::Fail;
                 if (!taken) return Flow::Normal;
@@ -733,7 +955,7 @@ auto ConstEvaluator::exec(nodes::ASTNode* s) -> Flow {
                 bool taken = true, stop = false;
                 if (fs->condition && !test(fs->condition, taken)) return Flow::Fail;
                 if (!taken) return Flow::Normal;
-                const Flow f = exec_loop_body(fs->body, stop);
+                const Flow f = exec_loop_body(fs->body, stop, fs->label);
                 if (stop) return f == Flow::Normal ? Flow::Normal : f;
 
                 if (fs->increment) {
@@ -748,8 +970,8 @@ auto ConstEvaluator::exec(nodes::ASTNode* s) -> Flow {
         case K::SingleStatement: {
             using V = nodes::SingleStatement::Variant;
             switch (static_cast<nodes::SingleStatement*>(s)->variant) {
-                case V::Break:    return Flow::Break;
-                case V::Continue: return Flow::Continue;
+                case V::Break:    m_jump_label = static_cast<nodes::SingleStatement*>(s)->label; return Flow::Break;
+                case V::Continue: m_jump_label = static_cast<nodes::SingleStatement*>(s)->label; return Flow::Continue;
                 default:          return fail({});
             }
         }
@@ -803,6 +1025,21 @@ ConstValue ConstEvaluator::apply_binary(TK op, ConstValue l, ConstValue r, nodes
     if (!l.ok()) return l;
     if (!r.ok()) return r;
 
+    if (l.is_string() || r.is_string()) {
+        if (!l.is_string() || !r.is_string()) return {};
+        switch (op) {
+            case TK::Plus:         return make_string(m_types.intern_string(*l.s + *r.s));
+            case TK::LogicEqual:   return make_bool(*l.s == *r.s);
+            case TK::NotEqual:     return make_bool(*l.s != *r.s);
+            case TK::LessThan:     return make_bool(*l.s < *r.s);
+            case TK::GreaterThan:  return make_bool(*l.s > *r.s);
+            case TK::LessEqual:    return make_bool(*l.s <= *r.s);
+            case TK::GreaterEqual: return make_bool(*l.s >= *r.s);
+            default:               return {};
+        }
+    }
+    if ((l.is_special() || r.is_special()) && !l.is_bool() && !r.is_bool()) return apply_special(op, l, r, b);
+
     if (l.is_float() || r.is_float()) {
         bool lossy = false;
 
@@ -852,11 +1089,11 @@ ConstValue ConstEvaluator::eval_int_op(TK op, const WideInt& a, const WideInt& b
         }
 
         case TK::Slash:
-            if (b.is_zero()) return ConstValue::error(a.is_zero() ? ConstValue::Fail::Indeterminate : ConstValue::Fail::Undefined);
+            if (b.is_zero()) return a.is_zero() ? make_special(SpecialKind::Indeterminate, ConstValue::Fail::Indeterminate) : make_special(SpecialKind::Undefined, ConstValue::Fail::Undefined);
             return make_int(a / b);
 
         case TK::Percent:
-            if (b.is_zero()) return ConstValue::error(a.is_zero() ? ConstValue::Fail::Indeterminate : ConstValue::Fail::Undefined);
+            if (b.is_zero()) return a.is_zero() ? make_special(SpecialKind::Indeterminate, ConstValue::Fail::Indeterminate) : make_special(SpecialKind::Undefined, ConstValue::Fail::Undefined);
             return make_int(a % b);
 
         case TK::DoubleAsterisk: return eval_int_pow(a, b);
@@ -898,12 +1135,12 @@ ConstValue ConstEvaluator::eval_int_op(TK op, const WideInt& a, const WideInt& b
 
 ConstValue ConstEvaluator::eval_int_pow(const WideInt& a, const WideInt& b) {
     if (a.is_undefined() || b.is_undefined()) return {};
-    if (b.is_zero()) return make_int(WideInt(1));
+    if (b.is_zero()) return a.is_zero() ? make_special(SpecialKind::Indeterminate, ConstValue::Fail::Indeterminate) : make_int(WideInt(1));
     const long long hb = a.highest_bit();        
     const bool odd = b.get_bit(0);
 
     if (b.is_negative()) {
-        if (hb <  0) return ConstValue::error(ConstValue::Fail::Undefined);        
+        if (hb <  0) return make_special(SpecialKind::Undefined, ConstValue::Fail::Undefined);
         if (hb != 0) return ConstValue::error(ConstValue::Fail::Domain);             
         return make_int((a.is_negative() && odd) ? WideInt(-1) : WideInt(1));
     }
@@ -924,8 +1161,7 @@ ConstValue ConstEvaluator::eval_int_pow(const WideInt& a, const WideInt& b) {
 }
 
 ConstValue ConstEvaluator::guard_range(const WideFloat& r, const WideFloat& a, const WideFloat& b) {
-    if (r.is_undefined()) return ConstValue::error(ConstValue::Fail::Indeterminate);
-    if (r.is_nan())       return ConstValue::error(ConstValue::Fail::Domain);
+    if (r.is_unordered()) return special_of_float(r, a.is_unordered() || b.is_unordered());
     const bool finite_in = a.is_finite() && b.is_finite();
     if (finite_in && r.is_infinite()) return ConstValue::error(ConstValue::Fail::Overflow);
     if (finite_in && r.is_zero() && !a.is_zero() && !b.is_zero()) return ConstValue::error(ConstValue::Fail::Underflow);
@@ -934,26 +1170,10 @@ ConstValue ConstEvaluator::guard_range(const WideFloat& r, const WideFloat& a, c
 
 ConstValue ConstEvaluator::eval_float_op(TK op, const WideFloat& a, const WideFloat& b) {
     switch (op) {
-        case TK::Plus:
-            if (a.is_infinite() && b.is_infinite() && a.is_negative() != b.is_negative())
-                return ConstValue::error(ConstValue::Fail::Indeterminate);         
-            return guard_range(a + b, a, b);
-
-        case TK::Minus:
-            if (a.is_infinite() && b.is_infinite() && a.is_negative() == b.is_negative())
-                return ConstValue::error(ConstValue::Fail::Indeterminate);          
-            return guard_range(a - b, a, b);
-
-        case TK::Asterisk:
-            if ((a.is_zero() && b.is_infinite()) || (a.is_infinite() && b.is_zero()))
-                return ConstValue::error(ConstValue::Fail::Indeterminate);         
-            return guard_range(a * b, a, b);
-
-        case TK::Slash:
-            if (a.is_zero()     && b.is_zero())     return ConstValue::error(ConstValue::Fail::Indeterminate); 
-            if (a.is_infinite() && b.is_infinite()) return ConstValue::error(ConstValue::Fail::Indeterminate);  
-            if (b.is_zero())                        return ConstValue::error(ConstValue::Fail::Undefined);     
-            return guard_range(a / b, a, b);
+        case TK::Plus:     return guard_range(a + b, a, b);
+        case TK::Minus:    return guard_range(a - b, a, b);
+        case TK::Asterisk: return guard_range(a * b, a, b);
+        case TK::Slash:    return guard_range(a / b, a, b);
 
         case TK::DoubleAsterisk: return eval_float_pow(a, b);
 
@@ -968,20 +1188,12 @@ ConstValue ConstEvaluator::eval_float_op(TK op, const WideFloat& a, const WideFl
 }
 
 ConstValue ConstEvaluator::eval_float_pow(const WideFloat& a, const WideFloat& b) {
-    const WideFloat one(1);
-    const WideFloat mag = mp::math::abs(a);
-    if (a.is_zero()     && b.is_zero())     return ConstValue::error(ConstValue::Fail::Indeterminate);  
-    if (a.is_infinite() && b.is_zero())     return ConstValue::error(ConstValue::Fail::Indeterminate);  
-    if (mag == one      && b.is_infinite()) return ConstValue::error(ConstValue::Fail::Indeterminate);  
-    if (a.is_zero()     && b.is_negative()) return ConstValue::error(ConstValue::Fail::Undefined);
-    if (a.is_negative() && b.is_finite() && !wf_is_integral(b)) return ConstValue::error(ConstValue::Fail::Domain);
     return guard_range(mp::math::pow(a, b), a, b);
 }
 
 ConstValue ConstEvaluator::finite_result(const WideFloat& r, const WideFloat& a, const WideFloat& b) {
     const bool inputs_finite = a.is_finite() && b.is_finite();
-    if (r.is_undefined()) return ConstValue::error(ConstValue::Fail::Domain);
-    if (inputs_finite && r.is_nan())      return ConstValue::error(ConstValue::Fail::Domain);
+    if (r.is_unordered()) return special_of_float(r, a.is_unordered() || b.is_unordered());
     if (inputs_finite && r.is_infinite()) return ConstValue::error(ConstValue::Fail::Overflow);
     if (inputs_finite && r.is_zero() && !a.is_zero() && !b.is_zero()) return ConstValue::error(ConstValue::Fail::Underflow);
     return make_float(r);
@@ -989,6 +1201,13 @@ ConstValue ConstEvaluator::finite_result(const WideFloat& r, const WideFloat& a,
 
 ConstValue ConstEvaluator::convert_to(const ConstValue& v, BuiltinType* dst) {
     using BK = parser_types::PrimitiveType::BaseKind;
+
+    if (v.is_special()) {
+        if (dst->base() == BK::Bool) return make_bool(true);
+        if (dst->base() != BK::Int && dst->base() != BK::Float) return {};
+        if (v.sp == SpecialKind::NegInf && dst->is_unsigned()) return dst->base() == BK::Int ? make_int(WideInt()) : make_float(WideFloat(0));
+        return v;
+    }
 
     switch (dst->base()) {
         case BK::Bool: {

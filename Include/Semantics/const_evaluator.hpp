@@ -16,8 +16,10 @@
 namespace walnut {
 namespace semantics {
 
+enum class SpecialKind : std::uint8_t { PosInf = 0, NegInf, Nan, Undefined, Indeterminate };
+
 struct ConstValue {
-    enum class Kind : std::uint8_t { None = 0, Int, Float, Bool } kind = Kind::None;
+    enum class Kind : std::uint8_t { None = 0, Int, Float, Bool, Special, String } kind = Kind::None;
 
     enum class Fail : std::uint8_t {
         NotConstant = 0,   
@@ -40,12 +42,18 @@ struct ConstValue {
     const WideInt*   i = nullptr;
     const WideFloat* f = nullptr;
     bool             b = false;
+    SpecialKind      sp = SpecialKind::Undefined;
+    const std::string* s = nullptr;
 
     bool ok()        const { return kind != Kind::None; }
+    bool is_special() const { return kind == Kind::Special; }
+    bool is_unordered() const { return kind == Kind::Special && sp != SpecialKind::PosInf && sp != SpecialKind::NegInf; }
+    bool is_infinite() const { return kind == Kind::Special && (sp == SpecialKind::PosInf || sp == SpecialKind::NegInf); }
     bool is_error()  const { return kind == Kind::None && fail != Fail::NotConstant; }
     bool is_int()    const { return kind == Kind::Int; }
     bool is_float()  const { return kind == Kind::Float; }
     bool is_bool()   const { return kind == Kind::Bool; }
+    bool is_string() const { return kind == Kind::String; }
 
     static ConstValue error(Fail f) { ConstValue c; c.fail = f; return c; }
 };
@@ -53,14 +61,21 @@ struct ConstValue {
 
 const char* fail_message(ConstValue::Fail f);
 
+const char* special_spelling(SpecialKind k);
+
+WideFloat special_to_float(SpecialKind k);
+
 class ConstEvaluator {
 public:
     explicit ConstEvaluator(TypeContext& types) : m_types(types) {}
 
     std::function<const SubstEnv*(Symbol*)> env_of;
     std::function<int(nodes::TemplateInstantiation*)> concept_value;
+    std::function<ConstValue(nodes::TemplateInstantiation*)> variable_template_value;
+    std::function<ConstValue(nodes::MemberAccessExpression*)> scoped_member_value;
 
     ConstValue eval_named(Symbol* s) { return eval_symbol(s); }
+    ConstValue eval_value_function(Symbol* fn);
 
     ConstValue eval(nodes::ASTNode* e) {
         if (!e || m_depth > kMaxDepth) return {};
@@ -101,6 +116,7 @@ public:
     }
 
     bool layout_of(Type* t, long long& size, long long& align, int depth = 0);
+    bool layout_hit_native = false;
     long long alignment_of(const parser_types::TemplateArgument* a);
 
     bool record_layout(RecordType* rt, long long& size, long long& align, int depth);
@@ -151,8 +167,28 @@ private:
         return c;
     }
 
+    static ConstValue make_special(SpecialKind k, ConstValue::Fail flag = ConstValue::Fail::NotConstant) {
+        ConstValue c; c.kind = ConstValue::Kind::Special; c.sp = k; c.fail = flag;
+        return c;
+    }
+
+    static ConstValue special_result(SpecialKind k, const ConstValue& l, const ConstValue& r);
+
+    static ConstValue special_of_float(const WideFloat& f, bool inputs_unordered);
+
+    bool as_wide_float(const ConstValue& v, WideFloat& out);
+
+    ConstValue apply_special(TK op, const ConstValue& l, const ConstValue& r, nodes::BinaryExpression* b);
+
+    ConstValue special_int_op(TK op, const ConstValue& l, const ConstValue& r);
+
     static ConstValue make_bool(bool b) {
         ConstValue c; c.kind = ConstValue::Kind::Bool; c.b = b;
+        return c;
+    }
+
+    static ConstValue make_string(const std::string* s) {
+        ConstValue c; if (s) { c.kind = ConstValue::Kind::String; c.s = s; }
         return c;
     }
 
@@ -202,7 +238,8 @@ private:
 
     bool test(nodes::ASTNode* cond, bool& taken);
 
-    Flow exec_loop_body(nodes::ASTNode* body, bool& stop);
+    Flow exec_loop_body(nodes::ASTNode* body, bool& stop, std::string_view label = {});
+    std::string_view m_jump_label;
 
     Flow exec(nodes::ASTNode* s);
 

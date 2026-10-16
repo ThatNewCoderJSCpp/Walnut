@@ -4,7 +4,7 @@ This is the reference for everything Walnut can do. For installing Walnut and ru
 
 Walnut is statically typed and compiles to C++. Its numbers are [Fizmo](https://github.com/ThatNewCoderJSCpp/Fizmo) multiprecision numbers, so every integer and float has the same exact width on every platform.
 
-This file describes the language itself. Walnut's library is documented separately, one page per module, in [Documentation/Library](Documentation/Library/README.md); so far it has one module, `core`, which every program gets without an `import`. Output, files and other system access come from C or C++ code you call directly; see [Calling C and C++](#calling-c-and-c).
+This file describes the language itself. Walnut's library is documented separately, one page per module, in [Documentation/Library](Documentation/Library/README.md); `core` comes with every program without an `import`, and other modules such as `io` and `collections` are imported by name. Output, files and other system access come from C or C++ code you call directly; see [Calling C and C++](#calling-c-and-c).
 
 ## Contents
 
@@ -36,7 +36,7 @@ This file describes the language itself. Walnut's library is documented separate
 26. [Calling C and C++](#calling-c-and-c)
 27. [The preprocessor](#the-preprocessor)
 28. [The command line](#the-command-line)
-29. [Not supported yet](#not-supported-yet)
+29. [Left out on purpose](#left-out-on-purpose)
 
 ## A first program
 
@@ -65,7 +65,7 @@ Walnut files end in `.wal`. Walnut header files, which are meant to be included 
 - `//` runs to the end of the line.
 - `/* ... */` can span lines, and block comments nest.
 
-**Blocks** are written with `{ }` and can't be empty. A block needs at least one statement; the only exception is a `catch` body.
+**Blocks** are written with `{ }`. A block can be empty, on one line (`{ }`) or across several.
 
 **Named declarations end with `end`.** Functions, classes, structs, unions and namespaces close with `end <kind> <name>`, and the name must match the opening name:
 
@@ -101,7 +101,37 @@ namespace shapes {
 
 `integer`, `double` and `decimal` look like aliases but are wider types; see [Numbers](#numbers).
 
-**Reserved words.** Keywords can't be used as names. The ones most likely to clash with a name you'd want are `in`, `is`, `as`, `local`, `text`, `arr`, `inf`, `from` and `hidden`.
+**Reserved words.** Keywords can't be used as variable, parameter, field or type names. The ones most likely to clash with a name you'd want are `in`, `is`, `as`, `local`, `text`, `arr`, `inf`, `nan`, `undefined`, `special`, `from`, `hidden` and `self`.
+
+**Keywords as function and method names.** Where a keyword can't mean anything else, it can still name a function or method:
+- Any keyword works as a member name after `.` and `->`: `list.end()`, `range.in(x)`, `p->from()`.
+- These keywords can also name functions and methods, and be called on their own (`end()`, `in(3)`) or after `::` (`Shape::from(...)`): `end`, `in`, `is`, `as`, `from`, `then`, `down`, `inherits`, `extends`, `implicit`, `explicit`, `override`, `abstract`, `fallthrough`, `repeat`, `hoist`, `hidden`, `local`, `global`, `export`, `include`, `module`, `mutable`, `lazy`, `friend`, `virtual`, `concept`, `async`, `infinity` and `nan`. A name like that is only taken as a function when it is followed by `(`, so `repeat;` and `x is int` keep their usual meaning.
+
+```walnut
+class Range {
+public:
+    int: lo = 1;
+    int: hi = 5;
+    function in(int: x) const -> bool {
+        return x >= lo && x < hi;
+    } end function in
+    function end() const -> int {
+        return hi;
+    } end function end
+    function last() const -> int {
+        return end() - 1;
+    } end function last
+} end class Range
+
+function main() -> int {
+    Range: r;
+    bool: inside = r.in(3);
+    int: top = r.last();
+    return 0;
+} end function main
+```
+
+Here `inside` is `true` and `top` is `4`.
 
 ## Types
 
@@ -142,7 +172,7 @@ function main() -> int {
 
 Here `change` ends up as `0`.
 
-**Infinity.** `infinity` (or `inf`) is a float constant, and `-inf` is negative infinity. `inf - inf` is `nan`.
+**Infinity and other special values.** Every integer and float type can also hold `inf`, `-inf`, `nan`, `undefined` and `indeterminate`; see [Special values](#special-values).
 
 ### Number literals
 
@@ -150,10 +180,13 @@ Here `change` ends up as `0`.
 |---|---|
 | Decimal | `42`, `1_000_000`, `1'000'000` |
 | Hexadecimal | `0xFF`, `0xFF_FF` |
+| Octal | `0o17`, `0o7_55` |
 | Binary | `0b1010`, `0b1010_1010` |
 | Float | `2.5`, `5.`, `1e3`, `2.5E-2` |
 
 **Digit separators.** `_` and `'` can sit between two digits anywhere in a number, and are ignored.
+
+**Leading zeros.** A leading `0` doesn't make a number octal as it does in C: `017` is seventeen, and the compiler warns that it may have been meant as `0o17`.
 
 **Types.** A plain integer literal gets the narrowest of `int`, `long int`, `long long int` and the wider types that can hold it. A plain float literal is a `float`.
 
@@ -206,6 +239,97 @@ function main() -> int {
 - A float too large for its type is an error, because the type can't represent it (`1e400s`). So is an integer too large for every integer type.
 - Suffixes are part of the language. They can't be overloaded, and you can't define new ones.
 
+### Special values
+
+Every integer and float type, signed or unsigned, can hold these values besides ordinary numbers:
+
+| Value | Meaning | Examples |
+|---|---|---|
+| `inf` and `-inf` (also `infinity`) | Positive or negative infinity | `inf`, `inf * 2`, a float too large for its type |
+| `nan` | A result that exists but isn't a real number (it would be complex) | `(-8.0) ** 0.5` |
+| `undefined` | A result that doesn't exist | `1 / 0`, `7 % 0`, `0 ** -1` |
+| `indeterminate` | A form whose value can't be decided | `0 / 0`, `inf - inf`, `0 * inf`, `0 ** 0`, `1 ** inf` |
+
+```walnut
+function average(int: total, int: count) -> int {
+    if (count == 0) then {
+        return undefined;
+    }
+    return total / count;
+} end function average
+
+function main() -> int {
+    int: a = average(10, 0);
+    bool: empty = a is undefined;
+    float: f = a;
+    long int: n = 5;
+    n = n * inf;
+    unsigned int: cap = inf;
+    auto: x = nan;
+    return 0;
+} end function main
+```
+
+Here `a` is `undefined`, `empty` is `true`, `f` is `undefined`, `n` is `inf`, `cap` is `inf` and `x` is a `float` holding `nan`.
+
+**Where they come from**
+- The keywords `inf`, `nan`, `undefined` and `indeterminate`. On their own they take the type they go into, so `int: x = undefined;` needs no cast. `auto` and `var` make them a `float`.
+- Arithmetic: dividing a non-zero number by zero gives `undefined`, for floats as well as integers (not `inf` as in C). `0 / 0` and the other indeterminate forms give `indeterminate`, and a result that would be complex gives `nan`.
+- A float that overflows becomes `inf`. Integer overflow still wraps around; it never becomes `inf`.
+
+**Arithmetic with special values**
+- They pass through: `undefined + 1` is `undefined`, `inf + 1` is `inf` and `-inf * 2` is `-inf`.
+- When two different ones meet, `undefined` wins over `indeterminate`, which wins over `nan`.
+- `x / inf` is `0` and `x % inf` is `x` for an ordinary `x`. `inf % x` is `undefined`.
+- `&`, `|`, `^`, `~`, `<<` and `>>` on an integer holding a special value give `undefined`.
+- Mixing a special value with a number gives the number's type: if `n` is a `long int`, `n + inf` is a `long int`.
+
+**Comparisons**
+- `nan`, `undefined` and `indeterminate` are unordered: `==`, `<`, `<=`, `>` and `>=` are `false` and `!=` is `true`, even when a value is compared with itself. Check for them with `is`.
+- `inf` is greater than every number and `-inf` is less than every number. `inf == inf` is `true`.
+
+**Checking with `is`.** `x is nan`, `x is undefined`, `x is indeterminate` and `x is inf` check which special value `x` holds. `x is inf` is true for both `inf` and `-inf`; use `x == -inf` to check the sign. These work on numbers, [special(T)](#specialt) values and `var` values.
+
+**Unsigned types** have no `-inf`. Putting `-inf` into an unsigned type is a compile-time error when Walnut can see it; while the program runs it becomes `0`, the same way a negative unsigned float becomes `0`.
+
+**Conversions** between number types keep the special value: a `float` holding `inf` cast to `int` is `inf`, and an `int` holding `nan` converted to `float` is `nan`.
+
+**Constants.** Writing one of the keywords never warns. A constant expression that produces a special value by itself, such as `int: q = 10 / 0;`, is a warning, and `q` is `undefined`.
+
+**Printing.** `inf` and `-inf` print as `∞` and `-∞`; the others print their names.
+
+**Calling C and C++.** Passing an integer that holds a special value to a C or C++ integer parameter stops the program with a runtime error, because C integers can't hold them. A float passes `inf` as infinity and the other three as NaN.
+
+### special(T)
+
+Strings, characters, classes and other types that aren't numbers can't hold special values. `special(T)` holds either a `T` or one of the special values, so a function can return one when you allow it:
+
+```walnut
+function lookup(int: id) -> special(string) {
+    if (id < 0) then {
+        return undefined;
+    }
+    return "walnut";
+} end function lookup
+
+function main() -> int {
+    special(string): name = lookup(-1);
+    bool: missing = name is undefined;
+    name = lookup(3);
+    bool: found = name is string;
+    string: s = name as string;
+    return 0;
+} end function main
+```
+
+Here `missing` is `true`, `found` is `true` and `s` is `"walnut"`.
+
+- A `T` or a special value converts to `special(T)` implicitly.
+- `is T` and `as T` work as they do on a [variant](#variants). `as T` stops the program with a runtime error when it holds a special value, so check with `is` first when you aren't sure.
+- `is nan`, `is undefined`, `is indeterminate` and `is inf` check which special value it holds.
+- `T` can't be a number type or `var`, because those already hold special values. It also can't be a reference, `void` or another `special(...)`.
+- With no initializer, a `special(T)` holds a default `T`.
+
 ### Other types
 
 | Type | What it holds |
@@ -217,6 +341,7 @@ function main() -> int {
 | `auto` | Takes its type from the initializer |
 | `var` | A dynamic value whose type can change at run time |
 | `variant(T1, T2, ...)` | One value of one of the listed types; see [Variants](#variants) |
+| `special(T)` | A `T` or one of the special values (`inf`, `nan`, `undefined`, `indeterminate`); see [special(T)](#specialt) |
 | `void` | No value. Only used as a return type |
 
 ### Dynamic values
@@ -258,8 +383,51 @@ function main() -> int {
 } end function main
 ```
 
+**Several at once.** One declaration can declare several variables of the same type, separated by commas. Each one gets its own initializer, or none:
+
+```walnut
+function main() -> int {
+    int: a = 1, b = 2, c;
+    string: first = "x", second;
+    return 0;
+} end function main
+```
+
+Here `c` is `0` and `second` is `""`. This works anywhere a declaration does: in a function, at file or namespace level, and for fields of a class. In the first part of a `for` loop, `,` still separates the loop's parts, so declare one variable there.
+
+**Initializing with `(...)` and `{...}`.** Instead of `= value`, the values can follow the name in parentheses or braces:
+
+```walnut
+class Box {
+public:
+    int: v;
+    string: s;
+    constructor(int: x, string: y) : v = x, s = y { }
+} end class Box
+
+struct Point {
+    int: x;
+    int: y;
+} end struct Point
+
+function main() -> int {
+    Box: a(1, "one");
+    Box: b{2, "two"};
+    Point: p{3, 4};
+    int: n(5), m{6};
+    array[] int: nums{1, 2, 3};
+    return 0;
+} end function main
+```
+
+Here `a.v` is `1`, `b.s` is `"two"`, `p.y` is `4`, `n` is `5`, `m` is `6` and `nums` has three elements.
+
+- For a class with constructors, both forms call the constructor that matches the values, the same as `T: x = T(values)`.
+- For a struct without constructors, the values fill its fields in order, as in `Point: p = Point{3, 4}`.
+- For any other type there can be at most one value, and it is converted as with `=`. `int: n{}` and `int: n()` are zero.
+- With `auto` or `var`, there must be exactly one value: `auto: x(5)` is an `int`.
+
 **Rules**
-- Each declaration has one name.
 - A variable with no initializer is zero: `0`, `0.0`, `""`, `false`.
 - `auto` needs an initializer, and so does a reference.
 - Declaring the same name twice in one scope is an error. An inner block may shadow an outer name.
@@ -300,6 +468,7 @@ Modifiers go before the type.
 | `inline` | Allowed to be defined in several files |
 | `extern` | Declared here, defined in another file (see [Linking between files](#linking-between-files)) |
 | `mutable` | A class field that can change inside `const` methods |
+| `lazy` | A class field computed from its initializer the first time it is read; see [Lazy fields](#lazy-fields) |
 | `hoist` | A local that can be used before its declaration line |
 | `alignas(N)` | Places the variable at an address that is a multiple of `N` bytes; see [Alignment](#alignment) |
 | `global`, `local`, `hidden` | Visibility; see [Visibility](#visibility) |
@@ -310,6 +479,7 @@ Walnut rejects combinations that contradict each other:
 - `constexpr` with `constinit`, `volatile`, `mutable`, `thread_local` or `extern`
 - `inline` with `extern`, `mutable`, `volatile`, `thread_local` or `constinit`
 - `mutable` with `static`, `thread_local` or `extern`
+- `lazy` with `const`, `constexpr`, `constinit`, `static`, `extern`, `inline`, `thread_local`, `mutable` or `volatile`
 - more than one of `global`, `local` and `hidden`
 
 ```walnut
@@ -470,15 +640,114 @@ Here `joined` is `"abcdefd"`, `s` is `"abc!"`, `t` is ``"back`tick"``, `letters`
 
 **Literals**
 - `"..."` is a `string`, `` `...` `` is a `text` and `'x'` is a `char`. String and text literals may span lines.
-- Escapes: `\n \t \r \a \b \f \v \e \0 \\ \' \" \? \``, `\xHH`, `\uXXXX`, `\UXXXXXXXX` and `\u{...}`.
+- Escapes: `\n \t \r \a \b \f \v \e \0 \\ \' \" \? \` \$`, `\xHH`, `\uXXXX`, `\UXXXXXXXX` and `\u{...}`.
 - Source files are UTF-8, so literals can contain any character directly.
 
 **Operations**
 - `+` joins strings, text and characters in any order, and `+=` appends.
 - `== != < > <= >=` compare strings, and compare `char`s by code point.
+- A `char` plus or minus a whole number is another `char`: `'a' + 2` is `'c'`, and `c += 1` moves `c` to the next character. Two `char`s can also be subtracted; the result is a `char` holding the distance between them, so use `static_cast<int>(c) - static_cast<int>('0')` when you want the number.
 - `countof(s)` gives the number of characters (code points), not bytes.
 - `for (char: c in s)` walks through the characters.
-- There's no built-in conversion between numbers and strings; that belongs in a library.
+- Any value can be turned into text with `${}` in a text literal (see [Text interpolation](#text-interpolation)) or with `.to_string()` and `.to_text()` (see [Methods on built-in values](#methods-on-built-in-values)). Reading a value out of a string is done with `std::io::parse_int`, `parse_float`, `parse_bool` and the other parse functions in the [io library](Documentation/Library/io.md#parsing-values), or with a stream such as `std::io::istringstream`.
+
+### Text interpolation
+
+A `text` literal (written with backticks) can hold `${expression}`. The expression is evaluated, turned into text, and put in its place, the same way JavaScript template literals work. This is what makes `text` different from `string`: a `"..."` string literal never interpolates.
+
+```walnut
+struct Temp {
+    int: degrees = 21;
+    operator(string) function() const {
+        return "warm";
+    }
+} end struct Temp
+
+function main() -> int {
+    int: n = 5;
+    float: half = 2.5;
+    string: who = "walnut";
+    Temp: t;
+    text: a = `n=${n}, half=${half}, sum=${n + half}, who=${who}`;
+    text: b = `today is ${t}, and ${`nested ${n * 2}`}`;
+    text: c = `cost: \${n} and \$5`;
+    return 0;
+} end function main
+```
+
+Here `a` is `` `n=5, half=2.5, sum=7.5, who=walnut` ``, `b` is `` `today is warm, and nested 10` `` and `c` is `` `cost: ${n} and $5` ``.
+
+- `${...}` takes any expression, including calls, operators, string literals with braces in them and other text literals with their own `${}`.
+- Numbers, `bool`, `char`, `string`, `text`, enums (as their number), `var` values, [special values](#special-values) and `special(T)` values can all be interpolated. A float is written in its shortest form, switching to scientific notation for very large or very small values (`1e+30`).
+- A class or struct can be interpolated when it has a conversion operator to `string` or `text`. Any other type is an error.
+- `\$` writes a `$` without starting an interpolation, so `` `\${x}` `` is the five characters `${x}`. A `$` that isn't followed by `{` doesn't need the backslash.
+- The result is always `text`. Use `static_cast<string>(...)` to get a `string`.
+
+### Methods on built-in values
+
+Built-in types have methods, called with `.` like the methods of a class. They work on variables, on any other expression (`"abc".length()`), and through pointers with `->`.
+
+```walnut
+function main() -> int {
+    string: x = "fvfbkvh";
+    text: padded = `  Héllo  `;
+    array[4] int: nums = {3, 1, 4, 1};
+    int: n = 42;
+    int: chars = x.length();
+    int: bytes = padded.sizeof();
+    string: middle = x.substr(1, 3);
+    int: at = x.find("bk");
+    bool: has = x.contains('h');
+    text: clean = padded.trim().to_upper();
+    bool: found = nums.contains(4);
+    int: where = nums.find(1);
+    string: shown = n.to_string() + "!";
+    int: width = n.sizeof();
+    return 0;
+} end function main
+```
+
+Here `chars` is `7`, `bytes` is `10` (`é` takes two bytes), `middle` is `"vfb"`, `at` is `3`, `has` is `true`, `clean` is `` `HÉLLO` ``, `found` is `true`, `where` is `1`, `shown` is `"42!"` and `width` is `4`.
+
+Strings and characters get many more methods from the [strings library](Documentation/Library/strings.md): with `import module.strings`, every function in `std::strings` whose first parameter is a string (or a `char`) can also be called as a method, so `line.split(",")` is `std::strings::split(line, ",")` and `c.is_digit()` is `std::strings::is_digit(c)`. The methods in the tables below always come first.
+
+**Every value**
+
+| Method | Result |
+|---|---|
+| `sizeof()` | The size in bytes, as an `int`. For a `string` or `text` it is the number of bytes the characters take, and for an array whose size is only known at run time it is the element size times the count |
+| `alignof()` | The alignment in bytes |
+| `to_string()`, `to_text()` | The value as a `string` or `text`, written the same way as [text interpolation](#text-interpolation) writes it. Not available on classes and structs |
+| `countof()` | The same as `countof(x)`: elements of an array, characters of a string, or enumerators of an enum |
+
+**`string` and `text`.** Positions and counts are in characters (code points), not bytes. Methods that give back a string give back the same type they were called on.
+
+| Method | Result |
+|---|---|
+| `length()` | The number of characters |
+| `size()` | The number of bytes |
+| `empty()` | `true` if there are no characters |
+| `substr(start)`, `substr(start, count)` | The characters from `start` to the end, or `count` characters from `start`. A `start` past the end is an error at run time; a `count` past the end stops at the end |
+| `find(needle)` | The position of the first match, or `undefined` if there isn't one (see [Special values](#special-values)) |
+| `contains(needle)`, `starts_with(needle)`, `ends_with(needle)` | `bool` |
+| `to_upper()`, `to_lower()` | A copy with letters changed. Latin, Greek and Cyrillic letters are converted |
+| `trim()` | A copy without spaces, tabs and line breaks at either end |
+
+A needle can be a `string`, a `text` or a `char`.
+
+**Arrays**
+
+| Method | Result |
+|---|---|
+| `length()`, `size()` | The number of elements |
+| `empty()` | `true` if there are no elements |
+| `find(value)` | The position of the first element equal to `value`, or `undefined` |
+| `contains(value)` | `bool` |
+
+- These methods are part of the language, so they don't need an `import`.
+- `sizeof`, `alignof` and `countof` are keywords, but they are allowed as method names after `.` and `->`.
+- A class or struct can use `.sizeof()` and `.alignof()` too. Its other methods are its own.
+- A method that doesn't exist for a type is an error, such as `n.length()` on an `int`.
 
 ## Enums, aliases, variants and unions
 
@@ -626,14 +895,16 @@ Here `quotient` is `3`, `remainder` is `2`, `power` is `289`, `mixed` is `50`, `
 - Overflow wraps around, as in two's complement: `int` 2147483647 + 1 is -2147483648, and `unsigned int` 0 - 1 is 4294967295.
 - Division truncates toward zero (`-7 / 2` is -3), and `>>` keeps the sign (`-7 >> 1` is -4).
 
+Integer division or `%` by zero doesn't stop the program: it gives `undefined` (or `indeterminate` for `0 / 0`). See [Special values](#special-values).
+
 **Runtime errors.** These stop the program with a `walnut runtime error` message:
-- integer division or `%` by zero
 - a shift by a negative amount, or by at least the type's width
-- an integer raised to a negative power
+- an integer other than 0, 1 and -1 raised to a negative power
+- an integer holding a special value used as an array index, a count or a size, or passed to C or C++
 
 **Which types each operator takes**
 - `%` and the bitwise operators need integers. Bitwise operators also take two `bool`s, or two values of the same enum.
-- `char` only does arithmetic with another `char`.
+- `char` does arithmetic with another `char`, and `+` and `-` also take a `char` and a whole number (`'a' + 1`, `c - 3`, `2 + c`), giving a `char`.
 - `&&`, `||` and `!` accept anything that can be tested as true or false: numbers, pointers, `bool`.
 
 **Mixing number types** widens to the larger type: `int + float` is a `float`, and `int + long int` is a `long int`.
@@ -666,9 +937,9 @@ All casts are written `name<Type>(value)`.
 
 | Cast | Use it for |
 |---|---|
-| `static_cast<T>(v)` | Number to number (narrowing, signed ↔ unsigned, float ↔ int), enum ↔ integer, `char` to integer, base class to derived class, explicit conversion operators |
+| `static_cast<T>(v)` | Number to number (narrowing, signed ↔ unsigned, float ↔ int), enum ↔ integer, `char` to integer, `string` ↔ `text`, base class to derived class, explicit conversion operators |
 
-**Numbers never become `char` or `bool`.** No cast turns an integer (or any number) into a `char` or a `bool`, not even `static_cast` or `bit_cast`. A `char` only comes from a character literal or another `char`, and a `bool` from a comparison such as `x != 0`. Going the other way is allowed with a cast: `static_cast<int>(c)` gives a character's code point.
+**Numbers never become `char` or `bool`.** No cast turns an integer (or any number) into a `char` or a `bool`, not even `static_cast` or `bit_cast`. A `char` only comes from a character literal or another `char` (including one moved by a whole number, as in `'a' + n`), and a `bool` from a comparison such as `x != 0`. Going the other way is allowed with a cast: `static_cast<int>(c)` gives a character's code point.
 | `const_cast<T>(v)` | Removing (or adding) `const` or `volatile` through a pointer or reference |
 | `dynamic_cast<T>(v)` | Converting a pointer or reference to a class with virtual functions into a derived class, checked while the program runs. A failed pointer cast gives `nullptr`. `as` does the same with an error instead |
 | `reinterpret_cast<T>(v)` | Pointer ↔ pointer and pointer ↔ integer, reinterpreting the bits |
@@ -701,7 +972,7 @@ Here `n` ends as `10`, `truncated` is `3`, and `wrapped` is `4294967291`.
 
 ### Casting to an rvalue reference
 
-`static_cast<T&&>(x)` lets `x` be moved from, so a move constructor or move assignment is chosen instead of a copy. The core library wraps this as `std::move(x)`. See [Copying and moving](#copying-and-moving).
+`static_cast<T&&>(x)` lets `x` be moved from, so a move constructor or move assignment is chosen instead of a copy. The core library wraps this as `std::core::move(x)`. See [Copying and moving](#copying-and-moving).
 
 ## Checking types with is and as
 
@@ -743,6 +1014,8 @@ function main() -> int {
 ```
 
 Here `s_is_square` is `true`, `p_is_square` is `false`, `side` is `3`, `d_is_float` is `true` and `f` is `2.5`.
+
+`is` also checks for special values: `x is nan`, `x is undefined`, `x is indeterminate` and `x is inf`; see [Special values](#special-values).
 
 Walnut rejects a check that can never be true, such as `v is float` for a `variant(int, string)`, or `is` on a class that doesn't derive from the one tested. A pointer `as` on a null pointer gives `nullptr`.
 
@@ -825,7 +1098,7 @@ Here `sum` is `23`, `k` ends at `0`, and `count` is `2`.
 
 **`for`**
 - The three parts can be separated by `;` or `,`, and any part can be left out: `for (;;)` loops forever.
-- `for (T: x in items)` loops over arrays, strings and generators.
+- `for (T: x in items)` loops over arrays, strings, generators, and classes that provide `begin()` and `end()` (see [Looping over your own classes](#looping-over-your-own-classes)).
 - `for (var: c in v)` loops over a `var` holding a string, giving each character as a `var`. If the `var` holds anything else, the program stops with a runtime error.
 - `for (T: x in {1, 2, 3})` loops over a brace list. With `auto`, the elements must share a common type.
 - `for (auto: [a, b] in pairs)` unpacks each element as it goes.
@@ -835,6 +1108,7 @@ Here `sum` is `23`, `k` ends at `0`, and `count` is `2`.
 **Jumps**
 - `break;` leaves the loop and `continue;` goes to the next iteration.
 - `repeat;` runs the current iteration again from the top of the body, without checking the condition or running the `for` increment.
+- A loop can be given a label, written as a name and a colon before it. `break label;`, `continue label;` and `repeat label;` then act on that loop instead of the innermost one, so an inner loop can leave or continue an outer one.
 
 ```walnut
 function main() -> int {
@@ -853,9 +1127,126 @@ function main() -> int {
 
 Here the body runs 4 times (three times with `i` at 0, once with `i` at 1), so `tries` is `4` and `last` is `1`.
 
+```walnut
+function main() -> int {
+    int: found = -1;
+    rows: for (int: r = 0; r < 5; r++) {
+        for (int: c = 0; c < 5; c++) {
+            if (c > r) then {
+                continue rows;
+            }
+            if (r * c == 6) then {
+                found = r * 10 + c;
+                break rows;
+            }
+        }
+    }
+    return 0;
+} end function main
+```
+
+Here `found` is `32`: the search stops at `r` = 3, `c` = 2, and `continue rows` skips the rest of each row once `c` passes `r`.
+
+- Any `for`, `for ... in`, `while` or `do ... while` loop can have a label.
+- The label must belong to a loop around the jump; anything else is an error. A label is only visible inside its own loop, so two separate loops can use the same label.
+- Labelled jumps work in `constexpr` functions too.
+
+### goto
+
+`goto name;` jumps to `label name;` in the same function. The label is a statement of its own, so no `:` is involved.
+
+```walnut
+function find(int: target) -> int {
+    int: found = -1;
+    for (int: a = 0; a < 10; a++) {
+        for (int: b = 0; b < 10; b++) {
+            if (a * b == target) then {
+                found = a * 10 + b;
+                goto done;
+            }
+        }
+    }
+    found = -2;
+    label done;
+    return found;
+} end function find
+
+function main() -> int {
+    int: hit = find(12);
+    int: miss = find(97);
+    return 0;
+} end function main
+```
+
+Here `hit` is `26` and `miss` is `-2`.
+
+- A goto can jump backwards or forwards, out of any number of blocks, to a label in its own block or in a block around it. It can't jump into a block it isn't inside, such as the body of an `if` or a loop it isn't in.
+- A forward jump can't skip a variable declaration in the label's block, because the variable would exist without being initialized. Declare the variable before the `goto`, or put it in its own `{ }` block.
+- Each label name can be used once per function. Labels and loop labels are separate, and `label` and `goto` are still usable as ordinary names elsewhere.
+- Labelled `break` and `continue` cover most uses of `goto` more clearly; `goto` is there for state machines, shared clean-up code at the end of a function, and code translated from C.
+
+### Looping over your own classes
+
+`for (T: x in obj)` works on any class with a `begin()` method and an `end()` method that take no arguments. They return an iterator, which needs three operators:
+
+| Operator | Used for |
+|---|---|
+| `operator(!=)` | Checking whether the loop has reached `end()` |
+| `operator(++)` (prefix, no parameter) | Moving to the next element |
+| `operator(*)` (unary) | Getting the current element; return `T&` to let the loop change elements through `T&: x` |
+
+A plain pointer is already an iterator, so a class that stores its elements in an array can return `T*` from both methods.
+
+```walnut
+class Countdown {
+    int: start;
+public:
+    constructor(int: s) : start = s { }
+
+    class Step {
+    public:
+        int: n;
+        constructor(int: x) : n = x { }
+        operator(!=) function(const Step&: other) const -> bool {
+            return n != other.n;
+        }
+        operator(++) function() -> Step& {
+            n -= 1;
+            return *this;
+        }
+        operator(*) function() const -> int {
+            return n;
+        }
+    } end class Step
+
+    function begin() const -> Step {
+        return Step(start);
+    } end function begin
+
+    function end() const -> Step {
+        return Step(0);
+    } end function end
+} end class Countdown
+
+function main() -> int {
+    int: total = 0;
+    for (int: n in Countdown(3)) {
+        total = total * 10 + n;
+    }
+    return 0;
+} end function main
+```
+
+Here `total` is `321`.
+
+- `end` is a keyword, but it can be used as the name of a method, as above, and called as `list.end()`, or as just `end()` inside the class (see [Keywords as function and method names](#source-files)).
+- `begin()` and `end()` are called once, before the loop starts. A `const` object uses the `const` versions.
+- Labelled `break` and `continue`, structured bindings (`for (auto: [k, v] in map)`) and `T&` loop variables all work as they do for arrays.
+- The [collections library](Documentation/Library/collections.md) uses this for all of its containers.
+
 ### switch
 
-`switch` works on integers, characters and enums. A case that runs into the next case gets a warning, unless you end it with `fallthrough;` to show the fall-through is intended. `break;` ends a case.
+`switch` works on integers, characters, enums, `string` and `text`. A case that runs into the next case gets a warning, unless you end it with `fallthrough;` to show the fall-through is intended. `break;` ends a case.
 
 ```walnut
 function describe(int: n) -> int {
@@ -878,6 +1269,27 @@ function main() -> int {
 ```
 
 Here `a` is `1`, `b` is `23` and `c` is `100`.
+
+A switch on a string compares the whole string with each case, the same as a chain of `==` tests. The cases can be `string` or `text` literals:
+
+```walnut
+function command(string: word) -> int {
+    switch (word) {
+        case "start": return 1;
+        case "stop": return 2;
+        case `pause`: return 3;
+        default: return 0;
+    }
+} end function command
+
+function main() -> int {
+    int: a = command("stop");
+    int: b = command("jump");
+    return 0;
+} end function main
+```
+
+Here `a` is `2` and `b` is `0`.
 
 ## Functions
 
@@ -1079,12 +1491,15 @@ function main() -> int {
 
 Here `result` is `6` and `safe` is `true`.
 
+**Overloading on `const`.** A method can have a `const` and a non-`const` version with the same parameters, such as `function at(long int: i) const -> const T&` and `function at(long int: i) -> T&`. A `const` object calls the `const` one; any other object calls the non-`const` one.
+
 ## Exceptions
 
 Any value can be thrown: a number, a string or an object.
 - `catch (T: name)` catches values of type `T`. `catch (const T&: e)` avoids a copy.
 - `catch (...)` catches anything, and must come last.
 - `throw;` on its own rethrows the exception currently being handled.
+- The library's exceptions are in the namespace `std::errors`: [`collection_error`](Documentation/Library/collections.md#errors) from `collections`, [`format_error`](Documentation/Library/io.md) and [`input_error`](Documentation/Library/io.md#reading-input) from `io`, [`pointer_error`](Documentation/Library/memory.md#errors) and [`arena_error`](Documentation/Library/memory.md#errors) from `memory`, [`optional_error`](Documentation/Library/optional.md#errors) from `optional`, [`linalg_error`](Documentation/Library/linalg.md) from `linalg`, [`statistics_error`](Documentation/Library/statistics.md) from `statistics`, [`graph_error`](Documentation/Library/graphs.md) from `graphs`, [`time_error`](Documentation/Library/time.md) from `time`, [`network_error`](Documentation/Library/networking.md) from `networking` and [`crypto_error`](Documentation/Library/crypto.md) from `crypto`. Each has `what()`, which gives the message.
 - `noexcept(expression)` is `true` when the expression can't throw.
 
 ```walnut
@@ -1158,7 +1573,7 @@ function times(int: x) -> int {
 } end function times
 
 template <typename A, typename B>
-function add(A: a, B: b) -> common_type(A, B) {
+function add(A: a, B: b) -> std::traits::common_type<A, B> {
     return a + b;
 } end function add
 
@@ -1174,9 +1589,11 @@ function main() -> int {
 Here `big` is `9`, `later` is `"b"`, `fifteen` is `15` and `mixed` is `3.5`.
 
 **Template parameters**
-- A parameter can be a type (`typename T`) or a constant (`int N`).
+- A parameter can be a type (`typename T`) or a constant (`int N`). A constant can have any integer, float, `bool`, `char`, `string` or `text` type: `template <string Name>` takes `Greeter<"hi">`.
 - A parameter can have a default (`typename T = int`).
 - At a call, the template arguments are deduced from the function's arguments, or given explicitly as in `biggest<string>(...)`.
+- `T::name` reaches a static member, method or member type of the type that `T` stands for, such as `T::value`, `T::make()` or `T::item_type` (usable as a type, as in `Box<T::item_type>`). It works the same through a type alias: with `using Small = Box<1>;`, `Small::name()` calls `Box<1>`'s static `name`.
+- A template argument left out because the parameter has a default is filled in, so `Box<1>` and `Box<1, Default>` are the same type and deduce the same way.
 
 ### Variadic templates
 
@@ -1212,6 +1629,53 @@ function main() -> int {
 
 Here `n` is `3`, `t` is `6` and `f` is `9`.
 
+**Pack fields.** A class template can hold a pack as a field: `Ts...: items;` declares one field for each type in `Ts`. `items[0]`, `items[1]` and so on are the fields, and the index has to be a constant, because each field can have a different type. `countof(items)` is how many there are. A brace list fills them in order, and `{values...}` expands a function's parameter pack into it. A pack field can't have an initializer. [`std::collections::Tuple`](Documentation/Library/collections.md#tuple) is a struct with one pack field.
+
+```walnut
+template <typename... Ts>
+struct Row {
+    Ts...: cells;
+} end struct Row
+
+template <typename... Ts>
+function make_row(Ts...: values) -> Row<Ts...> {
+    return Row<Ts...>{values...};
+} end function make_row
+
+function main() -> int {
+    Row<int, string>: r{1, "one"};
+    auto: s = make_row(2, "two", 2.5);
+    r.cells[0] += 10;
+    long int: width = countof(s.cells);
+    auto: [number, word] = r;
+    return 0;
+} end function main
+```
+
+Here `r.cells[0]` is `11`, `width` is `3`, `number` is `11` and `word` is `"one"`. A function can take any `Row` with `template <typename... Ts> function f(const Row<Ts...>&: row)`, and `Row<>` holds nothing.
+
+**Overloads with packs.** When two overloads match a call equally well, the one with more ordinary (non-pack) parameters wins, because it is the more specific one. If they have the same number, the one with no variadic parameter wins, so `constructor()` is chosen over `constructor(T...: items)` for `Box: b;`:
+
+```walnut
+template <typename... Ts>
+function describe(Ts...: rest) -> string {
+    return "anything";
+} end function describe
+
+template <typename... Ts>
+function describe(int: first, Ts...: rest) -> string {
+    return "starts with an int";
+} end function describe
+
+function main() -> int {
+    string: a = describe(1, "x");
+    string: b = describe("x", 1);
+    return 0;
+} end function main
+```
+
+Here `a` is `"starts with an int"` and `b` is `"anything"`.
+
 ### Class templates
 
 ```walnut
@@ -1245,6 +1709,85 @@ function main() -> int {
 
 Here `got` is `"hi"` and `size` is `4`.
 
+**Methods are checked when they're used.** A method of a class template is only type-checked, and only turned into C++, for a `T` it is actually called with. So a `Box<T>` can have a `sort()` that needs `<`, and `Box<Point>` still works as long as nobody calls `sort()` on it. A call that does need `<` is an error at that call, as usual. Virtual methods, constructors, destructors, `operator(=)` and conversion operators are always checked, because they can be used without being called by name.
+
+### Variable templates
+
+A variable template is a constant with template parameters. `name<args>` gives its value for those arguments.
+
+```walnut
+template <typename T>
+constexpr long int: bits = sizeof(T) * 8;
+
+template <typename T>
+constexpr bool: is_small = bits<T> <= 32;
+
+template <int N>
+constexpr long int: factorial = N * factorial<N - 1>;
+
+template <>
+constexpr long int: factorial<0> = 1;
+
+template <typename T>
+const string: label = "a " + typeid(T);
+
+template <typename T>
+requires is_small<T>
+function widen(T: x) -> long int {
+    return x;
+} end function widen
+
+function main() -> int {
+    static_assert(bits<int> == 32, "int is 32 bits");
+    long int: f = factorial<10>;
+    string: s = label<bool>;
+    long int: w = widen(7);
+    return 0;
+} end function main
+```
+
+Here `f` is `3628800`, `s` is `"a bool"` and `w` is `7`.
+
+- A variable template is `constexpr` or `const`, and has an initializer. A `constexpr` one is worked out while compiling, so it can go in `static_assert`, `if constexpr`, `requires` clauses, array sizes and template arguments.
+- It can be [specialized](#specialization) like a function: `template <> constexpr long int: factorial<0> = 1;`. A recursive one needs a specialization (or another way to stop), because both sides of `?:` are instantiated; one that never stops is reported as going past the recursion depth limit.
+- Inside a class it is `static`: `template <typename T> static constexpr long int: bits = sizeof(T) * 8;`, used as `Limits::bits<int>`.
+- The [type traits](#traits) are variable templates in `std::traits`.
+
+### Alias templates
+
+An alias template is a name for a family of types: `template <...> using Name = type;`. `Name<args>` is that type with the arguments filled in.
+
+```walnut
+import module.collections
+
+template <typename T>
+using Grid = std::collections::Vector<std::collections::Vector<T>>;
+
+template <typename V>
+using ByName = std::collections::Map<string, V>;
+
+template <typename T>
+using Plain = std::traits::discard_cv<std::traits::discard_ref<T>>;
+
+template <typename... Ts>
+using Row = std::collections::Tuple<Ts...>;
+
+function main() -> int {
+    Grid<int>: board;
+    board.push_back(std::collections::Vector<int>{1, 2, 3});
+    ByName<long int>: ages;
+    ages.insert("Ada", 36);
+    static_assert(std::traits::is_same<Plain<const int&>, int>, "Plain drops const and &");
+    Row<int, string>: r{1, "one"};
+    return 0;
+} end function main
+```
+
+- An alias template is the same type as what it stands for, so `Grid<int>` and `Vector<Vector<int>>` can be used interchangeably.
+- Its parameters can be types, values (`template <int N> using Buf = Buffer<char, N>;`) and packs, and can have defaults.
+- It can't be specialized; specialize the class it names instead.
+- The [type operations](#type-operations) are alias templates in `std::traits`.
+
 ### Specialization
 
 `template <>` gives a version of a template for specific arguments:
@@ -1269,11 +1812,51 @@ function main() -> int {
 
 Here `a` is `"something"` and `b` is `"an int"`. Classes are specialized the same way: `template <> class Box<bool> { ... } end class Box`.
 
+### Type flags and SFINAE
+
+A class template that inherits from [`std::true_type` or `std::false_type`](Documentation/Library/core.md#constants) answers a yes-or-no question about a type, and specializations change the answer for particular types. Its `value` is a `constexpr bool`.
+
+When filling in a function template's parameter types or return type fails, that template is quietly left out of the call instead of being an error ("substitution failure is not an error", SFINAE). [`std::enable_if_t<condition, T>`](Documentation/Library/core.md#enable_if) is `T` when the condition is true and fails otherwise, so it switches overloads on and off:
+
+```walnut
+struct Point {
+    int: x;
+} end struct Point
+
+template <typename T>
+struct is_point inherits std::false_type {
+} end struct is_point
+
+template <>
+struct is_point<Point> inherits std::true_type {
+} end struct is_point
+
+template <typename T>
+function describe(T: value) -> std::enable_if_t<is_point<T>::value, string> {
+    return "a point";
+} end function describe
+
+template <typename T>
+function describe(T: value) -> std::enable_if_t<!is_point<T>::value, string> {
+    return "something else";
+} end function describe
+
+function main() -> int {
+    Point: p;
+    static_assert(is_point<Point>::value && !is_point<int>::value, "flags");
+    string: a = describe(p);
+    string: b = describe(3);
+    return 0;
+} end function main
+```
+
+Here `a` is `"a point"` and `b` is `"something else"`. A [`requires` clause](#concepts) usually says the same thing more directly (`requires is_point<T>::value`), but `enable_if` works where a constraint can't go, such as inside a type.
+
 ### Concepts
 
 A concept is a named requirement on a type. Its body can be:
 - a `requires (params) { expressions; }` block, which checks that the expressions compile
-- a type trait such as `is_arithmetic(T)`
+- a type trait such as `std::traits::is_arithmetic<T>`, or another `constexpr bool` [variable template](#variable-templates)
 - another concept
 - any combination of these with `&&`, `||` and `!`
 
@@ -1284,7 +1867,7 @@ template <typename T>
 concept Addable = requires (T: a, T: b) { a + b; }
 
 template <typename T>
-concept Number = is_arithmetic(T) && !is_same(T, bool)
+concept Number = std::traits::is_arithmetic<T> && !std::traits::is_same<T, bool>
 
 template <Addable T>
 function twice(T: x) -> T {
@@ -1292,7 +1875,7 @@ function twice(T: x) -> T {
 } end function twice
 
 template <typename T>
-requires Number<T> && is_integral(T)
+requires Number<T> && std::traits::is_integer<T>
 function half(T: x) -> T {
     return x / 2;
 } end function half
@@ -1311,7 +1894,8 @@ Here `a` is `42`, `b` is `"abab"` and `c` is `4`.
 
 - A requirement can also check the result type: `{ x.size() } -> int;`.
 - A concept definition has no `;` after it.
-- Calling a constrained template with a type that doesn't qualify names what failed, such as `Addable<P> is not satisfied` or `is_integral(float) is not satisfied`.
+- Calling a constrained template with a type that doesn't qualify names what failed, such as `Addable<P> is not satisfied` or `std::traits::is_integer<float> is not satisfied`.
+- Ready-made concepts are in `std::concepts`, which every program has: `integer_type`, `floating_point`, `same_as`, `totally_ordered` and [others](Documentation/Library/core.md#stdconcepts). `template <std::concepts::integer_type T>` and `requires std::concepts::integer_type<T>` both work.
 
 ## Lambdas
 
@@ -1448,14 +2032,72 @@ Here `got` is `17`, `c.reads` is `1`, `made` is `1`, and `p` is `{7, 8}`.
 - `static` fields and methods belong to the class and are reached as `Counter::count()`.
 - `const` after a method's parameters means it doesn't change the object. Calling a non-const method on a const object is an error.
 - `mutable` fields can still change inside `const` methods.
+- `lazy` fields are computed the first time they are read; see [Lazy fields](#lazy-fields).
 - `this` is a pointer to the current object: use `this->x` and `*this`.
+- `self` is the current object itself, the same as `*this`: `self.x`, `return self;`, and `self(x)` to call the object's own `operator(())`. In a `const` method it is `const`. A lambda that captures `[this]` can use `self` too.
 
 **Construction**
 - `Point{7, 8}` sets the fields in order (aggregate initialization).
 - `Counter: c;` uses the default constructor.
 - `Box: b = Box(5);` calls a constructor.
+- `Box: b = {5};` and `Box: b{5};` call a constructor with the values in the braces. A brace list can also be passed straight to a function or constructor (`draw({3, 4})`, `push_back({1, 2})`) or returned (`return {3, 4};`); it builds the parameter's (or return) type the same way. A non-`explicit` constructor that takes the values is used, or the fields are filled in order if the class has no constructors.
+- A constructor whose only parameter is a [`std::initializer_list<T>`](Documentation/Library/core.md#stdinitializer_list) is chosen first for a brace list whose values all convert to `T`, as in C++: `Bag: b = {1, 2, 3};` passes all three values to it. Parentheses skip that rule, so `Bag: b(1, 2);` still calls a two-parameter constructor.
 
 **Forward declaration.** `class Name;` declares a class before its definition.
+
+### Lazy fields
+
+A `lazy` field's initializer is a recipe instead of a starting value. It runs the first time the field is read, and the result is kept for later reads. `invalidate` throws the kept value away, so the next read runs the initializer again. This is for values that are expensive to work out and depend on other fields, such as a bounding box or a total:
+
+```walnut
+import module.io
+
+class Mesh {
+    float: width = 2.0;
+    float: height = 3.0;
+    int: computed = 0;
+
+    function compute_area() -> float {
+        computed++;
+        return width * height;
+    } end function compute_area
+
+public:
+    lazy float: area = compute_area();
+
+    function resize(float: w, float: h) -> void {
+        width = w;
+        height = h;
+        invalidate area;
+    } end function resize
+
+    function times_computed() const -> int {
+        return computed;
+    } end function times_computed
+} end class Mesh
+
+function main() -> int {
+    Mesh: m;
+    std::io::println(m.area, " ", m.area, " ", m.times_computed());
+    m.resize(4.0, 5.0);
+    std::io::println(m.area, " ", m.times_computed());
+    return 0;
+} end function main
+```
+
+This prints `6 6 1` and then `20 2`: the area is worked out once, and again only after `resize` invalidates it.
+
+- The field is read like any other (`m.area`), and `const` methods can read it too, because computing it doesn't count as changing the object.
+- The initializer runs inside the object, so it can use the other fields and call the class's methods, `const` or not. It must be `= <expression>`, not a brace list.
+- `invalidate a, b;` invalidates several fields. It can also name a field of another object, as in `invalidate other.area;`.
+- Only the class itself (and its friends) can assign a lazy field or invalidate it, and from outside the class it reads as `const`, so `m.items.push_back(x)` is an error too. Assigning sets the value and marks it as computed, so the initializer won't run until the next `invalidate`.
+- `public lazy` lets code outside the class assign and invalidate the field as well, as long as the object isn't `const`: `public lazy string: label = default_label();`.
+- If the initializer throws, the field stays uncomputed and the next read tries again. If the initializer reads, assigns or invalidates its own field, the program stops with an error instead of looping forever.
+- `lazy threadsafe` makes the field safe to read from several threads at once: one thread computes the value while the others wait for it, and assigning and invalidating wait their turn too. Plain `lazy` fields are for one thread at a time. A reference taken from a read (`float&: r = m.area;` inside the class) isn't protected from a later `invalidate`.
+- Copying an object copies the computed value along with it, if there is one.
+- Lazy fields are skipped by aggregate initialization (`Point{1.0, 2.0}` sets the other fields in order), by structured bindings and by the automatic `==`.
+- A lazy field takes one byte more than the value it holds (rounded up to the value's alignment), to remember whether it has been computed.
+- Only class and struct fields can be `lazy`; locals, globals, `static` fields, arrays, references and union fields can't.
 
 ### Constructors and destructors
 
@@ -1493,6 +2135,37 @@ Here `area` is `6`. `s` is a 4×4 rectangle and `unit` a 1×1 one, both with `ta
 **The initializer list** comes after `:`. Each field (or base class) can be set three ways: `x = v`, `x(v)` or `x{a, b}`.
 
 **Delegating constructors.** A constructor can hand all the work to another constructor of the same class by naming the class in its initializer list, as `Rect(side, side)` does above. That must be the only initializer, and a constructor can't hand off to itself.
+
+**Template constructors.** A constructor can have its own template parameters, written with `template <...>` in front of it inside the class. Each call works out the parameters from its arguments, the same way a [function template](#function-templates) does, and the class can be a template too:
+
+```walnut
+template <typename T>
+class Holder {
+public:
+    T: value;
+    string: origin;
+
+    template <typename U>
+    constructor(U&&: input) : value(std::core::forward<U>(input)), origin("one value") { }
+
+    template <typename A, typename B>
+    constructor(const A&: a, const B&: b) : value(a + b), origin("two values") { }
+} end class Holder
+
+function main() -> int {
+    string: name = "walnut";
+    Holder<string>: copied(name);
+    Holder<string>: moved(std::core::move(name));
+    Holder<float>: sum(1, 2.5);
+    return 0;
+} end function main
+```
+
+Here `copied.value` is `"walnut"`, `moved.value` is `"walnut"` (and `name` was moved from), and `sum.value` is `3.5` with `sum.origin` set to `"two values"`. `U&&` is a forwarding reference (see [Copying and moving](#copying-and-moving)), so `copied` receives `name` as a `string&` and copies it, while `moved` receives a temporary and moves it.
+
+- A template constructor has to be written inside its class with its body, and can't be `= default` or `= delete`.
+- Like in C++, a template constructor is never used to copy or move: copying a `Holder<string>` from another one, or moving it, uses the class's own copy or move constructor even when the template would also fit, unless the template fits better (for example, a non-`const` lvalue passed to a `U&&` parameter).
+- Declaring a template constructor takes away the automatic constructor with no arguments, the same as declaring any other constructor. Add `constructor() { }` if `Holder<int>: h;` should still work.
 
 **Special forms**
 - `constructor() = default;` asks for the compiler-generated version.
@@ -1558,6 +2231,48 @@ Here `total` is `18`.
 - Defining a method that the class doesn't declare is an error, and so is defining one twice.
 - Templates' methods are defined inside the class.
 
+**Constructors, destructors and operators** can be defined outside the class the same way. Declare them in the class ending with `;`, then write the definition with the class's name right after the keyword:
+
+```walnut
+class Account {
+    int: balance;
+public:
+    constructor(int: start);
+    destructor();
+    operator(+=) function(int: amount) -> Account&;
+    operator(int) function() const;
+} end class Account
+
+constructor Account(int: start) : balance = start { }
+
+destructor Account() {
+    balance = 0;
+}
+
+operator(+=) function Account(int: amount) -> Account& {
+    balance += amount;
+    return *this;
+}
+
+operator(int) function Account() const {
+    return balance;
+}
+
+function main() -> int {
+    Account: acc(10);
+    acc += 5;
+    int: total = acc;
+    return 0;
+} end function main
+```
+
+Here `total` is `15`.
+
+- The definition's parameters (and `const`, for operators) must match a declaration in the class. The initializer list (`: balance = start`) goes on the definition.
+- A class in a namespace is named in full, as in `constructor bank::Account(int: start)`, or the definition goes inside `namespace bank { ... }` with just `constructor Account(...)`. Inside the parameters, the class can be named with or without its namespace.
+- A constructor or destructor that is declared but never defined is an error.
+- Friend operators aren't members, so they are defined like any free operator, without the class name.
+
 ## Copying and moving
 
 The copy and move members are declared like this:
@@ -1596,14 +2311,49 @@ public:
 function main() -> int {
     Resource: a = Resource(1);
     Resource: b = a;
-    Resource: c = std::move(a);
+    Resource: c = std::core::move(a);
     return 0;
 } end function main
 ```
 
 Here `b` is a copy (`b.copies` is `1`), `c` took `a`'s value (`c.id` is `1`), and `a.id` is now `-1`.
 
-`std::move(x)` lets `x` be moved from; afterwards `x` is valid but its value is up to the move constructor. It comes from the [core library](Documentation/Library/core.md), and does the same as `static_cast<T&&>(x)`. Returning a local variable from a function moves it automatically.
+`std::core::move(x)` lets `x` be moved from; afterwards `x` is valid but its value is up to the move constructor. It comes from the [core library](Documentation/Library/core.md), and does the same as `static_cast<T&&>(x)`. Returning a local variable from a function moves it automatically.
+
+When a function has both a `const T&` and a `T&&` overload, a temporary or a `std::core::move`d value goes to the `T&&` one and anything else to the `const T&` one, so `v.push_back(Thread(...))` moves a value that can't be copied.
+
+**Forwarding references.** In a function template, a parameter written `T&&`, where `T` is that template's own type parameter, takes anything. Given a variable, `T` becomes a reference (`int&`, or `const int&` for a `const` variable) and the parameter is an lvalue reference to it; given a temporary, `T` is the plain type and the parameter is `T&&`. `static_cast<T&&>(value)` passes the argument on the way it came in:
+
+```walnut
+template <typename T>
+function kind(T&&: value) -> string {
+    if constexpr (std::traits::is_lvalue_ref<T>) then {
+        return "variable";
+    } else then {
+        return "temporary";
+    }
+} end function kind
+
+template <typename T>
+function pass_on(T&&: value) -> string {
+    return kind(static_cast<T&&>(value));
+} end function pass_on
+
+function main() -> int {
+    int: n = 1;
+    const int: c = 2;
+    string: a = kind(n);
+    string: b = kind(3);
+    string: d = kind(c);
+    string: e = pass_on(n);
+    string: f = pass_on(4);
+    return 0;
+} end function main
+```
+
+Here `a`, `d` and `e` are `"variable"`, and `b` and `f` are `"temporary"`. When a `T&` overload and a forwarding `T&&` overload both fit a variable, the `T&` one is chosen.
+
+`std::core::forward<T>(value)` from the [core library](Documentation/Library/core.md) does the same as `static_cast<T&&>(value)` and reads better: `pass_on` above could `return kind(std::core::forward<T>(value));`. A pack works too: `template <typename... Ts> function make(Ts&&...: args)` takes each argument as a forwarding reference.
 
 A copy that isn't allowed is reported with the reason:
 
@@ -1620,7 +2370,7 @@ class Shape {
 public:
     string: name;
     constructor(string: n) : name = n { }
-    function area() const virtual -> int;
+    function area() const abstract -> int;
     function describe() const virtual -> string {
         return "shape " + name;
     } end function describe
@@ -1654,7 +2404,9 @@ Here `area` is `16`, `text_of` is `"shape square!"`, and `back` points to `sq`.
 
 **Virtual methods**
 - `virtual` and `override` go after the parameter list.
-- A `virtual` method without a body is abstract. A class with an abstract method can't be created, and neither can a subclass that doesn't implement it.
+- `abstract` marks a method that has no body here and must be implemented by subclasses. It implies `virtual`, ends with `;`, and can't be given a definition anywhere, inside or outside the class. A class with an abstract method can't be created, and neither can a subclass that doesn't implement it.
+- A `virtual` method with no body that is never defined is abstract too, but the compiler warns about it, because it may be a forgotten definition. Write `abstract` to say it's on purpose.
+- Only methods can be abstract, not constructors, destructors or operators.
 - `override` on a method that doesn't override anything is an error.
 
 **Calling the base.** `Base::method()` calls a base class's version.
@@ -1701,6 +2453,37 @@ Here `size` is `4`.
 'x' is ambiguous in 'C': it is inherited from 'A' and 'B'; declare 'x' in this class to decide which one it means
 ```
 
+**Naming a base's member.** `obj.Base::member` (or `ptr->Base::member`) uses the member as `Base` declares it. For a method, this calls `Base`'s version directly, even if it is `virtual` and the object's class overrides it. It also picks one of two inherited members with the same name.
+
+```walnut
+class Animal {
+public:
+    int: legs = 4;
+    function speak() const virtual -> string {
+        return "...";
+    } end function speak
+} end class Animal
+
+class Dog inherits Animal {
+public:
+    int: legs = 3;
+    function speak() const override -> string {
+        return "woof";
+    } end function speak
+} end class Dog
+
+function main() -> int {
+    Dog: d;
+    string: own = d.speak();
+    string: base = d.Animal::speak();
+    int: dog_legs = d.legs;
+    int: animal_legs = d.Animal::legs;
+    return 0;
+} end function main
+```
+
+Here `own` is `"woof"`, `base` is `"..."`, `dog_legs` is `3` and `animal_legs` is `4`. Naming a class that isn't the object's class or one of its bases is an error. Inside a method, `Base::member` without an object does the same for `this`.
+
 ### Friends and nested types
 
 ```walnut
@@ -1736,7 +2519,50 @@ function main() -> int {
 
 Here `secret` is `42`, `k.code` is `7`, `closed` is `true` and `doubled` is `2.5`.
 
-**Friends.** `friend function f(...)` and `friend class C;` give access to private members.
+**Friends.** `friend function f(...)`, `friend operator(...) function(...)` and `friend class C;` give access to private members. A friend function or operator can be defined right where it is declared; see [Stream operators](#stream-operators) for a friend `<<`.
+
+**Defining a friend inside the class.** A friend defined in the class body is not a member. It belongs to the scope around the class: the namespace (call it as `shapes::f(...)` from outside), or the function body for a class declared inside a function. This works in class templates too:
+
+```walnut
+template <typename T>
+class Box {
+    T: v;
+public:
+    constructor(T: x) : v = x { }
+    friend function get(const Box&: b) -> T {
+        return b.v;
+    } end function get
+    friend operator(+) function(const Box&: a, const Box&: b) -> Box {
+        return Box(a.v + b.v);
+    }
+} end class Box
+
+function main() -> int {
+    Box<int>: sum = Box<int>(2) + Box<int>(5);
+    int: seven = get(sum);
+    string: hi = get(Box<string>("hi"));
+
+    struct Counter {
+        int: n = 0;
+        friend function bump(Counter&: c) -> int {
+            c.n += 1;
+            return c.n;
+        } end function bump
+    } end struct Counter
+
+    Counter: c;
+    bump(c);
+    int: two = bump(c);
+    return 0;
+} end function main
+```
+
+Here `seven` is `7`, `hi` is `"hi"` and `two` is `2`.
+
+- In a class template, the class's own name without arguments (`Box`) means the current type (`Box<T>`), as it does in the class's methods. The friend becomes a function template over the class's template parameters, so `get` works for every `Box<T>`, and its arguments must let `T` be worked out from the call: `get(sum)` finds `T` from `sum`.
+- A friend that is itself a template (`template <typename U> friend function ...`) can be defined in the class as well.
+- Inside the friend's body, names are looked up in the class first, as in a method: nested types such as `Mode`, static members and the class's own name work without `Box::`. Members that need an object (fields and non-static methods) must be reached through a parameter, as in `b.v`, because a friend has no `this`.
+- A friend can be defined inside a nested class (a class inside another class) too, and is then called as if it were declared after the outer class. The exception is a class nested inside a class template: there, declare the friend in the class and define it after the outer class.
 
 **Nested types.** Classes and enums can be declared inside a class and are named as `Outer::Inner`.
 
@@ -1916,42 +2742,48 @@ Here `during` is `1` and `after` is `0`.
 
 ### Stream operators
 
-C++'s `std::ostream` and `std::istream` are classes, and `<<` and `>>` are overloaded on them. Walnut works the same way: write a stream class whose `operator(<<)` members handle the built-in types (by calling C or C++ to do the actual output), and each type you define adds a free `operator(<<)` that takes the stream as its first parameter. Each overload returns the stream, so calls chain.
+The [io library](Documentation/Library/io.md) has C++-style streams: `std::io::cout`, `std::io::cin`, files, string streams and the rest. `<<` writes to an `ostream` and `>>` reads from an `istream`, and both are already defined for the built-in types.
+
+A type of your own adds `<<` and `>>` with an operator that takes the stream as its first parameter and returns it, so calls chain. The operator can be a free function, or a `friend` declared inside the class when it needs private members. Write it for `std::io::ostream&` and `std::io::istream&`, and it works on every stream: `cout`, files, string streams and so on.
 
 ```walnut
-extern "C++" function stream_write(const string&: s) noexcept -> void;
-extern "C++" function stream_write_int(long int: v) noexcept -> void;
-
-class OutStream {
-public:
-    operator(<<) function(const string&: s) -> OutStream& {
-        stream_write(s);
-        return *this;
-    }
-    operator(<<) function(long int: v) -> OutStream& {
-        stream_write_int(v);
-        return *this;
-    }
-} end class OutStream
-
-OutStream: out;
+import module.io
 
 struct Point {
     int: x;
     int: y;
 } end struct Point
 
-operator(<<) function(OutStream&: s, const Point&: p) -> OutStream& {
-    return s << "(" << p.x << ", " << p.y << ")";
+operator(<<) function(std::io::ostream&: out, const Point&: p) -> std::io::ostream& {
+    return out << "(" << p.x << ", " << p.y << ")";
 }
 
+operator(>>) function(std::io::istream&: input, Point&: p) -> std::io::istream& {
+    return input >> p.x >> p.y;
+}
+
+class Money {
+    long int: cents;
+public:
+    constructor(long int: c) : cents = c { }
+    friend operator(<<) function(std::io::ostream&: out, const Money&: m) -> std::io::ostream& {
+        return out << "$" << m.cents / 100 << "." << std::io::setw(2) << std::io::setfill('0') << m.cents % 100;
+    }
+} end class Money
+
 function main() -> int {
-    out << "point " << Point{3, 4} << "\n";
+    std::io::istringstream: source = std::io::istringstream("3 4");
+    Point: p;
+    source >> p;
+    std::io::cout << "point " << p << ", price " << Money(1205) << std::io::endl;
     return 0;
 } end function main
 ```
 
-With a C++ file that defines `stream_write` and `stream_write_int` (for example with `std::cout`), this prints `point (3, 4)`. An input stream works the same way with `operator(>>)`, taking the target by reference.
+This prints `point (3, 4), price $12.05`.
+
+- A friend operator has the same parameters as a free one. It is not a member, so it doesn't take the class as `this`.
+- `>>` takes the target by non-const reference. If reading fails, the stream's `failbit` is set and `if (stream)` is `false`.
 
 ### Conversion operators
 
@@ -1980,6 +2812,36 @@ function main() -> int {
 
 Here `label` is `"M"` and `raw` is `8`.
 
+**Conversion templates.** A conversion operator can be a template, which lets one operator cover many target types. The template parameter is worked out from the type being converted to:
+
+```walnut
+class Num {
+public:
+    long int: v = 42;
+    template <typename T>
+    requires std::traits::is_arithmetic<T>
+    operator(T) function() const {
+        return static_cast<T>(v);
+    }
+} end class Num
+
+function main() -> int {
+    Num: n;
+    int: i = static_cast<int>(n);
+    double: d = n;
+    short int: s = static_cast<short int>(n);
+    return 0;
+} end function main
+```
+
+Here `i`, `d` and `s` are all `42`.
+
+- The pattern can be more than a bare `T`, as in `operator(T*)`, which only matches pointer types.
+- A conversion operator that isn't a template wins over a template that converts to the same type.
+- `requires` limits which types the template accepts, as on any template.
+
+**Moving conversions.** `&&` after the empty parameter list, as in `operator(Box<U>) function() && { ... }`, marks a conversion that takes the object over, the way [`UniquePtr`](Documentation/Library/memory.md#uniqueptr) moves its pointer into a `UniquePtr` of a base class. It is only used on a value that is being moved or thrown away anyway: a temporary such as a function's result, or `std::core::move(x)`. Converting a named variable without `std::core::move` is an error that says to add it.
+
 ### Generated comparisons
 
 You rarely need to write every comparison operator:
@@ -1999,7 +2861,7 @@ If a class has no `==`, Walnut generates one that compares the base classes and 
 
 A class can tell the [type traits](#type-operations-and-traits) how to treat it, so that your own number types behave like the built-in ones in templates.
 
-**Traits.** A trait overload's body must be a single `return` of a constant. It returns `bool`, or `int` for the rank queries.
+**Traits.** A trait overload's body must be a single `return` of a constant. It changes the built-in answer the trait starts from; the traits built on top (such as `is_number` from `is_arithmetic`) follow it. To change a trait from outside the class, or for a type you didn't write, specialize it instead; see [Extending a trait](Documentation/Library/core.md#extending-a-trait). It returns `bool`, or `int` for the rank queries.
 
 **Type operations.** A type operation overload has no body; the type after `->` is the answer. Only `common_type` takes a parameter: the other type.
 
@@ -2008,24 +2870,24 @@ class Fixed {
 public:
     int: raw;
     operator(is_arithmetic) function() -> bool { return true; }
-    operator(is_integral) function() -> bool { return false; }
+    operator(is_integer) function() -> bool { return false; }
     operator(float_rank) function() -> int { return -1; }
     operator(promote) function() -> double;
     operator(common_type) function(int) -> Fixed;
 } end class Fixed
 
 function main() -> int {
-    static_assert(is_arithmetic(Fixed), "Fixed counts as arithmetic");
-    static_assert(!is_integral(Fixed), "but not as an integer");
-    static_assert(float_rank(Fixed) == -1, "ranked like short float");
-    static_assert(is_same(promote(Fixed), double), "promotes to double");
+    static_assert(std::traits::is_arithmetic<Fixed>, "Fixed counts as arithmetic");
+    static_assert(!std::traits::is_integer<Fixed>, "but not as an integer");
+    static_assert(std::traits::float_rank<Fixed> == -1, "ranked like short float");
+    static_assert(std::traits::is_same<std::traits::promote<Fixed>, double>, "promotes to double");
     return 0;
 } end function main
 ```
 
 | | Names |
 |---|---|
-| Can be overloaded | `is_integral`, `is_floating`, `is_arithmetic`, `is_signed`, `is_unsigned`, `is_string`, `integer_rank`, `float_rank`, `make_signed`, `make_unsigned`, `element_type`, `underlying_type`, `return_type`, `common_type`, `promote`, `demote`, `int_from_float`, `float_from_int` |
+| Can be overloaded | `is_integer`, `is_float` (or `is_floating`), `is_arithmetic`, `is_signed`, `is_unsigned`, `is_string`, `is_text`, `is_str`, `integer_rank`, `float_rank`, `integer_bits`, `float_bits`, `float_mantissa_bits`, `float_exponent_bits`, `make_signed`, `make_unsigned`, `element_type`, `underlying_type`, `return_type`, `common_type`, `promote`, `demote`, `int_from_float`, `float_from_int` |
 | Can be overloaded, with a warning | `is_pointer`, `is_array`, `is_bool`, `is_char`, `is_class`, `is_function` |
 | Can't be overloaded | All other traits and type operations, and `sizeof`. Their answer depends only on how the type is written |
 
@@ -2049,9 +2911,9 @@ static_assert(fib(10) == 55, "fib(10) should be 55");
 
 template <typename T>
 function kind(T: value) -> string {
-    if constexpr (is_integral(T)) then {
+    if constexpr (std::traits::is_integer<T>) then {
         return "integer";
-    } else if constexpr (is_string(T)) then {
+    } else if constexpr (std::traits::is_string<T>) then {
         return "string";
     } else then {
         return "other";
@@ -2069,9 +2931,18 @@ function main() -> int {
 
 Here `f` is `144`, and `a`, `b` and `c` are `"integer"`, `"string"` and `"other"`.
 
+**What can be computed.** Integers, floats, `bool`, `char`, `string` and `text` can all be constants. Strings can be joined with `+` and compared with `==`, `!=`, `<`, `>`, `<=` and `>=` while compiling:
+
+```walnut
+constexpr string: first = "wal";
+constexpr string: whole = first + "nut";
+static_assert(whole == "walnut", "joined at compile time");
+static_assert("apple" < "pear", "compared at compile time");
+```
+
 ## Type operations and traits
 
-Type operations and traits are evaluated at compile time. Type operations produce a type and traits produce a value. Both take types as arguments, and `typeof(value)` turns a value into its type.
+Type operations and traits are evaluated at compile time. Type operations produce a type and are [alias templates](#alias-templates) in `std::traits`, such as `std::traits::discard_ref<T>`. Traits produce a value and are [variable templates](#variable-templates) in `std::traits`, such as `std::traits::is_integer<T>`. `typeof`, `decltype`, `discard_const`, `sizeof`, `alignof`, `countof` and `typeid` are operators of the language, and `typeof(value)` turns a value into its type.
 
 ### Size, count and names
 
@@ -2106,31 +2977,40 @@ Here `a` is `"int"`, `b` is `"long int"`, `e` is `"Point"`, `f` is `"float"` and
 
 ### Type operations
 
+Apart from `typeof`, `decltype` and `discard_const`, which are keywords, these are alias templates in `std::traits` that come with every program. `using std::traits::decay;` brings one in under its short name.
+
 | Operation | Result |
 |---|---|
 | `typeof(expr)` | The type of a value, without the reference |
 | `decltype(expr)` | The declared type of a name, or `T&` for other lvalues |
-| `discard_const(T)`, `discard_volatile(T)`, `discard_cv(T)` | `T` without `const`/`volatile` |
-| `discard_ref(T)`, `discard_pointer(T)`, `decay(T)` | `T` without a reference or pointer; `decay` also turns arrays into pointers |
-| `add_const(T)`, `add_volatile(T)`, `add_ref(T)`, `add_rvalue_ref(T)`, `add_pointer(T)` | `T` with that added |
-| `make_signed(T)`, `make_unsigned(T)` | The signed or unsigned version of a number type, floats included |
-| `promote(T)`, `demote(T)` | The next wider or narrower type of the same kind |
-| `int_from_float(T)`, `float_from_int(T)` | The integer or float type of the same width |
-| `element_type(T)` | The element type of an array, or `char` for strings |
-| `underlying_type(E)` | The integer type behind an enum |
-| `return_type(F)` | The return type of a function type |
-| `common_type(A, B, ...)` | The type all the arguments convert to |
-| `conditional(condition, A, B)` | `A` when the condition is true, otherwise `B` |
+| `discard_const(T)`, `std::traits::discard_volatile<T>`, `std::traits::discard_cv<T>` | `T` without `const`/`volatile` |
+| `std::traits::discard_ref<T>`, `std::traits::discard_pointer<T>`, `std::traits::decay<T>` | `T` without a reference or pointer; `decay` also turns arrays into pointers |
+| `std::traits::add_const<T>`, `std::traits::add_volatile<T>`, `std::traits::add_ref<T>`, `std::traits::add_rvalue_ref<T>`, `std::traits::add_pointer<T>` | `T` with that added |
+| `std::traits::make_signed<T>`, `std::traits::make_unsigned<T>` | The signed or unsigned version of a number type, floats included |
+| `std::traits::promote<T>`, `std::traits::demote<T>` | The next wider or narrower type of the same kind |
+| `std::traits::int_from_float<T>`, `std::traits::float_from_int<T>` | The integer or float type of the same width |
+| `std::traits::element_type<T>` | The element type of an array, or `char` for strings |
+| `std::traits::underlying_type<E>` | The integer type behind an enum |
+| `std::traits::return_type<F>` | The return type of a function type |
+| `std::traits::common_type<A, B, ...>` | The type all the arguments convert to |
+| `std::traits::conditional<condition, A, B>` | `A` when the condition is true, otherwise `B` |
 
 ### Traits
 
+Traits are [variable templates](#variable-templates) in the namespace `std::traits`, which comes with every program like the rest of [core](Documentation/Library/core.md#stdtraits). `std::traits::is_integer<T>` is a `constexpr bool`, so it works in `static_assert`, `if constexpr`, `requires` clauses and concepts, and anywhere else a constant does.
+
 | Trait | Result |
 |---|---|
-| `is_same(A, B)`, `is_convertible(From, To)`, `is_base_of(Base, Derived)` | `bool` |
-| `is_const`, `is_volatile`, `is_ref`, `is_lvalue_ref`, `is_rvalue_ref`, `is_pointer`, `is_array`, `is_function`, `is_void` | `bool` |
-| `is_integral`, `is_floating`, `is_arithmetic`, `is_signed`, `is_unsigned`, `is_bool`, `is_char`, `is_string`, `is_enum`, `is_class`, `is_dynamic` | `bool` |
-| `integer_rank(T)` | The width step of an integer type: `int` is 0, `long int` 1, `short int` -1, and so on up to 6 for `long long integer` |
-| `float_rank(T)` | The same for floats: `float` is 0, `short float` -1, `double` 2 |
+| `is_same<A, B>`, `is_convertible<From, To>`, `is_base_of<Base, Derived>` | `bool` |
+| `is_const<T>`, `is_volatile<T>`, `is_ref<T>`, `is_lvalue_ref<T>`, `is_rvalue_ref<T>`, `is_pointer<T>`, `is_array<T>`, `is_function<T>`, `is_void<T>` | `bool` |
+| `is_integer<T>`, `is_float<T>`, `is_number<T>`, `is_signed<T>`, `is_unsigned<T>`, `is_bool<T>`, `is_char<T>`, `is_string<T>`, `is_enum<T>`, `is_class<T>`, `is_dynamic<T>` and [about 60 more](Documentation/Library/core.md#stdtraits) | `bool` |
+| `integer_rank<T>` | An `int`: the width step of an integer type. `int` is 0, `long int` 1, `short int` -1, and so on up to 6 for `long long integer` |
+| `float_rank<T>` | The same for floats: `float` is 0, `short float` -1, `double` 2 |
+| `integer_bits<T>`, `float_bits<T>`, `float_mantissa_bits<T>`, `float_exponent_bits<T>`, `array_extent<T>` | `int` sizes |
+
+`is_integer` is only for integer types: `bool` and `char` are their own kinds, with `is_bool` and `is_char`. `using std::traits::is_integer;` brings one in under its short name.
+
+Every `bool` trait reads a struct in `std::traits::extend`, which you can specialize with `std::true_type` or `std::false_type` to give your own types an answer; see [Extending a trait](Documentation/Library/core.md#extending-a-trait). `std::traits::integer_traits<T>` and `std::traits::float_traits<T>` give the limits and sizes of the built-in number types, like C++'s `std::numeric_limits`; see [integer_traits and float_traits](Documentation/Library/core.md#integer_traits-and-float_traits).
 
 ```walnut
 function main() -> int {
@@ -2139,16 +3019,16 @@ function main() -> int {
     int&: rx = x;
     decltype(rx): alias = x;
     typeof(rx): copy = x;
-    make_unsigned(int): u = 7;
-    conditional(sizeof(int) == 4, int, string): pick = 9;
+    std::traits::make_unsigned<int>: u = 7;
+    std::traits::conditional<sizeof(int) == 4, int, string>: pick = 9;
     discard_const(typeof(cx)): changeable = 1;
     changeable = 2;
-    static_assert(is_ref(decltype(rx)), "decltype keeps the reference");
-    static_assert(!is_ref(typeof(rx)), "typeof drops it");
-    static_assert(is_const(typeof(cx)), "typeof keeps const");
-    static_assert(is_same(typeof(x + 2.5), float), "int + float is float");
-    static_assert(is_unsigned(typeof(u)), "make_unsigned made it unsigned");
-    static_assert(integer_rank(long int) == 1 && float_rank(double) == 2, "ranks");
+    static_assert(std::traits::is_ref<decltype(rx)>, "decltype keeps the reference");
+    static_assert(!std::traits::is_ref<typeof(rx)>, "typeof drops it");
+    static_assert(std::traits::is_const<typeof(cx)>, "typeof keeps const");
+    static_assert(std::traits::is_same<typeof(x + 2.5), float>, "int + float is float");
+    static_assert(std::traits::is_unsigned<typeof(u)>, "make_unsigned made it unsigned");
+    static_assert(std::traits::integer_rank<long int> == 1 && std::traits::float_rank<double> == 2, "ranks");
     return 0;
 } end function main
 ```
@@ -2193,6 +3073,7 @@ Here `a` is `9`, `b` is `8`, `c` is `10` and `d` is `16`.
 - `namespace a::b { }` declares nested namespaces in one step.
 - `namespace short = long::name;` makes an alias.
 - `using namespace n;` makes the names in `n` usable without the prefix, until the end of the current block.
+- `using a::b;` makes just the one name `b` usable without its prefix, in the current block or namespace. It works for functions (with all their overloads), types, variables, constants and nested namespaces, as in `using geo::Point;` or `using std::io::println;`.
 
 ## Files, imports and modules
 
@@ -2244,8 +3125,9 @@ export namespace shapes
 | `import namespace shapes from "lib.wal"` | `shapes::...` |
 | `import "lib.wal" as lib` | Everything `lib.wal` exports, as `lib::...` |
 | `import module "greet" from "lib.wal"` | A named module block from that file, as `greet::...` |
-| `import module.name` | A module found by name, as `name::...` |
+| `import module.name` | A module found by name, as `name::...`. A module from Walnut's library is `std::name::...` instead |
 | `import module.a.b as x` | The module `a/b`, as `x::...` |
+| `import module.io as x` | The library module `io`, as `std::io::...` and `x::...` |
 
 `import { ... }` lists several imports at once.
 
@@ -2272,7 +3154,11 @@ A module block lists names declared elsewhere in the file, and can also define n
 
 ### Modules by name
 
-`import module.name` looks for a module file called `name.walh` (or `name.wal`). In `import module.a.b`, the dots become folders, so it looks for `a/b.walh`. The module is reached through its last name part (`b::`), or through the name given with `as`. A module whose name is a keyword, such as `module.string`, must be imported with `as`.
+`import module.name` looks for a module file called `name.walh` (or `name.wal`).
+
+**Library modules.** When a module comes from Walnut's own library, it exists in `std::name`: `import module.io` gives `std::io::cout`, and the always-present `core` module gives `std::core::move`. `import module.io as io` makes `io` another name for `std::io`. The library's modules are listed in [Documentation/Library](Documentation/Library/README.md).
+
+ In `import module.a.b`, the dots become folders, so it looks for `a/b.walh`. The module is reached through its last name part (`b::`), or through the name given with `as`. A module whose name is a keyword, such as `module.string`, must be imported with `as`.
 
 Walnut searches these folders in order:
 1. every `-M <dir>` given on the command line
@@ -2325,7 +3211,7 @@ function main() -> int {
 
 **Declaring native functions**
 - Declare a C function with `extern "C"`, or a C++ function with `extern "C++"`.
-- Several functions can share one `extern "C"` or `extern "C++"` in an extern block. It can only hold function declarations, can only appear at file or namespace level, and closes with `end extern`:
+- Several functions can share one `extern "C"` or `extern "C++"` in an extern block. It can only hold function declarations (and, for `extern "C++"`, [C++ classes](#using-c-classes)), can only appear at file or namespace level, and closes with `end extern`:
 
 ```walnut
 extern "C" {
@@ -2346,6 +3232,7 @@ function main() -> int {
 - `short float` and `short short float`, converted to and from C's `double` and `float`
 - `bool`, `char`, `string` (C's `const char*`, or C++'s `std::string`) and `const string&`
 - `void`, as a return type
+- for `extern "C++"` only: integers wider than 64 bits and floats other than `short float` and `short short float` (64 and 32 bits). They arrive in C++ as Walnut's runtime types, such as `walnut_rt::i2048` for `long long integer` or `walnut_rt::f2048` for `long long double`, declared in `walnut_runtime.hpp`
 
 ### Using C and C++ files
 
@@ -2369,6 +3256,7 @@ namespace words {
 - **Headers** (`.h`, `.hpp`, `.hh`, `.hxx`) are included in the generated C++, so header-only code works: inline functions, and templates called with the types you declare. The functions are then called with the header's own declarations, so the Walnut declaration only has to be callable the same way; it doesn't have to repeat the C++ signature exactly. A `.h` named in an `extern "C"` block is included as C.
 - A header only declares functions, so if the code lives in a separate source file, name both, as with `vec.h` and `vec.c` above.
 - Each file is compiled or included once, however many declarations name it.
+- A header in angle brackets, such as `from "<vector>"`, is a system or library header: it is included as `#include <vector>` and found on the C++ compiler's include path instead of next to the Walnut file.
 - `from` also works on a single declaration: `extern "C" from "vec.c" function vec_dot(...) -> long int;`.
 - With a block, each function you use needs a Walnut declaration. To have Walnut read them from the header instead, see the next section.
 
@@ -2393,6 +3281,130 @@ function main() -> int {
 - A template can still be used by declaring the versions you need in an `extern "C++" from "file.hpp" { ... } end extern` block.
 - Headers are read with libclang, which Walnut looks for on the system (for example after `sudo apt install libclang-dev`). The `WALNUT_LIBCLANG` environment variable can point at it directly.
 - Walnut reads the headers with the same include folders and settings as the C++ compiler it uses, plus the `-I` folders.
+
+### Using C++ classes
+
+An `extern "C++"` block can also declare a C++ class, so Walnut code can create its objects and call their methods. The class's fields stay in C++; the Walnut declaration lists the constructors, methods and operators Walnut may use. Given this header:
+
+```cpp
+#pragma once
+#include <string>
+
+namespace geo {
+    class Counter {
+    public:
+        Counter() = default;
+        explicit Counter(long start) : m_count(start) {}
+        void add(long amount) { m_count += amount; }
+        long count() const { return m_count; }
+        static Counter starting_at(long start) { return Counter(start); }
+        bool operator<(const Counter& other) const { return m_count < other.m_count; }
+        std::string label() const { return "count " + std::to_string(m_count); }
+    private:
+        long m_count = 0;
+    };
+
+    inline long doubled(const Counter& c) { return c.count() * 2; }
+}
+```
+
+the class is used from Walnut like this:
+
+```walnut
+namespace geo {
+    extern "C++" from "geo/counter.hpp" {
+        class Counter {
+        public:
+            constructor();
+            constructor(long int: start);
+            function add(long int: amount) -> void;
+            function count() const -> long int;
+            static function starting_at(long int: start) -> Counter;
+            operator(<) function(const Counter&: other) const -> bool;
+            function label() const -> string;
+            function doubled() const -> long int as "geo::doubled";
+            function add_twice(long int: amount) -> void {
+                add(amount);
+                add(amount);
+            } end function add_twice
+        } end class Counter
+    } end extern
+} end namespace geo
+
+function main() -> int {
+    geo::Counter: a;
+    a.add(5);
+    geo::Counter: b = geo::Counter::starting_at(10);
+    b.add_twice(1);
+    bool: smaller = a < b;
+    string: shown = b.label();
+    long int: twice = a.doubled();
+    return 0;
+} end function main
+```
+
+Here `a.count()` is `5`, `b.count()` is `12`, `smaller` is `true`, `shown` is `"count 12"` and `twice` is `10`.
+
+**Declaring the class**
+- The C++ name comes from the Walnut namespaces around the block, as for functions: `geo::Counter` above. `as` gives a different name: `class List as "std::vector"`.
+- A method or constructor without a body ends with `;` and calls the C++ method of the same name. `as "name"` calls a C++ method with another name (`as "data"`, or `as "operator[]"`), and `as "ns::function"` (a name with `::`) calls a free C++ function with the object as its first argument, like `geo::doubled` above. An operator without `as` uses the same C++ operator.
+- A constructor's arguments go to the C++ constructor. A constructor with `as "ns::make"` initializes the object with what that C++ function returns.
+- In a class template, an `as` name can use the template's parameters, which are replaced by the class's arguments: in `List<T>`, `constructor(T...: items) as "ns::make_list<T>";` calls `ns::make_list<std::string>` for a `List<string>`.
+- A method can also have a Walnut body, like `add_twice` above, to add methods the C++ class doesn't have or to check arguments first. A Walnut body can call the other methods, but can't reach the C++ fields.
+- A class with no constructors can be created without arguments. A C++ class can't declare fields, a destructor (the C++ destructor runs on its own), virtual methods or base classes.
+- Only the methods a program calls are generated, so a template can declare methods that only compile for some types, the same as in C++.
+
+**Templates.** A class template becomes a C++ class template with the same arguments: `List<string>` below is `std::vector<std::string>`, and an `int` template parameter passes an integer, as in `SmallVector<T, 8>`.
+
+```walnut
+import module.io
+
+extern "C++" from "<vector>" {
+    template <typename T>
+    class List as "std::vector" {
+    public:
+        constructor();
+        constructor(long int: count, const T&: value);
+        function size() const -> long int;
+        function push_back(const T&: value) -> void;
+        function data() -> T*;
+        function begin() -> T* as "data";
+
+        function end() -> T* {
+            return data() + size();
+        } end function end
+
+        operator([]) function(long int: index) -> T& {
+            if (index < 0 || index >= size()) then {
+                throw "index out of range";
+            }
+            return data()[index];
+        }
+    } end class List
+} end extern
+
+function main() -> int {
+    List<string>: names(2, "?");
+    names.push_back("ann");
+    names[0] = "bob";
+    for (const string&: n in names) {
+        std::io::print(n, " ");
+    }
+    std::io::println();
+    return 0;
+} end function main
+```
+
+This prints `bob ? ann`.
+
+**Values crossing.** Integers, floats, `bool` and `char` are converted to and from the C++ types of the same size, as for functions. A parameter or result whose type is a template parameter (`const T&`, `T&`) is passed as Walnut's own type, so `List<int>` holds Walnut `int`s. A Walnut object of a C++ class passes as the C++ object. A method that returns a pointer can also return a C++ iterator into a container whose elements are stored in one block (`std::vector`, `std::string`), as `begin` does above.
+
+**Using the objects**
+- Objects of C++ classes copy and move with the C++ class's own copy and move.
+- `for (x in c)` works when the class has `begin()` and `end()` that return pointers.
+- `==` and other operators work only when they are declared in the block; Walnut doesn't generate them for C++ classes.
+- `sizeof` gives the C++ size.
+- C++ code can't call Walnut operators: a C++ algorithm that compares elements with `<` or `==` works on numbers and strings, but not on Walnut classes. Write that method in Walnut instead, as the [collections](Documentation/Library/collections.md) module does for `sort` and `find`.
 
 ### Writing C and C++ code in Walnut files
 
@@ -2496,6 +3508,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `build` | Builds an executable |
 | `run` | Builds the program and runs it |
 | `clean` | Deletes the build cache |
+| `highlight` | Prints what each name and operator in the file is, and its errors and warnings, as JSON for editors. With `--stdin`, the file's text comes from standard input. It also takes a `.walh` file. The format is in [the VS Code extension's README](Tools/vscode-walnut/README.md#the-highlight-command) |
 | `help`, `-h`, `--help` | Shows the usage |
 
 | Option | Meaning |
@@ -2510,6 +3523,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `--cxx-flag <flag>` | Passes a flag to the C++ compiler |
 | `--runtime <dir>` | Where the Walnut runtime is |
 | `--keep-cpp` | Keeps the generated C++ next to the program (builds without the cache) |
+| `-u`, `--unbuffered` | Makes the program flush `cout` and `clog` after every write, like `python -u` (setting `WALNUT_UNBUFFERED=1` when it runs does the same) |
 | `--no-cache` | Builds from scratch in a temporary folder, without the build cache |
 | `-g` | Builds for a debugger, which then shows `.wal` lines (defaults to `-O0`) |
 | `--debug-cpp` | Builds for a debugger that shows the generated C++ |
@@ -2523,6 +3537,17 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 `-I`, `-D`, `-L` and `-l` also accept their value attached, as in `-Iinclude`.
 
 Arguments after `--` go to the program.
+
+**Reading errors.** Each error names the file and line, says what is wrong and, where it can, how to fix it, then shows the line itself. A `^` marks the exact spot when Walnut knows it, so a forgotten `;` points at the end of the line that is missing it rather than at the next line:
+
+```
+[Parser] shop.wal:4: Syntax Error on line 4: Expected ';' at the end of this line, after the number '5'
+Context: Variable declaration must end with a semicolon
+  4 |     int: count = 5
+    |                   ^
+```
+
+A call that matches no overload lists the candidates and why each one doesn't fit (too few arguments, an argument of the wrong type, a temporary passed to a `T&`), an unknown name or member suggests a close match (`did you mean 'count'?`), and a keyword used as a name, such as `arr` or `txt`, says which keyword it is another spelling of.
 
 **The build cache.** `build` and `run` keep what they compile in a cache, so a build only redoes the work for what changed:
 - The C++ for each Walnut file is compiled separately, several at once, and each compiled file is kept. A file whose generated C++ is unchanged isn't compiled again. Changing a function's body only recompiles its own file; changing what other files see (a signature, a class, a global) recompiles every file.
@@ -2540,21 +3565,11 @@ Arguments after `--` go to the program.
 - `WALNUT_CACHE_DIR`: where the build cache is kept
 - `WALNUT_LIBCLANG`: the libclang library used to read C and C++ headers
 
-## Not supported yet
+## Left out on purpose
 
-These are planned or partly implemented. They are listed so you don't rely on them.
+These C++ features aren't in Walnut, and aren't planned, because Walnut does the same job another way.
 
-**Syntax that isn't accepted**
-- Several variables in one declaration (`int: a = 1, b = 2;`).
-- `T: x{v}` and `T: x(v)` declaration forms. Write `T: x = T(v);` instead.
-- `enum class`. Enums are always scoped, so it isn't needed.
-- Octal literals.
-- `sizeof...(pack)`. Use `countof(pack)`.
-- Labelled `break`.
-- `using a::b;` for a single name.
-- `= 0` for abstract methods. Leave out the body of a `virtual` method instead.
-- Qualified member access such as `obj.Base::member`.
-- Defining constructors, destructors and operators outside their class (methods can be).
-
-**Accepted, but not working yet**
-- Templates of conversion operators. Every other operator can be a template, inside or outside a class.
+- **`enum class`.** Enums are always scoped, so plain `enum` already behaves like C++'s `enum class`.
+- **`sizeof...(pack)`.** Use `countof(pack)`, which also counts arrays, strings and enumerators.
+- **`= 0` for abstract methods.** Write `abstract` after the parameters instead, as in `function area() const abstract -> int;`.
+- **C-style octal literals.** `017` is seventeen. Write `0o17` for octal.

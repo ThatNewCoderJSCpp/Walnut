@@ -6,6 +6,8 @@
 namespace walnut {
 namespace nodes {
 
+struct RecordDeclaration;
+
 struct ExpressionStatement : ASTNode {
     ASTNode* expr;
 
@@ -33,6 +35,11 @@ struct VariableDeclaration : ASTNode {
     SmallVector<semantics::Symbol*, 4> binding_symbols;
     semantics::Type* binding_source = nullptr;
     bool binding_by_ref = false;
+    bool direct_init = false;
+    bool pack_field = false;
+    std::vector<semantics::Symbol*> pack_elements;
+    bool template_specialization = false;
+    std::vector<parser_types::TemplateArgument*> spec_args;
 
     VariableDeclaration(const parser_types::TypeInfo& type_info, std::string_view name, ASTNode* init = nullptr, std::uint32_t ln = 0)
 ;
@@ -149,6 +156,7 @@ struct ForStatement : ASTNode {
     ASTNode* var_init = nullptr;
     semantics::Scope* scope = nullptr;
     bool has_var_init;
+    std::string_view label;
 
     ForStatement(ASTNode* init, ASTNode* cond, ASTNode* inc, ASTNode* b)
 ;
@@ -184,6 +192,15 @@ struct ForEachStatement : ASTNode {
     SmallVector<semantics::Symbol*, 4> binding_symbols;
     semantics::Type* binding_source = nullptr;
     bool binding_by_ref = false;
+    std::string_view label;
+    semantics::Symbol* range_sym = nullptr;
+    semantics::Symbol* it_sym = nullptr;
+    semantics::Symbol* end_sym = nullptr;
+    ASTNode* begin_call = nullptr;
+    ASTNode* end_call = nullptr;
+    ASTNode* iter_cond = nullptr;
+    ASTNode* iter_next = nullptr;
+    ASTNode* iter_get = nullptr;
 
     ForEachStatement(const parser_types::TypeInfo& element_type, const modifiers::RawModifiers& mods, std::string_view var_name, ASTNode* container, ASTNode* body, std::uint32_t ln = 0)
 ;
@@ -213,6 +230,7 @@ struct ForEachStatement : ASTNode {
 struct WhileStatement : ASTNode {
     ASTNode* body;
     ASTNode* condition;
+    std::string_view label;
 
     WhileStatement(ASTNode* b, ASTNode* c) : ASTNode(Kind::WhileStatement), body(b), condition(c) {}
 
@@ -275,9 +293,10 @@ struct ArrayDeclaration : ASTNode {
 };
 
 struct SingleStatement : ASTNode {
-    enum class Variant : std::uint8_t { Break = 0, Continue, Fallthrough, Repeat };
+    enum class Variant : std::uint8_t { Break = 0, Continue, Fallthrough, Repeat, Goto, Label };
 
     Variant variant;
+    std::string_view label;
 
     SingleStatement(Variant v, std::uint32_t ln = 0) : ASTNode(Kind::SingleStatement, ln), variant(v) {}
 
@@ -290,12 +309,13 @@ struct SingleStatement : ASTNode {
         os << "SingleStatement (" << variant_name() << ")\n";
     }
 
-    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<SingleStatement>(a, variant, line); copy_base_to(c); return c; }
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<SingleStatement>(a, variant, line); c->label = label; copy_base_to(c); return c; }
 };
 
 struct DoWhileStatement : ASTNode {
     ASTNode* body;
     ASTNode* condition;
+    std::string_view label;
 
     DoWhileStatement(ASTNode* b, ASTNode* c, std::uint32_t ln = 0) : ASTNode(Kind::DoWhileStatement, ln), body(b), condition(c) {}
 
@@ -447,7 +467,7 @@ struct EnumDeclaration : ASTNode {
 };
 
 struct UsingDeclaration : ASTNode {
-    enum class Variant : std::uint8_t { Alias = 0, Typedef, NamespaceDirective, NamespaceAlias };
+    enum class Variant : std::uint8_t { Alias = 0, Typedef, NamespaceDirective, NamespaceAlias, Name };
 
     Variant variant;
     std::string_view name;
@@ -468,6 +488,7 @@ struct UsingDeclaration : ASTNode {
     bool is_typedef()   const { return variant == Variant::Typedef; }
     bool is_directive() const { return variant == Variant::NamespaceDirective; }
     bool is_namespace_alias() const { return variant == Variant::NamespaceAlias; }
+    bool is_name()      const { return variant == Variant::Name; }
 
     const char* variant_name() const;
 
@@ -516,6 +537,9 @@ struct TemplateDeclaration : ASTNode {
     bool m_is_empty_template = false;
     ASTNode* m_requires_clause = nullptr;
     semantics::Scope* scope = nullptr;
+    RecordDeclaration* friend_of = nullptr;
+    parser_types::TypeInfo friend_type;
+    bool has_friend_type = false;
 
     explicit TemplateDeclaration(std::uint32_t ln = 0) : ASTNode(Kind::TemplateDeclaration, ln) {}
 
@@ -550,6 +574,7 @@ struct ImportExportItem {
     bool                          alias_global = false;
     bool                          is_template = false;
     bool                          from_module_path = false;
+    bool                          library_module = false;
     std::vector<std::string_view> module_parts;
     ASTNode*                      decl = nullptr;      
 
@@ -591,6 +616,18 @@ struct ModuleDeclaration : ASTNode {
     void add_item(ImportExportItem it) { items.push_back(std::move(it)); }
     const std::vector<ImportExportItem>& get_items() const { return items; }
     std::string_view get_name() const { return name; }
+
+    void print(std::ostream& os, std::size_t indent) const;
+
+    ASTNode* clone_into(Arena& a) const override;
+};
+
+struct InvalidateStatement : ASTNode {
+    std::vector<ASTNode*> targets;
+
+    explicit InvalidateStatement(std::uint32_t ln = 0) : ASTNode(Kind::InvalidateStatement, ln) {}
+
+    static bool classof(const ASTNode* n) { return n->kind == Kind::InvalidateStatement; }
 
     void print(std::ostream& os, std::size_t indent) const;
 

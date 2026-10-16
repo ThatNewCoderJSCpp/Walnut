@@ -41,6 +41,8 @@ Selection select_overload(const std::vector<CandidateMatch>& cands, const std::v
 
 Selection select_overload(const std::vector<CandidateMatch>& cands);
 
+Selection select_overload(const std::vector<CandidateMatch>& cands, const std::vector<bool>& from_template, const std::vector<std::size_t>& fixed_params);
+
 bool variadic_signature_ok(const std::vector<ParamShape>& params, std::size_t& bad_index);
 
 bool signature_defaults_ok(const std::vector<ParamShape>& params, std::size_t& bad_i, std::size_t& bad_j);

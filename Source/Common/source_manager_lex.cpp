@@ -7,7 +7,7 @@ tokenizing::TokenStream SourceManager::lex(FileId id, ErrorReporter& reporter) {
 
     if (!e.lexed) {
         const std::size_t cap = e.size + 1;  
-        auto* buf = m_arena.alloc_array_uninit<tokenizing::Token>(cap); // No arena allocation between here and shrink_array_last
+        auto* buf = m_arena.alloc_array_uninit<tokenizing::Token>(cap); 
         tokenizing::Lexer lexer(e.data, reporter);
         std::size_t n = 0;
 
@@ -25,7 +25,7 @@ tokenizing::TokenStream SourceManager::lex(FileId id, ErrorReporter& reporter) {
             }
         }
 
-        m_arena.shrink_array_last(buf, cap, n); // Allocations allowed again
+        m_arena.shrink_array_last(buf, cap, n); 
         e.tokens      = buf;
         e.token_count = n;
         e.lexed       = true;

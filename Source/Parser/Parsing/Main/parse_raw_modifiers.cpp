@@ -161,6 +161,24 @@ modifiers::RawModifiers Parser::parse_raw_modifiers() {
                 advance();
                 break;
 
+            case tokenizing::Token::Kind::PublicKeyword:
+                if (lookahead().kind() != tokenizing::Token::Kind::LazyKeyword) return raw;
+                if (raw.lazy_public()) throw ParserError::duplicate_type_modifiers(reporter, current_token());
+                raw.set_lazy_public(true);
+                advance();
+                break;
+
+            case tokenizing::Token::Kind::LazyKeyword:
+                if (raw.has(modifiers::RawModifiers::Lazy)) throw ParserError::duplicate_type_modifiers(reporter, current_token());
+                raw.add(modifiers::RawModifiers::Lazy);
+                raw.add_token(kind);
+                advance();
+                if (current_token().kind() == tokenizing::Token::Kind::Identifier && current_token().lexeme() == "threadsafe") {
+                    raw.add(modifiers::RawModifiers::LazyThreadsafe);
+                    advance();
+                }
+                break;
+
                 
             default:
                 return raw;

@@ -25,6 +25,7 @@ WalkPass::WalkPass(ErrorReporter& reporter, WarningReporter& warnings, semantics
 
 void WalkPass::run(const FrontPass& front) {
     semantics::ThrowContext throws(m_types);
+    semantics::TypeWalker::reset_deferred_bodies();
 
     for (FileId id : front.order()) {
         const UnitFrontResult* unit = front.result(id);
@@ -41,7 +42,7 @@ void WalkPass::run(const FrontPass& front) {
     check_externs(front);
 }
 
-std::string WalkPass::native_type_problem(semantics::Type* t, bool is_return) {
+std::string WalkPass::native_type_problem(semantics::Type* t, bool is_return, bool cpp) {
     using BK = parser_types::PrimitiveType::BaseKind;
     if (!t) return "has no type";
 
@@ -58,12 +59,12 @@ std::string WalkPass::native_type_problem(semantics::Type* t, bool is_return) {
 
     switch (b->base()) {
         case BK::Int:
-            if (bit_width_of_rank(b->width()) <= 64) return {};
-            return "uses a " + std::to_string(bit_width_of_rank(b->width())) + "-bit integer; C and C++ integers are at most 64 bits";
+            if (bit_width_of_rank(b->width()) <= 64 || cpp) return {};
+            return "uses a " + std::to_string(bit_width_of_rank(b->width())) + "-bit integer; C integers are at most 64 bits (C++ functions receive wider integers as Walnut's own walnut_rt types)";
         case BK::Float: {
             const unsigned bits = bit_width_of_rank(b->width());
-            if (bits == 32 || bits == 64) return {};
-            return "uses a " + std::to_string(bits) + "-bit float; C and C++ only have 32-bit and 64-bit floats, so use 'short float' for a C double or 'short short float' for a C float";
+            if (bits == 32 || bits == 64 || cpp) return {};
+            return "uses a " + std::to_string(bits) + "-bit float; C only has 32-bit and 64-bit floats, so use 'short float' for a C double or 'short short float' for a C float";
         }
         case BK::Bool:
         case BK::Char:
@@ -156,12 +157,12 @@ void WalkPass::check_externs(const FrontPass& front) {
                         if (const nodes::FunctionParameters* ps = f->get_parameters()) {
                             for (const nodes::FunctionParameter* p : ps->m_params) {
                                 if (p->is_variadic()) { fail(f, what + ": variadic parameters cannot cross into C or C++"); continue; }
-                                std::string problem = native_type_problem(m_types.canonicalize(p->get_type()), false);
+                                std::string problem = native_type_problem(m_types.canonicalize(p->get_type()), false, m.linkage() == RM::Linkage::Cpp);
                                 if (!problem.empty()) fail(f, what + ": parameter '" + std::string(p->get_name()) + "' " + problem);
                             }
                         }
 
-                        std::string problem = native_type_problem(m_types.canonicalize(f->get_return_type()), true);
+                        std::string problem = native_type_problem(m_types.canonicalize(f->get_return_type()), true, m.linkage() == RM::Linkage::Cpp);
                         if (!problem.empty()) fail(f, what + ": the return type " + problem);
                     } else if (f->symbol) {
                         pending.push_back(WalnutExtern{ f, f->symbol, file, path });

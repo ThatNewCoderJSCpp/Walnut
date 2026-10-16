@@ -1,5 +1,8 @@
 #include "Semantics/resolve.hpp"
 
+#include <algorithm>
+#include <cctype>
+
 namespace walnut {
 namespace semantics {
 
@@ -29,8 +32,77 @@ Symbol* resolve_qualified(Scope* root, const std::vector<std::string_view>& part
     return cur->find_local(parts.back());
 }
 
+namespace {
+
+std::size_t edit_distance(std::string_view a, std::string_view b) {
+    std::vector<std::size_t> prev(b.size() + 1), cur(b.size() + 1);
+    for (std::size_t j = 0; j <= b.size(); ++j) prev[j] = j;
+    for (std::size_t i = 1; i <= a.size(); ++i) {
+        cur[0] = i;
+        for (std::size_t j = 1; j <= b.size(); ++j) {
+            const char x = static_cast<char>(std::tolower(static_cast<unsigned char>(a[i - 1])));
+            const char y = static_cast<char>(std::tolower(static_cast<unsigned char>(b[j - 1])));
+            const std::size_t cost = x == y ? 0 : 1;
+            cur[j] = std::min({ prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost });
+        }
+        std::swap(prev, cur);
+    }
+    return prev[b.size()];
+}
+
+bool suggestable(const Symbol* s) {
+    if (!s || s->name.empty()) return false;
+    if (s->name == "constructor" || s->name == "destructor") return false;
+    if (s->name.find('#') != std::string_view::npos || s->name.rfind("walnut", 0) == 0 || s->name.rfind("__", 0) == 0) return false;
+    return true;
+}
+
+void collect_members(const Scope* s, std::vector<std::string_view>& out, int depth) {
+    if (!s || depth > 16) return;
+    for (const Symbol* sym : s->symbols) if (suggestable(sym)) out.push_back(sym->name);
+    for (const Scope* b : s->bases) collect_members(b, out, depth + 1);
+}
+
+} // namespace
+
+std::string suggest_similar(const Scope* from, std::string_view name, bool members_only) {
+    if (name.empty()) return {};
+    std::vector<std::string_view> names;
+
+    if (members_only) {
+        collect_members(from, names, 0);
+    } else {
+        for (const Scope* s = from; s; s = s->parent) {
+            if (s->kind == Scope::Kind::Record) collect_members(s, names, 0);
+            else for (const Symbol* sym : s->symbols) if (suggestable(sym)) names.push_back(sym->name);
+        }
+    }
+
+    const std::size_t limit = name.size() <= 2 ? 0 : (name.size() <= 4 ? 1 : (name.size() <= 7 ? 2 : 3));
+    std::string_view best;
+    std::size_t best_d = limit + 1;
+
+    for (std::string_view n : names) {
+        if (n == name || (n.size() <= 2 && name.size() > 2)) continue;
+        const std::size_t longer = std::max(n.size(), name.size());
+        const std::size_t shorter = std::min(n.size(), name.size());
+        if (longer - shorter > limit) continue;
+        const std::size_t d = edit_distance(n, name);
+        if (d < best_d) { best_d = d; best = n; }
+    }
+
+    if (best.empty()) return {};
+    return "; did you mean '" + std::string(best) + "'?";
+}
+
 bool scope_carrier(SymbolKind k) {
     return k == SymbolKind::Namespace || k == SymbolKind::Module || k == SymbolKind::Type || k == SymbolKind::Enum;
+}
+
+bool carries_scope(const Symbol* s) {
+    if (!s || !s->inner_scope) return false;
+    if (s->kind == SymbolKind::Import) return s->import_target && scope_carrier(s->import_target->kind);
+    return scope_carrier(s->kind);
 }
 
 Symbol* descend(Scope* start, const std::vector<std::string_view>& parts, std::size_t first) {
@@ -39,7 +111,7 @@ Symbol* descend(Scope* start, const std::vector<std::string_view>& parts, std::s
 
     for (std::size_t i = first; i + 1 < parts.size(); ++i) {
         Symbol* s = cur->kind == Scope::Kind::Record ? cur->find_member(parts[i]) : cur->find_local(parts[i]);
-        if (!s || !s->inner_scope || !scope_carrier(s->kind)) { return nullptr; }
+        if (!carries_scope(s)) { return nullptr; }
         cur = s->inner_scope;
     }
 
@@ -86,7 +158,7 @@ std::vector<Symbol*> resolve_path(
         Symbol* head = resolve_lexical_visible(from, parts[0], use);
         if (!head) return chain;
         chain.push_back(head);
-        if (parts.size() == 1 || !head->inner_scope || !scope_carrier(head->kind)) return chain;
+        if (parts.size() == 1 || !carries_scope(head)) return chain;
         cur = head->inner_scope;
         first = 1;
     }
@@ -96,7 +168,7 @@ std::vector<Symbol*> resolve_path(
         if (!s) break;
         chain.push_back(s);
         if (i + 1 == parts.size()) break;
-        if (!s->inner_scope || !scope_carrier(s->kind)) break;
+        if (!carries_scope(s)) break;
         cur = s->inner_scope;
     }
 
@@ -165,7 +237,7 @@ Symbol* resolve_name(
     if (!from) { return nullptr; }
     Symbol* head = resolve_lexical_visible(from, parts[0], use);
     if (parts.size() == 1) { return head; }
-    if (!head || !head->inner_scope || !scope_carrier(head->kind)) { return nullptr; }
+    if (!carries_scope(head)) { return nullptr; }
     if (Symbol* found = descend(head->inner_scope, parts, 1)) { return found; }
     if (head->kind != SymbolKind::Namespace) { return nullptr; }
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(walnut VERSION 0.1.4 LANGUAGES CXX)
+project(walnut VERSION 0.1.5 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(FetchContent)
 FetchContent_Declare(fizmo
     GIT_REPOSITORY https://github.com/ThatNewCoderJSCpp/Fizmo.git
-    GIT_TAG        v0.2.21
+    GIT_TAG        v0.2.24
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(fizmo)
 
@@ -169,7 +169,13 @@ if(WALNUT_PACKAGE)
     set(WALNUT_PACKAGE_CXX "c++")
     set(WALNUT_RELOCATABLE 1)
 else()
-    set(WALNUT_RUNTIME_INCLUDES "$<JOIN:$<TARGET_PROPERTY:fizmo,INTERFACE_INCLUDE_DIRECTORIES>,;>")
+    set(_walnut_include_list "$<TARGET_PROPERTY:fizmo,INTERFACE_INCLUDE_DIRECTORIES>")
+    foreach(dep IN LISTS WALNUT_REQUIRED_DEPS WALNUT_OPTIONAL_DEPS)
+        if(TARGET ${dep})
+            string(APPEND _walnut_include_list ";$<TARGET_PROPERTY:${dep},INTERFACE_INCLUDE_DIRECTORIES>")
+        endif()
+    endforeach()
+    set(WALNUT_RUNTIME_INCLUDES "$<JOIN:$<REMOVE_DUPLICATES:$<FILTER:${_walnut_include_list},EXCLUDE,^(/usr/include|/usr/local/include)?$>>,;>")
     set(WALNUT_RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Runtime")
     set(WALNUT_PACKAGE_CXX "${CMAKE_CXX_COMPILER}")
     set(WALNUT_RELOCATABLE 0)
