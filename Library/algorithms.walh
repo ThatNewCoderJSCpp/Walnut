@@ -40,8 +40,8 @@ namespace std {
                 return depth + 4;
             } end function depth_limit
 
-            template <typename It, typename Compare>
-            function sift_down(It: first, long int: root, long int: count, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function sift_down(It: first, long int: root, long int: count, const std::Compare<E>&: comp) -> void {
                 long int: parent = root;
                 while (parent * 2 + 1 < count) {
                     long int: child = parent * 2 + 1;
@@ -56,8 +56,8 @@ namespace std {
                 }
             } end function sift_down
 
-            template <typename It, typename Compare>
-            function sift_up(It: first, long int: index, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function sift_up(It: first, long int: index, const std::Compare<E>&: comp) -> void {
                 long int: child = index;
                 while (child > 0) {
                     const long int: parent = (child - 1) / 2;
@@ -69,8 +69,8 @@ namespace std {
                 }
             } end function sift_up
 
-            template <typename It, typename Compare>
-            function insertion(It: first, long int: lo, long int: hi, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function insertion(It: first, long int: lo, long int: hi, const std::Compare<E>&: comp) -> void {
                 for (long int: i = lo + 1; i < hi; i++) {
                     if (comp(first[i], first[i - 1])) then {
                         auto: held = std::core::move(first[i]);
@@ -84,15 +84,15 @@ namespace std {
                 }
             } end function insertion
 
-            template <typename It, typename Compare>
-            function heapify(It: first, long int: count, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function heapify(It: first, long int: count, const std::Compare<E>&: comp) -> void {
                 for (long int: start = count / 2 - 1; start >= 0; start--) {
                     sift_down(first, start, count, comp);
                 }
             } end function heapify
 
-            template <typename It, typename Compare>
-            function heap(It: first, long int: count, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function heap(It: first, long int: count, const std::Compare<E>&: comp) -> void {
                 if (count < 2) then {
                     return;
                 }
@@ -103,8 +103,8 @@ namespace std {
                 }
             } end function heap
 
-            template <typename It, typename Compare>
-            function median_to_front(It: first, long int: a, long int: b, long int: c, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function median_to_front(It: first, long int: a, long int: b, long int: c, const std::Compare<E>&: comp) -> void {
                 if (comp(first[b], first[a])) then {
                     swap_values(first[a], first[b]);
                 }
@@ -117,8 +117,8 @@ namespace std {
                 swap_values(first[a], first[b]);
             } end function median_to_front
 
-            template <typename It, typename Compare>
-            function partition_around_first(It: first, long int: lo, long int: hi, Compare&: comp) -> long int {
+            template <typename It, typename E>
+            function partition_around_first(It: first, long int: lo, long int: hi, const std::Compare<E>&: comp) -> long int {
                 long int: i = lo + 1;
                 long int: j = hi - 1;
                 while (true) {
@@ -139,8 +139,8 @@ namespace std {
                 return j;
             } end function partition_around_first
 
-            template <typename It, typename Compare>
-            function intro(It: first, long int: lo, long int: hi, int: depth, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function intro(It: first, long int: lo, long int: hi, int: depth, const std::Compare<E>&: comp) -> void {
                 long int: a = lo;
                 long int: b = hi;
                 int: budget = depth;
@@ -163,8 +163,8 @@ namespace std {
                 insertion(first, a, b, comp);
             } end function intro
 
-            template <typename It, typename V, typename Compare>
-            function merge_pass(It: first, long int: lo, long int: mid, long int: hi, V*: buffer, Compare&: comp) -> void {
+            template <typename It, typename V, typename E>
+            function merge_pass(It: first, long int: lo, long int: mid, long int: hi, V*: buffer, const std::Compare<E>&: comp) -> void {
                 long int: n = 0;
                 for (long int: k = lo; k < mid; k++) {
                     buffer[n] = std::core::move(first[k]);
@@ -190,8 +190,8 @@ namespace std {
                 }
             } end function merge_pass
 
-            template <typename It, typename V, typename Compare>
-            function merge_rec(It: first, long int: lo, long int: hi, V*: buffer, Compare&: comp) -> void {
+            template <typename It, typename V, typename E>
+            function merge_rec(It: first, long int: lo, long int: hi, V*: buffer, const std::Compare<E>&: comp) -> void {
                 if (hi - lo <= 16) then {
                     insertion(first, lo, hi, comp);
                     return;
@@ -204,8 +204,8 @@ namespace std {
                 }
             } end function merge_rec
 
-            template <typename It, typename Compare>
-            function select(It: first, long int: lo, long int: hi, long int: k, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function select(It: first, long int: lo, long int: hi, long int: k, const std::Compare<E>&: comp) -> void {
                 long int: a = lo;
                 long int: b = hi;
                 while (b - a > 16) {
@@ -223,8 +223,8 @@ namespace std {
                 insertion(first, a, b, comp);
             } end function select
 
-            template <typename It, typename Compare>
-            function quick(It: first, long int: lo, long int: hi, Compare&: comp) -> void {
+            template <typename It, typename E>
+            function quick(It: first, long int: lo, long int: hi, const std::Compare<E>&: comp) -> void {
                 long int: a = lo;
                 long int: b = hi;
                 while (b - a > 16) {
@@ -293,16 +293,16 @@ namespace std {
             detail::swap_values(*a, *b);
         } end function iter_swap
 
-        template <typename It, typename Func>
-        function for_each(It: first, It: last, Func: func) -> Func {
+        template <typename It, typename E>
+        function for_each(It: first, It: last, std::Action<E>: func) -> std::Action<E> {
             for (It: it = first; it != last; ++it) {
                 func(*it);
             }
             return func;
         } end function for_each
 
-        template <typename It, typename Func>
-        function for_each_indexed(It: first, It: last, Func: func) -> Func {
+        template <typename It, typename E>
+        function for_each_indexed(It: first, It: last, function(long int, E&) -> void: func) -> function(long int, E&) -> void {
             long int: i = 0;
             for (It: it = first; it != last; ++it) {
                 func(i, *it);
@@ -322,8 +322,8 @@ namespace std {
             return n;
         } end function count
 
-        template <typename It, typename Pred>
-        function count_if(It: first, It: last, Pred: pred) -> long int {
+        template <typename It, typename E>
+        function count_if(It: first, It: last, std::Predicate<E>: pred) -> long int {
             long int: n = 0;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
@@ -343,8 +343,8 @@ namespace std {
             return last;
         } end function find
 
-        template <typename It, typename Pred>
-        function find_if(It: first, It: last, Pred: pred) -> It {
+        template <typename It, typename E>
+        function find_if(It: first, It: last, std::Predicate<E>: pred) -> It {
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
                     return it;
@@ -353,8 +353,8 @@ namespace std {
             return last;
         } end function find_if
 
-        template <typename It, typename Pred>
-        function find_if_not(It: first, It: last, Pred: pred) -> It {
+        template <typename It, typename E>
+        function find_if_not(It: first, It: last, std::Predicate<E>: pred) -> It {
             for (It: it = first; it != last; ++it) {
                 if (!pred(*it)) then {
                     return it;
@@ -374,8 +374,8 @@ namespace std {
             return found;
         } end function find_last
 
-        template <typename It, typename Pred>
-        function find_last_if(It: first, It: last, Pred: pred) -> It {
+        template <typename It, typename E>
+        function find_last_if(It: first, It: last, std::Predicate<E>: pred) -> It {
             It: found = last;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
@@ -397,8 +397,8 @@ namespace std {
             return -1;
         } end function index_of
 
-        template <typename It, typename Pred>
-        function index_if(It: first, It: last, Pred: pred) -> long int {
+        template <typename It, typename E>
+        function index_if(It: first, It: last, std::Predicate<E>: pred) -> long int {
             long int: i = 0;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
@@ -414,13 +414,13 @@ namespace std {
             return find(first, last, value) != last;
         } end function contains
 
-        template <typename It, typename Pred>
-        function contains_if(It: first, It: last, Pred: pred) -> bool {
+        template <typename It, typename E>
+        function contains_if(It: first, It: last, std::Predicate<E>: pred) -> bool {
             return find_if(first, last, pred) != last;
         } end function contains_if
 
-        template <typename It, typename Pred>
-        function all_of(It: first, It: last, Pred: pred) -> bool {
+        template <typename It, typename E>
+        function all_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
             for (It: it = first; it != last; ++it) {
                 if (!pred(*it)) then {
                     return false;
@@ -429,13 +429,13 @@ namespace std {
             return true;
         } end function all_of
 
-        template <typename It, typename Pred>
-        function any_of(It: first, It: last, Pred: pred) -> bool {
+        template <typename It, typename E>
+        function any_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
             return find_if(first, last, pred) != last;
         } end function any_of
 
-        template <typename It, typename Pred>
-        function none_of(It: first, It: last, Pred: pred) -> bool {
+        template <typename It, typename E>
+        function none_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
             return find_if(first, last, pred) == last;
         } end function none_of
 
@@ -457,8 +457,8 @@ namespace std {
             return last;
         } end function adjacent_find
 
-        template <typename It, typename Pred>
-        function adjacent_find(It: first, It: last, Pred: pred) -> It {
+        template <typename It, typename E>
+        function adjacent_find(It: first, It: last, function(const E&, const E&) -> bool: pred) -> It {
             if (first == last) then {
                 return last;
             }
@@ -616,8 +616,8 @@ namespace std {
             return a == last && b != o_last;
         } end function lexicographical_compare
 
-        template <typename It, typename Compare>
-        function min_element(It: first, It: last, Compare: comp) -> It {
+        template <typename It, typename E>
+        function min_element(It: first, It: last, std::Compare<E>: comp) -> It {
             if (first == last) then {
                 return last;
             }
@@ -635,11 +635,12 @@ namespace std {
 
         template <typename It>
         function min_element(It: first, It: last) -> It {
-            return min_element(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return min_element(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function min_element
 
-        template <typename It, typename Compare>
-        function max_element(It: first, It: last, Compare: comp) -> It {
+        template <typename It, typename E>
+        function max_element(It: first, It: last, std::Compare<E>: comp) -> It {
             if (first == last) then {
                 return last;
             }
@@ -657,11 +658,12 @@ namespace std {
 
         template <typename It>
         function max_element(It: first, It: last) -> It {
-            return max_element(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return max_element(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function max_element
 
-        template <typename It, typename Compare>
-        function minmax_element(It: first, It: last, Compare: comp) -> Range<It> {
+        template <typename It, typename E>
+        function minmax_element(It: first, It: last, std::Compare<E>: comp) -> Range<It> {
             return Range<It>(min_element(first, last, comp), max_element(first, last, comp));
         } end function minmax_element
 
@@ -679,8 +681,8 @@ namespace std {
             return total;
         } end function accumulate
 
-        template <typename It, typename T, typename Op>
-        function accumulate(It: first, It: last, T: init, Op: op) -> T {
+        template <typename It, typename T, typename E>
+        function accumulate(It: first, It: last, T: init, std::Combine<T, E>: op) -> T {
             T: total = std::core::move(init);
             for (It: it = first; it != last; ++it) {
                 total = op(total, *it);
@@ -693,8 +695,8 @@ namespace std {
             return accumulate(first, last, init);
         } end function reduce
 
-        template <typename It, typename T, typename Op>
-        function reduce(It: first, It: last, T: init, Op: op) -> T {
+        template <typename It, typename T, typename E>
+        function reduce(It: first, It: last, T: init, std::Combine<T, E>: op) -> T {
             return accumulate(first, last, init, op);
         } end function reduce
 
@@ -734,8 +736,8 @@ namespace std {
             }
         } end function iota
 
-        template <typename It, typename Gen>
-        function generate(It: first, It: last, Gen: gen) -> void {
+        template <typename It, typename E>
+        function generate(It: first, It: last, std::Supplier<E>: gen) -> void {
             for (It: it = first; it != last; ++it) {
                 *it = gen();
             }
@@ -763,8 +765,8 @@ namespace std {
             return o;
         } end function copy_n
 
-        template <typename It, typename Out, typename Pred>
-        function copy_if(It: first, It: last, Out: out, Pred: pred) -> Out {
+        template <typename It, typename Out, typename E>
+        function copy_if(It: first, It: last, Out: out, std::Predicate<E>: pred) -> Out {
             Out: o = out;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
@@ -785,8 +787,8 @@ namespace std {
             return o;
         } end function move_to
 
-        template <typename It, typename Out, typename Op>
-        function transform(It: first, It: last, Out: out, Op: op) -> Out {
+        template <typename It, typename Out, typename E, typename U>
+        function transform(It: first, It: last, Out: out, std::Transform<E, U>: op) -> Out {
             Out: o = out;
             for (It: it = first; it != last; ++it) {
                 *o = op(*it);
@@ -795,8 +797,8 @@ namespace std {
             return o;
         } end function transform
 
-        template <typename It, typename Op>
-        function transform_in_place(It: first, It: last, Op: op) -> void {
+        template <typename It, typename E>
+        function transform_in_place(It: first, It: last, std::Transform<E, E>: op) -> void {
             for (It: it = first; it != last; ++it) {
                 *it = op(*it);
             }
@@ -814,8 +816,8 @@ namespace std {
             return n;
         } end function replace
 
-        template <typename It, typename Pred, typename T>
-        function replace_if(It: first, It: last, Pred: pred, const T&: new_value) -> long int {
+        template <typename It, typename T, typename E>
+        function replace_if(It: first, It: last, std::Predicate<E>: pred, const T&: new_value) -> long int {
             long int: n = 0;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
@@ -826,8 +828,8 @@ namespace std {
             return n;
         } end function replace_if
 
-        template <typename It, typename Pred>
-        function remove_if(It: first, It: last, Pred: pred) -> It {
+        template <typename It, typename E>
+        function remove_if(It: first, It: last, std::Predicate<E>: pred) -> It {
             It: out = find_if(first, last, pred);
             if (out == last) then {
                 return last;
@@ -846,11 +848,12 @@ namespace std {
 
         template <typename It, typename T>
         function remove(It: first, It: last, const T&: value) -> It {
-            return remove_if(first, last, [&value](const auto&: x) -> bool { return x == value; });
+            using V = std::traits::decay<typeof(*first)>;
+            return remove_if(first, last, [&value](const V&: x) -> bool { return x == value; });
         } end function remove
 
-        template <typename It, typename Pred>
-        function unique(It: first, It: last, Pred: same) -> It {
+        template <typename It, typename E>
+        function unique(It: first, It: last, function(const E&, const E&) -> bool: same) -> It {
             if (first == last) then {
                 return last;
             }
@@ -872,7 +875,8 @@ namespace std {
 
         template <typename It>
         function unique(It: first, It: last) -> It {
-            return unique(first, last, [](const auto&: a, const auto&: b) -> bool { return a == b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return unique(first, last, [](const V&: a, const V&: b) -> bool { return a == b; });
         } end function unique
 
         template <typename It>
@@ -946,8 +950,8 @@ namespace std {
             }
         } end function shuffle
 
-        template <typename It, typename Pred>
-        function partition(It: first, It: last, Pred: pred) -> It {
+        template <typename It, typename E>
+        function partition(It: first, It: last, std::Predicate<E>: pred) -> It {
             It: out = find_if_not(first, last, pred);
             if (out == last) then {
                 return last;
@@ -964,8 +968,8 @@ namespace std {
             return out;
         } end function partition
 
-        template <typename It, typename Pred>
-        function stable_partition(It: first, It: last, Pred: pred) -> It {
+        template <typename It, typename E>
+        function stable_partition(It: first, It: last, std::Predicate<E>: pred) -> It {
             using V = std::traits::decay<typeof(*first)>;
             const long int: n = distance(first, last);
             if (n == 0) then {
@@ -996,8 +1000,8 @@ namespace std {
             return out;
         } end function stable_partition
 
-        template <typename It, typename Pred>
-        function is_partitioned(It: first, It: last, Pred: pred) -> bool {
+        template <typename It, typename E>
+        function is_partitioned(It: first, It: last, std::Predicate<E>: pred) -> bool {
             It: it = find_if_not(first, last, pred);
             while (it != last) {
                 if (pred(*it)) then {
@@ -1008,8 +1012,8 @@ namespace std {
             return true;
         } end function is_partitioned
 
-        template <typename It, typename Compare>
-        function is_sorted_until(It: first, It: last, Compare: comp) -> It {
+        template <typename It, typename E>
+        function is_sorted_until(It: first, It: last, std::Compare<E>: comp) -> It {
             if (first == last) then {
                 return last;
             }
@@ -1028,11 +1032,12 @@ namespace std {
 
         template <typename It>
         function is_sorted_until(It: first, It: last) -> It {
-            return is_sorted_until(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return is_sorted_until(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function is_sorted_until
 
-        template <typename It, typename Compare>
-        function is_sorted(It: first, It: last, Compare: comp) -> bool {
+        template <typename It, typename E>
+        function is_sorted(It: first, It: last, std::Compare<E>: comp) -> bool {
             return is_sorted_until(first, last, comp) == last;
         } end function is_sorted
 
@@ -1041,8 +1046,8 @@ namespace std {
             return is_sorted_until(first, last) == last;
         } end function is_sorted
 
-        template <typename It, typename Compare>
-        function sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function sort(It: first, It: last, std::Compare<E>: comp) -> void {
             const long int: n = static_cast<long int>(last - first);
             if (n < 2) then {
                 return;
@@ -1052,21 +1057,24 @@ namespace std {
 
         template <typename It>
         function sort(It: first, It: last) -> void {
-            sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function sort
 
         template <typename It>
         function sort_descending(It: first, It: last) -> void {
-            sort(first, last, [](const auto&: a, const auto&: b) -> bool { return b < a; });
+            using V = std::traits::decay<typeof(*first)>;
+            sort(first, last, [](const V&: a, const V&: b) -> bool { return b < a; });
         } end function sort_descending
 
-        template <typename It, typename Key>
-        function sort_by(It: first, It: last, Key: key) -> void {
-            sort(first, last, [&key](const auto&: a, const auto&: b) -> bool { return key(a) < key(b); });
+        template <typename It, typename E, typename K>
+        function sort_by(It: first, It: last, std::Transform<E, K>: key) -> void {
+            using V = std::traits::decay<typeof(*first)>;
+            sort(first, last, [&key](const V&: a, const V&: b) -> bool { return key(a) < key(b); });
         } end function sort_by
 
-        template <typename It, typename Compare>
-        function stable_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function stable_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             using V = std::traits::decay<typeof(*first)>;
             const long int: n = static_cast<long int>(last - first);
             if (n < 2) then {
@@ -1079,16 +1087,18 @@ namespace std {
 
         template <typename It>
         function stable_sort(It: first, It: last) -> void {
-            stable_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            stable_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function stable_sort
 
-        template <typename It, typename Key>
-        function stable_sort_by(It: first, It: last, Key: key) -> void {
-            stable_sort(first, last, [&key](const auto&: a, const auto&: b) -> bool { return key(a) < key(b); });
+        template <typename It, typename E, typename K>
+        function stable_sort_by(It: first, It: last, std::Transform<E, K>: key) -> void {
+            using V = std::traits::decay<typeof(*first)>;
+            stable_sort(first, last, [&key](const V&: a, const V&: b) -> bool { return key(a) < key(b); });
         } end function stable_sort_by
 
-        template <typename It, typename Compare>
-        function merge_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function merge_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             stable_sort(first, last, comp);
         } end function merge_sort
 
@@ -1097,38 +1107,41 @@ namespace std {
             stable_sort(first, last);
         } end function merge_sort
 
-        template <typename It, typename Compare>
-        function quick_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function quick_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             detail::quick(first, 0, static_cast<long int>(last - first), comp);
         } end function quick_sort
 
         template <typename It>
         function quick_sort(It: first, It: last) -> void {
-            quick_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            quick_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function quick_sort
 
-        template <typename It, typename Compare>
-        function heap_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function heap_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             detail::heap(first, static_cast<long int>(last - first), comp);
         } end function heap_sort
 
         template <typename It>
         function heap_sort(It: first, It: last) -> void {
-            heap_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            heap_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function heap_sort
 
-        template <typename It, typename Compare>
-        function insertion_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function insertion_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             detail::insertion(first, 0, static_cast<long int>(last - first), comp);
         } end function insertion_sort
 
         template <typename It>
         function insertion_sort(It: first, It: last) -> void {
-            insertion_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            insertion_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function insertion_sort
 
-        template <typename It, typename Compare>
-        function selection_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function selection_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             const long int: n = static_cast<long int>(last - first);
             for (long int: i = 0; i + 1 < n; i++) {
                 long int: best = i;
@@ -1145,11 +1158,12 @@ namespace std {
 
         template <typename It>
         function selection_sort(It: first, It: last) -> void {
-            selection_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            selection_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function selection_sort
 
-        template <typename It, typename Compare>
-        function bubble_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function bubble_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             long int: stop = static_cast<long int>(last - first);
             while (stop > 1) {
                 long int: last_swap = 0;
@@ -1165,11 +1179,12 @@ namespace std {
 
         template <typename It>
         function bubble_sort(It: first, It: last) -> void {
-            bubble_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            bubble_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function bubble_sort
 
-        template <typename It, typename Compare>
-        function cocktail_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function cocktail_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             const long int: n = static_cast<long int>(last - first);
             if (n < 2) then {
                 return;
@@ -1201,11 +1216,12 @@ namespace std {
 
         template <typename It>
         function cocktail_sort(It: first, It: last) -> void {
-            cocktail_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            cocktail_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function cocktail_sort
 
-        template <typename It, typename Compare>
-        function gnome_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function gnome_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             const long int: n = static_cast<long int>(last - first);
             long int: i = 1;
             while (i < n) {
@@ -1220,11 +1236,12 @@ namespace std {
 
         template <typename It>
         function gnome_sort(It: first, It: last) -> void {
-            gnome_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            gnome_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function gnome_sort
 
-        template <typename It, typename Compare>
-        function shell_sort(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function shell_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             const long int: n = static_cast<long int>(last - first);
             long int: gap = 1;
             while (gap < n / 3) {
@@ -1246,7 +1263,8 @@ namespace std {
 
         template <typename It>
         function shell_sort(It: first, It: last) -> void {
-            shell_sort(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            shell_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function shell_sort
 
         template <typename It>
@@ -1356,8 +1374,8 @@ namespace std {
             delete[] keys;
         } end function radix_sort
 
-        template <typename It, typename Compare>
-        function partial_sort(It: first, It: middle, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function partial_sort(It: first, It: middle, It: last, std::Compare<E>: comp) -> void {
             const long int: k = static_cast<long int>(middle - first);
             const long int: n = static_cast<long int>(last - first);
             if (k <= 0) then {
@@ -1378,11 +1396,12 @@ namespace std {
 
         template <typename It>
         function partial_sort(It: first, It: middle, It: last) -> void {
-            partial_sort(first, middle, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            partial_sort(first, middle, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function partial_sort
 
-        template <typename It, typename Compare>
-        function nth_element(It: first, It: nth, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function nth_element(It: first, It: nth, It: last, std::Compare<E>: comp) -> void {
             const long int: n = static_cast<long int>(last - first);
             const long int: k = static_cast<long int>(nth - first);
             if (k < 0 || k >= n) then {
@@ -1393,21 +1412,23 @@ namespace std {
 
         template <typename It>
         function nth_element(It: first, It: nth, It: last) -> void {
-            nth_element(first, nth, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            nth_element(first, nth, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function nth_element
 
-        template <typename It, typename Compare>
-        function make_heap(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function make_heap(It: first, It: last, std::Compare<E>: comp) -> void {
             detail::heapify(first, static_cast<long int>(last - first), comp);
         } end function make_heap
 
         template <typename It>
         function make_heap(It: first, It: last) -> void {
-            make_heap(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            make_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function make_heap
 
-        template <typename It, typename Compare>
-        function push_heap(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function push_heap(It: first, It: last, std::Compare<E>: comp) -> void {
             const long int: n = static_cast<long int>(last - first);
             if (n > 1) then {
                 detail::sift_up(first, n - 1, comp);
@@ -1416,11 +1437,12 @@ namespace std {
 
         template <typename It>
         function push_heap(It: first, It: last) -> void {
-            push_heap(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            push_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function push_heap
 
-        template <typename It, typename Compare>
-        function pop_heap(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function pop_heap(It: first, It: last, std::Compare<E>: comp) -> void {
             const long int: n = static_cast<long int>(last - first);
             if (n > 1) then {
                 detail::swap_values(first[0], first[n - 1]);
@@ -1430,11 +1452,12 @@ namespace std {
 
         template <typename It>
         function pop_heap(It: first, It: last) -> void {
-            pop_heap(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            pop_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function pop_heap
 
-        template <typename It, typename Compare>
-        function sort_heap(It: first, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function sort_heap(It: first, It: last, std::Compare<E>: comp) -> void {
             for (long int: n = static_cast<long int>(last - first); n > 1; n--) {
                 detail::swap_values(first[0], first[n - 1]);
                 detail::sift_down(first, 0, n - 1, comp);
@@ -1443,11 +1466,12 @@ namespace std {
 
         template <typename It>
         function sort_heap(It: first, It: last) -> void {
-            sort_heap(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            sort_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function sort_heap
 
-        template <typename It, typename Compare>
-        function is_heap(It: first, It: last, Compare: comp) -> bool {
+        template <typename It, typename E>
+        function is_heap(It: first, It: last, std::Compare<E>: comp) -> bool {
             const long int: n = static_cast<long int>(last - first);
             for (long int: i = 1; i < n; i++) {
                 if (comp(first[(i - 1) / 2], first[i])) then {
@@ -1459,11 +1483,12 @@ namespace std {
 
         template <typename It>
         function is_heap(It: first, It: last) -> bool {
-            return is_heap(first, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return is_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function is_heap
 
-        template <typename It, typename T, typename Compare>
-        function lower_bound(It: first, It: last, const T&: value, Compare: comp) -> It {
+        template <typename It, typename T, typename E>
+        function lower_bound(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
             long int: lo = 0;
             long int: hi = static_cast<long int>(last - first);
             while (lo < hi) {
@@ -1479,11 +1504,12 @@ namespace std {
 
         template <typename It, typename T>
         function lower_bound(It: first, It: last, const T&: value) -> It {
-            return lower_bound(first, last, value, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return lower_bound(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function lower_bound
 
-        template <typename It, typename T, typename Compare>
-        function upper_bound(It: first, It: last, const T&: value, Compare: comp) -> It {
+        template <typename It, typename T, typename E>
+        function upper_bound(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
             long int: lo = 0;
             long int: hi = static_cast<long int>(last - first);
             while (lo < hi) {
@@ -1499,11 +1525,12 @@ namespace std {
 
         template <typename It, typename T>
         function upper_bound(It: first, It: last, const T&: value) -> It {
-            return upper_bound(first, last, value, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return upper_bound(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function upper_bound
 
-        template <typename It, typename T, typename Compare>
-        function equal_range(It: first, It: last, const T&: value, Compare: comp) -> Range<It> {
+        template <typename It, typename T, typename E>
+        function equal_range(It: first, It: last, const T&: value, std::Compare<E>: comp) -> Range<It> {
             return Range<It>(lower_bound(first, last, value, comp), upper_bound(first, last, value, comp));
         } end function equal_range
 
@@ -1512,8 +1539,8 @@ namespace std {
             return Range<It>(lower_bound(first, last, value), upper_bound(first, last, value));
         } end function equal_range
 
-        template <typename It, typename T, typename Compare>
-        function binary_search(It: first, It: last, const T&: value, Compare: comp) -> bool {
+        template <typename It, typename T, typename E>
+        function binary_search(It: first, It: last, const T&: value, std::Compare<E>: comp) -> bool {
             It: it = lower_bound(first, last, value, comp);
             return it != last && !comp(value, *it);
         } end function binary_search
@@ -1524,8 +1551,8 @@ namespace std {
             return it != last && !(value < *it);
         } end function binary_search
 
-        template <typename It, typename T, typename Compare>
-        function binary_find(It: first, It: last, const T&: value, Compare: comp) -> It {
+        template <typename It, typename T, typename E>
+        function binary_find(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
             It: it = lower_bound(first, last, value, comp);
             if (it != last && !comp(value, *it)) then {
                 return it;
@@ -1535,11 +1562,12 @@ namespace std {
 
         template <typename It, typename T>
         function binary_find(It: first, It: last, const T&: value) -> It {
-            return binary_find(first, last, value, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return binary_find(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function binary_find
 
-        template <typename It, typename T, typename Compare>
-        function exponential_search(It: first, It: last, const T&: value, Compare: comp) -> It {
+        template <typename It, typename T, typename E>
+        function exponential_search(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
             const long int: n = static_cast<long int>(last - first);
             if (n == 0) then {
                 return last;
@@ -1559,7 +1587,8 @@ namespace std {
 
         template <typename It, typename T>
         function exponential_search(It: first, It: last, const T&: value) -> It {
-            return exponential_search(first, last, value, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return exponential_search(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function exponential_search
 
         template <typename It, typename T>
@@ -1595,8 +1624,8 @@ namespace std {
             return last;
         } end function interpolation_search
 
-        template <typename It, typename T, typename Compare>
-        function fibonacci_search(It: first, It: last, const T&: value, Compare: comp) -> It {
+        template <typename It, typename T, typename E>
+        function fibonacci_search(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
             const long int: n = static_cast<long int>(last - first);
             long int: fib2 = 0;
             long int: fib1 = 1;
@@ -1633,11 +1662,12 @@ namespace std {
 
         template <typename It, typename T>
         function fibonacci_search(It: first, It: last, const T&: value) -> It {
-            return fibonacci_search(first, last, value, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            return fibonacci_search(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function fibonacci_search
 
-        template <typename A, typename B, typename Out, typename Compare>
-        function merge(A: first, A: last, B: o_first, B: o_last, Out: out, Compare: comp) -> Out {
+        template <typename A, typename B, typename Out, typename E>
+        function merge(A: first, A: last, B: o_first, B: o_last, Out: out, std::Compare<E>: comp) -> Out {
             A: a = first;
             B: b = o_first;
             Out: o = out;
@@ -1666,11 +1696,12 @@ namespace std {
 
         template <typename A, typename B, typename Out>
         function merge(A: first, A: last, B: o_first, B: o_last, Out: out) -> Out {
-            return merge(first, last, o_first, o_last, out, [](const auto&: x, const auto&: y) -> bool { return x < y; });
+            using V = std::traits::decay<typeof(*first)>;
+            return merge(first, last, o_first, o_last, out, [](const V&: x, const V&: y) -> bool { return x < y; });
         } end function merge
 
-        template <typename It, typename Compare>
-        function inplace_merge(It: first, It: middle, It: last, Compare: comp) -> void {
+        template <typename It, typename E>
+        function inplace_merge(It: first, It: middle, It: last, std::Compare<E>: comp) -> void {
             using V = std::traits::decay<typeof(*first)>;
             const long int: mid = static_cast<long int>(middle - first);
             const long int: n = static_cast<long int>(last - first);
@@ -1684,7 +1715,8 @@ namespace std {
 
         template <typename It>
         function inplace_merge(It: first, It: middle, It: last) -> void {
-            inplace_merge(first, middle, last, [](const auto&: a, const auto&: b) -> bool { return a < b; });
+            using V = std::traits::decay<typeof(*first)>;
+            inplace_merge(first, middle, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function inplace_merge
 
         template <typename A, typename B, typename Out>
@@ -1774,9 +1806,9 @@ namespace std {
             sort(items.begin(), items.end());
         } end function sort
 
-        template <typename C, typename Compare>
+        template <typename C, typename E>
         requires std::concepts::iterable<C>
-        function sort(C&&: items, Compare: comp) -> void {
+        function sort(C&&: items, std::Compare<E>: comp) -> void {
             sort(items.begin(), items.end(), comp);
         } end function sort
 
@@ -1786,9 +1818,9 @@ namespace std {
             stable_sort(items.begin(), items.end());
         } end function stable_sort
 
-        template <typename C, typename Compare>
+        template <typename C, typename E>
         requires std::concepts::iterable<C>
-        function stable_sort(C&&: items, Compare: comp) -> void {
+        function stable_sort(C&&: items, std::Compare<E>: comp) -> void {
             stable_sort(items.begin(), items.end(), comp);
         } end function stable_sort
 
@@ -1804,9 +1836,9 @@ namespace std {
             return count(items.begin(), items.end(), value);
         } end function count
 
-        template <typename C, typename Pred>
+        template <typename C, typename E>
         requires std::concepts::iterable<C>
-        function count_if(C&&: items, Pred: pred) -> long int {
+        function count_if(C&&: items, std::Predicate<E>: pred) -> long int {
             return count_if(items.begin(), items.end(), pred);
         } end function count_if
 
@@ -1816,21 +1848,21 @@ namespace std {
             return contains(items.begin(), items.end(), value);
         } end function contains
 
-        template <typename C, typename Pred>
+        template <typename C, typename E>
         requires std::concepts::iterable<C>
-        function all_of(C&&: items, Pred: pred) -> bool {
+        function all_of(C&&: items, std::Predicate<E>: pred) -> bool {
             return all_of(items.begin(), items.end(), pred);
         } end function all_of
 
-        template <typename C, typename Pred>
+        template <typename C, typename E>
         requires std::concepts::iterable<C>
-        function any_of(C&&: items, Pred: pred) -> bool {
+        function any_of(C&&: items, std::Predicate<E>: pred) -> bool {
             return any_of(items.begin(), items.end(), pred);
         } end function any_of
 
-        template <typename C, typename Pred>
+        template <typename C, typename E>
         requires std::concepts::iterable<C>
-        function none_of(C&&: items, Pred: pred) -> bool {
+        function none_of(C&&: items, std::Predicate<E>: pred) -> bool {
             return none_of(items.begin(), items.end(), pred);
         } end function none_of
 
@@ -1852,9 +1884,9 @@ namespace std {
             return is_sorted(items.begin(), items.end());
         } end function is_sorted
 
-        template <typename C, typename Func>
+        template <typename C, typename E>
         requires std::concepts::iterable<C>
-        function for_each(C&&: items, Func: func) -> Func {
+        function for_each(C&&: items, std::Action<E>: func) -> std::Action<E> {
             return for_each(items.begin(), items.end(), func);
         } end function for_each
     } end namespace algorithms

@@ -41,6 +41,7 @@ public:
         m_types.expr_walk_hook = m_saved_walk_hook;
         m_types.type_error_hook = m_saved_error_hook;
         m_types.conversions_hook = m_saved_conversions_hook;
+        m_types.range_element_hook = m_saved_range_element_hook;
         m_types.template_conversion_hook = nullptr;
         if (m_saved_member_value_hook) {
             m_types.member_value_hook = m_saved_member_value_hook;
@@ -122,6 +123,7 @@ private:
     std::function<void(nodes::ASTNode*)> m_saved_walk_hook;
     std::function<void(const std::string&)> m_saved_error_hook;
     std::function<void(Type*)>              m_saved_conversions_hook;
+    std::function<Type*(Type*, nodes::ASTNode*)> m_saved_range_element_hook;
     std::function<bool(Type*, std::string_view, TemplateArg&)> m_saved_member_value_hook;
     std::function<int(nodes::TemplateInstantiation*)> m_saved_concept_value;
     std::function<ConstValue(nodes::TemplateInstantiation*)> m_saved_variable_template_value;
@@ -227,6 +229,8 @@ private:
     }
 
     Type* iterated_element(Type* container);
+
+    Type* range_element(Type* container, nodes::ASTNode* site);
 
     void type_for_each(nodes::ForEachStatement* s);
 
@@ -356,6 +360,12 @@ private:
     Type* decay_ref(Type* t, VC& vc);
 
     std::vector<ParamShape> shapes_of(Symbol* fn);
+
+    Symbol* overload_origin(Symbol* s);
+
+    void remember_overloads(nodes::ASTNode* site, const std::vector<CandidateMatch>& matches, const std::vector<Symbol*>& origins, std::size_t chosen);
+
+    void keep_overloads(nodes::ASTNode* site, Symbol* chosen);
 
     Symbol* callee_symbol(nodes::ASTNode* n);
 

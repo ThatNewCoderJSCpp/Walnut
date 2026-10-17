@@ -1,0 +1,35 @@
+{
+    "name": "Walnut Dark Modern",
+    "declarations": "#FFFFFF",
+    "variables": "#9CDCFE",
+    "variable templates": "#4FC1FF",
+    "unresolved": "#CCCCCC",
+    "self": "#F44747",
+    "cast expressions": "#C586C0",
+    "this": "#569CD6",
+    "built-in operators": "#D4D4D4",
+    "overloaded operators": {
+        "color": "#DCDCAA",
+        "bold": true
+    },
+    "functions": "#DCDCAA",
+    "template scopes": "#4EC9B0",
+    "types": "#4EC9B0",
+    "built-in types": "#569CD6",
+    "namespaces": "#4EC9B0",
+    "enum members": "#4FC1FF",
+    "keywords": "#569CD6",
+    "control keywords": "#C586C0",
+    "constants": "#569CD6",
+    "strings": "#CE9178",
+    "escapes": "#D7BA7D",
+    "numbers": "#B5CEA8",
+    "comments": {
+        "color": "#6A9955",
+        "italic": true
+    },
+    "preprocessor": "#C586C0",
+    "error underlines": "#F14C4C",
+    "warning underlines": "#CCA700",
+    "error lines": ""
+}

@@ -3,14 +3,16 @@ const childProcess = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const designer = require('./color-designer');
 
 const tokenTypes = ['namespace', 'class', 'struct', 'enum', 'type', 'typeParameter', 'concept', 'function', 'method', 'variable', 'parameter', 'property', 'enumMember', 'operator', 'unresolved'];
-const tokenModifiers = ['declaration', 'overloaded', 'templateQualifier'];
+const tokenModifiers = ['declaration', 'overloaded', 'templateQualifier', 'variableTemplate'];
 const legend = new vscode.SemanticTokensLegend(tokenTypes, tokenModifiers);
 
 const categories = {
     'declarations': { tm: ['meta.declaration.variable.name.walnut'], sem: ['variable.declaration', 'parameter.declaration', 'property.declaration'] },
     'variables': { tm: ['variable.other.readwrite.walnut'], sem: ['variable', 'parameter', 'property'] },
+    'variable templates': { sem: ['variable.variableTemplate', 'property.variableTemplate'] },
     'unresolved': { sem: ['unresolved'] },
     'self': { tm: ['variable.language.self.walnut'] },
     'cast expressions': { tm: ['keyword.operator.cast.walnut'] },
@@ -45,7 +47,7 @@ const keywordWords = new Set([
     'fallthrough', 'co_return', 'co_yield', 'continue', 'default', 'repeat', 'return', 'switch', 'await', 'break', 'catch', 'label', 'throw', 'while', 'case', 'down', 'else', 'goto', 'then', 'end', 'for', 'try', 'as', 'do', 'if', 'in', 'is', 'invalidate',
     'constructor', 'destructor', 'namespace', 'function', 'inherits', 'operator', 'requires', 'template', 'typename', 'concept', 'extends', 'include', 'inherit', 'typedef', 'define', 'export', 'import', 'module', 'struct', 'class', 'union', 'using', 'enum', 'def', 'let',
     'thread_local', 'threadlocal', 'no_discard', 'threadsafe', 'automatic', 'consteval', 'constexpr', 'constinit', 'nodiscard', 'protected', 'abstract', 'constant', 'explicit', 'implicit', 'noexcept', 'override', 'volatile', 'hoisted', 'mutable', 'private', 'virtual', 'extern', 'friend', 'global', 'hidden', 'inline', 'public', 'static', 'async', 'const', 'hoist', 'local', 'lazy',
-    'character', 'unsigned', 'variable', 'boolean', 'decimal', 'dynamic', 'floater', 'integer', 'special', 'variant', 'double', 'string', 'array', 'float', 'short', 'auto', 'bool', 'char', 'long', 'text', 'void', 'any', 'arr', 'int', 'str', 'txt', 'var',
+    'character', 'iterable', 'unsigned', 'variable', 'boolean', 'decimal', 'dynamic', 'floater', 'integer', 'special', 'variant', 'double', 'string', 'array', 'float', 'short', 'auto', 'bool', 'char', 'long', 'text', 'void', 'any', 'arr', 'int', 'str', 'txt', 'var',
     'indeterminate', 'undefined', 'infinity', 'nullptr', 'FALSE', 'False', 'false', 'TRUE', 'True', 'true', 'inf', 'nan',
     'reinterpret_cast', 'dynamic_cast', 'static_cast', 'const_cast', 'bit_cast', 'bitcast',
     'discard_no_discard', 'discard_nodiscard', 'discard_const', 'static_assert', 'align_as', 'align_of', 'count_of', 'decltype', 'alignas', 'alignof', 'countof', 'size_of', 'type_id', 'type_of', 'delete', 'sizeof', 'typeid', 'typeof', 'new'
@@ -53,6 +55,10 @@ const keywordWords = new Set([
 
 const wholeLineWords = new Set(['import', 'include']);
 const labelWords = new Set(['goto', 'label']);
+
+const themeKeys = new Set(['extends', 'name', '$schema']);
+const overloadPages = new Map();
+const linkResults = new Map();
 
 const rulePrefix = 'Walnut: ';
 const semanticSuffix = ':walnut';
@@ -168,20 +174,109 @@ function readColors(file) {
     return data;
 }
 
+function knownColorNames() {
+    return Object.keys(categories).concat(Object.keys(squiggleColors), editorStyles);
+}
+
+function themeFolders() {
+    const folders = [];
+    const file = colorsFile();
+    if (file && !isBundledColorsFile(file)) folders.push(path.join(path.dirname(file), 'color-themes'));
+    const bundled = path.join(extensionPath, 'color-themes');
+    if (!folders.some(f => path.resolve(f) === path.resolve(bundled))) folders.push(bundled);
+    return folders;
+}
+
+function listThemes() {
+    const themes = new Map();
+
+    for (const folder of themeFolders()) {
+        let names = [];
+
+        try {
+            names = fs.readdirSync(folder);
+        } catch (e) {
+            continue;
+        }
+
+        for (const name of names.sort()) {
+            if (!name.toLowerCase().endsWith('.json')) continue;
+            const file = path.join(folder, name);
+            let label = name.slice(0, -5);
+
+            try {
+                const data = readColors(file);
+                if (typeof data.name === 'string' && data.name.trim()) label = data.name.trim();
+            } catch (e) {
+            }
+
+            if (!themes.has(label)) themes.set(label, file);
+        }
+    }
+
+    return themes;
+}
+
+function resolveColors(data, seen) {
+    const out = {};
+
+    if (typeof data.extends === 'string' && data.extends.trim()) {
+        const name = data.extends.trim();
+        const file = listThemes().get(name);
+        if (!file) throw new Error(`there is no color theme named "${name}" to extend`);
+        const key = path.resolve(file);
+        if (seen.has(key)) throw new Error(`the color theme "${name}" ends up extending itself`);
+        seen.add(key);
+        Object.assign(out, resolveColors(readColors(file), seen));
+    }
+
+    for (const [name, value] of Object.entries(data)) if (!themeKeys.has(name)) out[name] = value;
+    return out;
+}
+
+function chosenTheme() {
+    return (settings().get('colorTheme') || '').trim();
+}
+
+function activeColorsFile() {
+    const theme = chosenTheme();
+
+    if (theme) {
+        const file = listThemes().get(theme);
+        if (file) return file;
+        log(`Walnut: there is no color theme named "${theme}", so colors.json is used`);
+    }
+
+    return colorsFile();
+}
+
+function colorsFrom(file) {
+    return resolveColors(readColors(file), new Set([path.resolve(file)]));
+}
+
 function sameJson(a, b) {
     return JSON.stringify(a) === JSON.stringify(b);
 }
 
-async function applyColors(showErrors) {
+let applyQueue = Promise.resolve();
+
+function applyColors(showErrors, override) {
+    applyQueue = applyQueue.then(() => applyColorsNow(showErrors, override)).catch(e => log(`Walnut couldn't apply the colors: ${e && e.message ? e.message : e}`));
+    return applyQueue;
+}
+
+async function applyColorsNow(showErrors, override) {
     const config = vscode.workspace.getConfiguration('editor');
     const enabled = settings().get('colors.enabled', true);
     let colors = {};
 
-    if (enabled) {
-        const file = colorsFile();
+    if (override) {
+        colors = override;
+    } else if (enabled) {
+        const file = activeColorsFile();
 
         try {
-            colors = readColors(file);
+            colors = colorsFrom(file);
             lastColorsError = '';
         } catch (e) {
             const message = `Walnut couldn't read the colors file ${file}: ${e.message}`;
@@ -191,10 +286,14 @@ async function applyColors(showErrors) {
             return;
         }
 
-        const known = Object.keys(categories).concat(Object.keys(squiggleColors), editorStyles);
+        const known = knownColorNames();
 
         for (const name of Object.keys(colors)) {
-            if (!known.includes(name)) log(`Walnut colors: unknown name "${name}" in ${file}; the names are: ${known.join(', ')}`);
+            if (!known.includes(name)) {
+                const message = `Walnut colors: "${name}" in ${file} isn't a color name, so it does nothing; the names are: ${known.join(', ')}`;
+                log(message);
+                if (showErrors) vscode.window.showWarningMessage(message);
+            }
         }
     }
 
@@ -310,7 +409,7 @@ function scheduleApply() {
 }
 
 function watchColors() {
-    const file = settings().get('colors.enabled', true) ? colorsFile() : '';
+    const file = settings().get('colors.enabled', true) ? activeColorsFile() : '';
     if (file === watchedColorsFile) return;
     if (watchedColorsFile) fs.unwatchFile(watchedColorsFile);
     watchedColorsFile = file;
@@ -332,7 +431,7 @@ async function chooseColorsFile() {
 
 async function editColors() {
     if (!settings().get('colors.enabled', true)) await settings().update('colors.enabled', true, vscode.ConfigurationTarget.Global);
-    const file = colorsFile();
+    const file = activeColorsFile();
 
     if (isBundledColorsFile(file)) {
         const choice = await vscode.window.showInformationMessage(
@@ -344,6 +443,154 @@ async function editColors() {
 
     const doc = await vscode.workspace.openTextDocument(file);
     await vscode.window.showTextDocument(doc);
+}
+
+function themeItems() {
+    const items = [{ label: 'colors.json', description: 'your own colors file', theme: '' }];
+
+    for (const [name, file] of listThemes()) {
+        const bundled = path.resolve(path.dirname(file)) === path.resolve(path.join(extensionPath, 'color-themes'));
+        items.push({ label: name, description: bundled ? 'came with the extension' : path.dirname(file), theme: name });
+    }
+
+    return items;
+}
+
+function themeFile(theme) {
+    return theme ? listThemes().get(theme) : colorsFile();
+}
+
+async function chooseColorTheme() {
+    const items = themeItems();
+    const current = chosenTheme();
+    const pick = vscode.window.createQuickPick();
+    pick.items = items;
+    pick.placeholder = 'Pick the Walnut colors (moving through the list previews them)';
+    pick.activeItems = items.filter(i => i.theme === current);
+    let accepted = false;
+
+    pick.onDidChangeActive(active => {
+        const item = active[0];
+        if (!item) return;
+
+        try {
+            applyColors(false, colorsFrom(themeFile(item.theme)));
+        } catch (e) {
+            log(`Walnut couldn't preview "${item.label}": ${e.message}`);
+        }
+    });
+
+    pick.onDidAccept(async () => {
+        const item = pick.selectedItems[0] || pick.activeItems[0];
+        accepted = true;
+        pick.hide();
+        if (!item) return;
+        if (!settings().get('colors.enabled', true)) await settings().update('colors.enabled', true, vscode.ConfigurationTarget.Global);
+        await settings().update('colorTheme', item.theme, vscode.ConfigurationTarget.Global);
+        watchColors();
+        await applyColors(true);
+    });
+
+    pick.onDidHide(() => {
+        if (!accepted) applyColors(false);
+        pick.dispose();
+    });
+
+    pick.show();
+}
+
+function orderedColors(colors) {
+    const out = {};
+    for (const name of knownColorNames()) if (colors[name] !== undefined) out[name] = colors[name];
+    for (const [name, value] of Object.entries(colors)) if (out[name] === undefined) out[name] = value;
+    return out;
+}
+
+async function writeColorsFile(file, colors, extra) {
+    const data = Object.assign({}, extra || {}, orderedColors(colors));
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, JSON.stringify(data, null, 4) + '\n', 'utf8');
+}
+
+async function saveColorsAsTheme(colors) {
+    const name = await vscode.window.showInputBox({
+        prompt: 'Name the new Walnut color theme',
+        placeHolder: 'Ocean',
+        validateInput: v => !v.trim() ? 'Give the theme a name' : (/[\\/:*?"<>|]/.test(v) ? 'A theme name can\'t have \\ / : * ? " < > |' : null)
+    });
+    if (!name) return;
+
+    if (!colors) {
+        try {
+            colors = colorsFrom(activeColorsFile());
+        } catch (e) {
+            vscode.window.showWarningMessage(`Walnut couldn't read the current colors: ${e.message}`);
+            return;
+        }
+    }
+
+    const folder = themeFolders()[0];
+    const file = path.join(folder, name.trim() + '.json');
+
+    if (fs.existsSync(file)) {
+        const answer = await vscode.window.showWarningMessage(`There is already a theme file named ${path.basename(file)}. Replace it?`, { modal: true }, 'Replace');
+        if (answer !== 'Replace') return;
+    }
+
+    try {
+        await writeColorsFile(file, colors, { name: name.trim() });
+    } catch (e) {
+        vscode.window.showWarningMessage(`Walnut couldn't save ${file}: ${e.message}`);
+        return;
+    }
+
+    const where = path.resolve(folder) === path.resolve(path.join(extensionPath, 'color-themes'))
+        ? ' (inside the installed extension, so reinstalling it removes the file; pick your Walnut folder\'s colors.json with "Walnut: Choose Colors File..." to keep themes there)'
+        : '';
+    const choice = await vscode.window.showInformationMessage(`Saved the color theme "${name.trim()}" to ${file}${where}.`, 'Use It', 'Open File');
+    if (choice === 'Use It') await settings().update('colorTheme', name.trim(), vscode.ConfigurationTarget.Global);
+    if (choice === 'Open File') await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(file));
+}
+
+function openColorDesigner() {
+    designer.open({
+        context: extensionContext,
+        names: knownColorNames(),
+        themes: () => themeItems().map(i => ({ label: i.label, theme: i.theme })),
+        colorsOf: theme => colorsFrom(themeFile(theme)),
+        current: () => ({ theme: chosenTheme(), colors: colorsFrom(activeColorsFile()) }),
+        preview: colors => applyColors(false, colors),
+        restore: () => applyColors(false),
+        saveToColorsFile: async colors => {
+            const file = colorsFile();
+
+            if (isBundledColorsFile(file)) {
+                const choice = await vscode.window.showWarningMessage('This would save into the colors file that came with the extension, which is replaced when it is reinstalled. Pick the colors.json in your Walnut folder first?', 'Choose File...', 'Save Anyway');
+                if (choice === 'Choose File...') { await chooseColorsFile(); return saveDesignerColors(colors); }
+                if (choice !== 'Save Anyway') return false;
+            }
+
+            return saveDesignerColors(colors);
+        },
+        saveAsTheme: colors => saveColorsAsTheme(colors)
+    });
+}
+
+async function saveDesignerColors(colors) {
+    const file = colorsFile();
+
+    try {
+        await writeColorsFile(file, colors);
+    } catch (e) {
+        vscode.window.showWarningMessage(`Walnut couldn't save ${file}: ${e.message}`);
+        return false;
+    }
+
+    if (chosenTheme()) await settings().update('colorTheme', '', vscode.ConfigurationTarget.Global);
+    watchColors();
+    await applyColors(true);
+    vscode.window.showInformationMessage(`Saved the colors to ${file}.`);
+    return true;
 }
 
 async function chooseCompiler() {
@@ -471,9 +718,27 @@ function inlineCode(text) {
     return fence + pad + text + pad + fence;
 }
 
-function hoverMarkdown(h) {
+function overloadKey(uri, line, col) {
+    return `${uri}#${line}:${col}`;
+}
+
+function hoverMarkdown(h, uri) {
     const md = new vscode.MarkdownString();
-    if (h.code) md.appendCodeblock(shorten(h.code), 'walnut');
+    const overloads = uri && Array.isArray(h.overloads) && h.overloads.length > 1 ? h.overloads : null;
+    const page = overloads ? (overloadPages.get(overloadKey(uri, h.line, h.col)) || 0) % overloads.length : 0;
+
+    if (overloads) {
+        const args = encodeURIComponent(JSON.stringify([uri, h.line, h.col]));
+        md.isTrusted = true;
+        md.supportThemeIcons = true;
+        md.appendCodeblock(shorten(overloads[page]), 'walnut');
+        md.appendMarkdown(`[$(chevron-left)](command:walnut.previousOverload?${args} "Previous overload") ${page + 1} of ${overloads.length} [$(chevron-right)](command:walnut.nextOverload?${args} "Next overload")`);
+        if (page > 0) return md;
+        md.appendMarkdown('  \n');
+    } else if (h.code) {
+        md.appendCodeblock(shorten(h.code), 'walnut');
+    }
+
     const lines = [];
 
     const add = (one, many, items) => {
@@ -498,10 +763,120 @@ const hoverProvider = {
         for (const e of entries) {
             if (position.character < e.range.start.character || position.character >= e.range.end.character) continue;
             if (document.getText(e.range) !== e.text) continue;
-            return new vscode.Hover(hoverMarkdown(e.hover), e.range);
+            return new vscode.Hover(hoverMarkdown(e.hover, document.uri.toString()), e.range);
         }
 
         return null;
+    }
+};
+
+async function stepOverload(delta, uri, line, col) {
+    const byLine = hoverResults.get(uri);
+    const entries = byLine && byLine.get(line);
+    const entry = entries && entries.find(e => e.hover.col === col);
+    if (!entry || !Array.isArray(entry.hover.overloads) || entry.hover.overloads.length < 2) return;
+    const count = entry.hover.overloads.length;
+    const key = overloadKey(uri, line, col);
+    overloadPages.set(key, ((overloadPages.get(key) || 0) + delta + count) % count);
+    let editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri);
+    if (!editor) return;
+    if (vscode.window.activeTextEditor !== editor) editor = await vscode.window.showTextDocument(editor.document, editor.viewColumn);
+    const at = new vscode.Position(line, col);
+    editor.selection = new vscode.Selection(at, at);
+    await vscode.commands.executeCommand('editor.action.showHover');
+}
+
+function storeLinks(document, result) {
+    const key = document.uri.toString();
+    if (!Array.isArray(result.links) || !Array.isArray(result.locations)) return;
+    if (!result.semantic && linkResults.has(key)) return;
+    const byLine = new Map();
+
+    for (const k of result.links) {
+        if (!Array.isArray(k) || k.length < 5 || k[0] >= document.lineCount || !(k[2] > 0)) continue;
+        const range = new vscode.Range(k[0], k[1], k[0], k[1] + k[2]);
+        const definition = result.locations[k[3]];
+        if (!definition) continue;
+        const declarations = (k[4] || []).map(i => result.locations[i]).filter(Boolean);
+        if (!byLine.has(k[0])) byLine.set(k[0], []);
+        byLine.get(k[0]).push({ range, text: document.getText(range), definition, declarations });
+    }
+
+    linkResults.set(key, byLine);
+}
+
+function libraryFile(file) {
+    const root = '<walnut>/';
+    if (!file.startsWith(root)) return file;
+    const rest = file.slice(root.length);
+    const compiler = findOnPath(compilerPath());
+    if (!compiler) return '';
+    let dir;
+
+    try {
+        dir = path.dirname(fs.realpathSync(compiler));
+    } catch (e) {
+        return '';
+    }
+
+    for (let i = 0; i < 6; ++i) {
+        for (const folder of ['Library', 'library', path.join('share', 'walnut', 'Library')]) {
+            const candidate = path.join(dir, folder, rest);
+            if (fs.existsSync(candidate)) return candidate;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+
+    return '';
+}
+
+function locationOf(document, place) {
+    const [file, line, col, len] = place;
+    let uri = document.uri;
+
+    if (file) {
+        const real = libraryFile(file);
+        if (!real) return null;
+        uri = vscode.Uri.file(real);
+    }
+
+    return new vscode.Location(uri, new vscode.Range(line, col, line, col + len));
+}
+
+function linkAt(document, position) {
+    const byLine = linkResults.get(document.uri.toString());
+    const entries = byLine && byLine.get(position.line);
+    if (!entries) return null;
+
+    for (const e of entries) {
+        if (position.character < e.range.start.character || position.character > e.range.end.character) continue;
+        if (document.getText(e.range) !== e.text) continue;
+        return e;
+    }
+
+    return null;
+}
+
+const definitionProvider = {
+    provideDefinition(document, position) {
+        const link = linkAt(document, position);
+        if (!link) return null;
+        const definition = locationOf(document, link.definition);
+        const declarations = link.declarations.map(d => locationOf(document, d)).filter(Boolean);
+        const onDefinition = definition && definition.uri.toString() === document.uri.toString() && definition.range.contains(position);
+        if (onDefinition && declarations.length) return declarations;
+        return definition;
+    }
+};
+
+const declarationProvider = {
+    provideDeclaration(document, position) {
+        const link = linkAt(document, position);
+        if (!link) return null;
+        const declarations = link.declarations.map(d => locationOf(document, d)).filter(Boolean);
+        return declarations.length ? declarations : locationOf(document, link.definition);
     }
 };
 
@@ -670,6 +1045,7 @@ const provider = {
         if (cancel.isCancellationRequested || document.version !== version) throw new vscode.CancellationError();
         publishDiagnostics(document, result);
         storeHovers(document, result);
+        storeLinks(document, result);
 
         if (!result.semantic && lastResults.has(key)) throw new vscode.CancellationError();
         addUnresolved(document, result);
@@ -691,13 +1067,19 @@ function activate(context) {
         tokensChanged,
         vscode.languages.registerDocumentSemanticTokensProvider({ language: 'walnut' }, provider, legend),
         vscode.languages.registerHoverProvider({ language: 'walnut' }, hoverProvider),
-        vscode.workspace.onDidCloseTextDocument(doc => { diagnostics.delete(doc.uri); lastResults.delete(doc.uri.toString()); errorLines.delete(doc.uri.toString()); hoverResults.delete(doc.uri.toString()); }),
+        vscode.languages.registerDefinitionProvider({ language: 'walnut' }, definitionProvider),
+        vscode.languages.registerDeclarationProvider({ language: 'walnut' }, declarationProvider),
+        vscode.workspace.onDidCloseTextDocument(doc => { diagnostics.delete(doc.uri); lastResults.delete(doc.uri.toString()); errorLines.delete(doc.uri.toString()); hoverResults.delete(doc.uri.toString()); linkResults.delete(doc.uri.toString()); }),
         vscode.window.onDidChangeVisibleTextEditors(showErrorLines),
         vscode.workspace.onDidSaveTextDocument(doc => {
-            if (watchedColorsFile && doc.uri.scheme === 'file' && path.resolve(doc.uri.fsPath) === path.resolve(watchedColorsFile)) applyColors(true);
+            if (doc.uri.scheme !== 'file') return;
+            const saved = path.resolve(doc.uri.fsPath);
+            const isColors = watchedColorsFile && saved === path.resolve(watchedColorsFile);
+            const isTheme = saved.toLowerCase().endsWith('.json') && themeFolders().some(f => path.dirname(saved) === path.resolve(f));
+            if (isColors || isTheme) applyColors(true);
         }),
         vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('walnut.colorsFile') || e.affectsConfiguration('walnut.colors.enabled') || e.affectsConfiguration('walnut.compilerPath')) { watchColors(); applyColors(true); }
+            if (e.affectsConfiguration('walnut.colorsFile') || e.affectsConfiguration('walnut.colors.enabled') || e.affectsConfiguration('walnut.compilerPath') || e.affectsConfiguration('walnut.colorTheme')) { watchColors(); applyColors(true); }
             if (e.affectsConfiguration('walnut')) tokensChanged.fire();
         }),
         vscode.commands.registerCommand('walnut.editColors', editColors),
@@ -705,6 +1087,11 @@ function activate(context) {
         vscode.commands.registerCommand('walnut.removeColors', removeColors),
         vscode.commands.registerCommand('walnut.chooseCompiler', chooseCompiler),
         vscode.commands.registerCommand('walnut.refresh', () => { warnedMissingCompiler = false; tokensChanged.fire(); }),
+        vscode.commands.registerCommand('walnut.nextOverload', (uri, line, col) => stepOverload(1, uri, line, col)),
+        vscode.commands.registerCommand('walnut.previousOverload', (uri, line, col) => stepOverload(-1, uri, line, col)),
+        vscode.commands.registerCommand('walnut.chooseColorTheme', chooseColorTheme),
+        vscode.commands.registerCommand('walnut.saveColorsAsTheme', () => saveColorsAsTheme()),
+        vscode.commands.registerCommand('walnut.openColorDesigner', openColorDesigner),
         { dispose: () => { if (watchedColorsFile) fs.unwatchFile(watchedColorsFile); for (const child of running.values()) child.kill(); if (errorLineDecoration) errorLineDecoration.dispose(); } }
     );
 

@@ -1,4 +1,5 @@
 #include "Semantics/instantiator.hpp"
+#include "Semantics/conversion.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -161,6 +162,7 @@ auto Instantiator::instantiate_for_call(
         }
 
         const std::size_t n = std::min(nfix_fn, call_args.size());
+        std::vector<Type*> deferred;
 
         for (std::size_t i = 0; i < n; ++i) {
             Type* pt = m_types.canonicalize(ps->m_params[i]->get_type());
@@ -191,7 +193,36 @@ auto Instantiator::instantiate_for_call(
                 }
             }
 
-            if (!deduce(pt, call_args[i], env, m_types)) return nullptr;
+            if (!deduce(pt, call_args[i], env, m_types)) {
+                Type* pv = pt && pt->is_reference() ? static_cast<ReferenceType*>(pt)->referent() : pt;
+                Type* av = call_args[i] && call_args[i]->is_reference() ? static_cast<ReferenceType*>(call_args[i])->referent() : call_args[i];
+                pv = m_types.strip_cv(pv);
+                av = m_types.strip_cv(av);
+                if (!pv || !av || pv->kind() != TypeKind::Function || av->kind() == TypeKind::Function || !av->is_record()) return nullptr;
+                deferred.push_back(pt);
+                continue;
+            }
+
+            if (ps->m_params[i]->is_iterable) {
+                Type* el = m_types.range_element_hook ? m_types.range_element_hook(call_args[i], site) : nullptr;
+                if (!el) return nullptr;
+                Type* want = m_types.canonicalize(const_cast<nodes::FunctionParameter*>(ps->m_params[i])->iterable_element);
+                if (!want) return nullptr;
+
+                if (want->is_dependent()) {
+                    if (!deduce(want, el, env, m_types)) return nullptr;
+                } else if (m_types.strip_cv(want) != el) {
+                    const ConversionRank r = rank_conversion(el, m_types.strip_cv(want), m_types);
+                    if (r != ConversionRank::Exact && r != ConversionRank::Promotion) return nullptr;
+                }
+            }
+        }
+
+        for (Type* pt : deferred) {
+            m_types.push_subst(&env);
+            Type* bound = m_types.apply_subst(pt);
+            m_types.pop_subst();
+            if (!bound || bound->is_dependent()) return nullptr;
         }
 
         if (!last_pks.empty()) {

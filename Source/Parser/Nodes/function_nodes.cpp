@@ -40,6 +40,8 @@ void FunctionParameter::print(std::ostream& os, std::size_t indent) const {
 ASTNode* FunctionParameter::clone_into(Arena& a) const {
     auto* c = make_in<FunctionParameter>(a, m_name, m_type.clone_into(a), clone_child(m_initializer, a), m_is_init_in_decl, m_variadic_length);
     c->m_variadic_exact = m_variadic_exact;
+    c->is_iterable = is_iterable;
+    if (is_iterable) c->iterable_element = iterable_element.clone_into(a);
     copy_base_to(c);
     return c;
 }

@@ -667,9 +667,9 @@ namespace std {
             return detail::Native<S>::compare_ignore_case(a, b);
         } end function compare_ignore_case
 
-        template <typename S, typename Pred>
+        template <typename S>
         requires std::traits::is_string<S>
-        function count_if(const S&: s, Pred: pred) -> long int {
+        function count_if(const S&: s, std::Predicate<char>: pred) -> long int {
             long int: n = 0;
             for (char: c in s) {
                 if (pred(c)) then {
@@ -679,9 +679,9 @@ namespace std {
             return n;
         } end function count_if
 
-        template <typename S, typename Pred>
+        template <typename S>
         requires std::traits::is_string<S>
-        function all_of(const S&: s, Pred: pred) -> bool {
+        function all_of(const S&: s, std::Predicate<char>: pred) -> bool {
             for (char: c in s) {
                 if (!pred(c)) then {
                     return false;
@@ -690,9 +690,9 @@ namespace std {
             return true;
         } end function all_of
 
-        template <typename S, typename Pred>
+        template <typename S>
         requires std::traits::is_string<S>
-        function any_of(const S&: s, Pred: pred) -> bool {
+        function any_of(const S&: s, std::Predicate<char>: pred) -> bool {
             for (char: c in s) {
                 if (pred(c)) then {
                     return true;
@@ -701,15 +701,15 @@ namespace std {
             return false;
         } end function any_of
 
-        template <typename S, typename Pred>
+        template <typename S>
         requires std::traits::is_string<S>
-        function none_of(const S&: s, Pred: pred) -> bool {
+        function none_of(const S&: s, std::Predicate<char>: pred) -> bool {
             return !any_of(s, pred);
         } end function none_of
 
-        template <typename S, typename Pred>
+        template <typename S>
         requires std::traits::is_string<S>
-        function find_if(const S&: s, Pred: pred) -> long int {
+        function find_if(const S&: s, std::Predicate<char>: pred) -> long int {
             long int: i = 0;
             for (char: c in s) {
                 if (pred(c)) then {
@@ -720,9 +720,9 @@ namespace std {
             return -1;
         } end function find_if
 
-        template <typename S, typename Pred>
+        template <typename S>
         requires std::traits::is_string<S>
-        function filter(const S&: s, Pred: pred) -> S {
+        function filter(const S&: s, std::Predicate<char>: pred) -> S {
             S: out;
             for (char: c in s) {
                 if (pred(c)) then {
@@ -732,9 +732,9 @@ namespace std {
             return out;
         } end function filter
 
-        template <typename S, typename Pred>
+        template <typename S>
         requires std::traits::is_string<S>
-        function remove_if(const S&: s, Pred: pred) -> S {
+        function remove_if(const S&: s, std::Predicate<char>: pred) -> S {
             S: out;
             for (char: c in s) {
                 if (!pred(c)) then {
@@ -744,9 +744,9 @@ namespace std {
             return out;
         } end function remove_if
 
-        template <typename S, typename Func>
+        template <typename S>
         requires std::traits::is_string<S>
-        function map_chars(const S&: s, Func: func) -> S {
+        function map_chars(const S&: s, std::Transform<char, char>: func) -> S {
             S: out;
             for (char: c in s) {
                 out += func(c);
@@ -754,17 +754,17 @@ namespace std {
             return out;
         } end function map_chars
 
-        template <typename S, typename Func>
+        template <typename S>
         requires std::traits::is_string<S>
-        function for_each(const S&: s, Func: func) -> void {
+        function for_each(const S&: s, function(char) -> void: func) -> void {
             for (char: c in s) {
                 func(c);
             }
         } end function for_each
 
-        template <typename S, typename Pred>
-        requires std::traits::is_string<S> && !std::traits::is_char<Pred>
-        function where(S&: s, Pred: pred) -> std::collections::WhereQuery<S, char> {
+        template <typename S>
+        requires std::traits::is_string<S>
+        function where(S&: s, std::Predicate<char>: pred) -> std::collections::WhereQuery<S, char> {
             return std::collections::WhereQuery<S, char>::matching(s, pred);
         } end function where
 

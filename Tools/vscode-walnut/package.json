@@ -1,8 +1,8 @@
 {
     "name": "walnut-language",
     "displayName": "Walnut",
-    "description": "Coloring, error underlines, hover info, bracket matching and comment toggling for the Walnut language (.wal and .walh files)",
-    "version": "0.5.0",
+    "description": "Coloring, error underlines, hover info with overload pages, go to definition, color themes and a color designer for the Walnut language (.wal and .walh files)",
+    "version": "0.6.2",
     "publisher": "walnut",
     "engines": {
         "vscode": "^1.75.0"
@@ -77,6 +77,31 @@
                 "command": "walnut.refresh",
                 "title": "Refresh Highlighting",
                 "category": "Walnut"
+            },
+            {
+                "command": "walnut.chooseColorTheme",
+                "title": "Choose Color Theme...",
+                "category": "Walnut"
+            },
+            {
+                "command": "walnut.openColorDesigner",
+                "title": "Open Color Designer",
+                "category": "Walnut"
+            },
+            {
+                "command": "walnut.saveColorsAsTheme",
+                "title": "Save Colors as Theme...",
+                "category": "Walnut"
+            },
+            {
+                "command": "walnut.nextOverload",
+                "title": "Next Overload",
+                "category": "Walnut"
+            },
+            {
+                "command": "walnut.previousOverload",
+                "title": "Previous Overload",
+                "category": "Walnut"
             }
         ],
         "configuration": {
@@ -91,6 +116,11 @@
                     "type": "string",
                     "default": "",
                     "markdownDescription": "The colors file to use. Empty means `Tools/vscode-walnut/colors.json` in the Walnut folder the compiler was built in, or else the copy that came with the extension. Changes to the file show up as soon as it's saved."
+                },
+                "walnut.colorTheme": {
+                    "type": "string",
+                    "default": "",
+                    "markdownDescription": "The Walnut color theme to use, by name, from the `color-themes` folders (next to your colors file, and in the extension). Empty means your colors file. **Walnut: Choose Color Theme...** sets it and previews each theme as you move through the list."
                 },
                 "walnut.colors.enabled": {
                     "type": "boolean",
@@ -151,6 +181,10 @@
             {
                 "id": "templateQualifier",
                 "description": "A template written before '::', as in float_traits<T>::digits"
+            },
+            {
+                "id": "variableTemplate",
+                "description": "A variable template, as in std::traits::is_arithmetic<T>"
             }
         ],
         "semanticTokenScopes": [
@@ -174,6 +208,18 @@
                     ]
                 }
             }
-        ]
+        ],
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "walnut.nextOverload",
+                    "when": "false"
+                },
+                {
+                    "command": "walnut.previousOverload",
+                    "when": "false"
+                }
+            ]
+        }
     }
 }

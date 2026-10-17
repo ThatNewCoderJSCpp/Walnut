@@ -95,8 +95,7 @@ namespace std {
                     return fallback;
                 } end function value_or
 
-                template <typename F>
-                function value_or_else(F: make) const -> T {
+                function value_or_else(std::Supplier<T>: make) const -> T {
                     if (has_value()) then {
                         return unchecked();
                     }
@@ -140,40 +139,37 @@ namespace std {
                     return has_value() && unchecked() == value;
                 } end function contains
 
-                template <typename F>
-                function map(F: func) const -> Optional<std::traits::decay<std::traits::return_type<F>>> {
+                template <typename U>
+                function map(std::Transform<T, U>: func) const -> Optional<U> {
                     if (has_value()) then {
-                        return Optional<std::traits::decay<std::traits::return_type<F>>>(func(unchecked()));
+                        return Optional<U>(func(unchecked()));
                     }
-                    return Optional<std::traits::decay<std::traits::return_type<F>>>();
+                    return Optional<U>();
                 } end function map
 
-                template <typename F>
-                function and_then(F: func) const -> std::traits::decay<std::traits::return_type<F>> {
+                template <typename R>
+                function and_then(std::Transform<T, R>: func) const -> R {
                     if (has_value()) then {
                         return func(unchecked());
                     }
-                    return std::traits::decay<std::traits::return_type<F>>();
+                    return R();
                 } end function and_then
 
-                template <typename F>
-                function or_else(F: func) const -> Optional {
+                function or_else(std::Supplier<Optional>: func) const -> Optional {
                     if (has_value()) then {
                         return *this;
                     }
                     return func();
                 } end function or_else
 
-                template <typename Pred>
-                function filter(Pred: pred) const -> Optional {
+                function filter(std::Predicate<T>: pred) const -> Optional {
                     if (has_value() && pred(unchecked())) then {
                         return *this;
                     }
                     return Optional();
                 } end function filter
 
-                template <typename F>
-                function if_present(F: func) -> void {
+                function if_present(std::Action<T>: func) -> void {
                     if (has_value()) then {
                         func(unchecked());
                     }

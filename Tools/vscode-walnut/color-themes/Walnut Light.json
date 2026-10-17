@@ -1,0 +1,38 @@
+{
+    "name": "Walnut Light",
+    "declarations": "#001080",
+    "variables": "#0070C1",
+    "variable templates": "#267F99",
+    "unresolved": {
+        "color": "#A31515",
+        "italic": true
+    },
+    "self": "#C50F1F",
+    "cast expressions": "#AF00DB",
+    "this": "#0000FF",
+    "built-in operators": "#000000",
+    "overloaded operators": {
+        "color": "#795E26",
+        "bold": true
+    },
+    "functions": "#795E26",
+    "template scopes": "#267F99",
+    "types": "#267F99",
+    "built-in types": "#0000FF",
+    "namespaces": "#267F99",
+    "enum members": "#0070C1",
+    "keywords": "#0000FF",
+    "control keywords": "#AF00DB",
+    "constants": "#0000FF",
+    "strings": "#A31515",
+    "escapes": "#EE0000",
+    "numbers": "#098658",
+    "comments": {
+        "color": "#008000",
+        "italic": true
+    },
+    "preprocessor": "#AF00DB",
+    "error underlines": "#E51400",
+    "warning underlines": "#BF8803",
+    "error lines": ""
+}

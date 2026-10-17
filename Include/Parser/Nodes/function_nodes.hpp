@@ -21,6 +21,8 @@ struct FunctionParameter : ASTNode {
     std::vector<semantics::Symbol*> pack_symbols;
     bool expanded_pack = false;
     bool m_variadic_exact = false;
+    bool is_iterable = false;
+    parser_types::TypeInfo iterable_element;
 
     FunctionParameter(
         std::string_view name,

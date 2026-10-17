@@ -1,6 +1,7 @@
 {
     "declarations": "#FFFFFF",
     "variables": "#00FFFF",
+    "variable templates": "#FFEA00",
     "unresolved": "#FFFFFF",
     "self": "#FF0000",
     "cast expressions": "#F00000",

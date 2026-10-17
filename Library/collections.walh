@@ -1,4 +1,5 @@
 import module.algorithms
+import module.iterators
 
 namespace std {
     namespace errors {
@@ -274,6 +275,30 @@ namespace std {
                 function end() -> T* as "walnut_rt::coll::end";
                 function end() const -> const T* as "walnut_rt::coll::end";
 
+                function rbegin() -> std::iterators::Pointer<T, true> {
+                    return std::iterators::Pointer<T, true>(data(), size() - 1);
+                } end function rbegin
+
+                function rend() -> std::iterators::Pointer<T, true> {
+                    return std::iterators::Pointer<T, true>(data(), -1);
+                } end function rend
+
+                function rbegin() const -> std::iterators::Pointer<const T, true> {
+                    return std::iterators::Pointer<const T, true>(data(), size() - 1);
+                } end function rbegin
+
+                function rend() const -> std::iterators::Pointer<const T, true> {
+                    return std::iterators::Pointer<const T, true>(data(), -1);
+                } end function rend
+
+                function backwards() -> std::iterators::Range<std::iterators::Pointer<T, true>> {
+                    return std::iterators::Range<std::iterators::Pointer<T, true>>(rbegin(), rend());
+                } end function backwards
+
+                function backwards() const -> std::iterators::Range<std::iterators::Pointer<const T, true>> {
+                    return std::iterators::Range<std::iterators::Pointer<const T, true>>(rbegin(), rend());
+                } end function backwards
+
                 operator([]) function(long int: index) -> T& {
                     check(index);
                     return data()[index];
@@ -403,8 +428,7 @@ namespace std {
                     }
                 } end function sort
 
-                template <typename Compare>
-                function sort(Compare: comp) -> void {
+                function sort(std::Compare<T>: comp) -> void {
                     std::algorithms::sort(data(), data() + size(), comp);
                 } end function sort
 
@@ -412,8 +436,8 @@ namespace std {
                     std::algorithms::sort_descending(data(), data() + size());
                 } end function sort_descending
 
-                template <typename Key>
-                function sort_by(Key: key) -> void {
+                template <typename K>
+                function sort_by(std::Transform<T, K>: key) -> void {
                     std::algorithms::sort_by(data(), data() + size(), key);
                 } end function sort_by
 
@@ -421,13 +445,12 @@ namespace std {
                     std::algorithms::stable_sort(data(), data() + size());
                 } end function stable_sort
 
-                template <typename Compare>
-                function stable_sort(Compare: comp) -> void {
+                function stable_sort(std::Compare<T>: comp) -> void {
                     std::algorithms::stable_sort(data(), data() + size(), comp);
                 } end function stable_sort
 
-                template <typename Key>
-                function stable_sort_by(Key: key) -> void {
+                template <typename K>
+                function stable_sort_by(std::Transform<T, K>: key) -> void {
                     std::algorithms::stable_sort_by(data(), data() + size(), key);
                 } end function stable_sort_by
 
@@ -481,8 +504,7 @@ namespace std {
                     return std::algorithms::is_sorted(data(), data() + size());
                 } end function is_sorted
 
-                template <typename Compare>
-                function is_sorted(Compare: comp) const -> bool {
+                function is_sorted(std::Compare<T>: comp) const -> bool {
                     return std::algorithms::is_sorted(data(), data() + size(), comp);
                 } end function is_sorted
 
@@ -492,8 +514,7 @@ namespace std {
                     return out;
                 } end function sorted
 
-                template <typename Compare>
-                function sorted(Compare: comp) const -> Vector {
+                function sorted(std::Compare<T>: comp) const -> Vector {
                     Vector: out = *this;
                     std::algorithms::sort(out.data(), out.data() + out.size(), comp);
                     return out;
@@ -528,15 +549,13 @@ namespace std {
                     return at;
                 } end function insert_sorted
 
-                template <typename Compare>
-                function insert_sorted(const T&: value, Compare: comp) -> long int {
+                function insert_sorted(const T&: value, std::Compare<T>: comp) -> long int {
                     const long int: at = std::algorithms::upper_bound(data(), data() + size(), value, comp) - data();
                     insert(at, value);
                     return at;
                 } end function insert_sorted
 
-                template <typename Pred>
-                function find_if(Pred: pred) const -> long int {
+                function find_if(std::Predicate<T>: pred) const -> long int {
                     return std::algorithms::index_if(data(), data() + size(), pred);
                 } end function find_if
 
@@ -549,8 +568,7 @@ namespace std {
                     return -1;
                 } end function find_last
 
-                template <typename Pred>
-                function find_last_if(Pred: pred) const -> long int {
+                function find_last_if(std::Predicate<T>: pred) const -> long int {
                     for (long int: i = size() - 1; i >= 0; i--) {
                         if (pred(data()[i])) then {
                             return i;
@@ -573,28 +591,23 @@ namespace std {
                     return std::algorithms::count(data(), data() + size(), value);
                 } end function count
 
-                template <typename Pred>
-                function count_if(Pred: pred) const -> long int {
+                function count_if(std::Predicate<T>: pred) const -> long int {
                     return std::algorithms::count_if(data(), data() + size(), pred);
                 } end function count_if
 
-                template <typename Pred>
-                function contains_if(Pred: pred) const -> bool {
+                function contains_if(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::contains_if(data(), data() + size(), pred);
                 } end function contains_if
 
-                template <typename Pred>
-                function all_of(Pred: pred) const -> bool {
+                function all_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::all_of(data(), data() + size(), pred);
                 } end function all_of
 
-                template <typename Pred>
-                function any_of(Pred: pred) const -> bool {
+                function any_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::any_of(data(), data() + size(), pred);
                 } end function any_of
 
-                template <typename Pred>
-                function none_of(Pred: pred) const -> bool {
+                function none_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::none_of(data(), data() + size(), pred);
                 } end function none_of
 
@@ -631,29 +644,26 @@ namespace std {
                     return total;
                 } end function sum
 
-                template <typename U, typename Op>
-                function accumulate(U: init, Op: op) const -> U {
+                template <typename U>
+                function accumulate(U: init, std::Combine<U, T>: op) const -> U {
                     return std::algorithms::accumulate(data(), data() + size(), init, op);
                 } end function accumulate
 
-                template <typename Func>
-                function for_each(Func: func) -> void {
+                function for_each(std::Action<T>: func) -> void {
                     std::algorithms::for_each(data(), data() + size(), func);
                 } end function for_each
 
-                template <typename Func>
-                function for_each_indexed(Func: func) -> void {
+                function for_each_indexed(function(long int, T&) -> void: func) -> void {
                     std::algorithms::for_each_indexed(data(), data() + size(), func);
                 } end function for_each_indexed
 
-                template <typename Func>
-                function transform(Func: func) -> void {
+                function transform(std::Transform<T, T>: func) -> void {
                     std::algorithms::transform_in_place(data(), data() + size(), func);
                 } end function transform
 
-                template <typename Func>
-                function map(Func: func) const -> Vector<std::traits::decay<std::traits::return_type<Func>>> {
-                    Vector<std::traits::decay<std::traits::return_type<Func>>>: out;
+                template <typename U>
+                function map(std::Transform<T, U>: func) const -> Vector<U> {
+                    Vector<U>: out;
                     out.reserve(size());
                     for (long int: i = 0; i < size(); i++) {
                         out.push_back(func(data()[i]));
@@ -661,8 +671,7 @@ namespace std {
                     return out;
                 } end function map
 
-                template <typename Pred>
-                function filter(Pred: pred) const -> Vector {
+                function filter(std::Predicate<T>: pred) const -> Vector {
                     Vector: out;
                     for (long int: i = 0; i < size(); i++) {
                         if (pred(data()[i])) then {
@@ -672,8 +681,7 @@ namespace std {
                     return out;
                 } end function filter
 
-                template <typename Pred>
-                function remove_if(Pred: pred) -> long int {
+                function remove_if(std::Predicate<T>: pred) -> long int {
                     const long int: kept = std::algorithms::remove_if(data(), data() + size(), pred) - data();
                     const long int: removed = size() - kept;
                     while (size() > kept) {
@@ -682,8 +690,7 @@ namespace std {
                     return removed;
                 } end function remove_if
 
-                template <typename Pred>
-                function retain_if(Pred: pred) -> long int {
+                function retain_if(std::Predicate<T>: pred) -> long int {
                     return remove_if([&pred](const T&: x) -> bool { return !pred(x); });
                 } end function retain_if
 
@@ -703,6 +710,70 @@ namespace std {
                 function swap_remove(long int: index) -> T {
                     return remove_unordered(index);
                 } end function swap_remove
+
+                function erase_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function erase_unordered
+
+                function take_at_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function take_at_unordered
+
+                function remove_at_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function remove_at_unordered
+
+                function remove_first_unordered(const T&: value) -> bool {
+                    const long int: at = find(value);
+                    if (at < 0) then {
+                        return false;
+                    }
+                    remove_unordered(at);
+                    return true;
+                } end function remove_first_unordered
+
+                function remove_all_unordered(const T&: value) -> long int {
+                    return remove_if_unordered([&value](const T&: x) -> bool { return x == value; });
+                } end function remove_all_unordered
+
+                function remove_if_unordered(std::Predicate<T>: drop) -> long int {
+                    long int: removed = 0;
+                    long int: i = 0;
+                    while (i < size()) {
+                        if (drop(data()[i])) then {
+                            remove_unordered(i);
+                            removed += 1;
+                        } else then {
+                            i += 1;
+                        }
+                    }
+                    return removed;
+                } end function remove_if_unordered
+
+                function retain_if_unordered(std::Predicate<T>: keep) -> long int {
+                    return remove_if_unordered([&keep](const T&: x) -> bool { return !keep(x); });
+                } end function retain_if_unordered
+
+                function remove_range_unordered(long int: start, long int: stop) -> void {
+                    if (start < 0 || start > size()) then {
+                        throw detail::out_of_range(start, size());
+                    }
+                    if (stop < start || stop > size()) then {
+                        throw detail::out_of_range(stop, size());
+                    }
+                    const long int: count = stop - start;
+                    const long int: n = size();
+                    for (long int: k = 0; k < count; k++) {
+                        const long int: hole = start + k;
+                        const long int: source = n - 1 - k;
+                        if (source >= stop && source > hole) then {
+                            data()[hole] = std::core::move(data()[source]);
+                        }
+                    }
+                    for (long int: k = 0; k < count; k++) {
+                        pop_back();
+                    }
+                } end function remove_range_unordered
 
                 function remove_first(const T&: value) -> bool {
                     const long int: at = find(value);
@@ -756,8 +827,7 @@ namespace std {
                     return std::algorithms::replace(data(), data() + size(), old_value, new_value);
                 } end function replace
 
-                template <typename Pred>
-                function replace_if(Pred: pred, const T&: new_value) -> long int {
+                function replace_if(std::Predicate<T>: pred, const T&: new_value) -> long int {
                     return std::algorithms::replace_if(data(), data() + size(), pred, new_value);
                 } end function replace_if
 
@@ -779,13 +849,11 @@ namespace std {
                     std::algorithms::detail::swap_values(data()[a], data()[b]);
                 } end function swap_items
 
-                template <typename Pred>
-                function partition(Pred: pred) -> long int {
+                function partition(std::Predicate<T>: pred) -> long int {
                     return std::algorithms::partition(data(), data() + size(), pred) - data();
                 } end function partition
 
-                template <typename Pred>
-                function stable_partition(Pred: pred) -> long int {
+                function stable_partition(std::Predicate<T>: pred) -> long int {
                     return std::algorithms::stable_partition(data(), data() + size(), pred) - data();
                 } end function stable_partition
 
@@ -862,8 +930,7 @@ namespace std {
                     return WhereQuery<Vector, T>::equal_to(*this, value);
                 } end function where
 
-                template <typename Pred>
-                function where(Pred: pred) -> WhereQuery<Vector, T> {
+                function where(std::Predicate<T>: pred) -> WhereQuery<Vector, T> {
                     return WhereQuery<Vector, T>::matching(*this, pred);
                 } end function where
 
@@ -924,6 +991,18 @@ namespace std {
             function end() const -> T* {
                 return m_data + m_size;
             } end function end
+
+            function rbegin() const -> std::iterators::Pointer<T, true> {
+                return std::iterators::Pointer<T, true>(m_data, m_size - 1);
+            } end function rbegin
+
+            function rend() const -> std::iterators::Pointer<T, true> {
+                return std::iterators::Pointer<T, true>(m_data, -1);
+            } end function rend
+
+            function backwards() const -> std::iterators::Range<std::iterators::Pointer<T, true>> {
+                return std::iterators::Range<std::iterators::Pointer<T, true>>(rbegin(), rend());
+            } end function backwards
 
             operator([]) function(long int: index) const -> T& {
                 check(index);
@@ -1038,6 +1117,30 @@ namespace std {
                 function begin() const -> const T* as "walnut_rt::coll::begin";
                 function end() -> T* as "walnut_rt::coll::end";
                 function end() const -> const T* as "walnut_rt::coll::end";
+
+                function rbegin() -> std::iterators::Pointer<T, true> {
+                    return std::iterators::Pointer<T, true>(data(), size() - 1);
+                } end function rbegin
+
+                function rend() -> std::iterators::Pointer<T, true> {
+                    return std::iterators::Pointer<T, true>(data(), -1);
+                } end function rend
+
+                function rbegin() const -> std::iterators::Pointer<const T, true> {
+                    return std::iterators::Pointer<const T, true>(data(), size() - 1);
+                } end function rbegin
+
+                function rend() const -> std::iterators::Pointer<const T, true> {
+                    return std::iterators::Pointer<const T, true>(data(), -1);
+                } end function rend
+
+                function backwards() -> std::iterators::Range<std::iterators::Pointer<T, true>> {
+                    return std::iterators::Range<std::iterators::Pointer<T, true>>(rbegin(), rend());
+                } end function backwards
+
+                function backwards() const -> std::iterators::Range<std::iterators::Pointer<const T, true>> {
+                    return std::iterators::Range<std::iterators::Pointer<const T, true>>(rbegin(), rend());
+                } end function backwards
 
                 operator([]) function(long int: index) -> T& {
                     check(index);
@@ -1154,8 +1257,7 @@ namespace std {
                     return Span<T>(data(), size());
                 } end function as_span
 
-                template <typename Compare>
-                function sort(Compare: comp) -> void {
+                function sort(std::Compare<T>: comp) -> void {
                     std::algorithms::sort(data(), data() + size(), comp);
                 } end function sort
 
@@ -1163,8 +1265,8 @@ namespace std {
                     std::algorithms::sort_descending(data(), data() + size());
                 } end function sort_descending
 
-                template <typename Key>
-                function sort_by(Key: key) -> void {
+                template <typename K>
+                function sort_by(std::Transform<T, K>: key) -> void {
                     std::algorithms::sort_by(data(), data() + size(), key);
                 } end function sort_by
 
@@ -1172,13 +1274,12 @@ namespace std {
                     std::algorithms::stable_sort(data(), data() + size());
                 } end function stable_sort
 
-                template <typename Compare>
-                function stable_sort(Compare: comp) -> void {
+                function stable_sort(std::Compare<T>: comp) -> void {
                     std::algorithms::stable_sort(data(), data() + size(), comp);
                 } end function stable_sort
 
-                template <typename Key>
-                function stable_sort_by(Key: key) -> void {
+                template <typename K>
+                function stable_sort_by(std::Transform<T, K>: key) -> void {
                     std::algorithms::stable_sort_by(data(), data() + size(), key);
                 } end function stable_sort_by
 
@@ -1232,8 +1333,7 @@ namespace std {
                     return std::algorithms::is_sorted(data(), data() + size());
                 } end function is_sorted
 
-                template <typename Compare>
-                function is_sorted(Compare: comp) const -> bool {
+                function is_sorted(std::Compare<T>: comp) const -> bool {
                     return std::algorithms::is_sorted(data(), data() + size(), comp);
                 } end function is_sorted
 
@@ -1243,8 +1343,7 @@ namespace std {
                     return out;
                 } end function sorted
 
-                template <typename Compare>
-                function sorted(Compare: comp) const -> DynamicArray {
+                function sorted(std::Compare<T>: comp) const -> DynamicArray {
                     DynamicArray: out = *this;
                     std::algorithms::sort(out.data(), out.data() + out.size(), comp);
                     return out;
@@ -1279,15 +1378,13 @@ namespace std {
                     return at;
                 } end function insert_sorted
 
-                template <typename Compare>
-                function insert_sorted(const T&: value, Compare: comp) -> long int {
+                function insert_sorted(const T&: value, std::Compare<T>: comp) -> long int {
                     const long int: at = std::algorithms::upper_bound(data(), data() + size(), value, comp) - data();
                     insert(at, value);
                     return at;
                 } end function insert_sorted
 
-                template <typename Pred>
-                function find_if(Pred: pred) const -> long int {
+                function find_if(std::Predicate<T>: pred) const -> long int {
                     return std::algorithms::index_if(data(), data() + size(), pred);
                 } end function find_if
 
@@ -1300,8 +1397,7 @@ namespace std {
                     return -1;
                 } end function find_last
 
-                template <typename Pred>
-                function find_last_if(Pred: pred) const -> long int {
+                function find_last_if(std::Predicate<T>: pred) const -> long int {
                     for (long int: i = size() - 1; i >= 0; i--) {
                         if (pred(data()[i])) then {
                             return i;
@@ -1324,28 +1420,23 @@ namespace std {
                     return std::algorithms::count(data(), data() + size(), value);
                 } end function count
 
-                template <typename Pred>
-                function count_if(Pred: pred) const -> long int {
+                function count_if(std::Predicate<T>: pred) const -> long int {
                     return std::algorithms::count_if(data(), data() + size(), pred);
                 } end function count_if
 
-                template <typename Pred>
-                function contains_if(Pred: pred) const -> bool {
+                function contains_if(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::contains_if(data(), data() + size(), pred);
                 } end function contains_if
 
-                template <typename Pred>
-                function all_of(Pred: pred) const -> bool {
+                function all_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::all_of(data(), data() + size(), pred);
                 } end function all_of
 
-                template <typename Pred>
-                function any_of(Pred: pred) const -> bool {
+                function any_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::any_of(data(), data() + size(), pred);
                 } end function any_of
 
-                template <typename Pred>
-                function none_of(Pred: pred) const -> bool {
+                function none_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::none_of(data(), data() + size(), pred);
                 } end function none_of
 
@@ -1382,29 +1473,26 @@ namespace std {
                     return total;
                 } end function sum
 
-                template <typename U, typename Op>
-                function accumulate(U: init, Op: op) const -> U {
+                template <typename U>
+                function accumulate(U: init, std::Combine<U, T>: op) const -> U {
                     return std::algorithms::accumulate(data(), data() + size(), init, op);
                 } end function accumulate
 
-                template <typename Func>
-                function for_each(Func: func) -> void {
+                function for_each(std::Action<T>: func) -> void {
                     std::algorithms::for_each(data(), data() + size(), func);
                 } end function for_each
 
-                template <typename Func>
-                function for_each_indexed(Func: func) -> void {
+                function for_each_indexed(function(long int, T&) -> void: func) -> void {
                     std::algorithms::for_each_indexed(data(), data() + size(), func);
                 } end function for_each_indexed
 
-                template <typename Func>
-                function transform(Func: func) -> void {
+                function transform(std::Transform<T, T>: func) -> void {
                     std::algorithms::transform_in_place(data(), data() + size(), func);
                 } end function transform
 
-                template <typename Func>
-                function map(Func: func) const -> Vector<std::traits::decay<std::traits::return_type<Func>>> {
-                    Vector<std::traits::decay<std::traits::return_type<Func>>>: out;
+                template <typename U>
+                function map(std::Transform<T, U>: func) const -> Vector<U> {
+                    Vector<U>: out;
                     out.reserve(size());
                     for (long int: i = 0; i < size(); i++) {
                         out.push_back(func(data()[i]));
@@ -1412,8 +1500,7 @@ namespace std {
                     return out;
                 } end function map
 
-                template <typename Pred>
-                function filter(Pred: pred) const -> DynamicArray {
+                function filter(std::Predicate<T>: pred) const -> DynamicArray {
                     DynamicArray: out;
                     for (long int: i = 0; i < size(); i++) {
                         if (pred(data()[i])) then {
@@ -1423,8 +1510,7 @@ namespace std {
                     return out;
                 } end function filter
 
-                template <typename Pred>
-                function remove_if(Pred: pred) -> long int {
+                function remove_if(std::Predicate<T>: pred) -> long int {
                     const long int: kept = std::algorithms::remove_if(data(), data() + size(), pred) - data();
                     const long int: removed = size() - kept;
                     while (size() > kept) {
@@ -1433,8 +1519,7 @@ namespace std {
                     return removed;
                 } end function remove_if
 
-                template <typename Pred>
-                function retain_if(Pred: pred) -> long int {
+                function retain_if(std::Predicate<T>: pred) -> long int {
                     return remove_if([&pred](const T&: x) -> bool { return !pred(x); });
                 } end function retain_if
 
@@ -1454,6 +1539,81 @@ namespace std {
                 function swap_remove(long int: index) -> T {
                     return remove_unordered(index);
                 } end function swap_remove
+
+                function erase_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function erase_unordered
+
+                function take_at_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function take_at_unordered
+
+                function remove_at_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function remove_at_unordered
+
+                function remove_first_unordered(const T&: value) -> bool {
+                    const long int: at = find(value);
+                    if (at < 0) then {
+                        return false;
+                    }
+                    remove_unordered(at);
+                    return true;
+                } end function remove_first_unordered
+
+                function remove_all_unordered(const T&: value) -> long int {
+                    return remove_if_unordered([&value](const T&: x) -> bool { return x == value; });
+                } end function remove_all_unordered
+
+                function remove_if_unordered(std::Predicate<T>: drop) -> long int {
+                    long int: removed = 0;
+                    long int: i = 0;
+                    while (i < size()) {
+                        if (drop(data()[i])) then {
+                            remove_unordered(i);
+                            removed += 1;
+                        } else then {
+                            i += 1;
+                        }
+                    }
+                    return removed;
+                } end function remove_if_unordered
+
+                function retain_if_unordered(std::Predicate<T>: keep) -> long int {
+                    return remove_if_unordered([&keep](const T&: x) -> bool { return !keep(x); });
+                } end function retain_if_unordered
+
+                function remove_range_unordered(long int: start, long int: stop) -> void {
+                    if (start < 0 || start > size()) then {
+                        throw detail::out_of_range(start, size());
+                    }
+                    if (stop < start || stop > size()) then {
+                        throw detail::out_of_range(stop, size());
+                    }
+                    const long int: count = stop - start;
+                    const long int: n = size();
+                    for (long int: k = 0; k < count; k++) {
+                        const long int: hole = start + k;
+                        const long int: source = n - 1 - k;
+                        if (source >= stop && source > hole) then {
+                            data()[hole] = std::core::move(data()[source]);
+                        }
+                    }
+                    for (long int: k = 0; k < count; k++) {
+                        pop_back();
+                    }
+                } end function remove_range_unordered
+
+                function take_front_unordered() -> T {
+                    if (empty()) then {
+                        throw detail::empty_error("take_front_unordered()");
+                    }
+                    return remove_unordered(0);
+                } end function take_front_unordered
+
+                function pop_front_unordered() -> T {
+                    return take_front_unordered();
+                } end function pop_front_unordered
 
                 function remove_first(const T&: value) -> bool {
                     const long int: at = find(value);
@@ -1507,8 +1667,7 @@ namespace std {
                     return std::algorithms::replace(data(), data() + size(), old_value, new_value);
                 } end function replace
 
-                template <typename Pred>
-                function replace_if(Pred: pred, const T&: new_value) -> long int {
+                function replace_if(std::Predicate<T>: pred, const T&: new_value) -> long int {
                     return std::algorithms::replace_if(data(), data() + size(), pred, new_value);
                 } end function replace_if
 
@@ -1530,13 +1689,11 @@ namespace std {
                     std::algorithms::detail::swap_values(data()[a], data()[b]);
                 } end function swap_items
 
-                template <typename Pred>
-                function partition(Pred: pred) -> long int {
+                function partition(std::Predicate<T>: pred) -> long int {
                     return std::algorithms::partition(data(), data() + size(), pred) - data();
                 } end function partition
 
-                template <typename Pred>
-                function stable_partition(Pred: pred) -> long int {
+                function stable_partition(std::Predicate<T>: pred) -> long int {
                     return std::algorithms::stable_partition(data(), data() + size(), pred) - data();
                 } end function stable_partition
 
@@ -1613,8 +1770,7 @@ namespace std {
                     return WhereQuery<DynamicArray, T>::equal_to(*this, value);
                 } end function where
 
-                template <typename Pred>
-                function where(Pred: pred) -> WhereQuery<DynamicArray, T> {
+                function where(std::Predicate<T>: pred) -> WhereQuery<DynamicArray, T> {
                     return WhereQuery<DynamicArray, T>::matching(*this, pred);
                 } end function where
 
@@ -1668,6 +1824,30 @@ namespace std {
                 function begin() const -> const T* as "walnut_rt::coll::begin";
                 function end() -> T* as "walnut_rt::coll::end";
                 function end() const -> const T* as "walnut_rt::coll::end";
+
+                function rbegin() -> std::iterators::Pointer<T, true> {
+                    return std::iterators::Pointer<T, true>(data(), size() - 1);
+                } end function rbegin
+
+                function rend() -> std::iterators::Pointer<T, true> {
+                    return std::iterators::Pointer<T, true>(data(), -1);
+                } end function rend
+
+                function rbegin() const -> std::iterators::Pointer<const T, true> {
+                    return std::iterators::Pointer<const T, true>(data(), size() - 1);
+                } end function rbegin
+
+                function rend() const -> std::iterators::Pointer<const T, true> {
+                    return std::iterators::Pointer<const T, true>(data(), -1);
+                } end function rend
+
+                function backwards() -> std::iterators::Range<std::iterators::Pointer<T, true>> {
+                    return std::iterators::Range<std::iterators::Pointer<T, true>>(rbegin(), rend());
+                } end function backwards
+
+                function backwards() const -> std::iterators::Range<std::iterators::Pointer<const T, true>> {
+                    return std::iterators::Range<std::iterators::Pointer<const T, true>>(rbegin(), rend());
+                } end function backwards
 
                 operator([]) function(long int: index) -> T& {
                     check(index);
@@ -1771,8 +1951,7 @@ namespace std {
                     }
                 } end function sort
 
-                template <typename Compare>
-                function sort(Compare: comp) -> void {
+                function sort(std::Compare<T>: comp) -> void {
                     std::algorithms::sort(data(), data() + size(), comp);
                 } end function sort
 
@@ -1780,8 +1959,8 @@ namespace std {
                     std::algorithms::sort_descending(data(), data() + size());
                 } end function sort_descending
 
-                template <typename Key>
-                function sort_by(Key: key) -> void {
+                template <typename K>
+                function sort_by(std::Transform<T, K>: key) -> void {
                     std::algorithms::sort_by(data(), data() + size(), key);
                 } end function sort_by
 
@@ -1789,13 +1968,12 @@ namespace std {
                     std::algorithms::stable_sort(data(), data() + size());
                 } end function stable_sort
 
-                template <typename Compare>
-                function stable_sort(Compare: comp) -> void {
+                function stable_sort(std::Compare<T>: comp) -> void {
                     std::algorithms::stable_sort(data(), data() + size(), comp);
                 } end function stable_sort
 
-                template <typename Key>
-                function stable_sort_by(Key: key) -> void {
+                template <typename K>
+                function stable_sort_by(std::Transform<T, K>: key) -> void {
                     std::algorithms::stable_sort_by(data(), data() + size(), key);
                 } end function stable_sort_by
 
@@ -1849,8 +2027,7 @@ namespace std {
                     return std::algorithms::is_sorted(data(), data() + size());
                 } end function is_sorted
 
-                template <typename Compare>
-                function is_sorted(Compare: comp) const -> bool {
+                function is_sorted(std::Compare<T>: comp) const -> bool {
                     return std::algorithms::is_sorted(data(), data() + size(), comp);
                 } end function is_sorted
 
@@ -1860,8 +2037,7 @@ namespace std {
                     return out;
                 } end function sorted
 
-                template <typename Compare>
-                function sorted(Compare: comp) const -> SmallVector {
+                function sorted(std::Compare<T>: comp) const -> SmallVector {
                     SmallVector: out = *this;
                     std::algorithms::sort(out.data(), out.data() + out.size(), comp);
                     return out;
@@ -1896,15 +2072,13 @@ namespace std {
                     return at;
                 } end function insert_sorted
 
-                template <typename Compare>
-                function insert_sorted(const T&: value, Compare: comp) -> long int {
+                function insert_sorted(const T&: value, std::Compare<T>: comp) -> long int {
                     const long int: at = std::algorithms::upper_bound(data(), data() + size(), value, comp) - data();
                     insert(at, value);
                     return at;
                 } end function insert_sorted
 
-                template <typename Pred>
-                function find_if(Pred: pred) const -> long int {
+                function find_if(std::Predicate<T>: pred) const -> long int {
                     return std::algorithms::index_if(data(), data() + size(), pred);
                 } end function find_if
 
@@ -1917,8 +2091,7 @@ namespace std {
                     return -1;
                 } end function find_last
 
-                template <typename Pred>
-                function find_last_if(Pred: pred) const -> long int {
+                function find_last_if(std::Predicate<T>: pred) const -> long int {
                     for (long int: i = size() - 1; i >= 0; i--) {
                         if (pred(data()[i])) then {
                             return i;
@@ -1941,28 +2114,23 @@ namespace std {
                     return std::algorithms::count(data(), data() + size(), value);
                 } end function count
 
-                template <typename Pred>
-                function count_if(Pred: pred) const -> long int {
+                function count_if(std::Predicate<T>: pred) const -> long int {
                     return std::algorithms::count_if(data(), data() + size(), pred);
                 } end function count_if
 
-                template <typename Pred>
-                function contains_if(Pred: pred) const -> bool {
+                function contains_if(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::contains_if(data(), data() + size(), pred);
                 } end function contains_if
 
-                template <typename Pred>
-                function all_of(Pred: pred) const -> bool {
+                function all_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::all_of(data(), data() + size(), pred);
                 } end function all_of
 
-                template <typename Pred>
-                function any_of(Pred: pred) const -> bool {
+                function any_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::any_of(data(), data() + size(), pred);
                 } end function any_of
 
-                template <typename Pred>
-                function none_of(Pred: pred) const -> bool {
+                function none_of(std::Predicate<T>: pred) const -> bool {
                     return std::algorithms::none_of(data(), data() + size(), pred);
                 } end function none_of
 
@@ -1999,29 +2167,26 @@ namespace std {
                     return total;
                 } end function sum
 
-                template <typename U, typename Op>
-                function accumulate(U: init, Op: op) const -> U {
+                template <typename U>
+                function accumulate(U: init, std::Combine<U, T>: op) const -> U {
                     return std::algorithms::accumulate(data(), data() + size(), init, op);
                 } end function accumulate
 
-                template <typename Func>
-                function for_each(Func: func) -> void {
+                function for_each(std::Action<T>: func) -> void {
                     std::algorithms::for_each(data(), data() + size(), func);
                 } end function for_each
 
-                template <typename Func>
-                function for_each_indexed(Func: func) -> void {
+                function for_each_indexed(function(long int, T&) -> void: func) -> void {
                     std::algorithms::for_each_indexed(data(), data() + size(), func);
                 } end function for_each_indexed
 
-                template <typename Func>
-                function transform(Func: func) -> void {
+                function transform(std::Transform<T, T>: func) -> void {
                     std::algorithms::transform_in_place(data(), data() + size(), func);
                 } end function transform
 
-                template <typename Func>
-                function map(Func: func) const -> Vector<std::traits::decay<std::traits::return_type<Func>>> {
-                    Vector<std::traits::decay<std::traits::return_type<Func>>>: out;
+                template <typename U>
+                function map(std::Transform<T, U>: func) const -> Vector<U> {
+                    Vector<U>: out;
                     out.reserve(size());
                     for (long int: i = 0; i < size(); i++) {
                         out.push_back(func(data()[i]));
@@ -2029,8 +2194,7 @@ namespace std {
                     return out;
                 } end function map
 
-                template <typename Pred>
-                function filter(Pred: pred) const -> SmallVector {
+                function filter(std::Predicate<T>: pred) const -> SmallVector {
                     SmallVector: out;
                     for (long int: i = 0; i < size(); i++) {
                         if (pred(data()[i])) then {
@@ -2040,8 +2204,7 @@ namespace std {
                     return out;
                 } end function filter
 
-                template <typename Pred>
-                function remove_if(Pred: pred) -> long int {
+                function remove_if(std::Predicate<T>: pred) -> long int {
                     const long int: kept = std::algorithms::remove_if(data(), data() + size(), pred) - data();
                     const long int: removed = size() - kept;
                     while (size() > kept) {
@@ -2050,8 +2213,7 @@ namespace std {
                     return removed;
                 } end function remove_if
 
-                template <typename Pred>
-                function retain_if(Pred: pred) -> long int {
+                function retain_if(std::Predicate<T>: pred) -> long int {
                     return remove_if([&pred](const T&: x) -> bool { return !pred(x); });
                 } end function retain_if
 
@@ -2071,6 +2233,70 @@ namespace std {
                 function swap_remove(long int: index) -> T {
                     return remove_unordered(index);
                 } end function swap_remove
+
+                function erase_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function erase_unordered
+
+                function take_at_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function take_at_unordered
+
+                function remove_at_unordered(long int: index) -> T {
+                    return remove_unordered(index);
+                } end function remove_at_unordered
+
+                function remove_first_unordered(const T&: value) -> bool {
+                    const long int: at = find(value);
+                    if (at < 0) then {
+                        return false;
+                    }
+                    remove_unordered(at);
+                    return true;
+                } end function remove_first_unordered
+
+                function remove_all_unordered(const T&: value) -> long int {
+                    return remove_if_unordered([&value](const T&: x) -> bool { return x == value; });
+                } end function remove_all_unordered
+
+                function remove_if_unordered(std::Predicate<T>: drop) -> long int {
+                    long int: removed = 0;
+                    long int: i = 0;
+                    while (i < size()) {
+                        if (drop(data()[i])) then {
+                            remove_unordered(i);
+                            removed += 1;
+                        } else then {
+                            i += 1;
+                        }
+                    }
+                    return removed;
+                } end function remove_if_unordered
+
+                function retain_if_unordered(std::Predicate<T>: keep) -> long int {
+                    return remove_if_unordered([&keep](const T&: x) -> bool { return !keep(x); });
+                } end function retain_if_unordered
+
+                function remove_range_unordered(long int: start, long int: stop) -> void {
+                    if (start < 0 || start > size()) then {
+                        throw detail::out_of_range(start, size());
+                    }
+                    if (stop < start || stop > size()) then {
+                        throw detail::out_of_range(stop, size());
+                    }
+                    const long int: count = stop - start;
+                    const long int: n = size();
+                    for (long int: k = 0; k < count; k++) {
+                        const long int: hole = start + k;
+                        const long int: source = n - 1 - k;
+                        if (source >= stop && source > hole) then {
+                            data()[hole] = std::core::move(data()[source]);
+                        }
+                    }
+                    for (long int: k = 0; k < count; k++) {
+                        pop_back();
+                    }
+                } end function remove_range_unordered
 
                 function remove_first(const T&: value) -> bool {
                     const long int: at = find(value);
@@ -2124,8 +2350,7 @@ namespace std {
                     return std::algorithms::replace(data(), data() + size(), old_value, new_value);
                 } end function replace
 
-                template <typename Pred>
-                function replace_if(Pred: pred, const T&: new_value) -> long int {
+                function replace_if(std::Predicate<T>: pred, const T&: new_value) -> long int {
                     return std::algorithms::replace_if(data(), data() + size(), pred, new_value);
                 } end function replace_if
 
@@ -2147,13 +2372,11 @@ namespace std {
                     std::algorithms::detail::swap_values(data()[a], data()[b]);
                 } end function swap_items
 
-                template <typename Pred>
-                function partition(Pred: pred) -> long int {
+                function partition(std::Predicate<T>: pred) -> long int {
                     return std::algorithms::partition(data(), data() + size(), pred) - data();
                 } end function partition
 
-                template <typename Pred>
-                function stable_partition(Pred: pred) -> long int {
+                function stable_partition(std::Predicate<T>: pred) -> long int {
                     return std::algorithms::stable_partition(data(), data() + size(), pred) - data();
                 } end function stable_partition
 
@@ -2230,8 +2453,7 @@ namespace std {
                     return WhereQuery<SmallVector, T>::equal_to(*this, value);
                 } end function where
 
-                template <typename Pred>
-                function where(Pred: pred) -> WhereQuery<SmallVector, T> {
+                function where(std::Predicate<T>: pred) -> WhereQuery<SmallVector, T> {
                     return WhereQuery<SmallVector, T>::matching(*this, pred);
                 } end function where
 
@@ -2297,31 +2519,8 @@ namespace std {
             } end function unlink
 
         public:
-            class Iterator {
-            public:
-                Node*: node = nullptr;
-
-                constructor() { }
-
-                constructor(Node*: n) : node = n { }
-
-                operator(!=) function(const Iterator&: other) const -> bool {
-                    return node != other.node;
-                }
-
-                operator(==) function(const Iterator&: other) const -> bool {
-                    return node == other.node;
-                }
-
-                operator(++) function() -> Iterator& {
-                    node = node->next;
-                    return *this;
-                }
-
-                operator(*) function() const -> T& {
-                    return node->value;
-                }
-            } end class Iterator
+            using Iterator = std::iterators::Linked<Node, T>;
+            using ReverseIterator = std::iterators::Linked<Node, T, true>;
 
             constructor() { }
 
@@ -2387,6 +2586,18 @@ namespace std {
             function end() const -> Iterator {
                 return Iterator(nullptr);
             } end function end
+
+            function rbegin() const -> ReverseIterator {
+                return ReverseIterator(m_tail);
+            } end function rbegin
+
+            function rend() const -> ReverseIterator {
+                return ReverseIterator(nullptr);
+            } end function rend
+
+            function backwards() const -> std::iterators::Range<ReverseIterator> {
+                return std::iterators::Range<ReverseIterator>(rbegin(), rend());
+            } end function backwards
 
             function front() -> T& {
                 if (m_size == 0) then {
@@ -2550,8 +2761,7 @@ namespace std {
                 return n;
             } end function count
 
-            template <typename Pred>
-            function count_if(Pred: pred) const -> long int {
+            function count_if(std::Predicate<T>: pred) const -> long int {
                 long int: n = 0;
                 for (const T&: x in *this) {
                     if (pred(x)) then {
@@ -2561,8 +2771,7 @@ namespace std {
                 return n;
             } end function count_if
 
-            template <typename Pred>
-            function find_if(Pred: pred) const -> long int {
+            function find_if(std::Predicate<T>: pred) const -> long int {
                 long int: i = 0;
                 for (const T&: x in *this) {
                     if (pred(x)) then {
@@ -2573,42 +2782,35 @@ namespace std {
                 return -1;
             } end function find_if
 
-            template <typename Pred>
-            function contains_if(Pred: pred) const -> bool {
+            function contains_if(std::Predicate<T>: pred) const -> bool {
                 return find_if(pred) >= 0;
             } end function contains_if
 
-            template <typename Pred>
-            function all_of(Pred: pred) const -> bool {
+            function all_of(std::Predicate<T>: pred) const -> bool {
                 return count_if(pred) == size();
             } end function all_of
 
-            template <typename Pred>
-            function any_of(Pred: pred) const -> bool {
+            function any_of(std::Predicate<T>: pred) const -> bool {
                 return find_if(pred) >= 0;
             } end function any_of
 
-            template <typename Pred>
-            function none_of(Pred: pred) const -> bool {
+            function none_of(std::Predicate<T>: pred) const -> bool {
                 return find_if(pred) < 0;
             } end function none_of
 
-            template <typename Func>
-            function for_each(Func: func) -> void {
+            function for_each(std::Action<T>: func) -> void {
                 for (T&: x in *this) {
                     func(x);
                 }
             } end function for_each
 
-            template <typename Func>
-            function transform(Func: func) -> void {
+            function transform(std::Transform<T, T>: func) -> void {
                 for (T&: x in *this) {
                     x = func(x);
                 }
             } end function transform
 
-            template <typename Compare>
-            function sort(Compare: comp) -> void {
+            function sort(std::Compare<T>: comp) -> void {
                 Vector<T>: items = to_vector();
                 std::algorithms::sort(items.data(), items.data() + items.size(), comp);
                 long int: i = 0;
@@ -2622,8 +2824,7 @@ namespace std {
                 sort([](const T&: a, const T&: b) -> bool { return a < b; });
             } end function sort
 
-            template <typename Compare>
-            function stable_sort(Compare: comp) -> void {
+            function stable_sort(std::Compare<T>: comp) -> void {
                 Vector<T>: items = to_vector();
                 std::algorithms::stable_sort(items.data(), items.data() + items.size(), comp);
                 long int: i = 0;
@@ -2662,8 +2863,7 @@ namespace std {
                 return WhereQuery<LinkedList, T>::equal_to(*this, value);
             } end function where
 
-            template <typename Pred>
-            function where(Pred: pred) -> WhereQuery<LinkedList, T> {
+            function where(std::Predicate<T>: pred) -> WhereQuery<LinkedList, T> {
                 return WhereQuery<LinkedList, T>::matching(*this, pred);
             } end function where
         } end class LinkedList
@@ -2702,32 +2902,8 @@ namespace std {
             } end function check
 
         public:
-            class Iterator {
-            public:
-                Deque*: owner = nullptr;
-                long int: index = 0;
-
-                constructor() { }
-
-                constructor(Deque*: d, long int: i) : owner = d, index = i { }
-
-                operator(!=) function(const Iterator&: other) const -> bool {
-                    return index != other.index;
-                }
-
-                operator(==) function(const Iterator&: other) const -> bool {
-                    return index == other.index;
-                }
-
-                operator(++) function() -> Iterator& {
-                    index += 1;
-                    return *this;
-                }
-
-                operator(*) function() const -> T& {
-                    return owner->at(index);
-                }
-            } end class Iterator
+            using Iterator = std::iterators::Indexed<Deque, T>;
+            using ReverseIterator = std::iterators::Indexed<Deque, T, true>;
 
             constructor() { }
 
@@ -2814,6 +2990,26 @@ namespace std {
             function end() const -> Iterator {
                 return Iterator(const_cast<Deque*>(this), m_size);
             } end function end
+
+            function rbegin() -> ReverseIterator {
+                return ReverseIterator(this, m_size - 1);
+            } end function rbegin
+
+            function rend() -> ReverseIterator {
+                return ReverseIterator(this, -1);
+            } end function rend
+
+            function rbegin() const -> ReverseIterator {
+                return ReverseIterator(const_cast<Deque*>(this), m_size - 1);
+            } end function rbegin
+
+            function rend() const -> ReverseIterator {
+                return ReverseIterator(const_cast<Deque*>(this), -1);
+            } end function rend
+
+            function backwards() const -> std::iterators::Range<ReverseIterator> {
+                return std::iterators::Range<ReverseIterator>(rbegin(), rend());
+            } end function backwards
 
             operator([]) function(long int: index) -> T& {
                 check(index);
@@ -2927,8 +3123,7 @@ namespace std {
                 return n;
             } end function count
 
-            template <typename Pred>
-            function count_if(Pred: pred) const -> long int {
+            function count_if(std::Predicate<T>: pred) const -> long int {
                 long int: n = 0;
                 for (const T&: x in *this) {
                     if (pred(x)) then {
@@ -2938,8 +3133,7 @@ namespace std {
                 return n;
             } end function count_if
 
-            template <typename Pred>
-            function find_if(Pred: pred) const -> long int {
+            function find_if(std::Predicate<T>: pred) const -> long int {
                 long int: i = 0;
                 for (const T&: x in *this) {
                     if (pred(x)) then {
@@ -2950,42 +3144,35 @@ namespace std {
                 return -1;
             } end function find_if
 
-            template <typename Pred>
-            function contains_if(Pred: pred) const -> bool {
+            function contains_if(std::Predicate<T>: pred) const -> bool {
                 return find_if(pred) >= 0;
             } end function contains_if
 
-            template <typename Pred>
-            function all_of(Pred: pred) const -> bool {
+            function all_of(std::Predicate<T>: pred) const -> bool {
                 return count_if(pred) == size();
             } end function all_of
 
-            template <typename Pred>
-            function any_of(Pred: pred) const -> bool {
+            function any_of(std::Predicate<T>: pred) const -> bool {
                 return find_if(pred) >= 0;
             } end function any_of
 
-            template <typename Pred>
-            function none_of(Pred: pred) const -> bool {
+            function none_of(std::Predicate<T>: pred) const -> bool {
                 return find_if(pred) < 0;
             } end function none_of
 
-            template <typename Func>
-            function for_each(Func: func) -> void {
+            function for_each(std::Action<T>: func) -> void {
                 for (T&: x in *this) {
                     func(x);
                 }
             } end function for_each
 
-            template <typename Func>
-            function transform(Func: func) -> void {
+            function transform(std::Transform<T, T>: func) -> void {
                 for (T&: x in *this) {
                     x = func(x);
                 }
             } end function transform
 
-            template <typename Compare>
-            function sort(Compare: comp) -> void {
+            function sort(std::Compare<T>: comp) -> void {
                 Vector<T>: items = to_vector();
                 std::algorithms::sort(items.data(), items.data() + items.size(), comp);
                 long int: i = 0;
@@ -2999,8 +3186,7 @@ namespace std {
                 sort([](const T&: a, const T&: b) -> bool { return a < b; });
             } end function sort
 
-            template <typename Compare>
-            function stable_sort(Compare: comp) -> void {
+            function stable_sort(std::Compare<T>: comp) -> void {
                 Vector<T>: items = to_vector();
                 std::algorithms::stable_sort(items.data(), items.data() + items.size(), comp);
                 long int: i = 0;
@@ -3039,8 +3225,7 @@ namespace std {
                 return WhereQuery<Deque, T>::equal_to(*this, value);
             } end function where
 
-            template <typename Pred>
-            function where(Pred: pred) -> WhereQuery<Deque, T> {
+            function where(std::Predicate<T>: pred) -> WhereQuery<Deque, T> {
                 return WhereQuery<Deque, T>::matching(*this, pred);
             } end function where
         } end class Deque
@@ -3341,41 +3526,8 @@ namespace std {
             } end function release
 
         public:
-            class Iterator {
-            public:
-                const UnorderedMap*: owner = nullptr;
-                long int: index = 0;
-
-                constructor() { }
-
-                constructor(const UnorderedMap*: m, long int: i) : owner = m, index = i {
-                    skip();
-                }
-
-                function skip() -> void {
-                    while (index < owner->m_capacity && owner->m_state[index] != 'f') {
-                        index += 1;
-                    }
-                } end function skip
-
-                operator(!=) function(const Iterator&: other) const -> bool {
-                    return index != other.index;
-                }
-
-                operator(==) function(const Iterator&: other) const -> bool {
-                    return index == other.index;
-                }
-
-                operator(++) function() -> Iterator& {
-                    index += 1;
-                    skip();
-                    return *this;
-                }
-
-                operator(*) function() const -> Pair<K, V>& {
-                    return owner->m_slots[index];
-                }
-            } end class Iterator
+            using Iterator = std::iterators::Sparse<Pair<K, V>>;
+            using ReverseIterator = std::iterators::Sparse<Pair<K, V>, true>;
 
             constructor() { }
 
@@ -3431,12 +3583,24 @@ namespace std {
             } end function empty
 
             function begin() const -> Iterator {
-                return Iterator(this, 0);
+                return Iterator(m_slots, m_state, m_capacity, 0);
             } end function begin
 
             function end() const -> Iterator {
-                return Iterator(this, m_capacity);
+                return Iterator(m_slots, m_state, m_capacity, m_capacity);
             } end function end
+
+            function rbegin() const -> ReverseIterator {
+                return ReverseIterator(m_slots, m_state, m_capacity, m_capacity - 1);
+            } end function rbegin
+
+            function rend() const -> ReverseIterator {
+                return ReverseIterator(m_slots, m_state, m_capacity, -1);
+            } end function rend
+
+            function backwards() const -> std::iterators::Range<ReverseIterator> {
+                return std::iterators::Range<ReverseIterator>(rbegin(), rend());
+            } end function backwards
 
             function insert(const K&: key, const V&: value) -> bool {
                 if (slot_of(key) >= 0) then {
@@ -3539,31 +3703,8 @@ namespace std {
             UnorderedMap<T, bool>: m_items;
 
         public:
-            class Iterator {
-            public:
-                UnorderedMap<T, bool>::Iterator: inner;
-
-                constructor() { }
-
-                constructor(const UnorderedMap<T, bool>::Iterator&: it) : inner = it { }
-
-                operator(!=) function(const Iterator&: other) const -> bool {
-                    return inner != other.inner;
-                }
-
-                operator(==) function(const Iterator&: other) const -> bool {
-                    return inner == other.inner;
-                }
-
-                operator(++) function() -> Iterator& {
-                    ++inner;
-                    return *this;
-                }
-
-                operator(*) function() const -> const T& {
-                    return (*inner).first;
-                }
-            } end class Iterator
+            using Iterator = std::iterators::Keys<UnorderedMap<T, bool>::Iterator, const T>;
+            using ReverseIterator = std::iterators::Keys<UnorderedMap<T, bool>::ReverseIterator, const T>;
 
             constructor() { }
 
@@ -3588,6 +3729,18 @@ namespace std {
             function end() const -> Iterator {
                 return Iterator(m_items.end());
             } end function end
+
+            function rbegin() const -> ReverseIterator {
+                return ReverseIterator(m_items.rbegin());
+            } end function rbegin
+
+            function rend() const -> ReverseIterator {
+                return ReverseIterator(m_items.rend());
+            } end function rend
+
+            function backwards() const -> std::iterators::Range<ReverseIterator> {
+                return std::iterators::Range<ReverseIterator>(rbegin(), rend());
+            } end function backwards
 
             function insert(const T&: value) -> bool {
                 return m_items.insert(value, true);
@@ -4092,31 +4245,8 @@ namespace std {
             detail::Tree<K, Pair<K, V>>: m_tree;
 
         public:
-            class Iterator {
-            public:
-                detail::TreeNode<Pair<K, V>>*: node = nullptr;
-
-                constructor() { }
-
-                constructor(detail::TreeNode<Pair<K, V>>*: n) : node = n { }
-
-                operator(!=) function(const Iterator&: other) const -> bool {
-                    return node != other.node;
-                }
-
-                operator(==) function(const Iterator&: other) const -> bool {
-                    return node == other.node;
-                }
-
-                operator(++) function() -> Iterator& {
-                    node = detail::tree_next(node);
-                    return *this;
-                }
-
-                operator(*) function() const -> Pair<K, V>& {
-                    return node->entry;
-                }
-            } end class Iterator
+            using Iterator = std::iterators::Tree<detail::TreeNode<Pair<K, V>>, Pair<K, V>>;
+            using ReverseIterator = std::iterators::Tree<detail::TreeNode<Pair<K, V>>, Pair<K, V>, true>;
 
             constructor() { }
 
@@ -4135,6 +4265,18 @@ namespace std {
             function end() const -> Iterator {
                 return Iterator(nullptr);
             } end function end
+
+            function rbegin() const -> ReverseIterator {
+                return ReverseIterator(detail::tree_last(m_tree.m_root));
+            } end function rbegin
+
+            function rend() const -> ReverseIterator {
+                return ReverseIterator(nullptr);
+            } end function rend
+
+            function backwards() const -> std::iterators::Range<ReverseIterator> {
+                return std::iterators::Range<ReverseIterator>(rbegin(), rend());
+            } end function backwards
 
             function insert(const K&: key, const V&: value) -> bool {
                 bool: added = false;
@@ -4247,31 +4389,8 @@ namespace std {
             detail::Tree<T, T>: m_tree;
 
         public:
-            class Iterator {
-            public:
-                detail::TreeNode<T>*: node = nullptr;
-
-                constructor() { }
-
-                constructor(detail::TreeNode<T>*: n) : node = n { }
-
-                operator(!=) function(const Iterator&: other) const -> bool {
-                    return node != other.node;
-                }
-
-                operator(==) function(const Iterator&: other) const -> bool {
-                    return node == other.node;
-                }
-
-                operator(++) function() -> Iterator& {
-                    node = detail::tree_next(node);
-                    return *this;
-                }
-
-                operator(*) function() const -> const T& {
-                    return node->entry;
-                }
-            } end class Iterator
+            using Iterator = std::iterators::Tree<detail::TreeNode<T>, const T>;
+            using ReverseIterator = std::iterators::Tree<detail::TreeNode<T>, const T, true>;
 
             constructor() { }
 
@@ -4296,6 +4415,18 @@ namespace std {
             function end() const -> Iterator {
                 return Iterator(nullptr);
             } end function end
+
+            function rbegin() const -> ReverseIterator {
+                return ReverseIterator(detail::tree_last(m_tree.m_root));
+            } end function rbegin
+
+            function rend() const -> ReverseIterator {
+                return ReverseIterator(nullptr);
+            } end function rend
+
+            function backwards() const -> std::iterators::Range<ReverseIterator> {
+                return std::iterators::Range<ReverseIterator>(rbegin(), rend());
+            } end function backwards
 
             function insert(const T&: value) -> bool {
                 bool: added = false;
@@ -4441,8 +4572,7 @@ namespace std {
 
             constructor(C*: items, Vector<long int>&&: picked) : m_items = items, m_indices = std::core::move(picked) { }
 
-            template <typename Pred>
-            static function matching(C&: items, Pred: pred) -> WhereQuery {
+            static function matching(C&: items, std::Predicate<E>: pred) -> WhereQuery {
                 Vector<long int>: picked;
                 long int: i = 0;
                 for (const auto&: x in items) {
@@ -4641,8 +4771,7 @@ namespace std {
                 return skip(1).step(2);
             } end function odd
 
-            template <typename Pred>
-            function where(Pred: pred) const -> WhereQuery {
+            function where(std::Predicate<E>: pred) const -> WhereQuery {
                 Vector<long int>: picked;
                 for (long int: k = 0; k < m_indices.size(); k++) {
                     if (pred(item(k))) then {
@@ -4662,8 +4791,7 @@ namespace std {
                 return with(std::core::move(picked));
             } end function where
 
-            template <typename Pred>
-            function where_not(Pred: pred) const -> WhereQuery {
+            function where_not(std::Predicate<E>: pred) const -> WhereQuery {
                 Vector<long int>: picked;
                 for (long int: k = 0; k < m_indices.size(); k++) {
                     if (!pred(item(k))) then {
@@ -4673,8 +4801,7 @@ namespace std {
                 return with(std::core::move(picked));
             } end function where_not
 
-            template <typename Pred>
-            function where_indexed(Pred: pred) const -> WhereQuery {
+            function where_indexed(function(long int, const E&) -> bool: pred) const -> WhereQuery {
                 Vector<long int>: picked;
                 for (long int: k = 0; k < m_indices.size(); k++) {
                     if (pred(m_indices[k], item(k))) then {
@@ -4753,13 +4880,11 @@ namespace std {
                 return with(std::core::move(picked));
             } end function except
 
-            template <typename Pred>
-            function or_where(Pred: pred) const -> WhereQuery {
+            function or_where(std::Predicate<E>: pred) const -> WhereQuery {
                 return union_with(matching(*m_items, pred));
             } end function or_where
 
-            template <typename Pred>
-            function count_if(Pred: pred) const -> long int {
+            function count_if(std::Predicate<E>: pred) const -> long int {
                 long int: n = 0;
                 for (long int: k = 0; k < m_indices.size(); k++) {
                     if (pred(item(k))) then {
@@ -4769,18 +4894,15 @@ namespace std {
                 return n;
             } end function count_if
 
-            template <typename Pred>
-            function all_of(Pred: pred) const -> bool {
+            function all_of(std::Predicate<E>: pred) const -> bool {
                 return count_if(pred) == m_indices.size();
             } end function all_of
 
-            template <typename Pred>
-            function any_of(Pred: pred) const -> bool {
+            function any_of(std::Predicate<E>: pred) const -> bool {
                 return count_if(pred) > 0;
             } end function any_of
 
-            template <typename Pred>
-            function none_of(Pred: pred) const -> bool {
+            function none_of(std::Predicate<E>: pred) const -> bool {
                 return count_if(pred) == 0;
             } end function none_of
 
@@ -4832,11 +4954,11 @@ namespace std {
                 return (*m_items)[max_index()];
             } end function max_value
 
-            template <typename Func>
-            function for_each(Func: func) -> WhereQuery& {
+            function for_each(std::Action<E>: func) -> WhereQuery& {
                 if constexpr (std::traits::is_string<C>) then {
                     for (long int: k = 0; k < m_indices.size(); k++) {
-                        func(item(k));
+                        E: held = item(k);
+                        func(held);
                     }
                 } else then {
                     for (long int: i in m_indices) {
@@ -4846,11 +4968,11 @@ namespace std {
                 return *this;
             } end function for_each
 
-            template <typename Func>
-            function for_each_indexed(Func: func) -> WhereQuery& {
+            function for_each_indexed(function(long int, E&) -> void: func) -> WhereQuery& {
                 if constexpr (std::traits::is_string<C>) then {
                     for (long int: k = 0; k < m_indices.size(); k++) {
-                        func(m_indices[k], item(k));
+                        E: held = item(k);
+                        func(m_indices[k], held);
                     }
                 } else then {
                     for (long int: i in m_indices) {
@@ -4860,17 +4982,16 @@ namespace std {
                 return *this;
             } end function for_each_indexed
 
-            template <typename Func>
-            function transform(Func: func) -> WhereQuery& {
+            function transform(std::Transform<E, E>: func) -> WhereQuery& {
                 for (long int: k = 0; k < m_indices.size(); k++) {
                     (*m_items)[m_indices[k]] = func(item(k));
                 }
                 return *this;
             } end function transform
 
-            template <typename Func>
-            function map(Func: func) const -> Vector<std::traits::decay<std::traits::return_type<Func>>> {
-                Vector<std::traits::decay<std::traits::return_type<Func>>>: out;
+            template <typename U>
+            function map(std::Transform<E, U>: func) const -> Vector<U> {
+                Vector<U>: out;
                 for (long int: k = 0; k < m_indices.size(); k++) {
                     out.push_back(func(item(k)));
                 }
@@ -4905,8 +5026,7 @@ namespace std {
                 return pop();
             } end function extract
 
-            template <typename Compare>
-            function sort(Compare: comp) -> WhereQuery& {
+            function sort(std::Compare<E>: comp) -> WhereQuery& {
                 Vector<E>: picked = to_vector();
                 std::algorithms::sort(picked.begin(), picked.end(), comp);
                 for (long int: k = 0; k < m_indices.size(); k++) {
@@ -4923,8 +5043,7 @@ namespace std {
                 return sort([](const E&: a, const E&: b) -> bool { return b < a; });
             } end function sort_descending
 
-            template <typename Compare>
-            function stable_sort(Compare: comp) -> WhereQuery& {
+            function stable_sort(std::Compare<E>: comp) -> WhereQuery& {
                 Vector<E>: picked = to_vector();
                 std::algorithms::stable_sort(picked.begin(), picked.end(), comp);
                 for (long int: k = 0; k < m_indices.size(); k++) {
@@ -4937,8 +5056,8 @@ namespace std {
                 return stable_sort([](const E&: a, const E&: b) -> bool { return a < b; });
             } end function stable_sort
 
-            template <typename Key>
-            function sort_by(Key: key) -> WhereQuery& {
+            template <typename K>
+            function sort_by(std::Transform<E, K>: key) -> WhereQuery& {
                 return sort([&key](const E&: a, const E&: b) -> bool { return key(a) < key(b); });
             } end function sort_by
 

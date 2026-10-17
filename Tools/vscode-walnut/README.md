@@ -29,6 +29,14 @@ Hold the mouse over code to see what the compiler knows about it:
 
 Inside a template, a name or operator lists the type it has in each instantiation, such as `int, float`. Turn hovers off with the `walnut.hover` setting.
 
+### Overloads
+
+When a function, constructor or operator has more than one overload, its hover has arrows under the signature, with `1 of 3` between them. The first one is the overload the compiler picked for that call (or the one declared there, on a declaration); the arrows step through the rest, in order of how well they fit the call's arguments, with the ones that can't take those arguments at all last. Clicking an arrow moves the cursor onto the name so the hover can open again on the next page.
+
+## Go to Definition
+
+`Ctrl+Click` a name (or press `F12`) to go to what it really refers to: the overload, constructor or operator function the compiler picked for that call, the variable or type the name resolves to, or the library file a `std::` name comes from. On a function's definition, it goes to its earlier declarations (`function area(int: w) -> int;`) instead; on such a declaration, it goes to the definition. **Go to Declaration** always lists the declarations. Library files are found in the `Library` folder of the Walnut folder the compiler was built in.
+
 ## Installing
 
 1. In VS Code, press `Ctrl+Shift+X` to open the Extensions panel.
@@ -64,6 +72,7 @@ A color is `"#RRGGBB"`, or an object with `"color"` and any of `"bold"`, `"itali
 |---|---|
 | `declarations` | A variable, parameter or field where it's declared: `total` in `int: total = 0;` |
 | `variables` | Variables, parameters and fields where they're used afterwards |
+| `variable templates` | Variable templates, such as `is_arithmetic` in `std::traits::is_arithmetic<T>`; leave it out to use the `variables` color |
 | `unresolved` | Names the compiler couldn't find, such as a typo or a name that was never declared |
 | `self`, `this` | The keywords `self` and `this` |
 | `cast expressions` | `static_cast`, `const_cast`, `dynamic_cast`, `reinterpret_cast` and `bit_cast` |
@@ -99,6 +108,37 @@ The extension uses the first of these that exists:
 2. `Tools/vscode-walnut/colors.json` in the Walnut folder that the compiler was built in. When the compiler runs from Walnut's build folder, the extension finds this file by itself, so your colors live in the Walnut folder.
 3. The copy that came with the extension. Changes to this copy are lost when the extension is reinstalled.
 
+### Color themes
+
+`colors.json` is one set of colors; a color theme is another, kept in a `color-themes` folder. The extension looks in two of them: the one next to your colors file (`Tools/vscode-walnut/color-themes`), and the one that came with it. A theme file looks just like `colors.json`, plus an optional `"name"` (otherwise the file name is used) and an optional `"extends"`, which starts from another theme and changes only what's listed:
+
+```json
+{
+    "name": "Neon Blue",
+    "extends": "Walnut Neon",
+    "functions": "#33AAFF",
+    "overloaded operators": { "color": "#33AAFF", "bold": true }
+}
+```
+
+`colors.json` can use `"extends"` too.
+
+Run **Walnut: Choose Color Theme...** to switch: moving through the list shows each theme on your open files right away, `Enter` keeps it, and `Escape` goes back. Picking `colors.json` goes back to your own file. The choice is the `walnut.colorTheme` setting. **Walnut: Save Colors as Theme...** saves the colors in use as a new theme, and **Walnut: Edit Colors** opens whichever file is in use.
+
+The extension comes with these, each in its own file you can copy and change:
+
+| Theme | Looks like |
+|---|---|
+| `Walnut Neon` | The bright colors `colors.json` started with |
+| `Walnut Dark Modern` | VS Code's own Dark Modern colors |
+| `Walnut Soft` | Pastels on a dark background |
+| `Walnut Ember` | Warm oranges, reds and greens |
+| `Walnut Light` | VS Code's Light+ colors, for light color themes |
+
+### The color designer
+
+**Walnut: Open Color Designer** opens a page with a swatch, a hex box and bold, italic and underline buttons for every color name, next to a piece of Walnut code that uses all of them, so each change shows at once. Pointing at a color (or clicking into its boxes) lights up, in orange, every piece of the code that color changes; clicking a word in the code jumps to its color. Under it is the JSON for those colors: copy it into `colors.json`, or paste colors into it to load them. **Start from** loads any theme or your colors file, **Show in the editor** puts the colors on your open Walnut files while you work (they go back if you close the page without saving), **Save to colors.json** writes them to your colors file, and **Save as Theme...** makes a new theme from them.
+
 ## Themes
 
 The extension also has two color themes, **Walnut Dark** (based on VS Code's Dark Modern) and **Walnut Dark+** (based on Dark+), with the same Walnut colors built in. They're optional, since the colors from `colors.json` apply with any theme. Press `Ctrl+K` and then `T` to pick a theme.
@@ -109,6 +149,7 @@ The extension also has two color themes, **Walnut Dark** (based on VS Code's Dar
 |---|---|
 | `walnut.compilerPath` | The `walnut` compiler; empty means `walnut` on your PATH |
 | `walnut.colorsFile` | The colors file, as described above |
+| `walnut.colorTheme` | The color theme to use instead of the colors file; empty means the colors file |
 | `walnut.colors.enabled` | Whether to apply the colors file (default on) |
 | `walnut.semanticHighlighting` | Whether to ask the compiler about names and operators (default on) |
 | `walnut.markUnresolved` | Whether names the compiler didn't recognize get the `unresolved` color (default on) |
@@ -128,7 +169,9 @@ The extension also has two color themes, **Walnut Dark** (based on VS Code's Dar
 }
 ```
 
-Each token is `[line, column, length, kind, modifiers]`, with lines counted from 0 and columns and lengths in UTF-16 code units, as editors count them. The kinds are `namespace`, `class`, `struct`, `enum`, `type`, `typeParameter`, `concept`, `function`, `method`, `variable`, `parameter`, `property`, `enumMember`, `operator` and `unresolved`. When the compiler lists no `unresolved` names, the extension treats any name in the file that the compiler didn't list as unresolved. The modifiers are `declaration`, `overloaded` and `templateQualifier`. Built-in operators aren't listed, so any operator in the list calls an operator function. `semantic` is `false` when the file has a syntax error, since then only the errors are known. A diagnostic with `len` 0 covers its whole line.
+Each token is `[line, column, length, kind, modifiers]`, with lines counted from 0 and columns and lengths in UTF-16 code units, as editors count them. The kinds are `namespace`, `class`, `struct`, `enum`, `type`, `typeParameter`, `concept`, `function`, `method`, `variable`, `parameter`, `property`, `enumMember`, `operator` and `unresolved`. When the compiler lists no `unresolved` names, the extension treats any name in the file that the compiler didn't list as unresolved. The modifiers are `declaration`, `overloaded`, `templateQualifier` and `variableTemplate`. Built-in operators aren't listed, so any operator in the list calls an operator function. `semantic` is `false` when the file has a syntax error, since then only the errors are known. A diagnostic with `len` 0 covers its whole line.
+
+The result also has `hovers`, `locations` and `links`. A hover is `{ "line", "col", "len", "code", "overloads", "types", "values", "results" }`, where `overloads` (only there when there is more than one) lists the signatures, best fit first. `locations` is a list of `[file, line, column, length]`, where `file` is `""` for the file itself, or a path, or `<walnut>/name.walh` for a library file. Each link is `[line, column, length, definition, [declarations]]`, where `definition` and `declarations` are indexes into `locations`.
 
 ## Other editors
 

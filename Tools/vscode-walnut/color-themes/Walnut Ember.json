@@ -1,0 +1,38 @@
+{
+    "name": "Walnut Ember",
+    "declarations": "#FFF1D6",
+    "variables": "#F2C48D",
+    "variable templates": "#FFB86B",
+    "unresolved": "#E0E0E0",
+    "self": "#FF6B57",
+    "cast expressions": "#FF8F5A",
+    "this": "#FF6B57",
+    "built-in operators": "#E8A87C",
+    "overloaded operators": {
+        "color": "#FFD166",
+        "bold": true
+    },
+    "functions": "#FFD166",
+    "template scopes": "#F4A261",
+    "types": "#F4A261",
+    "built-in types": "#E76F51",
+    "namespaces": "#E9C46A",
+    "enum members": "#8AB17D",
+    "keywords": "#E76F51",
+    "control keywords": {
+        "color": "#FF6B57",
+        "bold": true
+    },
+    "constants": "#FF8F5A",
+    "strings": "#A7C957",
+    "escapes": "#F2E8CF",
+    "numbers": "#90BE6D",
+    "comments": {
+        "color": "#8C7B6B",
+        "italic": true
+    },
+    "preprocessor": "#C9ADA7",
+    "error underlines": "#FF3B30",
+    "warning underlines": "#FFB000",
+    "error lines": ""
+}

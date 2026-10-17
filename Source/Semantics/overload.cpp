@@ -169,6 +169,39 @@ bool better_candidate(const CandidateMatch& A, const CandidateMatch& B) {
     return strictly;
 }
 
+std::vector<std::size_t> candidate_order(const std::vector<CandidateMatch>& cands, std::size_t chosen) {
+    std::vector<std::size_t> viable;
+    std::vector<std::size_t> rest;
+
+    for (std::size_t i = 0; i < cands.size(); ++i) {
+        if (i == chosen) continue;
+        (cands[i].viable ? viable : rest).push_back(i);
+    }
+
+    std::vector<std::size_t> out;
+    if (chosen < cands.size()) out.push_back(chosen);
+
+    while (!viable.empty()) {
+        std::size_t pick = 0;
+
+        for (std::size_t k = 0; k < viable.size(); ++k) {
+            bool beaten = false;
+
+            for (std::size_t j = 0; j < viable.size() && !beaten; ++j) {
+                if (j != k && better_candidate(cands[viable[j]], cands[viable[k]]) && !better_candidate(cands[viable[k]], cands[viable[j]])) beaten = true;
+            }
+
+            if (!beaten) { pick = k; break; }
+        }
+
+        out.push_back(viable[pick]);
+        viable.erase(viable.begin() + static_cast<std::ptrdiff_t>(pick));
+    }
+
+    out.insert(out.end(), rest.begin(), rest.end());
+    return out;
+}
+
 Selection select_overload(const std::vector<CandidateMatch>& cands) {
     long best = -1;
 

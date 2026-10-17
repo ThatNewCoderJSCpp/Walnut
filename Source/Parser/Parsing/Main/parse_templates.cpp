@@ -1,5 +1,8 @@
 #include "Parser/Parsing/Main/parse_templates.hpp"
 
+#include <cstring>
+#include <sstream>
+
 namespace walnut {
 namespace parsing {
 
@@ -355,6 +358,70 @@ nodes::ASTNode* Parser::lower_variable_template(nodes::VariableDeclaration* v) {
     if (m_shared_names) m_shared_names->variable_templates.insert(v->get_name());
     if (v->template_specialization) fd->set_specialization(std::move(v->spec_args));
     return fd;
+}
+
+nodes::ASTNode* Parser::with_iterable_params(nodes::ASTNode* fn, nodes::TemplateDeclaration* owner) {
+    auto* fd = nodes::node_cast<nodes::FunctionDeclaration>(fn);
+    if (!fd || !fd->m_parameters) return fn;
+    std::vector<nodes::TemplateParameter*> hidden;
+
+    for (nodes::FunctionParameter* p : fd->m_parameters->m_params) {
+        if (!p || p->is_variadic()) continue;
+        parser_types::TypeInfo& t = p->m_type;
+        if (!t.type || !t.type->is_user_defined() || t.has_pointer()) continue;
+        const auto* u = static_cast<const parser_types::UserDefinedType*>(t.type);
+        if (u->parts().size() != 1 || u->parts()[0] != "iterable") continue;
+        if (t.template_args.size() != 1 || !t.template_args[0] || !t.template_args[0]->is_type() || t.template_args[0]->is_pack) {
+            throw ParserError::invalid_declaration(reporter, current_token(), "'iterable' takes one element type, as in 'iterable<int>: values'");
+        }
+
+        std::ostringstream shown;
+        shown << "iterable<";
+        t.template_args[0]->type.write_to(shown);
+        shown << ">";
+        std::string name = shown.str();
+        for (const nodes::TemplateParameter* h : hidden) if (h->m_name == name) name += ' ';
+        if (owner) for (const nodes::TemplateParameter* h : owner->m_params) if (h && h->m_name == name) name += ' ';
+        char* kept = static_cast<char*>(arena.alloc_raw(name.size() + 1, 1));
+        std::memcpy(kept, name.data(), name.size());
+        kept[name.size()] = '\0';
+
+        auto* tp = make<nodes::TemplateParameter>(p->line);
+        tp->m_form = nodes::TemplateParameter::Form::Type;
+        tp->m_name = std::string_view(kept, name.size());
+        tp->file_id = p->file_id;
+        hidden.push_back(tp);
+
+        p->is_iterable = true;
+        p->iterable_element = t.template_args[0]->type;
+        t.type = make<parser_types::UserDefinedType>(tp->m_name);
+        t.template_args.clear();
+        t.has_angle_args = false;
+
+        if (!t.has_reference()) {
+            t.modifiers.add(modifiers::RawModifiers::Const);
+            t.add_reference();
+        }
+    }
+
+    if (hidden.empty()) return fn;
+
+    if (owner) {
+        auto& ps = owner->m_params;
+        auto at = ps.end();
+        if (!ps.empty() && ps.back() && ps.back()->m_is_pack) at = ps.end() - 1;
+        ps.insert(at, hidden.begin(), hidden.end());
+        owner->set_empty_template(false);
+        return fn;
+    }
+
+    auto* t = make<nodes::TemplateDeclaration>(fd->line);
+    t->file_id = fd->file_id;
+    t->at = fd->at;
+    for (nodes::TemplateParameter* h : hidden) t->add_param(h);
+    t->set_declaration(fd);
+    register_template_name(fd->get_name());
+    return t;
 }
 
 void Parser::register_template_name(std::string_view name) {

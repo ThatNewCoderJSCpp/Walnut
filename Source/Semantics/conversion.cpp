@@ -178,6 +178,39 @@ int variant_alternative_for(Type* src, VariantType* v, TypeContext& ctx) {
     return found;
 }
 
+static bool passes_to(Type* given, Type* takes, TypeContext& ctx) {
+    if (given == takes) return true;
+    if (!given || !takes) return false;
+    Type* gv = given->is_reference() ? static_cast<ReferenceType*>(given)->referent() : given;
+    Type* tv = takes->is_reference() ? static_cast<ReferenceType*>(takes)->referent() : takes;
+    if (!gv || !tv || ctx.strip_cv(gv) != ctx.strip_cv(tv)) return false;
+    if (!takes->is_reference()) return true;
+    auto* tr = static_cast<ReferenceType*>(takes);
+
+    if (tr->ref_qual() == RefQual::LValue) {
+        if (tv->cv().is_const) return true;
+        return given->is_reference() && static_cast<ReferenceType*>(given)->ref_qual() == RefQual::LValue && !gv->cv().is_const;
+    }
+
+    return !given->is_reference() || static_cast<ReferenceType*>(given)->ref_qual() == RefQual::RValue;
+}
+
+bool callable_as(FunctionType* sf, FunctionType* df, TypeContext& ctx) {
+    if (!sf || !df || sf->params().size() != df->params().size()) return false;
+    for (std::size_t i = 0; i < sf->params().size(); ++i) if (!passes_to(df->params()[i], sf->params()[i], ctx)) return false;
+    Type* sr = sf->ret();
+    Type* dr = df->ret();
+    if (sr == dr) return true;
+    if (!sr || !dr) return false;
+    if (dr->is_builtin() && static_cast<BuiltinType*>(dr)->is_void()) return true;
+    if (dr->is_reference()) return sr->is_reference() && passes_to(sr, dr, ctx) && static_cast<ReferenceType*>(sr)->ref_qual() == static_cast<ReferenceType*>(dr)->ref_qual();
+    Type* sv = ctx.strip_cv(sr->is_reference() ? static_cast<ReferenceType*>(sr)->referent() : sr);
+    Type* dv = ctx.strip_cv(dr);
+    if (sv == dv) return true;
+    const ConversionRank r = rank_conversion(sv, dv, ctx);
+    return r == ConversionRank::Exact || r == ConversionRank::Promotion;
+}
+
 bool dynamic_callable(FunctionType* f, TypeContext& ctx) {
     if (!f || !dynamic_value_type(f->ret(), ctx, true)) return false;
     for (Type* p : f->params()) if (!dynamic_value_type(p, ctx, false)) return false;
@@ -254,6 +287,7 @@ ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx) {
         auto* sf = static_cast<FunctionType*>(src);
         auto* df = static_cast<FunctionType*>(dst);
         if (sf->ret() == df->ret() && sf->params() == df->params()) return ConversionRank::Conversion;
+        if (callable_as(sf, df, ctx)) return ConversionRank::Conversion;
     }
 
     if (dst->is_function() && ctx.strip_cv(src)->is_record() && ctx.callable_hook && ctx.callable_hook(ctx.strip_cv(src), dst)) return ConversionRank::UserDefined;

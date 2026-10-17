@@ -1,0 +1,41 @@
+{
+    "name": "Walnut Soft",
+    "declarations": "#F5E0DC",
+    "variables": "#B4BEFE",
+    "variable templates": "#94E2D5",
+    "unresolved": {
+        "color": "#F38BA8",
+        "italic": true
+    },
+    "self": "#F38BA8",
+    "cast expressions": "#EBA0AC",
+    "this": "#F38BA8",
+    "built-in operators": "#89DCEB",
+    "overloaded operators": {
+        "color": "#F9E2AF",
+        "bold": true
+    },
+    "functions": "#89B4FA",
+    "template scopes": "#F9E2AF",
+    "types": "#F9E2AF",
+    "built-in types": "#CBA6F7",
+    "namespaces": "#FAB387",
+    "enum members": "#94E2D5",
+    "keywords": "#CBA6F7",
+    "control keywords": {
+        "color": "#CBA6F7",
+        "italic": true
+    },
+    "constants": "#FAB387",
+    "strings": "#A6E3A1",
+    "escapes": "#F5C2E7",
+    "numbers": "#FAB387",
+    "comments": {
+        "color": "#7F849C",
+        "italic": true
+    },
+    "preprocessor": "#F5C2E7",
+    "error underlines": "#F38BA8",
+    "warning underlines": "#F9E2AF",
+    "error lines": ""
+}

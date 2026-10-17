@@ -1,0 +1,585 @@
+namespace std {
+    namespace iterators {
+        template <typename T, bool Reverse = false>
+        class Pointer {
+        public:
+            using value_type = T;
+
+            T*: base = nullptr;
+            long int: index = 0;
+
+            constructor() { }
+
+            constructor(T*: start, long int: at) : base = start, index = at { }
+
+            operator(==) function(const Pointer&: other) const -> bool {
+                return index == other.index;
+            }
+
+            operator(!=) function(const Pointer&: other) const -> bool {
+                return index != other.index;
+            }
+
+            operator(++) function() -> Pointer& {
+                if constexpr (Reverse) then {
+                    index -= 1;
+                } else then {
+                    index += 1;
+                }
+                return *this;
+            }
+
+            operator(--) function() -> Pointer& {
+                if constexpr (Reverse) then {
+                    index += 1;
+                } else then {
+                    index -= 1;
+                }
+                return *this;
+            }
+
+            operator(*) function() const -> T& {
+                return base[index];
+            }
+
+            operator(->) function() const -> T* {
+                return &base[index];
+            }
+
+            function position() const -> long int {
+                return index;
+            } end function position
+
+            static function first(T*: start, long int: count) -> Pointer {
+                if constexpr (Reverse) then {
+                    return Pointer(start, count - 1);
+                } else then {
+                    return Pointer(start, 0);
+                }
+            } end function first
+
+            static function past(T*: start, long int: count) -> Pointer {
+                if constexpr (Reverse) then {
+                    return Pointer(start, -1);
+                } else then {
+                    return Pointer(start, count);
+                }
+            } end function past
+        } end class Pointer
+
+        template <typename C, typename T, bool Reverse = false>
+        class Indexed {
+        public:
+            using value_type = T;
+
+            C*: owner = nullptr;
+            long int: index = 0;
+
+            constructor() { }
+
+            constructor(C*: container, long int: at) : owner = container, index = at { }
+
+            operator(==) function(const Indexed&: other) const -> bool {
+                return index == other.index;
+            }
+
+            operator(!=) function(const Indexed&: other) const -> bool {
+                return index != other.index;
+            }
+
+            operator(++) function() -> Indexed& {
+                if constexpr (Reverse) then {
+                    index -= 1;
+                } else then {
+                    index += 1;
+                }
+                return *this;
+            }
+
+            operator(--) function() -> Indexed& {
+                if constexpr (Reverse) then {
+                    index += 1;
+                } else then {
+                    index -= 1;
+                }
+                return *this;
+            }
+
+            operator(*) function() const -> T& {
+                return (*owner)[index];
+            }
+
+            operator(->) function() const -> T* {
+                return &(*owner)[index];
+            }
+
+            function position() const -> long int {
+                return index;
+            } end function position
+
+            static function first(C*: container, long int: count) -> Indexed {
+                if constexpr (Reverse) then {
+                    return Indexed(container, count - 1);
+                } else then {
+                    return Indexed(container, 0);
+                }
+            } end function first
+
+            static function past(C*: container, long int: count) -> Indexed {
+                if constexpr (Reverse) then {
+                    return Indexed(container, -1);
+                } else then {
+                    return Indexed(container, count);
+                }
+            } end function past
+        } end class Indexed
+
+        template <typename N, typename T, bool Reverse = false>
+        class Linked {
+        public:
+            using value_type = T;
+
+            N*: node = nullptr;
+
+            constructor() { }
+
+            constructor(N*: at) : node = at { }
+
+            operator(==) function(const Linked&: other) const -> bool {
+                return node == other.node;
+            }
+
+            operator(!=) function(const Linked&: other) const -> bool {
+                return node != other.node;
+            }
+
+            operator(++) function() -> Linked& {
+                if constexpr (Reverse) then {
+                    node = node->prev;
+                } else then {
+                    node = node->next;
+                }
+                return *this;
+            }
+
+            operator(--) function() -> Linked& {
+                if constexpr (Reverse) then {
+                    node = node->next;
+                } else then {
+                    node = node->prev;
+                }
+                return *this;
+            }
+
+            operator(*) function() const -> T& {
+                return node->value;
+            }
+
+            operator(->) function() const -> T* {
+                return &node->value;
+            }
+        } end class Linked
+
+        template <typename N, typename T, bool Reverse = false>
+        class Tree {
+            static function lowest(N*: n) -> N* {
+                N*: at = n;
+                while (at != nullptr && at->left != nullptr) {
+                    at = at->left;
+                }
+                return at;
+            } end function lowest
+
+            static function highest(N*: n) -> N* {
+                N*: at = n;
+                while (at != nullptr && at->right != nullptr) {
+                    at = at->right;
+                }
+                return at;
+            } end function highest
+
+            static function after(N*: n) -> N* {
+                if (n->right != nullptr) then {
+                    return lowest(n->right);
+                }
+                N*: at = n;
+                N*: up = n->parent;
+                while (up != nullptr && at == up->right) {
+                    at = up;
+                    up = up->parent;
+                }
+                return up;
+            } end function after
+
+            static function before(N*: n) -> N* {
+                if (n->left != nullptr) then {
+                    return highest(n->left);
+                }
+                N*: at = n;
+                N*: up = n->parent;
+                while (up != nullptr && at == up->left) {
+                    at = up;
+                    up = up->parent;
+                }
+                return up;
+            } end function before
+
+        public:
+            using value_type = T;
+
+            N*: node = nullptr;
+
+            constructor() { }
+
+            constructor(N*: at) : node = at { }
+
+            static function first(N*: root) -> Tree {
+                if constexpr (Reverse) then {
+                    return Tree(highest(root));
+                } else then {
+                    return Tree(lowest(root));
+                }
+            } end function first
+
+            static function past() -> Tree {
+                return Tree(nullptr);
+            } end function past
+
+            operator(==) function(const Tree&: other) const -> bool {
+                return node == other.node;
+            }
+
+            operator(!=) function(const Tree&: other) const -> bool {
+                return node != other.node;
+            }
+
+            operator(++) function() -> Tree& {
+                if constexpr (Reverse) then {
+                    node = before(node);
+                } else then {
+                    node = after(node);
+                }
+                return *this;
+            }
+
+            operator(--) function() -> Tree& {
+                if constexpr (Reverse) then {
+                    node = after(node);
+                } else then {
+                    node = before(node);
+                }
+                return *this;
+            }
+
+            operator(*) function() const -> T& {
+                return node->entry;
+            }
+
+            operator(->) function() const -> T* {
+                return &node->entry;
+            }
+        } end class Tree
+
+        template <typename T, bool Reverse = false>
+        class Sparse {
+            function settle() -> void {
+                if constexpr (Reverse) then {
+                    while (index >= 0 && state[index] != filled) {
+                        index -= 1;
+                    }
+                } else then {
+                    while (index < capacity && state[index] != filled) {
+                        index += 1;
+                    }
+                }
+            } end function settle
+
+        public:
+            using value_type = T;
+
+            T*: slots = nullptr;
+            const char*: state = nullptr;
+            long int: capacity = 0;
+            long int: index = 0;
+            char: filled = 'f';
+
+            constructor() { }
+
+            constructor(T*: s, const char*: flags, long int: count, long int: at, char: mark = 'f') : slots = s, state = flags, capacity = count, index = at, filled = mark {
+                settle();
+            }
+
+            static function first(T*: s, const char*: flags, long int: count, char: mark = 'f') -> Sparse {
+                if constexpr (Reverse) then {
+                    return Sparse(s, flags, count, count - 1, mark);
+                } else then {
+                    return Sparse(s, flags, count, 0, mark);
+                }
+            } end function first
+
+            static function past(T*: s, const char*: flags, long int: count, char: mark = 'f') -> Sparse {
+                if constexpr (Reverse) then {
+                    return Sparse(s, flags, count, -1, mark);
+                } else then {
+                    return Sparse(s, flags, count, count, mark);
+                }
+            } end function past
+
+            operator(==) function(const Sparse&: other) const -> bool {
+                return index == other.index;
+            }
+
+            operator(!=) function(const Sparse&: other) const -> bool {
+                return index != other.index;
+            }
+
+            operator(++) function() -> Sparse& {
+                if constexpr (Reverse) then {
+                    index -= 1;
+                } else then {
+                    index += 1;
+                }
+                settle();
+                return *this;
+            }
+
+            operator(*) function() const -> T& {
+                return slots[index];
+            }
+
+            operator(->) function() const -> T* {
+                return &slots[index];
+            }
+        } end class Sparse
+
+        template <typename It, typename K>
+        class Keys {
+        public:
+            using value_type = K;
+
+            It: inner;
+
+            constructor() { }
+
+            constructor(const It&: at) : inner = at { }
+
+            operator(==) function(const Keys&: other) const -> bool {
+                return inner == other.inner;
+            }
+
+            operator(!=) function(const Keys&: other) const -> bool {
+                return inner != other.inner;
+            }
+
+            operator(++) function() -> Keys& {
+                ++inner;
+                return *this;
+            }
+
+            operator(*) function() const -> K& {
+                return (*inner).first;
+            }
+        } end class Keys
+
+        template <typename It, typename V>
+        class Values {
+        public:
+            using value_type = V;
+
+            It: inner;
+
+            constructor() { }
+
+            constructor(const It&: at) : inner = at { }
+
+            operator(==) function(const Values&: other) const -> bool {
+                return inner == other.inner;
+            }
+
+            operator(!=) function(const Values&: other) const -> bool {
+                return inner != other.inner;
+            }
+
+            operator(++) function() -> Values& {
+                ++inner;
+                return *this;
+            }
+
+            operator(*) function() const -> V& {
+                return (*inner).second;
+            }
+        } end class Values
+
+        template <typename It>
+        class Range {
+        public:
+            It: first;
+            It: last;
+
+            constructor() { }
+
+            constructor(const It&: a, const It&: b) : first = a, last = b { }
+
+            function begin() const -> It {
+                return first;
+            } end function begin
+
+            function end() const -> It {
+                return last;
+            } end function end
+
+            function empty() const -> bool {
+                return !(first != last);
+            } end function empty
+        } end class Range
+
+        template <typename T>
+        function count(iterable<T>: items) -> long int {
+            long int: n = 0;
+            for (const T&: item in items) {
+                n += 1;
+            }
+            return n;
+        } end function count
+
+        template <typename T>
+        function count_if(iterable<T>: items, std::Predicate<T>: keep) -> long int {
+            long int: n = 0;
+            for (const T&: item in items) {
+                if (keep(item)) then {
+                    n += 1;
+                }
+            }
+            return n;
+        } end function count_if
+
+        template <typename T>
+        function any_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
+            for (const T&: item in items) {
+                if (test(item)) then {
+                    return true;
+                }
+            }
+            return false;
+        } end function any_of
+
+        template <typename T>
+        function all_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
+            for (const T&: item in items) {
+                if (!test(item)) then {
+                    return false;
+                }
+            }
+            return true;
+        } end function all_of
+
+        template <typename T>
+        function none_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
+            return !any_of(items, test);
+        } end function none_of
+
+        template <typename T>
+        function contains(iterable<T>: items, const T&: value) -> bool {
+            for (const T&: item in items) {
+                if (item == value) then {
+                    return true;
+                }
+            }
+            return false;
+        } end function contains
+
+        template <typename T>
+        function index_of(iterable<T>: items, const T&: value) -> long int {
+            long int: at = 0;
+            for (const T&: item in items) {
+                if (item == value) then {
+                    return at;
+                }
+                at += 1;
+            }
+            return -1;
+        } end function index_of
+
+        template <typename T>
+        function index_if(iterable<T>: items, std::Predicate<T>: test) -> long int {
+            long int: at = 0;
+            for (const T&: item in items) {
+                if (test(item)) then {
+                    return at;
+                }
+                at += 1;
+            }
+            return -1;
+        } end function index_if
+
+        template <typename T>
+        function sum(iterable<T>: items) -> T {
+            T: total = T();
+            for (const T&: item in items) {
+                total = total + item;
+            }
+            return total;
+        } end function sum
+
+        template <typename T, typename U>
+        function fold(iterable<T>: items, U: start, function(const U&, const T&) -> U: step) -> U {
+            U: total = start;
+            for (const T&: item in items) {
+                total = step(total, item);
+            }
+            return total;
+        } end function fold
+
+        template <typename T>
+        function min_of(iterable<T>: items, std::Compare<T>: less = std::less_than<T>) -> T {
+            bool: seen = false;
+            T: best = T();
+            for (const T&: item in items) {
+                if (!seen || less(item, best)) then {
+                    best = item;
+                    seen = true;
+                }
+            }
+            if (!seen) then {
+                throw std::errors::empty_range("min_of() needs at least one item");
+            }
+            return best;
+        } end function min_of
+
+        template <typename T>
+        function max_of(iterable<T>: items, std::Compare<T>: less = std::less_than<T>) -> T {
+            bool: seen = false;
+            T: best = T();
+            for (const T&: item in items) {
+                if (!seen || less(best, item)) then {
+                    best = item;
+                    seen = true;
+                }
+            }
+            if (!seen) then {
+                throw std::errors::empty_range("max_of() needs at least one item");
+            }
+            return best;
+        } end function max_of
+
+        template <typename T>
+        function each(iterable<T>&: items, std::Action<T>: act) -> void {
+            for (T&: item in items) {
+                act(item);
+            }
+        } end function each
+    } end namespace iterators
+
+    namespace errors {
+        class empty_range {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class empty_range
+    } end namespace errors
+} end namespace std

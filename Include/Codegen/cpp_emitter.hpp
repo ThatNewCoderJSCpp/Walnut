@@ -108,6 +108,9 @@ private:
     std::vector<RecordInfo*>                      m_record_order;
     std::unordered_map<const Sym*, RecordInfo*>   m_record_by_sym;
     std::vector<FuncInfo>                         m_functions;
+    std::unordered_set<std::string_view>          m_value_used_functions;
+    std::unordered_map<const nodes::ASTNode*, std::vector<const nodes::FunctionParameter*>> m_callable_params;
+    const std::vector<const nodes::FunctionParameter*>* m_templated_params = nullptr;
     std::vector<Inst*>                            m_ctor_insts;
     std::vector<nodes::EnumDeclaration*>          m_enum_decls;
     std::vector<nodes::ASTNode*>                  m_script;
@@ -452,6 +455,9 @@ private:
     }
 
     std::string function_header(const FuncInfo& f, bool qualified, bool in_class);
+    const std::vector<const nodes::FunctionParameter*>& callable_params(const FuncInfo& f);
+    bool only_called(const nodes::ASTNode* body, std::string_view name);
+    void scan_function_values(const std::vector<CodegenUnit>& units);
 
     void emit_function_body(std::ostream& os, const FuncInfo& f);
 

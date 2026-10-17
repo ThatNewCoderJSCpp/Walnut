@@ -278,6 +278,7 @@ private:
     nodes::FunctionParameters*    parse_function_parameters();
     modifiers::FunctionQualifiers parse_function_qualifiers();
     nodes::ASTNode*               parse_operator_function(const modifiers::RawModifiers& mods, std::size_t line_number);
+    nodes::ASTNode*               parse_operator_function_body(const modifiers::RawModifiers& mods, std::size_t line_number);
     nodes::ASTNode*               parse_type_query_overload(const parser_types::TypeQueryInfo& info, std::size_t line_number);
 
 private:
@@ -294,6 +295,8 @@ private:
     void drain_spliced(nodes::BlockStatement* block, std::size_t mark);
     nodes::ASTNode* reject_friend_definition(nodes::ASTNode* member);
     nodes::ASTNode* parse_constructor_declaration(const modifiers::RawModifiers& mods, std::size_t line_number);
+    nodes::ASTNode* parse_constructor_declaration_body(const modifiers::RawModifiers& mods, std::size_t line_number);
+    nodes::ASTNode* with_iterable_params(nodes::ASTNode* fn, nodes::TemplateDeclaration* owner);
     nodes::ASTNode* parse_destructor_declaration(const modifiers::RawModifiers& mods, std::size_t line_number);
 
 private:

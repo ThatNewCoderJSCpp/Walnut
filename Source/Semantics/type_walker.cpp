@@ -1,5 +1,6 @@
 #include "Semantics/type_walker.hpp"
 #include "Semantics/type_ops.hpp"
+#include <algorithm>
 #include <deque>
 #include "Lexer/numeric_literal.hpp"
 
@@ -25,6 +26,8 @@ TypeWalker::TypeWalker(
     m_saved_error_hook = m_types.type_error_hook;
     m_saved_conversions_hook = m_types.conversions_hook;
     m_types.conversions_hook = [this](Type* t) { ensure_conversions(t); };
+    m_saved_range_element_hook = m_types.range_element_hook;
+    m_types.range_element_hook = [this](Type* t, nodes::ASTNode* site) { return range_element(t, site); };
     m_saved_member_value_hook = m_types.member_value_hook;
     m_types.member_value_hook = [this](Type* rec, std::string_view name, TemplateArg& out) {
         if (!member_value(rec, name, out)) return false;
@@ -958,6 +961,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             Symbol* op = nullptr;
             Type* t = decay_ref(type_binary(b, op), vc);
             b->resolved = op;                            
+            keep_overloads(b, op);
             ensure_member_body(op);
             assign_typed(e, t, vc);
             break;
@@ -972,6 +976,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             Symbol* op = nullptr;
             Type* t = decay_ref(type_unary(u, op), vc);
             u->resolved = op;
+            keep_overloads(u, op);
             ensure_member_body(op);
             assign_typed(e, t, vc);
             break;
@@ -986,7 +991,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
             if (record_symbol_of(t)) {
                 OpResult r = resolve_operator(nodes::OverloadableOperator::Star, { t });
-                if (r.status == SelectStatus::Ok)             { d->resolved = r.chosen; res = decay_ref(r.type, vc); }
+                if (r.status == SelectStatus::Ok)             { d->resolved = r.chosen; keep_overloads(d, r.chosen); res = decay_ref(r.type, vc); }
                 else if (r.status == SelectStatus::Ambiguous) SemanticError::ambiguous_call(m_reporter, file_of(d), d->line, "*");
                 else                                          SemanticError::no_matching_overload(m_reporter, file_of(d), d->line, "*");
             } else if (t && t->is_pointer()) {
@@ -1096,7 +1101,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
             if (record_symbol_of(arr)) {
                 OpResult res = resolve_operator(nodes::OverloadableOperator::Subscript, { arr, type_of(s->m_index) });
-                if (res.status == SelectStatus::Ok)             { s->resolved = res.chosen; el = decay_ref(res.type, vc); ensure_member_body(res.chosen); }
+                if (res.status == SelectStatus::Ok)             { s->resolved = res.chosen; keep_overloads(s, res.chosen); el = decay_ref(res.type, vc); ensure_member_body(res.chosen); }
                 else if (res.status == SelectStatus::Ambiguous) SemanticError::ambiguous_call(m_reporter, file_of(s), s->line, "[]");
                 else                                            SemanticError::no_matching_overload(m_reporter, file_of(s), s->line, "[]");
             } else if (arr && arr->is_array()) { el = static_cast<ArrayType*>(arr)->element();  vc = VC::LValue; }
@@ -1185,7 +1190,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
             if (record_symbol_of(t)) {
                 OpResult res = resolve_operator(nodes::OverloadableOperator::BitNot, { t });
-                if (res.status == SelectStatus::Ok) { x->resolved = res.chosen; assign_typed(e, res.type, VC::RValue); break; }
+                if (res.status == SelectStatus::Ok) { x->resolved = res.chosen; keep_overloads(x, res.chosen); assign_typed(e, res.type, VC::RValue); break; }
                 SemanticError::no_matching_overload(m_reporter, file_of(x), x->line, "~");
                 assign_typed(e, nullptr, VC::RValue);
                 break;
@@ -1503,6 +1508,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                     if (auto* I = m_inst->instantiate(g, std::move(args), t)) {
                         if (I->decl && I->decl->kind == K::FunctionDeclaration) ensure_typed(I);   // functions: eager
                         result = I->type;                                                          // records: lazy members
+                        if (I->decl && I->decl->kind == K::FunctionDeclaration && !is_variable_template(g)) t->fn_instance = I->sym;
                         if (is_variable_template(g)) {
                             t->var_instance = I->sym;
                             result = (I->type && I->type->kind() == TypeKind::Function) ? static_cast<FunctionType*>(I->type)->ret() : nullptr;
@@ -1853,6 +1859,33 @@ Type* TypeWalker::record_iteration(nodes::ForEachStatement* s, Type* container) 
     Type* el = type_of(s->iter_get);
     if (el && el->is_reference()) el = static_cast<ReferenceType*>(el)->referent();
     return el ? el : m_types.error_();
+}
+
+Type* TypeWalker::range_element(Type* container, nodes::ASTNode* site) {
+    Type* c = container;
+    if (c && c->is_reference()) c = static_cast<ReferenceType*>(c)->referent();
+    if (!c || c->is_error()) return nullptr;
+    if (Type* e = iterated_element(c)) return m_types.strip_cv(e);
+    if (!m_inst || !record_symbol_of(c)) return nullptr;
+    Scope* ms = member_scope_of(c);
+    if (!ms || !ms->find_member("begin") || !ms->find_member("end")) return nullptr;
+    static long long counter = 0;
+    const std::uint32_t line = site ? site->line : 0;
+    Symbol* r = synthetic_symbol("walnut_iterable_" + std::to_string(counter++), m_types.reference(c, RefQual::LValue), site);
+    auto* m = make_in<nodes::MemberAccessExpression>(m_inst->arena(), ident_for(r, line), "begin", nodes::MemberAccessExpression::Op::Dot, line);
+    auto* call = make_in<nodes::CallExpression>(m_inst->arena(), m, line);
+    auto* get = make_in<nodes::DereferenceExpression>(m_inst->arena(), call, line);
+
+    if (site) {
+        m->file_id = call->file_id = get->file_id = site->file_id;
+        m->at = call->at = get->at = site->at;
+    }
+
+    walk_expr(get);
+    Type* el = type_of(get);
+    if (el && el->is_reference()) el = static_cast<ReferenceType*>(el)->referent();
+    if (!el || el->is_error()) return nullptr;
+    return m_types.strip_cv(el);
 }
 
 Type* TypeWalker::iterated_element(Type* container) {
@@ -2846,6 +2879,37 @@ Symbol* TypeWalker::generic_of_instance(Symbol* s) {
     return primary;
 }
 
+Symbol* TypeWalker::overload_origin(Symbol* s) {
+    if (!s || !m_inst) return s;
+    Instantiator::Instantiation* I = m_inst->owning(s);
+    if (!I || I->sym != s || !I->source || !I->source->m_declaration) return s;
+    nodes::ASTNode* d = I->source->m_declaration;
+    Symbol* primary = nullptr;
+    if (d->kind == K::FunctionDeclaration) primary = static_cast<nodes::FunctionDeclaration*>(d)->symbol;
+    else if (d->kind == K::OperatorFunctionDeclaration) primary = static_cast<nodes::OperatorFunctionDeclaration*>(d)->symbol;
+    else if (d->kind == K::ConstructorDeclaration) primary = static_cast<nodes::ConstructorDeclaration*>(d)->symbol;
+    return primary ? primary : s;
+}
+
+void TypeWalker::remember_overloads(nodes::ASTNode* site, const std::vector<CandidateMatch>& matches, const std::vector<Symbol*>& origins, std::size_t chosen) {
+    std::vector<Symbol*> order;
+
+    for (std::size_t i : candidate_order(matches, chosen)) {
+        if (i >= origins.size() || !origins[i]) continue;
+        if (std::find(order.begin(), order.end(), origins[i]) == order.end()) order.push_back(origins[i]);
+    }
+
+    if (site) m_types.overload_orders[site] = std::move(order);
+    else m_types.last_overload_order = std::move(order);
+}
+
+void TypeWalker::keep_overloads(nodes::ASTNode* site, Symbol* chosen) {
+    std::vector<Symbol*> order;
+    order.swap(m_types.last_overload_order);
+    if (!site || !chosen || order.empty() || order.front() != overload_origin(chosen)) return;
+    m_types.overload_orders[site] = std::move(order);
+}
+
 Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& args, VC& vc) {
     vc = VC::RValue;
     if (c->m_callee && c->m_callee->kind == K::Identifier) refresh_member(static_cast<nodes::Identifier*>(c->m_callee));
@@ -2870,6 +2934,7 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
         std::vector<Symbol*>                        cand_syms;
         std::vector<Instantiator::Instantiation*>   cand_inst;
         std::vector<std::vector<ParamShape>>        cand_shapes;
+        std::vector<Symbol*>                        cand_origins;
 
         for (Symbol* o = callee_sym; o; o = o->next_overload) {
             if (o->template_decl) {                         
@@ -2880,6 +2945,7 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
                 auto* I = m_inst->instantiate_for_call(o, c->get_template_args(), args, c, &lvalues);
                 if (!I) continue;                           
                 matches.push_back(match_with_constants(c, I->fn_shapes, args));
+                cand_origins.push_back(o);
                 cand_syms.push_back(I->sym);
                 cand_inst.push_back(I);
                 cand_shapes.push_back(I->fn_shapes);
@@ -2894,6 +2960,7 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
                 cand_shapes.push_back(shapes_of(o));
             }
 
+            cand_origins.push_back(o);
             cand_syms.push_back(o);
             cand_inst.push_back(owner);
         }
@@ -2945,6 +3012,7 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
         Symbol* chosen = cand_syms[sel.index];
         ensure_member_body(chosen);
         c->resolved = chosen;
+        remember_overloads(c, matches, cand_origins, sel.index);
         check_const_call(chosen, c);
         auto note_rvalue = [c](Type* ret) {
             c->returns_rvalue_ref = ret && ret->is_reference() && static_cast<ReferenceType*>(ret)->ref_qual() == RefQual::RValue;
@@ -3002,7 +3070,7 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
         operands.push_back(callee_type);
         for (Type* a : args) operands.push_back(a);
         OpResult res = resolve_operator(nodes::OverloadableOperator::Call, operands);
-        if (res.status == SelectStatus::Ok)        { c->resolved = res.chosen; return decay_ref(res.type, vc); }
+        if (res.status == SelectStatus::Ok)        { c->resolved = res.chosen; keep_overloads(c, res.chosen); return decay_ref(res.type, vc); }
         if (res.status == SelectStatus::Ambiguous) { SemanticError::ambiguous_call(m_reporter, file_of(c), c->line, "()"); }
         else                                       { SemanticError::no_matching_overload(m_reporter, file_of(c), c->line, "()"); }
         return nullptr;
@@ -4969,6 +5037,11 @@ Type* TypeWalker::resolve_member_operator(Type* recv, nodes::OverloadableOperato
     Selection sel = select_overload(matches, from_template);
     if (sel.status != SelectStatus::Ok) return nullptr;
     Symbol* pick = cands[sel.index];
+    {
+        std::vector<Symbol*> origins;
+        for (Symbol* c : cands) origins.push_back(overload_origin(c));
+        remember_overloads(nullptr, matches, origins, sel.index);
+    }
     if (from_template[sel.index]) if (Instantiator::Instantiation* I = m_inst->owning(pick)) ensure_typed(I);
     if (chosen) *chosen = pick;
     EnvGuard g(m_types, env_of_symbol(pick));
@@ -5405,6 +5478,11 @@ auto TypeWalker::resolve_operator(nodes::OverloadableOperator want, const std::v
     res.status = sel.status;
     if (sel.status != SelectStatus::Ok) return res;
     Symbol* pick   = cands[sel.index];
+    {
+        std::vector<Symbol*> origins;
+        for (Symbol* c : cands) origins.push_back(overload_origin(c));
+        remember_overloads(nullptr, matches, origins, sel.index);
+    }
     if (from_template[sel.index]) if (Instantiator::Instantiation* I = m_inst->owning(pick)) ensure_typed(I);
     ensure_member_body(pick);
     res.chosen     = pick;
@@ -5685,6 +5763,11 @@ auto TypeWalker::resolve_incdec(Type* recv, nodes::OverloadableOperator want, bo
     res.status = sel.status;
     if (sel.status != SelectStatus::Ok) return res;
     Symbol* pick = cands[sel.index];
+    {
+        std::vector<Symbol*> origins;
+        for (Symbol* c : cands) origins.push_back(overload_origin(c));
+        remember_overloads(nullptr, matches, origins, sel.index);
+    }
     if (from_template[sel.index]) if (Instantiator::Instantiation* I = m_inst->owning(pick)) ensure_typed(I);
     res.chosen = pick; res.via_member = member[sel.index];
     report_if_deleted(pick);
@@ -5931,6 +6014,7 @@ Symbol* TypeWalker::resolve_constructor(Symbol* rec, const std::vector<Type*>& a
     std::vector<CandidateMatch> matches;
     std::vector<Symbol*>        cands;
     std::vector<Instantiator::Instantiation*> cand_inst;
+    std::vector<Symbol*>        ctor_origins;
     Type* self = record_type_of(rec);
     std::vector<bool> lvalues;
     const std::vector<nodes::ASTNode*>* arg_nodes = m_ctor_arg_nodes;
@@ -5953,6 +6037,7 @@ Symbol* TypeWalker::resolve_constructor(Symbol* rec, const std::vector<Type*>& a
             matches.push_back(match_arguments(I->fn_shapes, args, m_types));
             cands.push_back(I->sym);
             cand_inst.push_back(I);
+            ctor_origins.push_back(o);
             continue;
         }
         if (!o->decl || o->decl->kind != K::ConstructorDeclaration) continue;
@@ -5961,6 +6046,7 @@ Symbol* TypeWalker::resolve_constructor(Symbol* rec, const std::vector<Type*>& a
         matches.push_back(match_arguments(shapes_of(o), args, m_types));
         cands.push_back(o);
         cand_inst.push_back(nullptr);
+        ctor_origins.push_back(o);
     }
 
     bool has_template_ctor = false;
@@ -6006,6 +6092,7 @@ Symbol* TypeWalker::resolve_constructor(Symbol* rec, const std::vector<Type*>& a
     if (sel.status == SelectStatus::NoMatch && args.size() == 1 && is_copy_source(rec, args[0])) { implicit_copy(); return nullptr; }
     if (sel.status == SelectStatus::NoMatch)   { SemanticError::emit(m_reporter, file_of(site), site->line, "Overload", "no constructor of '" + std::string(rec->name) + "' takes these arguments" + candidate_notes(bucket, args, arg_nodes, rec->name)); return nullptr; }
     if (sel.status == SelectStatus::Ambiguous) { SemanticError::ambiguous_call(m_reporter, file_of(site), site->line, "constructor"); return nullptr; }
+    remember_overloads(site, matches, ctor_origins, sel.index);
 
     if (cand_inst[sel.index] && args.size() == 1 && cand_inst[sel.index]->fn_shapes.size() == 1 && is_copy_source(rec, args[0])) {
         Type* p = cand_inst[sel.index]->fn_shapes[0].element;

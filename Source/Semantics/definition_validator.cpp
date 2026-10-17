@@ -1,6 +1,8 @@
 #include "Semantics/definition_validator.hpp"
 #include "Semantics/modifier_rules.hpp"
 
+#include <algorithm>
+
 namespace walnut {
 namespace semantics {
 
@@ -80,6 +82,7 @@ void DefinitionValidator::merge_overload_chain(Symbol* head) {
 
         const bool rep_def = has_body(rep);
         const bool s_def   = has_body(s);
+        nodes::ASTNode* earlier = rep->decl;
 
         if (s_def && rep_def) {                      
             SemanticError::redefinition(m_reporter, s->decl->file_id, s->decl->line, head->name, rep->decl->file_id, rep->decl->line);
@@ -87,6 +90,11 @@ void DefinitionValidator::merge_overload_chain(Symbol* head) {
             rep->decl        = s->decl;
             rep->inner_scope = s->inner_scope;
         }
+
+        nodes::ASTNode* other = rep->decl == earlier ? s->decl : earlier;
+        if (other && other != rep->decl && std::find(rep->declarations.begin(), rep->declarations.end(), other) == rep->declarations.end()) rep->declarations.push_back(other);
+        for (nodes::ASTNode* d : s->declarations) if (d != rep->decl && std::find(rep->declarations.begin(), rep->declarations.end(), d) == rep->declarations.end()) rep->declarations.push_back(d);
+        s->merged_into = rep;
 
         prev->next_overload = s->next_overload;      
         s = s->next_overload;

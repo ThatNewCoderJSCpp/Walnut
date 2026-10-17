@@ -70,6 +70,9 @@ struct Symbol {
 
     SmallVector<nodes::TemplateDeclaration*, 2> specializations;
 
+    Symbol*                       merged_into = nullptr;
+    SmallVector<nodes::ASTNode*, 1> declarations;
+
     Symbol(std::string_view n, SymbolKind k, nodes::ASTNode* d) noexcept : name(n), kind(k), decl(d) {}
 };
 

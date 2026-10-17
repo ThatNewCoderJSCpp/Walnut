@@ -767,8 +767,7 @@ namespace std {
                 return out;
             } end function breadth_first_search
 
-            template <typename F>
-            function breadth_first_search(long int: start, F: visit) const -> Traversal {
+            function breadth_first_search(long int: start, function(long int, long int) -> bool: visit) const -> Traversal {
                 check(start);
                 const long int: n = node_values.size();
                 Traversal: out;
@@ -800,9 +799,7 @@ namespace std {
                 return parallel_breadth_first_search(start, [](long int: node, long int: depth) -> bool { return true; }, threads);
             } end function parallel_breadth_first_search
 
-            template <typename F>
-            requires !std::traits::is_arithmetic<F>
-            function parallel_breadth_first_search(long int: start, F: visit, long int: threads = 0) const -> Traversal {
+            function parallel_breadth_first_search(long int: start, function(long int, long int) -> bool: visit, long int: threads = 0) const -> Traversal {
                 check(start);
                 if (threads < 0) then {
                     throw std::errors::graph_error(static_cast<string>(`parallel_breadth_first_search: can't use ${threads} threads`));
@@ -875,8 +872,7 @@ namespace std {
                 return depth_first_search(start, [](long int: node, long int: depth) -> bool { return true; });
             } end function depth_first_search
 
-            template <typename F>
-            function depth_first_search(long int: start, F: visit) const -> Traversal {
+            function depth_first_search(long int: start, function(long int, long int) -> bool: visit) const -> Traversal {
                 check(start);
                 const long int: n = node_values.size();
                 Traversal: out;

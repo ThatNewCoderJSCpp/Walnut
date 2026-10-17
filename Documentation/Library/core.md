@@ -1,6 +1,6 @@
 # core
 
-`core` holds the parts of the library that almost every program needs. Every Walnut program gets it automatically: there is nothing to `import`, and its names are always available. It has `std::core` (`move`, `forward`, `to_string`, and checks on number values such as `is_integer`, `is_even` and `is_finite`), `std::traits` (type traits and type operations), `std::concepts` (ready-made concepts), and directly in `std` the constant types (`std::true_type`, `std::bool_constant` and the rest), `std::enable_if` and `std::initializer_list`.
+`core` holds the parts of the library that almost every program needs. Every Walnut program gets it automatically: there is nothing to `import`, and its names are always available. It has `std::core` (`move`, `forward`, `to_string`, and checks on number values such as `is_integer`, `is_even` and `is_finite`), `std::traits` (type traits and type operations), `std::concepts` (ready-made concepts), and directly in `std` the function types (`std::Predicate`, `std::Compare` and the rest) with ready-made comparators, the constant types (`std::true_type`, `std::bool_constant` and the rest), `std::enable_if` and `std::initializer_list`.
 
 ## Contents
 
@@ -13,6 +13,7 @@
 7. [Constants](#constants)
 8. [enable_if](#enable_if)
 9. [std::initializer_list](#stdinitializer_list)
+10. [Function types and comparators](#function-types-and-comparators)
 
 ## std::core::move
 
@@ -608,3 +609,59 @@ This prints `3 6 10 0`.
 - A brace list becomes an `initializer_list<T>` wherever one is expected: a variable (`std::initializer_list<int>: xs = {1, 2, 3};`), a function argument, or a constructor argument. Each value has to convert to `T`.
 - When a class has a constructor that takes an `initializer_list<T>`, a brace list whose values all convert to `T` uses that constructor, even when another constructor takes the same number of values. Use parentheses to pick the other one: `Bag: paired(2, 3);` above. See [Classes and structs](../../documentation.md#classes-and-structs).
 - The values are read-only. Copying an `initializer_list` is cheap: the copies share the same values instead of copying them.
+
+## Function types and comparators
+
+These names are [function types](../../documentation.md#function-types), so a parameter can say what kind of function it wants without a template. The library uses them wherever it takes a function, and they work in your own code the same way.
+
+| Name | Is |
+|---|---|
+| `std::Predicate<T>` | `function(const T&) -> bool`, a test on one value |
+| `std::Compare<T>` | `function(const T&, const T&) -> bool`, `true` when the first value goes before the second |
+| `std::Action<T>` | `function(T&) -> void`, something done to a value, which may change it |
+| `std::Transform<T, U>` | `function(const T&) -> U`, turning a `T` into a `U` |
+| `std::Combine<U, T>` | `function(const U&, const T&) -> U`, folding a `T` into a running `U` |
+| `std::Supplier<T>` | `function() -> T`, making a value |
+
+A lambda or function fits when it can be called with the parameters of the type and gives something that converts to its result without loss, so `[](int: x) -> bool { ... }` is a `std::Predicate<int>` as well as `[](const int&: x) -> bool { ... }`. A `void` result accepts any function. When a function-type parameter is only called inside the function, the compiler passes the lambda straight through, so calling it costs the same as calling a template's `Compare`.
+
+**Ready-made comparators**
+
+| Function | Is `true` when |
+|---|---|
+| `std::less_than<T>(a, b)` | `a < b` |
+| `std::leq<T>(a, b)` | `a <= b` (worked out as `!(b < a)`) |
+| `std::greater_than<T>(a, b)` | `a > b` (worked out as `b < a`) |
+| `std::geq<T>(a, b)` | `a >= b` (worked out as `!(a < b)`) |
+| `std::equal<T>(a, b)` | `a == b` |
+| `std::not_equal<T>(a, b)` | `!(a == b)` |
+
+Each is a `std::Compare<T>`, so it can be passed by name: `v.sort(std::greater_than<int>)`.
+
+| Function | Gives |
+|---|---|
+| `std::by<T, K>(key)` | A `std::Compare<T>` that orders values by `key(value)` |
+| `std::reverse_order<T>(comp)` | A `std::Compare<T>` with `comp`'s order turned around |
+| `std::negate<T>(test)` | A `std::Predicate<T>` that is `true` when `test` is `false` |
+
+```walnut
+import module.collections
+
+struct Person {
+    string: name;
+    int: age = 0;
+} end struct Person
+
+function main() -> int {
+    std::collections::Vector<Person>: people;
+    people.push_back(Person{"Zoe", 41});
+    people.push_back(Person{"Al", 19});
+    people.sort(std::by<Person, int>([](const Person&: p) -> int { return p.age; }));
+    people.sort(std::reverse_order<Person>(std::by<Person, string>([](const Person&: p) -> string { return p.name; })));
+    std::Predicate<int>: odd = [](int: x) -> bool { return x % 2 == 1; };
+    bool: even_seven = std::negate<int>(odd)(7);
+    return 0;
+} end function main
+```
+
+After the first `sort`, `people[0]` is `Al`; after the second, it is `Zoe`, and `even_seven` is `false`.

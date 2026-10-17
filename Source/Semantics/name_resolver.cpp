@@ -839,6 +839,7 @@ void NameResolver::resolve_params(nodes::FunctionParameters* params) {
 
     for (nodes::FunctionParameter* p : *params) {
         resolve_type(mut(p->get_type()), p);
+        if (p->is_iterable) resolve_type(p->iterable_element, p);
         walk_expr(p->m_initializer);
     }
 }

@@ -34,6 +34,8 @@ bool assign_arguments(const std::vector<ParamShape>& params, const std::vector<T
 
 bool better_candidate(const CandidateMatch& A, const CandidateMatch& B);
 
+std::vector<std::size_t> candidate_order(const std::vector<CandidateMatch>& cands, std::size_t chosen);
+
 enum class SelectStatus : std::uint8_t { Ok = 0, NoMatch, Ambiguous };
 struct Selection { SelectStatus status; std::size_t index = 0; };
 

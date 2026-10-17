@@ -216,7 +216,7 @@ nodes::ASTNode* Parser::parse_statement() {
         case tokenizing::Token::Kind::FunctionKeyword: {
             std::size_t line = current_token().line();
             if (lookahead(1).kind() == tokenizing::Token::Kind::LeftParen) { return parse_variable_declaration({}, line, true); }
-            return parse_function_declaration({}, line);
+            return with_iterable_params(parse_function_declaration({}, line), owner_template);
         }
         
         case tokenizing::Token::Kind::ArrayKeyword: {
@@ -355,7 +355,7 @@ nodes::ASTNode* Parser::parse_statement() {
                 if (lookahead(1).kind() == tokenizing::Token::Kind::LeftParen) {
                     return parse_variable_declaration(mods, line, true);
                 }
-                return parse_function_declaration(mods, line);
+                return with_iterable_params(parse_function_declaration(mods, line), owner_template);
             }
             
             if (current_token().kind() == tokenizing::Token::Kind::ArrayKeyword) {

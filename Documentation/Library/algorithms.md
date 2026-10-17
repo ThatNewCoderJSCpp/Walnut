@@ -50,6 +50,7 @@ This prints `9 1 3 5`: after the second sort `v` is `9 7 5 3 1`, `7` was found, 
 - Most functions only step forward with `++it`, so they work with any iterator, including those of `LinkedList`, `Deque`, `Map` and `Set`. The ones marked *random access* below jump around (`it + n`, `last - first`, `it[k]`), so they need pointers (from `Vector`, `DynamicArray`, `SmallVector`, `Span` or an array) or an iterator class with those operators.
 - A function that finds a position gives back an iterator; `last` means "not found". Subtract `begin()` to get an index.
 - Wherever a function compares elements, it uses `<` (or `==`). The overloads that take a `comp` use `comp(a, b)` instead, which must be `true` when `a` goes before `b`. A `pred` takes one element and gives a `bool`.
+- `comp` is a [`std::Compare<E>`](core.md#function-types-and-comparators), `pred` a `std::Predicate<E>`, `key` a `std::Transform<E, K>` and `func` a `std::Action<E>`, where `E` is the element type, worked out from the lambda or function passed. Ready-made ones such as `std::less_than<int>`, `std::greater_than<int>` and `std::by<Person, int>(key)` fit too. A class object with an `operator(())` works when the call's other arguments already fix `E`; otherwise wrap it in a lambda.
 - `distance(first, last)` gives the number of elements, `next(it, n)` and `prev(it, n)` move an iterator, and `iter_swap(a, b)` swaps two elements.
 
 ## Comparing and testing

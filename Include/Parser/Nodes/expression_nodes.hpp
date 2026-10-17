@@ -312,6 +312,7 @@ struct TemplateInstantiation : ASTNode {
     ASTNode*                                      m_template; 
     std::vector<parser_types::TemplateArgument*>  m_args;
     semantics::Symbol*                            var_instance = nullptr;
+    semantics::Symbol*                            fn_instance = nullptr;
     int                                           concept_result = -1;
 
     TemplateInstantiation(ASTNode* tmpl, std::vector<parser_types::TemplateArgument*> args, std::uint32_t ln = 0) : ASTNode(Kind::TemplateInstantiation, ln), m_template(tmpl), m_args(std::move(args)) {}

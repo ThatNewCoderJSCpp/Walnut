@@ -58,6 +58,8 @@ bool rvalue_only_conversion(const Symbol* op);
 
 ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx);
 
+bool callable_as(FunctionType* sf, FunctionType* df, TypeContext& ctx);
+
 Scope* record_scope_of(Type* t, TypeContext& ctx);
 
 bool scope_derives_from(const Scope* s, const Scope* base, int depth = 0);

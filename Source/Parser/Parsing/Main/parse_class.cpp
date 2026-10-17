@@ -52,6 +52,13 @@ void Parser::check_native_member(nodes::ASTNode* member, const tokenizing::Token
 }
 
 nodes::ASTNode* Parser::parse_constructor_declaration(const modifiers::RawModifiers& mods, const std::size_t line_number) {
+    const char* keyword_at = current_token().data();
+    nodes::ASTNode* made = parse_constructor_declaration_body(mods, line_number);
+    if (made && !made->at) made->at = keyword_at;
+    return made;
+}
+
+nodes::ASTNode* Parser::parse_constructor_declaration_body(const modifiers::RawModifiers& mods, const std::size_t line_number) {
     expect(tokenizing::Token::Kind::ConstructorKeyword, "Expected 'constructor'");
     std::vector<std::string_view> owner;
     bool owner_global = false;

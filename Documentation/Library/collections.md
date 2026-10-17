@@ -89,6 +89,7 @@ This prints `apple fig fig pear pear` and `pears: 2, kinds: 3`.
 - `size()` gives the number of elements as a `long int`, and `empty()` is `true` when there are none.
 - `clear()` removes every element (not on `Span`, which doesn't own its elements).
 - `for (T: x in c)` visits every element in order. Containers that hand out references (`Vector`, `DynamicArray`, `SmallVector`, `Span`, `LinkedList`, `Deque`, `UnorderedMap`, `Map`) let the loop change elements with `T&: x`. See [Looping over your own classes](../../documentation.md#looping-over-your-own-classes) for how this works.
+- `for (T: x in c.backwards())` visits them from the last to the first, without copying. `rbegin()` and `rend()` give the iterators it uses, and each container names its iterator types `Iterator` and `ReverseIterator`; they come from [iterators](iterators.md#going-backwards).
 - Containers that own their elements copy deeply: `Vector<int>: b = a;` makes an independent copy. Moving one with `std::core::move` takes over its memory and leaves the source empty.
 - Indexes are `long int`, start at `0`, and are checked: an index out of range throws a [`std::errors::collection_error`](#errors), and so does taking an element from an empty container.
 - `find(value)` gives the index of the first match, or `undefined` when there is none (check with `i is undefined`). `contains(value)` gives a `bool`.
@@ -426,7 +427,7 @@ This prints `age 31 3 1`.
 
 ## Searching, sorting and more
 
-`Vector`, `DynamicArray` and `SmallVector` have these methods on top of their own. They are built on the [algorithms](algorithms.md) library, which has the same operations for any range. A `comp` takes two elements and is `true` when the first goes before the second, a `pred` takes one element and gives a `bool`, and a `key` turns an element into something to sort by.
+`Vector`, `DynamicArray` and `SmallVector` have these methods on top of their own. They are built on the [algorithms](algorithms.md) library, which has the same operations for any range. A `comp` is a [`std::Compare<T>`](core.md#function-types-and-comparators), which takes two elements and is `true` when the first goes before the second; a `pred` is a `std::Predicate<T>`, which takes one element and gives a `bool`; and a `key` is a `std::Transform<T, K>`, which turns an element into something to sort by. Any lambda or function with those parameters and result fits, whether it takes its elements by value (`int: a`) or by `const` reference (`const int&: a`), and so do the ready-made comparators such as `std::greater_than<int>`.
 
 ```walnut
 import module.collections
@@ -489,7 +490,12 @@ Here `slot` is `3`, `big` is `3`, `dropped` is `2` (the `4` and the `8`), `repea
 | `insert_all(i, other)` | Inserts all of another container of the same kind before `i` |
 | `insert_unordered(i, value)` | Puts `value` at `i` and moves the old element there to the end, which is faster than `insert` |
 | `remove_at(i)` | Removes the element at `i` and gives it back (the same as `erase`) |
-| `remove_unordered(i)`, `swap_remove(i)` | Removes the element at `i` by moving the last element into its place |
+| `remove_unordered(i)`, `swap_remove(i)`, `erase_unordered(i)`, `remove_at_unordered(i)`, `take_at_unordered(i)` | Removes the element at `i` by moving the last element into its place, and gives it back |
+| `remove_first_unordered(value)` | Removes the first element equal to `value` the same way; gives whether there was one |
+| `remove_all_unordered(value)` | Removes every element equal to `value`, filling each gap from the end; gives how many |
+| `remove_if_unordered(pred)`, `retain_if_unordered(pred)` | Removes the elements that pass, or that fail, `pred`, filling each gap from the end; gives how many were removed |
+| `remove_range_unordered(start, stop)` | Removes the elements from `start` up to (not including) `stop`, filling the gap with elements from the end |
+| `take_front_unordered()`, `pop_front_unordered()` | `DynamicArray` only: removes the first element by moving the last into its place, and gives it back |
 | `remove_first(value)` | Removes the first element equal to `value`; gives whether there was one |
 | `remove_if(pred)`, `retain_if(pred)` | Removes the elements that pass, or that fail, `pred`; gives how many were removed |
 | `unique()` | Removes repeats that are next to each other; gives how many |

@@ -1243,6 +1243,7 @@ Here `total` is `321`.
 - `begin()` and `end()` are called once, before the loop starts. A `const` object uses the `const` versions.
 - Labelled `break` and `continue`, structured bindings (`for (auto: [k, v] in map)`) and `T&` loop variables all work as they do for arrays.
 - The [collections library](Documentation/Library/collections.md) uses this for all of its containers.
+- Instead of writing an iterator class like `Step`, a class can use one from the [iterators library](Documentation/Library/iterators.md), such as `std::iterators::Pointer<T>` for elements stored one after another, which also has a backwards form.
 
 ### switch
 
@@ -1451,6 +1452,51 @@ Here `a` is `911` (`f(5)` is `3 + 3 + 5` and `f(1, 5)` is `1 + 3 + 5`) and `b` i
 - A call through a function value follows the parameters of its type, with the same rules as a call to a function.
 - Default values in a function type have to be constants.
 - A value can be stored in a function type that differs from its own only in default values and variadic markers. The type it is called through decides: `bump` above has no default of its own, but its type gives it one, and storing a lambda with defaults in a `function(int, string) -> int` means every argument has to be passed.
+- A function also fits a function type whose parameters it can be called with: a parameter taken by value or by `const` reference accepts the same type passed either way, so `[](int: x) -> bool { ... }` can be stored in a `function(const int&) -> bool` and the other way round. The result has to convert without loss (`int` to `long int` does, `long int` to `int` doesn't), and a `void` result accepts any. A non-`const` reference parameter still needs a non-`const` reference.
+- A template function can be passed as a value once its template arguments are written: `std::less_than<int>`.
+- When a function-type parameter is only called (or passed on to another function), the generated C++ takes the lambda as it is instead of wrapping it, so the call can be inlined as it would be for a template parameter.
+- The library names the common shapes: `std::Predicate<T>`, `std::Compare<T>`, `std::Action<T>`, `std::Transform<T, U>`, `std::Combine<U, T>` and `std::Supplier<T>`, with ready-made comparators such as `std::less_than<T>`; see [core](Documentation/Library/core.md#function-types-and-comparators).
+
+### iterable parameters
+
+`iterable<T>` as a parameter type takes anything a `for` loop can walk through whose elements are `T`: an array, a `string` (for `iterable<char>`), a generator, or any class with `begin()` and `end()`. Each call is compiled for the argument's real type, as a template would be, but the function is written without one:
+
+```walnut
+function total(iterable<int>: values) -> int {
+    int: sum = 0;
+    for (int: v in values) {
+        sum += v;
+    }
+    return sum;
+} end function total
+
+template <typename T>
+function largest(iterable<T>: values) -> T {
+    T: best = T();
+    for (const T&: v in values) {
+        if (best < v) then {
+            best = v;
+        }
+    }
+    return best;
+} end function largest
+
+function main() -> int {
+    array[] int: a = {4, 9, 2};
+    int: s = total(a);
+    int: m = largest(a);
+    char: c = largest("walnut");
+    return 0;
+} end function main
+```
+
+Here `s` is `15`, `m` is `9` and `c` is `'w'`.
+
+- `iterable<T>: values` is read-only and copies nothing, like a `const` reference. `iterable<T>&: values` can change the elements, and only takes something that can be changed.
+- `T` can be a fixed type, as in `total`, or a template parameter of the function, which is then worked out from the elements, as in `largest`. With a fixed type, elements that convert to it without loss also work.
+- An argument that can't be walked through, or whose elements don't fit `T`, makes the function not a candidate for that call, so another overload can be chosen.
+- `iterable` works for parameters of functions and methods. It isn't a type of its own, so it can't be used for variables or results.
+- The [iterators library](Documentation/Library/iterators.md) has functions written this way, such as `std::iterators::count_if` and `std::iterators::max_of`.
 
 ### main
 

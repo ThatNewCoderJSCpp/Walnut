@@ -465,6 +465,9 @@ public:
     std::function<Type*(Type*, std::string_view, const std::vector<parser_types::TemplateArgument*>&)> member_alias_type_hook;
     std::function<Symbol*(Type*, Type*)>               callable_hook;
     std::function<bool(Type*, Type*)>                  closure_hook;
+    std::vector<Symbol*>                               last_overload_order;
+    std::function<Type*(Type*, nodes::ASTNode*)>       range_element_hook;
+    std::unordered_map<const nodes::ASTNode*, std::vector<Symbol*>> overload_orders;
 
 private:
     Arena& m_arena;

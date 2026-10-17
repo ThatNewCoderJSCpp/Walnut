@@ -114,6 +114,69 @@ namespace std {
     template <bool Condition, typename T = void>
     using enable_if_t = enable_if<Condition, T>::type;
 
+    template <typename T>
+    using Predicate = function(const T&) -> bool;
+
+    template <typename T>
+    using Compare = function(const T&, const T&) -> bool;
+
+    template <typename T>
+    using Action = function(T&) -> void;
+
+    template <typename T, typename U>
+    using Transform = function(const T&) -> U;
+
+    template <typename U, typename T>
+    using Combine = function(const U&, const T&) -> U;
+
+    template <typename T>
+    using Supplier = function() -> T;
+
+    template <typename T>
+    function less_than(const T&: a, const T&: b) -> bool {
+        return a < b;
+    } end function less_than
+
+    template <typename T>
+    function leq(const T&: a, const T&: b) -> bool {
+        return !(b < a);
+    } end function leq
+
+    template <typename T>
+    function greater_than(const T&: a, const T&: b) -> bool {
+        return b < a;
+    } end function greater_than
+
+    template <typename T>
+    function geq(const T&: a, const T&: b) -> bool {
+        return !(a < b);
+    } end function geq
+
+    template <typename T>
+    function equal(const T&: a, const T&: b) -> bool {
+        return a == b;
+    } end function equal
+
+    template <typename T>
+    function not_equal(const T&: a, const T&: b) -> bool {
+        return !(a == b);
+    } end function not_equal
+
+    template <typename T, typename K>
+    function by(std::Transform<T, K>: key) -> std::Compare<T> {
+        return [key](const T&: a, const T&: b) -> bool { return key(a) < key(b); };
+    } end function by
+
+    template <typename T>
+    function reverse_order(std::Compare<T>: less) -> std::Compare<T> {
+        return [less](const T&: a, const T&: b) -> bool { return less(b, a); };
+    } end function reverse_order
+
+    template <typename T>
+    function negate(std::Predicate<T>: test) -> std::Predicate<T> {
+        return [test](const T&: value) -> bool { return !test(value); };
+    } end function negate
+
     namespace traits {
         namespace extend {
             template <typename T>

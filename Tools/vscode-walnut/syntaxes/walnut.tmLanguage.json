@@ -291,7 +291,7 @@
                 },
                 {
                     "name": "storage.type.primitive.walnut",
-                    "match": "\\b(?:character|unsigned|variable|boolean|decimal|dynamic|floater|integer|special|variant|double|string|array|float|short|auto|bool|char|long|text|void|any|arr|int|str|txt|var)\\b"
+                    "match": "\\b(?:character|unsigned|variable|boolean|decimal|dynamic|floater|integer|special|variant|double|string|array|float|short|auto|bool|char|long|text|void|any|arr|int|str|txt|var|iterable(?=\\s*<))\\b"
                 },
                 {
                     "name": "constant.language.walnut",

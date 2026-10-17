@@ -85,7 +85,103 @@ bool CppEmitter::needs_header_body(const FuncInfo& f) {
     if (f.decl->kind == K::FunctionDeclaration) mods = &static_cast<nodes::FunctionDeclaration*>(f.decl)->get_modifiers();
     else if (f.decl->kind == K::OperatorFunctionDeclaration) mods = &static_cast<nodes::OperatorFunctionDeclaration*>(f.decl)->get_modifiers();
     if (mods && mods->has(RM::Inline)) return true;
+    if (!callable_params(f).empty()) return true;
     return function_header(f, false, false).find("auto") != std::string::npos;
+}
+
+void CppEmitter::scan_function_values(const std::vector<CodegenUnit>& units) {
+    std::unordered_set<const nodes::ASTNode*> callees;
+
+    std::function<void(nodes::ASTNode*)> visit = [&](nodes::ASTNode* n) {
+        if (!n) return;
+
+        if (n->kind == K::CallExpression) {
+            if (nodes::ASTNode* callee = static_cast<nodes::CallExpression*>(n)->m_callee) {
+                callees.insert(callee);
+                if (callee->kind == K::TemplateInstantiation) callees.insert(static_cast<nodes::TemplateInstantiation*>(callee)->m_template);
+            }
+        }
+
+        const Sym* target = nullptr;
+        std::string_view name;
+
+        if (n->kind == K::Identifier) {
+            target = static_cast<nodes::Identifier*>(n)->resolved;
+            name = static_cast<nodes::Identifier*>(n)->name;
+        } else if (n->kind == K::QualifiedIdentifier) {
+            auto* q = static_cast<nodes::QualifiedIdentifier*>(n);
+            target = q->resolved;
+            if (!q->parts().empty()) name = q->parts().back();
+        } else if (n->kind == K::MemberAccessExpression) {
+            target = static_cast<nodes::MemberAccessExpression*>(n)->resolved;
+            name = static_cast<nodes::MemberAccessExpression*>(n)->m_member;
+        }
+
+        if (target && target->kind == SK::Function && !callees.count(n) && !name.empty()) m_value_used_functions.insert(name);
+        nodes::for_each_child<true>(n, visit);
+    };
+
+    for (const CodegenUnit& u : units) visit(u.ast);
+    m_inst.for_each([&](Inst& I) { visit(I.decl); });
+}
+
+bool CppEmitter::only_called(const nodes::ASTNode* body, std::string_view name) {
+    std::unordered_set<const nodes::ASTNode*> allowed;
+    bool ok = true;
+
+    std::function<void(nodes::ASTNode*)> visit = [&](nodes::ASTNode* n) {
+        if (!n || !ok) return;
+
+        if (n->kind == K::CallExpression) {
+            auto* c = static_cast<nodes::CallExpression*>(n);
+            if (c->m_callee) allowed.insert(c->m_callee);
+            std::vector<Type*> slots = c->resolved ? param_types_of(c->resolved) : std::vector<Type*>{};
+
+            for (std::size_t i = 0; i < c->m_arguments.size(); ++i) {
+                nodes::ASTNode* a = c->m_arguments[i];
+                if (!a || a->kind != K::Identifier || static_cast<nodes::Identifier*>(a)->name != name) continue;
+                Type* slot = i < slots.size() ? slots[i] : nullptr;
+                if (!c->resolved || !slot) { ok = false; return; }
+                if (slot->is_reference() && !static_cast<semantics::ReferenceType*>(slot)->referent()->cv().is_const) { ok = false; return; }
+                allowed.insert(a);
+            }
+        }
+
+        if (n->kind == K::Identifier && static_cast<nodes::Identifier*>(n)->name == name && !allowed.count(n)) { ok = false; return; }
+        nodes::for_each_child<true>(n, visit);
+    };
+
+    visit(const_cast<nodes::ASTNode*>(body));
+    return ok;
+}
+
+auto CppEmitter::callable_params(const FuncInfo& f) -> const std::vector<const nodes::FunctionParameter*>& {
+    auto found = m_callable_params.find(f.decl);
+    if (found != m_callable_params.end()) return found->second;
+    std::vector<const nodes::FunctionParameter*>& out = m_callable_params[f.decl];
+    if (f.decl->kind != K::FunctionDeclaration || f.sym == m_main_fn || decl_is_async(f.decl)) return out;
+    auto* fd = static_cast<nodes::FunctionDeclaration*>(f.decl);
+    const modifiers::FunctionQualifiers& q = fd->qualifiers();
+    if (!fd->get_body() || q.has(FQ::Virtual) || q.has(FQ::Override) || q.has(FQ::Abstract)) return out;
+    if (fd->get_modifiers().has(RM::Extern) || (f.owner && f.owner->native) || !fd->native_name.empty()) return out;
+    if (m_value_used_functions.count(fd->get_name())) return out;
+    const nodes::FunctionParameters* ps = fd->get_parameters();
+    if (!ps) return out;
+    EnvScope outer(m_types, outer_env(f));
+    EnvScope env(m_types, f.inst ? &f.inst->env : nullptr);
+    Type* ret = value_type(return_type_of(f.sym));
+    if (ret && ret->kind() == semantics::TypeKind::Coroutine) return out;
+
+    for (const nodes::FunctionParameter* p : ps->m_params) {
+        if (!p || p->expanded_pack || p->is_variadic() || p->has_initializer() || p->get_name().empty()) continue;
+        Type* pt = m_types.canonicalize(const_cast<nodes::FunctionParameter*>(p)->get_type());
+        Type* vt = value_type(pt);
+        if (!vt || vt->kind() != semantics::TypeKind::Function) continue;
+        if (pt->is_reference() && !static_cast<semantics::ReferenceType*>(pt)->referent()->cv().is_const) continue;
+        if (only_called(fd->get_body(), p->get_name())) out.push_back(p);
+    }
+
+    return out;
 }
 
 bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram& out) {
@@ -304,6 +400,8 @@ void CppEmitter::collect(const std::vector<CodegenUnit>& units) {
         if (!u.ast) continue;
         for (nodes::ASTNode* s : u.ast->statements) collect_decl(s, true);
     }
+
+    scan_function_values(units);
 
     std::vector<Inst*> instances;
     m_inst.for_each([&](Inst& I) { instances.push_back(&I); });
@@ -1208,6 +1306,7 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
                 if (RecordInfo* r = owner_record_of(vi)) return r->cname + "::" + function_name(vi) + "()";
                 return function_name(vi) + "()";
             }
+            if (Sym* fi = static_cast<nodes::TemplateInstantiation*>(e)->fn_instance) return symbol_ref(fi, e);
             unsupported(e, "a template instantiation used as a value");
             return "0";
         }
@@ -2843,6 +2942,15 @@ std::string CppEmitter::param_list(const nodes::FunctionParameters* ps, const no
             continue;
         }
 
+        if (m_templated_params) {
+            const auto t = std::find(m_templated_params->begin(), m_templated_params->end(), p);
+
+            if (t != m_templated_params->end()) {
+                add("WF" + std::to_string(t - m_templated_params->begin()) + "&& " + local_name(p->get_name()));
+                continue;
+            }
+        }
+
         std::string piece = cpp_type(pt, at) + " " + local_name(p->get_name());
         if (with_defaults && p->has_initializer()) piece += " = " + conv(const_cast<nodes::ASTNode*>(p->get_initializer()), pt, at);
         add(piece);
@@ -2893,6 +3001,14 @@ std::string CppEmitter::function_header(const FuncInfo& f, bool qualified, bool 
         mods = &od->get_modifiers();
     }
 
+    const std::vector<const nodes::FunctionParameter*>& templated = callable_params(f);
+
+    if (!templated.empty()) {
+        out += "template <";
+        for (std::size_t i = 0; i < templated.size(); ++i) out += (i ? ", typename WF" : "typename WF") + std::to_string(i);
+        out += "> ";
+    }
+
     if (mods->has(RM::Inline)) out += "WALNUT_FORCE_INLINE ";
 
     if (in_class) {
@@ -2902,7 +3018,10 @@ std::string CppEmitter::function_header(const FuncInfo& f, bool qualified, bool 
 
     out += (decl_is_async(f.decl) ? "walnut_rt::task<" + cpp_type(ret, f.decl) + ">" : cpp_type(ret, f.decl)) + " ";
     if (qualified && f.owner) out += f.owner->cname + "::";
+    const std::vector<const nodes::FunctionParameter*>* saved_templated = m_templated_params;
+    m_templated_params = templated.empty() ? nullptr : &templated;
     out += name + "(" + param_list(ps, f.decl) + ")";
+    m_templated_params = saved_templated;
 
     if (f.owner && q->has(FQ::Const) && !mods->has(RM::Static)) out += " const";
     return out;

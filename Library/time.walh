@@ -1369,8 +1369,7 @@ namespace std {
             detail::Native::yield_now();
         } end function yield_now
 
-        template <typename F>
-        function measure(F: work) -> Duration {
+        function measure(function() -> void: work) -> Duration {
             const Instant: start = Instant::now();
             work();
             return start.elapsed();

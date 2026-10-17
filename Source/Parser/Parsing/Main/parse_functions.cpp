@@ -569,6 +569,16 @@ nodes::ASTNode* Parser::parse_operator_function(
   const modifiers::RawModifiers& mods,
   const std::size_t line_number
 ) {
+    const char* keyword_at = current_token().data();
+    nodes::ASTNode* made = parse_operator_function_body(mods, line_number);
+    if (made && !made->at) made->at = keyword_at;
+    return made;
+}
+
+nodes::ASTNode* Parser::parse_operator_function_body(
+  const modifiers::RawModifiers& mods,
+  const std::size_t line_number
+) {
     using K = tokenizing::Token::Kind;
     expect(K::OperatorKeyword, "Expected 'operator' keyword");
     expect(K::LeftParen, "Expected '(' after 'operator'");
