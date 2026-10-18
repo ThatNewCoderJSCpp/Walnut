@@ -1,0 +1,584 @@
+import module.math
+
+namespace std {
+    namespace errors {
+        class symbolic_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class symbolic_error
+    } end namespace errors
+
+    namespace symbolic {
+        template <typename T>
+        concept Real = std::traits::is_builtin_float<T> || std::traits::is_same<T, std::math::BigFloat>
+
+        template <typename T>
+        concept Scalar = (std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>) || std::traits::is_builtin_float<T>
+
+        extern "C++" from "<walnut_symbolic.hpp>" {
+            template <typename T>
+            class Values as "walnut_rt::symbolic::values" {
+            public:
+                constructor();
+                function set(const string&: name, const T&: value) -> void;
+                function has(const string&: name) const -> bool;
+                function clear() -> void;
+                function size() const -> long int;
+            } end class Values
+        } end extern
+
+        namespace detail {
+            extern "C++" from "<walnut_symbolic.hpp>" {
+                class Node as "walnut_rt::symbolic::node" {
+                public:
+                    constructor();
+                    constructor(long int: value);
+                    function is_valid() const -> bool;
+                    function is_number() const -> bool;
+                    function is_integer() const -> bool;
+                    function is_variable() const -> bool;
+                    function is_constant() const -> bool;
+                    function is_zero() const -> bool;
+                    function identical(const Node&: other) const -> bool;
+                    function equals(const Node&: other) const -> bool;
+                    function depends_on(const string&: name) const -> bool;
+                    function variable_count() const -> long int;
+                    function variable_name(long int: index) const -> string;
+                    function numerator() const -> string;
+                    function denominator() const -> string;
+                    function to_string() const -> string;
+                    function to_mathtext() const -> string;
+                    function to_mathtext_infix() const -> string;
+                    function simplify() const -> Node;
+                    function full_simplify() const -> Node;
+                    function derivative(const string&: name) const -> Node;
+                    function nth_derivative(const string&: name, long int: order) const -> Node;
+                    function substitute(const string&: name, const Node&: replacement) const -> Node;
+                    function antiderivative(const string&: name) const -> Node;
+                    operator(-) function() const -> Node;
+                    operator(+) function(const Node&: other) const -> Node;
+                    operator(-) function(const Node&: other) const -> Node;
+                    operator(*) function(const Node&: other) const -> Node;
+                    operator(/) function(const Node&: other) const -> Node;
+                } end class Node
+
+                class Api as "walnut_rt::symbolic::api" {
+                public:
+                    static function symbol(const string&: name) -> Node as "walnut_rt::symbolic::variable";
+                    static function number(long int: value) -> Node as "walnut_rt::symbolic::number";
+                    static function parse_number(const string&: digits) -> Node as "walnut_rt::symbolic::parse_number";
+                    static function rational(long int: numerator, long int: denominator) -> Node as "walnut_rt::symbolic::rational";
+                    static function from_big(const std::math::BigFloat&: value) -> Node as "walnut_rt::symbolic::from_big";
+                    static function pi() -> Node as "walnut_rt::symbolic::pi";
+                    static function e() -> Node as "walnut_rt::symbolic::e";
+                    static function positive_infinity() -> Node as "walnut_rt::symbolic::infinity";
+                    static function power(const Node&: a, const Node&: b) -> Node as "walnut_rt::symbolic::power";
+                    static function modulo(const Node&: a, const Node&: b) -> Node as "walnut_rt::symbolic::modulo";
+                    static function log_base(const Node&: x, const Node&: base) -> Node as "walnut_rt::symbolic::log_base";
+                    static function root(const Node&: x, const Node&: n) -> Node as "walnut_rt::symbolic::root";
+                    static function beta(const Node&: a, const Node&: b) -> Node as "walnut_rt::symbolic::beta";
+                    static function polygamma(const Node&: n, const Node&: x) -> Node as "walnut_rt::symbolic::polygamma";
+                    static function lambert_w(const Node&: x, const Node&: k) -> Node as "walnut_rt::symbolic::lambert_w";
+                    static function polylog(const Node&: s, const Node&: x) -> Node as "walnut_rt::symbolic::polylog";
+                    static function combination(const Node&: n, const Node&: k) -> Node as "walnut_rt::symbolic::combination";
+                    static function permutation(const Node&: n, const Node&: k) -> Node as "walnut_rt::symbolic::permutation";
+                    static function abs(const Node&: x) -> Node as "walnut_rt::symbolic::abs";
+                    static function floor(const Node&: x) -> Node as "walnut_rt::symbolic::floor";
+                    static function ceiling(const Node&: x) -> Node as "walnut_rt::symbolic::ceiling";
+                    static function round(const Node&: x) -> Node as "walnut_rt::symbolic::round";
+                    static function trunc(const Node&: x) -> Node as "walnut_rt::symbolic::trunc";
+                    static function fractional_part(const Node&: x) -> Node as "walnut_rt::symbolic::fractional_part";
+                    static function sign(const Node&: x) -> Node as "walnut_rt::symbolic::sign";
+                    static function unit_step(const Node&: x) -> Node as "walnut_rt::symbolic::unit_step";
+                    static function sqrt(const Node&: x) -> Node as "walnut_rt::symbolic::sqrt";
+                    static function cbrt(const Node&: x) -> Node as "walnut_rt::symbolic::cbrt";
+                    static function exp(const Node&: x) -> Node as "walnut_rt::symbolic::exp";
+                    static function ln(const Node&: x) -> Node as "walnut_rt::symbolic::ln";
+                    static function sin(const Node&: x) -> Node as "walnut_rt::symbolic::sin";
+                    static function cos(const Node&: x) -> Node as "walnut_rt::symbolic::cos";
+                    static function tan(const Node&: x) -> Node as "walnut_rt::symbolic::tan";
+                    static function csc(const Node&: x) -> Node as "walnut_rt::symbolic::csc";
+                    static function sec(const Node&: x) -> Node as "walnut_rt::symbolic::sec";
+                    static function cot(const Node&: x) -> Node as "walnut_rt::symbolic::cot";
+                    static function arcsin(const Node&: x) -> Node as "walnut_rt::symbolic::arcsin";
+                    static function arccos(const Node&: x) -> Node as "walnut_rt::symbolic::arccos";
+                    static function arctan(const Node&: x) -> Node as "walnut_rt::symbolic::arctan";
+                    static function arccsc(const Node&: x) -> Node as "walnut_rt::symbolic::arccsc";
+                    static function arcsec(const Node&: x) -> Node as "walnut_rt::symbolic::arcsec";
+                    static function arccot(const Node&: x) -> Node as "walnut_rt::symbolic::arccot";
+                    static function sinh(const Node&: x) -> Node as "walnut_rt::symbolic::sinh";
+                    static function cosh(const Node&: x) -> Node as "walnut_rt::symbolic::cosh";
+                    static function tanh(const Node&: x) -> Node as "walnut_rt::symbolic::tanh";
+                    static function csch(const Node&: x) -> Node as "walnut_rt::symbolic::csch";
+                    static function sech(const Node&: x) -> Node as "walnut_rt::symbolic::sech";
+                    static function coth(const Node&: x) -> Node as "walnut_rt::symbolic::coth";
+                    static function arcsinh(const Node&: x) -> Node as "walnut_rt::symbolic::arcsinh";
+                    static function arccosh(const Node&: x) -> Node as "walnut_rt::symbolic::arccosh";
+                    static function arctanh(const Node&: x) -> Node as "walnut_rt::symbolic::arctanh";
+                    static function arccsch(const Node&: x) -> Node as "walnut_rt::symbolic::arccsch";
+                    static function arcsech(const Node&: x) -> Node as "walnut_rt::symbolic::arcsech";
+                    static function arccoth(const Node&: x) -> Node as "walnut_rt::symbolic::arccoth";
+                    static function sinc(const Node&: x) -> Node as "walnut_rt::symbolic::sinc";
+                    static function normalized_sinc(const Node&: x) -> Node as "walnut_rt::symbolic::normalized_sinc";
+                    static function erf(const Node&: x) -> Node as "walnut_rt::symbolic::erf";
+                    static function erfc(const Node&: x) -> Node as "walnut_rt::symbolic::erfc";
+                    static function erfi(const Node&: x) -> Node as "walnut_rt::symbolic::erfi";
+                    static function inv_erf(const Node&: x) -> Node as "walnut_rt::symbolic::inv_erf";
+                    static function inv_erfc(const Node&: x) -> Node as "walnut_rt::symbolic::inv_erfc";
+                    static function inv_erfi(const Node&: x) -> Node as "walnut_rt::symbolic::inv_erfi";
+                    static function gamma(const Node&: x) -> Node as "walnut_rt::symbolic::gamma";
+                    static function factorial(const Node&: x) -> Node as "walnut_rt::symbolic::factorial";
+                    static function digamma(const Node&: x) -> Node as "walnut_rt::symbolic::digamma";
+                    static function trigamma(const Node&: x) -> Node as "walnut_rt::symbolic::trigamma";
+                    static function riemann_zeta(const Node&: x) -> Node as "walnut_rt::symbolic::riemann_zeta";
+                    static function dilogarithm(const Node&: x) -> Node as "walnut_rt::symbolic::dilogarithm";
+                    static function trilogarithm(const Node&: x) -> Node as "walnut_rt::symbolic::trilogarithm";
+                    static function exp_integral(const Node&: x) -> Node as "walnut_rt::symbolic::exp_integral";
+                    static function log_integral(const Node&: x) -> Node as "walnut_rt::symbolic::log_integral";
+                    static function sin_integral(const Node&: x) -> Node as "walnut_rt::symbolic::sin_integral";
+                    static function cos_integral(const Node&: x) -> Node as "walnut_rt::symbolic::cos_integral";
+                    static function sinh_integral(const Node&: x) -> Node as "walnut_rt::symbolic::sinh_integral";
+                    static function cosh_integral(const Node&: x) -> Node as "walnut_rt::symbolic::cosh_integral";
+                    static function fresnel_s(const Node&: x) -> Node as "walnut_rt::symbolic::fresnel_s";
+                    static function fresnel_c(const Node&: x) -> Node as "walnut_rt::symbolic::fresnel_c";
+                    static function gudermannian(const Node&: x) -> Node as "walnut_rt::symbolic::gudermannian";
+                    static function inv_gudermannian(const Node&: x) -> Node as "walnut_rt::symbolic::inv_gudermannian";
+                } end class Api
+
+                template <typename T>
+                class Ops as "walnut_rt::symbolic::ops" {
+                public:
+                    static function from_float(const T&: value) -> Node as "walnut_rt::symbolic::from_float";
+                    static function evaluate(const Node&: e, const Values<T>&: values) -> T as "walnut_rt::symbolic::evaluate_with<T>";
+                    static function missing(const Node&: e, const Values<T>&: values) -> string as "walnut_rt::symbolic::missing_variable<T>";
+                } end class Ops
+            } end extern
+
+            template <typename T>
+            requires std::symbolic::Scalar<T>
+            function lift(const T&: value) -> Node {
+                if constexpr (std::traits::is_builtin_float<T>) then {
+                    return Ops<T>::from_float(value);
+                } else then {
+                    return Api::parse_number(std::core::to_string(value));
+                }
+            } end function lift
+        } end namespace detail
+
+
+        class Expression {
+            detail::Node: m_node;
+
+        public:
+            constructor() { }
+
+            constructor(const detail::Node&: n) : m_node(n) { }
+
+            function node() const -> const detail::Node& {
+                return m_node;
+            } end function node
+
+            function is_valid() const -> bool {
+                return m_node.is_valid();
+            } end function is_valid
+
+            function is_number() const -> bool {
+                return m_node.is_number();
+            } end function is_number
+
+            function is_integer() const -> bool {
+                return m_node.is_integer();
+            } end function is_integer
+
+            function is_variable() const -> bool {
+                return m_node.is_variable();
+            } end function is_variable
+
+            function is_constant() const -> bool {
+                return m_node.is_constant();
+            } end function is_constant
+
+            function is_zero() const -> bool {
+                return m_node.is_zero();
+            } end function is_zero
+
+            function identical(const Expression&: other) const -> bool {
+                return m_node.identical(other.m_node);
+            } end function identical
+
+            function depends_on(const string&: name) const -> bool {
+                return m_node.depends_on(name);
+            } end function depends_on
+
+            function variable_count() const -> long int {
+                return m_node.variable_count();
+            } end function variable_count
+
+            function variable_name(long int: index) const -> string {
+                if (index < 0 || index >= m_node.variable_count()) then {
+                    throw std::errors::symbolic_error(static_cast<string>(`variable_name: index ${index} is out of range for ${m_node.variable_count()} variables`));
+                }
+                return m_node.variable_name(index);
+            } end function variable_name
+
+            function numerator() const -> string {
+                if (!m_node.is_number()) then {
+                    throw std::errors::symbolic_error("numerator: the expression is not an exact number");
+                }
+                return m_node.numerator();
+            } end function numerator
+
+            function denominator() const -> string {
+                if (!m_node.is_number()) then {
+                    throw std::errors::symbolic_error("denominator: the expression is not an exact number");
+                }
+                return m_node.denominator();
+            } end function denominator
+
+            function to_string() const -> string {
+                return m_node.to_string();
+            } end function to_string
+
+            function to_text() const -> text {
+                return static_cast<text>(m_node.to_string());
+            } end function to_text
+
+            function to_mathtext() const -> string {
+                return m_node.to_mathtext();
+            } end function to_mathtext
+
+            function to_mathtext_infix() const -> string {
+                return m_node.to_mathtext_infix();
+            } end function to_mathtext_infix
+
+            function simplify() const -> Expression {
+                return Expression(m_node.simplify());
+            } end function simplify
+
+            function full_simplify() const -> Expression {
+                return Expression(m_node.full_simplify());
+            } end function full_simplify
+
+            function derivative(const string&: name) const -> Expression {
+                return Expression(m_node.derivative(name));
+            } end function derivative
+
+            function derivative(const string&: name, long int: order) const -> Expression {
+                if (order < 0) then {
+                    throw std::errors::symbolic_error(static_cast<string>(`derivative: the order ${order} is negative`));
+                }
+                return Expression(m_node.nth_derivative(name, order));
+            } end function derivative
+
+            function substitute(const string&: name, const Expression&: replacement) const -> Expression {
+                return Expression(m_node.substitute(name, replacement.m_node));
+            } end function substitute
+
+            template <typename T>
+            requires std::symbolic::Scalar<T>
+            function substitute(const string&: name, const T&: value) const -> Expression {
+                return Expression(m_node.substitute(name, detail::lift(value)));
+            } end function substitute
+
+            template <typename T>
+            requires std::symbolic::Real<T>
+            function evaluate(const Values<T>&: values) const -> T {
+                if (!m_node.is_valid()) then {
+                    throw std::errors::symbolic_error("evaluate: the expression is invalid");
+                }
+                const string: missing = detail::Ops<T>::missing(m_node, values);
+                if (missing != "") then {
+                    throw std::errors::symbolic_error(static_cast<string>(`evaluate: no value was given for the variable ${missing}`));
+                }
+                return detail::Ops<T>::evaluate(m_node, values);
+            } end function evaluate
+
+            template <typename T>
+            requires std::symbolic::Real<T>
+            function evaluate() const -> T {
+                Values<T>: none;
+                return evaluate<T>(none);
+            } end function evaluate
+
+            template <typename T>
+            requires std::symbolic::Real<T>
+            function evaluate(const string&: name, const T&: value) const -> T {
+                Values<T>: one;
+                one.set(name, value);
+                return evaluate<T>(one);
+            } end function evaluate
+
+            operator(-) function() const -> Expression {
+                return Expression(-m_node);
+            }
+
+            operator(+) function(const Expression&: o) const -> Expression {
+                return Expression(m_node + o.m_node);
+            }
+
+            operator(-) function(const Expression&: o) const -> Expression {
+                return Expression(m_node - o.m_node);
+            }
+
+            operator(*) function(const Expression&: o) const -> Expression {
+                return Expression(m_node * o.m_node);
+            }
+
+            operator(/) function(const Expression&: o) const -> Expression {
+                return Expression(m_node / o.m_node);
+            }
+
+            operator(**) function(const Expression&: o) const -> Expression {
+                return Expression(detail::Api::power(m_node, o.m_node));
+            }
+
+            operator(%) function(const Expression&: o) const -> Expression {
+                return Expression(detail::Api::modulo(m_node, o.m_node));
+            }
+
+            operator(+=) function(const Expression&: o) -> Expression& {
+                m_node = m_node + o.m_node;
+                return *this;
+            }
+
+            operator(-=) function(const Expression&: o) -> Expression& {
+                m_node = m_node - o.m_node;
+                return *this;
+            }
+
+            operator(*=) function(const Expression&: o) -> Expression& {
+                m_node = m_node * o.m_node;
+                return *this;
+            }
+
+            operator(/=) function(const Expression&: o) -> Expression& {
+                m_node = m_node / o.m_node;
+                return *this;
+            }
+
+            operator(==) function(const Expression&: o) const -> bool {
+                return m_node.equals(o.m_node);
+            }
+
+            operator(!=) function(const Expression&: o) const -> bool {
+                return !m_node.equals(o.m_node);
+            }
+        } end class Expression
+
+        function symbol(const string&: name) -> Expression {
+            if (name == "") then {
+                throw std::errors::symbolic_error("symbol: a symbol needs a name");
+            }
+            return Expression(detail::Api::symbol(name));
+        } end function symbol
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        function number(const T&: value) -> Expression {
+            return Expression(detail::lift(value));
+        } end function number
+
+        function number(const std::math::BigFloat&: value) -> Expression {
+            return Expression(detail::Api::from_big(value));
+        } end function number
+
+        function number(const string&: digits) -> Expression {
+            return Expression(detail::Api::parse_number(digits));
+        } end function number
+
+        function rational(long int: numerator, long int: denominator) -> Expression {
+            if (denominator == 0) then {
+                throw std::errors::symbolic_error("rational: the denominator is 0");
+            }
+            return Expression(detail::Api::rational(numerator, denominator));
+        } end function rational
+
+        function pi() -> Expression {
+            return Expression(detail::Api::pi());
+        } end function pi
+
+        function e() -> Expression {
+            return Expression(detail::Api::e());
+        } end function e
+
+        function positive_infinity() -> Expression {
+            return Expression(detail::Api::positive_infinity());
+        } end function positive_infinity
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(+) function(const Expression&: a, const T&: b) -> Expression {
+            return a + number(b);
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(+) function(const T&: a, const Expression&: b) -> Expression {
+            return number(a) + b;
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(-) function(const Expression&: a, const T&: b) -> Expression {
+            return a - number(b);
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(-) function(const T&: a, const Expression&: b) -> Expression {
+            return number(a) - b;
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(*) function(const Expression&: a, const T&: b) -> Expression {
+            return a * number(b);
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(*) function(const T&: a, const Expression&: b) -> Expression {
+            return number(a) * b;
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(/) function(const Expression&: a, const T&: b) -> Expression {
+            return a / number(b);
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(/) function(const T&: a, const Expression&: b) -> Expression {
+            return number(a) / b;
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(**) function(const Expression&: a, const T&: b) -> Expression {
+            return a ** number(b);
+        }
+
+        template <typename T>
+        requires std::symbolic::Scalar<T>
+        operator(**) function(const T&: a, const Expression&: b) -> Expression {
+            return number(a) ** b;
+        }
+
+        function pow(const Expression&: base, const Expression&: exponent) -> Expression {
+            return base ** exponent;
+        } end function pow
+
+        function root(const Expression&: x, const Expression&: n) -> Expression {
+            return Expression(detail::Api::root(x.node(), n.node()));
+        } end function root
+
+        function log(const Expression&: x, const Expression&: base) -> Expression {
+            return Expression(detail::Api::log_base(x.node(), base.node()));
+        } end function log
+
+        function log2(const Expression&: x) -> Expression {
+            return log(x, number(2));
+        } end function log2
+
+        function log10(const Expression&: x) -> Expression {
+            return log(x, number(10));
+        } end function log10
+
+        function beta(const Expression&: a, const Expression&: b) -> Expression {
+            return Expression(detail::Api::beta(a.node(), b.node()));
+        } end function beta
+
+        function polygamma(const Expression&: n, const Expression&: x) -> Expression {
+            return Expression(detail::Api::polygamma(n.node(), x.node()));
+        } end function polygamma
+
+        function lambert_w(const Expression&: x) -> Expression {
+            return Expression(detail::Api::lambert_w(x.node(), detail::Api::number(0)));
+        } end function lambert_w
+
+        function lambert_w(const Expression&: x, long int: branch) -> Expression {
+            return Expression(detail::Api::lambert_w(x.node(), detail::Api::number(branch)));
+        } end function lambert_w
+
+        function polylog(const Expression&: s, const Expression&: x) -> Expression {
+            return Expression(detail::Api::polylog(s.node(), x.node()));
+        } end function polylog
+
+        function combination(const Expression&: n, const Expression&: k) -> Expression {
+            return Expression(detail::Api::combination(n.node(), k.node()));
+        } end function combination
+
+        function permutation(const Expression&: n, const Expression&: k) -> Expression {
+            return Expression(detail::Api::permutation(n.node(), k.node()));
+        } end function permutation
+
+        function abs(const Expression&: x) -> Expression { return Expression(detail::Api::abs(x.node())); } end function abs
+        function floor(const Expression&: x) -> Expression { return Expression(detail::Api::floor(x.node())); } end function floor
+        function ceiling(const Expression&: x) -> Expression { return Expression(detail::Api::ceiling(x.node())); } end function ceiling
+        function round(const Expression&: x) -> Expression { return Expression(detail::Api::round(x.node())); } end function round
+        function trunc(const Expression&: x) -> Expression { return Expression(detail::Api::trunc(x.node())); } end function trunc
+        function fractional_part(const Expression&: x) -> Expression { return Expression(detail::Api::fractional_part(x.node())); } end function fractional_part
+        function sign(const Expression&: x) -> Expression { return Expression(detail::Api::sign(x.node())); } end function sign
+        function unit_step(const Expression&: x) -> Expression { return Expression(detail::Api::unit_step(x.node())); } end function unit_step
+        function sqrt(const Expression&: x) -> Expression { return Expression(detail::Api::sqrt(x.node())); } end function sqrt
+        function cbrt(const Expression&: x) -> Expression { return Expression(detail::Api::cbrt(x.node())); } end function cbrt
+        function exp(const Expression&: x) -> Expression { return Expression(detail::Api::exp(x.node())); } end function exp
+        function ln(const Expression&: x) -> Expression { return Expression(detail::Api::ln(x.node())); } end function ln
+        function sin(const Expression&: x) -> Expression { return Expression(detail::Api::sin(x.node())); } end function sin
+        function cos(const Expression&: x) -> Expression { return Expression(detail::Api::cos(x.node())); } end function cos
+        function tan(const Expression&: x) -> Expression { return Expression(detail::Api::tan(x.node())); } end function tan
+        function csc(const Expression&: x) -> Expression { return Expression(detail::Api::csc(x.node())); } end function csc
+        function sec(const Expression&: x) -> Expression { return Expression(detail::Api::sec(x.node())); } end function sec
+        function cot(const Expression&: x) -> Expression { return Expression(detail::Api::cot(x.node())); } end function cot
+        function arcsin(const Expression&: x) -> Expression { return Expression(detail::Api::arcsin(x.node())); } end function arcsin
+        function arccos(const Expression&: x) -> Expression { return Expression(detail::Api::arccos(x.node())); } end function arccos
+        function arctan(const Expression&: x) -> Expression { return Expression(detail::Api::arctan(x.node())); } end function arctan
+        function arccsc(const Expression&: x) -> Expression { return Expression(detail::Api::arccsc(x.node())); } end function arccsc
+        function arcsec(const Expression&: x) -> Expression { return Expression(detail::Api::arcsec(x.node())); } end function arcsec
+        function arccot(const Expression&: x) -> Expression { return Expression(detail::Api::arccot(x.node())); } end function arccot
+        function sinh(const Expression&: x) -> Expression { return Expression(detail::Api::sinh(x.node())); } end function sinh
+        function cosh(const Expression&: x) -> Expression { return Expression(detail::Api::cosh(x.node())); } end function cosh
+        function tanh(const Expression&: x) -> Expression { return Expression(detail::Api::tanh(x.node())); } end function tanh
+        function csch(const Expression&: x) -> Expression { return Expression(detail::Api::csch(x.node())); } end function csch
+        function sech(const Expression&: x) -> Expression { return Expression(detail::Api::sech(x.node())); } end function sech
+        function coth(const Expression&: x) -> Expression { return Expression(detail::Api::coth(x.node())); } end function coth
+        function arcsinh(const Expression&: x) -> Expression { return Expression(detail::Api::arcsinh(x.node())); } end function arcsinh
+        function arccosh(const Expression&: x) -> Expression { return Expression(detail::Api::arccosh(x.node())); } end function arccosh
+        function arctanh(const Expression&: x) -> Expression { return Expression(detail::Api::arctanh(x.node())); } end function arctanh
+        function arccsch(const Expression&: x) -> Expression { return Expression(detail::Api::arccsch(x.node())); } end function arccsch
+        function arcsech(const Expression&: x) -> Expression { return Expression(detail::Api::arcsech(x.node())); } end function arcsech
+        function arccoth(const Expression&: x) -> Expression { return Expression(detail::Api::arccoth(x.node())); } end function arccoth
+        function sinc(const Expression&: x) -> Expression { return Expression(detail::Api::sinc(x.node())); } end function sinc
+        function normalized_sinc(const Expression&: x) -> Expression { return Expression(detail::Api::normalized_sinc(x.node())); } end function normalized_sinc
+        function erf(const Expression&: x) -> Expression { return Expression(detail::Api::erf(x.node())); } end function erf
+        function erfc(const Expression&: x) -> Expression { return Expression(detail::Api::erfc(x.node())); } end function erfc
+        function erfi(const Expression&: x) -> Expression { return Expression(detail::Api::erfi(x.node())); } end function erfi
+        function inv_erf(const Expression&: x) -> Expression { return Expression(detail::Api::inv_erf(x.node())); } end function inv_erf
+        function inv_erfc(const Expression&: x) -> Expression { return Expression(detail::Api::inv_erfc(x.node())); } end function inv_erfc
+        function inv_erfi(const Expression&: x) -> Expression { return Expression(detail::Api::inv_erfi(x.node())); } end function inv_erfi
+        function gamma(const Expression&: x) -> Expression { return Expression(detail::Api::gamma(x.node())); } end function gamma
+        function factorial(const Expression&: x) -> Expression { return Expression(detail::Api::factorial(x.node())); } end function factorial
+        function digamma(const Expression&: x) -> Expression { return Expression(detail::Api::digamma(x.node())); } end function digamma
+        function trigamma(const Expression&: x) -> Expression { return Expression(detail::Api::trigamma(x.node())); } end function trigamma
+        function riemann_zeta(const Expression&: x) -> Expression { return Expression(detail::Api::riemann_zeta(x.node())); } end function riemann_zeta
+        function dilogarithm(const Expression&: x) -> Expression { return Expression(detail::Api::dilogarithm(x.node())); } end function dilogarithm
+        function trilogarithm(const Expression&: x) -> Expression { return Expression(detail::Api::trilogarithm(x.node())); } end function trilogarithm
+        function exp_integral(const Expression&: x) -> Expression { return Expression(detail::Api::exp_integral(x.node())); } end function exp_integral
+        function log_integral(const Expression&: x) -> Expression { return Expression(detail::Api::log_integral(x.node())); } end function log_integral
+        function sin_integral(const Expression&: x) -> Expression { return Expression(detail::Api::sin_integral(x.node())); } end function sin_integral
+        function cos_integral(const Expression&: x) -> Expression { return Expression(detail::Api::cos_integral(x.node())); } end function cos_integral
+        function sinh_integral(const Expression&: x) -> Expression { return Expression(detail::Api::sinh_integral(x.node())); } end function sinh_integral
+        function cosh_integral(const Expression&: x) -> Expression { return Expression(detail::Api::cosh_integral(x.node())); } end function cosh_integral
+        function fresnel_s(const Expression&: x) -> Expression { return Expression(detail::Api::fresnel_s(x.node())); } end function fresnel_s
+        function fresnel_c(const Expression&: x) -> Expression { return Expression(detail::Api::fresnel_c(x.node())); } end function fresnel_c
+        function gudermannian(const Expression&: x) -> Expression { return Expression(detail::Api::gudermannian(x.node())); } end function gudermannian
+        function inv_gudermannian(const Expression&: x) -> Expression { return Expression(detail::Api::inv_gudermannian(x.node())); } end function inv_gudermannian
+    } end namespace symbolic
+} end namespace std
