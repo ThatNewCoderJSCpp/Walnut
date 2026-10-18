@@ -215,7 +215,7 @@ C or C++ code can also be written straight into a `.wal` file, in an `extern "C+
 
 ## Editor support
 
-`Tools/vscode-walnut` is a Visual Studio Code extension that colors Walnut code (`.wal` and `.walh` files), underlines the compiler's errors as you type, and sets up comment toggling and bracket matching. It asks the compiler what each name and operator is with `walnut highlight`, so variables, types and overloaded operators get their exact colors. The colors are in `Tools/vscode-walnut/colors.json`, and saving that file recolors the editor at once. [Its README](Tools/vscode-walnut/README.md) covers installing it from a `.vsix` file, editing the colors, and using the grammar in other editors.
+`Tools/vscode-walnut` is a Visual Studio Code extension that colors Walnut code (`.wal` and `.walh` files), underlines the compiler's errors as you type, and sets up comment toggling and bracket matching. It asks the compiler what each name and operator is with `walnut highlight`, so variables, types and overloaded operators get their exact colors. The colors are in `Tools/vscode-walnut/colors.json`, and saving that file recolors the editor at once. Walnut files get their own icons too; `Tools/icons` has those icons as SVG, PNG and `.ico`, both as plain symbols and as file-document icons. [Its README](Tools/vscode-walnut/README.md) covers installing it from a `.vsix` file, editing the colors, and using the grammar in other editors.
 
 ## A short tour
 

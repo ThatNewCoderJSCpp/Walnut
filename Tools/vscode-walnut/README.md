@@ -7,6 +7,8 @@ The coloring works in two layers:
 - **The grammar** (`syntaxes/walnut.tmLanguage.json`) colors the text as soon as a file opens, from its shape alone: keywords, strings and `${}` interpolation, numbers, comments, declarations (`int: total`), calls, `self`, the name after `end function` and so on.
 - **The compiler** fills in what only the type checker knows. A moment after you stop typing, the extension runs `walnut highlight` on the file (unsaved changes included). The compiler says what every name really is (a variable, a parameter, a field, a type, a namespace, an enum member, a function) and which operators call an operator function you wrote, such as the `+` in `a + b` for two `Mesh` values. The same run underlines the compiler's errors and warnings, and lists them in the **Problems** panel.
 
+`.wal` files get a walnut icon in the explorer and on tabs, and `.walh` (or `.hwal`) headers get the same walnut with an "h" badge, whenever your file icon theme doesn't have its own icon for them. Headers are the separate **Walnut Header** language so they can have their own icon; they're colored, underlined and hovered exactly like `.wal` files.
+
 Without the compiler, the grammar still colors everything; only the exact coloring, the underlines and the hover info are missing.
 
 The compiler only runs when VS Code asks for semantic coloring, which some color themes turn off. If there are no underlines or hovers, add `"editor.semanticHighlighting.enabled": true` to your settings.

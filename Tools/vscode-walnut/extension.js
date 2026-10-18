@@ -62,6 +62,8 @@ const linkResults = new Map();
 
 const rulePrefix = 'Walnut: ';
 const semanticSuffix = ':walnut';
+const semanticSuffixes = [semanticSuffix, ':walnut-header'];
+const walnutSelector = [{ language: 'walnut' }, { language: 'walnut-header' }];
 const squiggleStateKey = 'walnut.squiggleColors';
 
 let extensionContext = null;
@@ -306,7 +308,7 @@ async function applyColorsNow(showErrors, override) {
         const style = styleOf(colors[name]);
         if (!style) continue;
         if (category.tm) textMateRules.push({ name: rulePrefix + name, scope: category.tm, settings: style });
-        if (category.sem) for (const selector of category.sem) semanticRules[selector + semanticSuffix] = semanticStyleOf(style);
+        if (category.sem) for (const selector of category.sem) for (const suffix of semanticSuffixes) semanticRules[selector + suffix] = semanticStyleOf(style);
     }
 
     const tokenColors = Object.assign({}, config.inspect('tokenColorCustomizations').globalValue || {});
@@ -316,7 +318,7 @@ async function applyColorsNow(showErrors, override) {
 
     const semanticColors = Object.assign({}, config.inspect('semanticTokenColorCustomizations').globalValue || {});
     const keptSemantic = {};
-    for (const [key, value] of Object.entries(semanticColors.rules || {})) if (!key.endsWith(semanticSuffix)) keptSemantic[key] = value;
+    for (const [key, value] of Object.entries(semanticColors.rules || {})) if (!semanticSuffixes.some(suffix => key.endsWith(suffix))) keptSemantic[key] = value;
     const newSemanticColors = Object.assign({}, semanticColors, { rules: Object.assign(keptSemantic, semanticRules) });
     if (!Object.keys(newSemanticColors.rules).length) delete newSemanticColors.rules;
 
@@ -1065,10 +1067,10 @@ function activate(context) {
         output,
         diagnostics,
         tokensChanged,
-        vscode.languages.registerDocumentSemanticTokensProvider({ language: 'walnut' }, provider, legend),
-        vscode.languages.registerHoverProvider({ language: 'walnut' }, hoverProvider),
-        vscode.languages.registerDefinitionProvider({ language: 'walnut' }, definitionProvider),
-        vscode.languages.registerDeclarationProvider({ language: 'walnut' }, declarationProvider),
+        vscode.languages.registerDocumentSemanticTokensProvider(walnutSelector, provider, legend),
+        vscode.languages.registerHoverProvider(walnutSelector, hoverProvider),
+        vscode.languages.registerDefinitionProvider(walnutSelector, definitionProvider),
+        vscode.languages.registerDeclarationProvider(walnutSelector, declarationProvider),
         vscode.workspace.onDidCloseTextDocument(doc => { diagnostics.delete(doc.uri); lastResults.delete(doc.uri.toString()); errorLines.delete(doc.uri.toString()); hoverResults.delete(doc.uri.toString()); linkResults.delete(doc.uri.toString()); }),
         vscode.window.onDidChangeVisibleTextEditors(showErrorLines),
         vscode.workspace.onDidSaveTextDocument(doc => {

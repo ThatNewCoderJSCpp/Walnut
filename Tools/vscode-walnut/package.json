@@ -2,7 +2,7 @@
     "name": "walnut-language",
     "displayName": "Walnut",
     "description": "Coloring, error underlines, hover info with overload pages, go to definition, color themes and a color designer for the Walnut language (.wal and .walh files)",
-    "version": "0.6.2",
+    "version": "0.6.3",
     "publisher": "walnut",
     "engines": {
         "vscode": "^1.75.0"
@@ -13,7 +13,8 @@
     ],
     "main": "./extension.js",
     "activationEvents": [
-        "onLanguage:walnut"
+        "onLanguage:walnut",
+        "onLanguage:walnut-header"
     ],
     "contributes": {
         "languages": [
@@ -24,15 +25,42 @@
                     "walnut"
                 ],
                 "extensions": [
-                    ".wal",
-                    ".walh"
+                    ".wal"
                 ],
-                "configuration": "./language-configuration.json"
+                "configuration": "./language-configuration.json",
+                "icon": {
+                    "light": "./icons/walnut.svg",
+                    "dark": "./icons/walnut.svg"
+                }
+            },
+            {
+                "id": "walnut-header",
+                "aliases": [
+                    "Walnut Header",
+                    "walh"
+                ],
+                "extensions": [
+                    ".walh",
+                    ".hwal"
+                ],
+                "configuration": "./language-configuration.json",
+                "icon": {
+                    "light": "./icons/walnut-header.svg",
+                    "dark": "./icons/walnut-header.svg"
+                }
             }
         ],
         "grammars": [
             {
                 "language": "walnut",
+                "scopeName": "source.walnut",
+                "path": "./syntaxes/walnut.tmLanguage.json",
+                "embeddedLanguages": {
+                    "meta.embedded.interpolation.walnut": "walnut"
+                }
+            },
+            {
+                "language": "walnut-header",
                 "scopeName": "source.walnut",
                 "path": "./syntaxes/walnut.tmLanguage.json",
                 "embeddedLanguages": {
@@ -190,6 +218,26 @@
         "semanticTokenScopes": [
             {
                 "language": "walnut",
+                "scopes": {
+                    "operator.overloaded": [
+                        "entity.name.function.operator.walnut"
+                    ],
+                    "variable.declaration": [
+                        "meta.declaration.variable.name.walnut"
+                    ],
+                    "parameter.declaration": [
+                        "meta.declaration.variable.name.walnut"
+                    ],
+                    "property.declaration": [
+                        "meta.declaration.variable.name.walnut"
+                    ],
+                    "concept": [
+                        "entity.name.type.walnut"
+                    ]
+                }
+            },
+            {
+                "language": "walnut-header",
                 "scopes": {
                     "operator.overloaded": [
                         "entity.name.function.operator.walnut"
