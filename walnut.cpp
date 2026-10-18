@@ -115,6 +115,7 @@ void print_usage(std::ostream& os) {
           "  run     build the program and run it\n"
           "  clean   delete walnut's build cache\n"
           "  highlight  print what each name and operator in the file is, as JSON, for editors (with --stdin, the file's text is read from standard input)\n"
+          "  library    list the library files built into walnut; 'library <file>' prints one, 'library --extract <dir>' writes them all to a folder\n"
           "\n"
           "options:\n"
           "  -o <path>          output path\n"
@@ -1242,7 +1243,40 @@ int run(const Options& o) {
 
 }
 
+int library_command(int argc, char** argv) {
+    if (argc < 3) {
+        for (const walnut_library::File& f : walnut_library::files) if (f.path) std::cout << f.path << "\n";
+        return 0;
+    }
+    const std::string a = argv[2];
+    if (a == "--extract") {
+        if (argc < 4) { std::cerr << "walnut: '--extract' needs a folder\n"; return 2; }
+        const fs::path dir = argv[3];
+        std::error_code ec;
+        for (const walnut_library::File& f : walnut_library::files) {
+            if (!f.path) continue;
+            const fs::path target = dir / fs::path(f.path);
+            fs::create_directories(target.parent_path(), ec);
+            std::ofstream out(target, std::ios::binary | std::ios::trunc);
+            if (!out) { std::cerr << "walnut: can't write " << target.string() << "\n"; return 1; }
+            out.write(reinterpret_cast<const char*>(f.data), static_cast<std::streamsize>(f.size));
+        }
+        return 0;
+    }
+    std::string want = a;
+    const std::string root = "<walnut>/";
+    if (want.rfind(root, 0) == 0) want = want.substr(root.size());
+    for (const walnut_library::File& f : walnut_library::files) {
+        if (!f.path || want != f.path) continue;
+        std::cout.write(reinterpret_cast<const char*>(f.data), static_cast<std::streamsize>(f.size));
+        return 0;
+    }
+    std::cerr << "walnut: '" << a << "' isn't a library file; 'walnut library' lists them\n";
+    return 1;
+}
+
 int main(int argc, char** argv) {
+    if (argc >= 2 && std::string(argv[1]) == "library") return library_command(argc, argv);
     Options o;
     int code = 0;
     if (!parse_args(argc, argv, o, code)) return code;

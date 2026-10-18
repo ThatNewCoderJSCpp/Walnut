@@ -750,6 +750,7 @@ function hoverMarkdown(h, uri) {
         lines.push(`**${items.length > 1 ? many : one}:** ` + items.map(inlineCode).join(', '));
     };
 
+    if (h.doc) md.appendMarkdown(h.doc + '  \n');
     add('Type', 'Types', h.types);
     add('Value', 'Values', h.values);
     add('Result', 'Results', h.results);
@@ -833,7 +834,37 @@ function libraryFile(file) {
         dir = parent;
     }
 
-    return '';
+    return extractedLibraryFile(compiler, rest);
+}
+
+function extractedLibraryFile(compiler, rest) {
+    let stamp = compiler;
+
+    try {
+        const info = fs.statSync(compiler);
+        stamp += `#${info.size}#${info.mtimeMs}`;
+    } catch (e) {
+        return '';
+    }
+
+    const hash = require('crypto').createHash('sha1').update(stamp).digest('hex').slice(0, 16);
+    const dir = path.join(os.tmpdir(), 'walnut-library', hash);
+    const target = path.join(dir, rest);
+    if (fs.existsSync(target)) return target;
+    if (fs.existsSync(path.join(dir, '.done'))) return '';
+
+    try {
+        fs.mkdirSync(dir, { recursive: true });
+        childProcess.execFileSync(compiler, ['library', '--extract', dir], { stdio: 'ignore', timeout: 20000 });
+    } catch (e) {
+    }
+
+    try {
+        fs.writeFileSync(path.join(dir, '.done'), '');
+    } catch (e) {
+    }
+
+    return fs.existsSync(target) ? target : '';
 }
 
 function locationOf(document, place) {

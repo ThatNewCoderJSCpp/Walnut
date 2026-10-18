@@ -2,7 +2,7 @@
     "name": "walnut-language",
     "displayName": "Walnut",
     "description": "Coloring, error underlines, hover info with overload pages, go to definition, color themes and a color designer for the Walnut language (.wal and .walh files)",
-    "version": "0.6.3",
+    "version": "0.6.4",
     "publisher": "walnut",
     "engines": {
         "vscode": "^1.75.0"

@@ -73,6 +73,7 @@ public:
 private:
     std::vector<AnalyzedUnit> m_units;
     FileId                    m_main_file = INVALID_FILE;
+    std::unordered_map<FileId, std::unordered_map<std::string, FileId>> m_file_imports;
 
 public:
     explicit CompilerPipeline(
@@ -96,6 +97,7 @@ public:
     const Arena& get_arena() const noexcept { return ast_arena; }
     const SourceManager& get_sources() const noexcept { return sources; }
     const std::vector<AnalyzedUnit>& analyzed_units() const noexcept { return m_units; }
+    const std::unordered_map<FileId, std::unordered_map<std::string, FileId>>& file_imports() const noexcept { return m_file_imports; }
     FileId main_file() const noexcept { return m_main_file; }
     semantics::TypeContext& mutable_types() noexcept { return types; }
     semantics::Instantiator& mutable_instantiator() noexcept { return instantiator; }
@@ -300,6 +302,7 @@ public:
             }
 
             loader.load_all(roots);
+            m_file_imports = loader.file_edges();
 
             if (const driver::ParsedUnit* root = loader.unit(*main_id)) { ast = root->ast; }
             driver::FrontPass front(reporter, ast_arena);

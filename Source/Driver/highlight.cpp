@@ -1,4 +1,5 @@
 #include "Driver/highlight.hpp"
+#include "Lexer/keywords.hpp"
 #include "Parser/Nodes/node_children.hpp"
 #include "Semantics/const_evaluator.hpp"
 #include "Semantics/instantiator.hpp"
@@ -8,11 +9,13 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -450,6 +453,197 @@ std::string_view decl_name(const N::ASTNode* d) {
     return {};
 }
 
+using TK = tokenizing::Token::Kind;
+
+struct KeywordDoc {
+    TK          kind;
+    const char* category;
+    const char* syntax;
+    const char* doc;
+};
+
+constexpr KeywordDoc k_keyword_docs[] = {
+    { TK::ArrayKeyword, "keyword", "array[3] int: values = {7, 8, 9};", "Declares a fixed-size array; the size is part of the type, written `array[N] T`. `[]` or `[...]` takes the size from the initializer, and multiple dimensions nest the keyword (`array[2] array[3] int`)." },
+    { TK::AsyncKeyword, "keyword", "function compute(int: x) async -> int { ... } end function compute", "Function qualifier, written after the parameter list, that makes the function a coroutine returning `task<T>`. The task starts running when it is awaited; `main` can't be `async`." },
+    { TK::AsKeyword, "operator", "v as int", "Gives a variant's current alternative, a `var`'s value converted to `T`, or a polymorphic object as a reference or pointer to a derived class. Stops the program with a runtime error if the value isn't a `T`, so check with `is` first." },
+    { TK::AwaitKeyword, "operator", "int: a = await compute(x);", "Waits for a `task<T>` and gives its result. It can be used in any function, including `main`." },
+    { TK::AlignofKeyword, "operator", "alignof(T)", "Gives the alignment of a type in bytes, evaluated at compile time. Also usable as a method: `x.alignof()`." },
+    { TK::AlignasKeyword, "keyword", "alignas(16) int: shared = 0;", "Places a variable, field, array or struct at an address that is a multiple of `N` bytes. `N` must be a power of two, given as a number, a constant or a type; on an array it goes right after `array`." },
+    { TK::BitCastKeyword, "operator", "bit_cast<T>(value)", "Copies the exact bits of a value into another type of the same size. It can't turn a number into a `char` or `bool`." },
+    { TK::BreakKeyword, "keyword", "break;", "Leaves the innermost loop, or ends a `switch` case. `break label;` leaves the labelled loop instead." },
+    { TK::CaseKeyword, "keyword", "case 1: score = 1; break;", "Labels one value inside a `switch`. Case values can be integers, characters, enum values, or `string`/`text` literals." },
+    { TK::ClassKeyword, "keyword", "class Name { ... } end class Name", "Declares a class, closed with `end class Name`. Members are `private` until an access section says otherwise." },
+    { TK::ContinueKeyword, "keyword", "continue;", "Skips to the next iteration of the innermost loop. `continue label;` acts on the labelled loop instead." },
+    { TK::CatchKeyword, "keyword", "catch (const T&: e) { ... }", "Handles exceptions of a given type after a `try` block. `catch (...)` catches anything and must come last." },
+    { TK::ConceptKeyword, "keyword", "concept Addable = requires (T: a, T: b) { a + b; }", "Defines a named requirement on a type, used in place of `typename` or in a `requires` clause. The body can be a `requires` block, a trait, another concept, or a combination with `&&`, `||` and `!`; it has no `;` after it." },
+    { TK::ConstexprKeyword, "keyword", "constexpr int: size = 4;", "Marks a variable as a compile-time constant (its initializer must be constant) or a function as able to run while compiling. `if constexpr` keeps only the branch whose condition is true." },
+    { TK::ConstevalKeyword, "keyword", "", "Function qualifier, written after the parameter list, meaning the function must always be evaluated at compile time." },
+    { TK::ConstinitKeyword, "keyword", "", "Variable modifier meaning the variable is initialized at compile time. It needs `static` or `thread_local`, and can't be combined with `constexpr` or `inline`." },
+    { TK::ConstructorKeyword, "keyword", "constructor(int: x, string: y) : v = x, s = y { }", "Declares a constructor inside a class, with an optional initializer list after `:`. Outside the class it is defined as `constructor ClassName(...) { }`; `= default` and `= delete` are allowed." },
+    { TK::ConstCastKeyword, "operator", "const_cast<int*>(read_only)", "Removes or adds `const` or `volatile` through a pointer or reference; only those qualifiers may differ between the two types. Writing through the result is only safe if the original object wasn't declared `const`." },
+    { TK::CountOfKeyword, "operator", "countof(x)", "Gives the number of elements of an array, characters (code points) of a string, enumerators of an enum, or arguments in a variadic pack." },
+    { TK::CoAwaitKeyword, "operator", "int: a = co_await compute(x);", "Waits for a `task<T>` and gives its result, the same as `await`." },
+    { TK::CoReturnKeyword, "keyword", "co_return;", "Ends a generator coroutine early, the same as a bare `return;`." },
+    { TK::CoYieldKeyword, "keyword", "co_yield i;", "Produces the next value from a function that returns `generator<T>`; the caller loops over it with `for ... in`." },
+    { TK::DoKeyword, "keyword", "do { ... } while (condition);", "Starts a `do ... while` loop, whose body runs once before the condition is checked." },
+    { TK::DefaultKeyword, "keyword", "default: score = 100;", "Marks the branch of a `switch` taken when no `case` matches. After a constructor, destructor or operator, `= default` asks for the compiler-generated version." },
+    { TK::DeleteKeyword, "operator", "delete p;", "Frees an object created with `new`; `delete[] p` frees an array made with `new T[n]`. Written `= delete;` after a constructor, destructor or operator, it forbids that member." },
+    { TK::DecltypeKeyword, "operator", "decltype(rx): alias = x;", "Names the declared type of a name, or `T&` for other lvalues, and is used wherever a type is written. Using it as a value is an error; use `typeid` for a type's name." },
+    { TK::DownKeyword, "keyword", "", "Reserved keyword; not described in the documentation. It can still be used as a function or method name." },
+    { TK::DestructorKeyword, "keyword", "destructor() { ... }", "Declares the destructor, which runs when the object goes out of scope or is deleted. Destructors are `noexcept`, and are virtual automatically in a class with virtual methods." },
+    { TK::DynamicKeyword, "type", "", "Reserved word; the documentation calls `var` values dynamic but does not describe `dynamic` itself." },
+    { TK::DynamicCastKeyword, "operator", "dynamic_cast<Square*>(p)", "Converts a pointer or reference to a class with virtual functions into a derived class, checked while the program runs. A failed pointer cast gives `nullptr`." },
+    { TK::DiscardConstKeyword, "operator", "discard_const(typeof(cx)): changeable = 1;", "A compile-time type operation that gives `T` without `const`." },
+    { TK::DiscardNodiscardKeyword, "operator", "discard_nodiscard(checked(2));", "Calls a `nodiscard` function while ignoring its result, without the warning." },
+    { TK::ElseKeyword, "keyword", "} else if (x > 3) then { ... } else then { ... }", "Adds another branch to an `if`. Every `else` branch needs `then` before its block." },
+    { TK::EndKeyword, "keyword", "} end function name", "Closes a named declaration: `end <kind> <name>` for functions, classes, structs, unions and namespaces, with the name matching the opening one, and `end extern` for extern blocks. `if`, loops, `switch`, `enum` and lambdas don't use it." },
+    { TK::EnumKeyword, "keyword", "enum Color { Red, Green = 5, Blue }", "Declares an enum. Enums are always scoped (`Color::Blue`), don't convert to or from integers implicitly, and default to an `int` underlying type, set with `: type`." },
+    { TK::ExportKeyword, "keyword", "export name", "Chooses what other files can import: a single name, `name as other`, `namespace n`, `this` for every global declaration, or `{ ... }` for several." },
+    { TK::ExtendsKeyword, "keyword", "class Square extends Shape { ... } end class Square", "Names the base class in a class heading, the same as `inherits`." },
+    { TK::ExternKeyword, "keyword", "extern \"C\" function puts(string: line) -> int;", "Declares a function or variable defined in another file, or with `\"C\"`/`\"C++\"` a native function or class. Several declarations can share an `extern { ... } end extern` block." },
+    { TK::ExplicitKeyword, "keyword", "constructor(int: side) explicit : Rect(side, side) { }", "Stops a constructor from being used for brace-list conversions, or makes a conversion operator usable only through `static_cast`. It goes after the parameter list (after `const` on a conversion operator)." },
+    { TK::False, "literal", "", "The `bool` value false." },
+    { TK::FallthroughKeyword, "keyword", "fallthrough;", "Ends a `switch` case to show that running into the next case is intended, which silences the warning." },
+    { TK::ForKeyword, "keyword", "for (int: i = 0; i < 3; i++) { ... }", "Loops with an initializer, condition and increment (separated by `;` or `,`), or over arrays, strings, generators and iterable classes with `for (T: x in items)`." },
+    { TK::FunctionKeyword, "keyword", "function name(int: x) -> int { ... } end function name", "Declares a function, closed with `end function name`. `-> T` gives the return type, `->` alone infers it, and no arrow returns a dynamic `var`; `function(int) -> int` is also a function type." },
+    { TK::FriendKeyword, "keyword", "friend function peek(const Vault&: v) -> int;", "Gives a function, operator or class access to a class's private members. A friend defined inside the class isn't a member and belongs to the surrounding scope." },
+    { TK::FromKeyword, "keyword", "import hello from \"lib.wal\"", "Names the file in an `import`, or the C/C++ files that hold the code in `extern \"C\" from \"file\"`. In a class heading it means the same as `inherits`." },
+    { TK::GlobalKeyword, "keyword", "global int: count = 0;", "Visibility for a top-level or namespace-level declaration: visible in its file, to importers and to `extern` from other files. This is the default." },
+    { TK::HoistKeyword, "keyword", "hoist int: later = 5;", "Lets a local variable be used before its declaration line." },
+    { TK::HiddenKeyword, "keyword", "hidden int: count = 0;", "Visibility for a top-level or namespace-level declaration: only usable in its own file (or, inside a namespace, only within that namespace); it can't be imported or reached with `extern`." },
+    { TK::IfKeyword, "keyword", "if (condition) then { ... }", "Runs a block when the condition is true; `then` and braces are required. The condition can declare a variable, and `if constexpr` chooses a branch at compile time." },
+    { TK::ImportKeyword, "keyword", "import module.io", "Brings in names exported by another Walnut file, or a module found by name (library modules appear under `std::name`)." },
+    { TK::IncludeKeyword, "keyword", "#include \"shapes.walh\"", "Used in the `#include` preprocessor directive, which inserts a `.wal` or `.walh` file. A header is pasted at most once into each file." },
+    { TK::InKeyword, "keyword", "for (int: v in items) { ... }", "Separates the loop variable from the sequence in a `for ... in` loop over arrays, strings, generators, brace lists or classes with `begin()` and `end()`." },
+    { TK::InlineKeyword, "keyword", "inline int: shared = 0;", "Modifier that allows a variable or function to be defined in several files." },
+    { TK::InfinityKeyword, "literal", "", "Positive infinity, which every integer and float type can hold; `-inf` is negative infinity. It takes the type it goes into, and `x is inf` is true for both signs." },
+    { TK::NanKeyword, "literal", "", "The special value for a result that exists but isn't a real number, such as `(-8.0) ** 0.5`. It is unordered, so test it with `x is nan`." },
+    { TK::UndefinedKeyword, "literal", "", "The special value for a result that doesn't exist, such as `1 / 0`. Any number type can hold it, it is unordered, and `x is undefined` tests for it." },
+    { TK::IndeterminateKeyword, "literal", "", "The special value for a form whose value can't be decided, such as `0 / 0` or `inf - inf`. It is unordered, so test it with `x is indeterminate`." },
+    { TK::SpecialKeyword, "keyword", "special(string): name = lookup(-1);", "`special(T)` holds either a `T` or one of the special values (`inf`, `nan`, `undefined`, `indeterminate`), for types that can't hold them themselves. `T` can't be a number type, `var`, a reference, `void` or another `special`." },
+    { TK::ImplicitKeyword, "keyword", "", "Reserved keyword; not described in the documentation. It can still be used as a function or method name." },
+    { TK::InheritsKeyword, "keyword", "class Square inherits Shape { ... } end class Square", "Names the base classes in a class heading, separated by commas. All bases are public." },
+    { TK::IsKeyword, "operator", "v is int", "Tests at run time whether a variant, `var` or polymorphic object currently holds or is a `T`. It also checks special values: `x is nan`, `is undefined`, `is indeterminate`, `is inf`." },
+    { TK::LocalKeyword, "keyword", "local int: count = 0;", "Visibility for a top-level or namespace-level declaration: usable in its own file and reachable with `extern` from other files, but not imported." },
+    { TK::MutableKeyword, "keyword", "mutable int: reads;", "Lets a class field change inside `const` methods. On a lambda, it lets the lambda change its own captured copies." },
+    { TK::LazyKeyword, "keyword", "lazy float: area = compute_area();", "A class field computed from its initializer the first time it is read, then kept. `invalidate` discards the kept value so the next read recomputes it." },
+    { TK::ModuleKeyword, "keyword", "module greet { ... }", "Groups declarations into a named module block that other files import with `import module \"greet\" from \"file.wal\"`. `import module.name` imports a module file found by name." },
+    { TK::NamespaceKeyword, "keyword", "namespace math { ... } end namespace math", "Declares a namespace, closed with `end namespace name`; `namespace a::b` nests in one step and `namespace short = long::name;` makes an alias." },
+    { TK::NewKeyword, "operator", "new int(7)", "Creates an object on the heap and returns a pointer; `new T[n]` creates an array. Free with `delete` or `delete[]`." },
+    { TK::NoexceptKeyword, "keyword", "function quiet() noexcept -> int { ... } end function quiet", "Function qualifier saying the function doesn't throw; a `throw` written directly inside one is a compile-time error. `noexcept(expression)` is `true` when the expression can't throw." },
+    { TK::NullptrKeyword, "literal", "", "The null pointer." },
+    { TK::NodiscardKeyword, "keyword", "function checked(int: x) nodiscard(\"why\") -> int { ... } end function checked", "Function qualifier that makes ignoring the result a warning. The optional string gives the reason." },
+    { TK::OperatorKeyword, "keyword", "operator(+) function(const Vec&: o) const -> Vec { ... }", "Defines an overloaded operator, a conversion operator (`operator(T)`), or a trait overload. Inside a class it is a member; at file or namespace level it is a free function." },
+    { TK::OverrideKeyword, "keyword", "function area() const override -> int { ... } end function area", "Marks a method, after its parameter list, as overriding a base class's virtual method. Using it on a method that overrides nothing is an error." },
+    { TK::PrivateKeyword, "keyword", "private:", "Starts a class section whose members only the class itself (and its friends) can use. Class members are private by default." },
+    { TK::PublicKeyword, "keyword", "public:", "Starts a class section whose members anyone can use. Struct members are public by default; `public lazy` lets outside code assign and invalidate a lazy field." },
+    { TK::ProtectedKeyword, "keyword", "protected:", "Starts a class section whose members the class and its derived classes can use." },
+    { TK::RepeatKeyword, "keyword", "repeat;", "Runs the current loop iteration again from the top of the body, without checking the condition or running the `for` increment. `repeat label;` acts on a labelled loop." },
+    { TK::ReinterpretCastKeyword, "operator", "reinterpret_cast<void*>(&storage[0])", "Converts pointer to pointer, or pointer to and from integer, reinterpreting the bits." },
+    { TK::ReturnKeyword, "keyword", "return value;", "Leaves the function, giving its result. A `void` function needs no `return`, and returning a local variable moves it automatically." },
+    { TK::RequiresKeyword, "keyword", "requires Number<T> && std::traits::is_integer<T>", "Adds a constraint to a template, written after `template <...>`. In a concept, `requires (params) { expressions; }` checks that the expressions compile." },
+    { TK::StaticKeyword, "keyword", "static int: counter = 0;", "Gives a variable one copy for the whole program (a local keeps its value between calls). In a class, `static` fields and methods belong to the class and are reached as `Class::name`." },
+    { TK::StaticCastKeyword, "operator", "static_cast<int>(3.99)", "The general explicit conversion: number to number (including narrowing and signed/unsigned), enum and integer, `char` to integer, `string` and `text`, base to derived class, and explicit conversion operators. It never turns a number into a `char` or `bool`." },
+    { TK::StaticAssertKeyword, "operator", "static_assert(condition, \"message\");", "Stops compilation when the condition is false. The message is required." },
+    { TK::SizeofKeyword, "operator", "sizeof(T)", "Gives the size of a type or value in bytes. Types without a fixed size, such as `string` and `var`, are an error; the method form `x.sizeof()` works on them." },
+    { TK::StructKeyword, "keyword", "struct Point { ... } end struct Point", "Declares a struct, closed with `end struct Name`. It is like a class, but its members are public by default." },
+    { TK::SwitchKeyword, "keyword", "switch (n) { case 1: ...; break; default: ... }", "Chooses a branch by value; works on integers, characters, enums, `string` and `text`. A case that runs into the next one gets a warning unless it ends with `fallthrough;`." },
+    { TK::ThenKeyword, "keyword", "if (condition) then { ... }", "Required between an `if` or `else if` condition and its block, and after `else`." },
+    { TK::ThisKeyword, "keyword", "this->value", "A pointer to the current object inside a method. `export this` exports every global declaration in the file." },
+    { TK::SelfKeyword, "keyword", "self.x", "The current object itself, the same as `*this`; `self(x)` calls the object's own `operator(())`. It is `const` in a `const` method, and a lambda that captures `[this]` can use it." },
+    { TK::ThrowKeyword, "keyword", "throw 42;", "Throws any value: a number, a string or an object. `throw;` on its own rethrows the exception currently being handled." },
+    { TK::TryKeyword, "keyword", "try { ... } catch (int: e) { ... }", "Runs a block whose exceptions are handled by the `catch` clauses after it." },
+    { TK::True, "literal", "", "The `bool` value true." },
+    { TK::TypedefKeyword, "keyword", "typedef int: Meters;", "Declares another name for a type." },
+    { TK::TypeofKeyword, "operator", "typeof(x): copy = x;", "Names the type of a value, without the reference, and is used wherever a type is written. Using it as a value is an error; use `typeid` for a type's name." },
+    { TK::ThreadLocalKeyword, "keyword", "thread_local int: counter = 0;", "Modifier that gives each thread its own copy of a variable." },
+    { TK::TemplateKeyword, "keyword", "template <typename T>", "Starts a template declaration for a function, class, variable, alias, constructor or operator. Parameters can be types, constants or packs; `template <>` writes a specialization." },
+    { TK::TypenameKeyword, "keyword", "template <typename T>", "Declares a type parameter of a template; `typename... Ts` takes any number of types." },
+    { TK::TypeidKeyword, "operator", "typeid(T)", "Gives a type's name as a `string`, such as `\"long int\"` or `\"Point\"`. For a `var` it is the type of the value it holds right now." },
+    { TK::UnionKeyword, "keyword", "union Number { ... } end union Number", "Declares a union, whose members share the same storage so only one holds a value at a time. Members must be plain values, and unions have no generated `==` and can't inherit." },
+    { TK::UsingKeyword, "keyword", "using Name = string;", "Declares a type alias, or with `using namespace n;` or `using a::b;` makes names usable without their prefix until the end of the block." },
+    { TK::VariantKeyword, "keyword", "variant(int, string): v = 5;", "`variant(T1, T2, ...)` holds one value of one of the listed types at a time. Check it with `is` and read it with `as`." },
+    { TK::VirtualKeyword, "keyword", "function describe() const virtual -> string { ... } end function describe", "Marks a method, after its parameter list, as able to be overridden by subclasses. A virtual method with no body that is never defined is abstract, with a warning." },
+    { TK::AbstractKeyword, "keyword", "function area() const abstract -> int;", "Marks a method that has no body and must be implemented by subclasses; it implies `virtual`. A class with an unimplemented abstract method can't be created." },
+    { TK::VoidKeyword, "type", "function increment(int&: value) -> void { ... } end function increment", "No value. It is only used as a return type, and a `void` function needs no `return`." },
+    { TK::VolatileKeyword, "keyword", "volatile int: flag = 0;", "Modifier meaning every read and write really happens; the compiler doesn't optimize them away." },
+    { TK::WhileKeyword, "keyword", "while (condition) { ... }", "Repeats a block or single statement while the condition is true. Also ends a `do ... while` loop." },
+    { TK::AutoDeclaration, "type", "auto: total = count * 2;", "Takes its type from the initializer, which is required. An `auto:` parameter makes a generic lambda." },
+    { TK::DynamicDeclaration, "type", "var x = 5;", "A dynamic value whose type can change at run time; it can hold a number, `bool`, `char`, string or function, and checks operations as the program runs. The colon is optional, and classes, pointers and arrays can't be stored in one." },
+    { TK::BooleanDeclaration, "type", "bool: found = true;", "Holds `true` or `false`. Numbers never convert to `bool`; use a comparison such as `x != 0`." },
+    { TK::CharacterDeclaration, "type", "char: c = 'd';", "One Unicode character (code point). A `char` plus or minus a whole number is another `char`, and `static_cast<int>(c)` gives its code point." },
+    { TK::ConstantDeclaration, "keyword", "const int: c = 2;", "Modifier meaning the variable can't be assigned after initialization. After a method's parameter list, it means the method doesn't change the object." },
+    { TK::DecimalDeclaration, "type", "float: ratio = 0.5;", "A fixed-width floating-point type. `float` is 128 bits, while `double` and `decimal` start two steps wider at 512 bits; `short` and `long` move the width one step each, and `unsigned` floats can't go below 0." },
+    { TK::IntegerDeclaration, "type", "int: count = 3;", "A fixed-width signed integer. `int` is 32 bits and `integer` starts four steps wider at 512 bits; `short` and `long` move the width one step each. Overflow wraps around." },
+    { TK::LongDeclaration, "type", "long int: n = 5;", "Makes a number type one step wider (up to two times): `long int` is 64 bits, `long long int` 128, `long float` 256. A bare `long` means `long int`." },
+    { TK::StringDeclaration, "type", "string: name = \"walnut\";", "UTF-8 text written with `\"...\"` literals, which never interpolate. It doesn't convert implicitly to or from `text`; lengths and positions count characters, not bytes." },
+    { TK::ShortDeclaration, "type", "short int: s = 3;", "Makes a number type one step narrower (up to two times): `short int` is 16 bits, `short short int` 8, `short float` 64. A bare `short` means `short int`." },
+    { TK::UnsignedDeclaration, "type", "unsigned int: cap = inf;", "Makes any number type unsigned; it goes first, and a bare `unsigned` means `unsigned int`. Unsigned integers wrap around, and an unsigned float that would go negative becomes 0." },
+    { TK::TextDeclaration, "type", "text: a = `n=${n}`;", "UTF-8 text written with backtick literals, which can interpolate `${expression}`. It works like `string` but is a separate type, so the two don't convert implicitly." },
+};
+
+const KeywordDoc* keyword_doc(TK kind) {
+    for (const KeywordDoc& d : k_keyword_docs) if (d.kind == kind) return &d;
+    return nullptr;
+}
+
+std::string keyword_aliases(TK kind, std::string_view written) {
+    const tokenizing::Token t(kind, 0);
+    std::string out;
+    for (std::size_t i = 0; i < t.spelling_count(); ++i) {
+        const std::string_view s = t.spellings()[i];
+        if (s == written) continue;
+        out += (out.empty() ? "" : ", ") + std::string("`") + std::string(s) + "`";
+    }
+    return out;
+}
+
+bool type_word(TK k) {
+    switch (k) {
+        case TK::UnsignedDeclaration: case TK::ShortDeclaration: case TK::LongDeclaration:
+        case TK::IntegerDeclaration: case TK::DecimalDeclaration: case TK::CharacterDeclaration:
+        case TK::BooleanDeclaration: case TK::StringDeclaration: case TK::TextDeclaration:
+        case TK::AutoDeclaration: case TK::DynamicDeclaration: case TK::VoidKeyword:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool width_word(TK k) { return k == TK::ShortDeclaration || k == TK::LongDeclaration; }
+
+std::string bits_text(double bits) {
+    std::ostringstream o;
+    o << static_cast<long long>(bits);
+    return o.str();
+}
+
+std::string builtin_type_doc(const std::vector<std::string_view>& words) {
+    bool is_unsigned = false;
+    int steps = 0;
+    std::string_view base;
+    for (std::string_view w : words) {
+        const TK k = get_keyword(w);
+        if (k == TK::UnsignedDeclaration) is_unsigned = true;
+        else if (k == TK::ShortDeclaration) --steps;
+        else if (k == TK::LongDeclaration) ++steps;
+        else base = w;
+    }
+    const TK bk = base.empty() ? TK::IntegerDeclaration : get_keyword(base);
+    const auto scaled = [steps](double bits) { for (int i = 0; i < steps; ++i) bits *= 2; for (int i = 0; i > steps; --i) bits /= 2; return bits; };
+    std::string what;
+    if (bk == TK::IntegerDeclaration) {
+        const double bits = scaled(base == "integer" ? 512.0 : 32.0);
+        what = "A " + bits_text(bits) + "-bit " + (is_unsigned ? "unsigned" : "signed") + " integer.";
+    } else if (bk == TK::DecimalDeclaration) {
+        const double bits = scaled(base == "double" || base == "decimal" ? 512.0 : 128.0);
+        what = "A " + bits_text(bits) + "-bit " + (is_unsigned ? "unsigned floating-point number, which can't hold a negative value." : "floating-point number.");
+    } else if (const KeywordDoc* d = keyword_doc(bk); d && d->doc[0]) {
+        what = d->doc;
+    }
+    return what;
+}
+
 class Collector {
 public:
     Collector(const char* begin, std::size_t size, S::ConstEvaluator* eval = nullptr, S::TypeContext* types = nullptr) : m_begin(begin), m_end(begin + size), m_eval(eval), m_types(types) {
@@ -613,6 +807,14 @@ public:
 
                 if (v->symbol) {
                     describe(v->m_name, v->symbol, nullptr, 3);
+                    if (v->m_initializer && v->m_initializer->kind == K::BraceInitializerList) {
+                        const auto* b = static_cast<const N::BraceInitializerList*>(v->m_initializer);
+                        const S::Symbol* made = follow(b->ctor ? b->ctor : b->init_list_ctor);
+                        if (made && made->kind == S::SymbolKind::Function) {
+                            link(v->m_name, made, 4);
+                            note(v->m_name, "", "Made with `" + function_signature(origin(made), m_types) + "`. Ctrl+click goes to that constructor.", 3);
+                        }
+                    }
                 } else {
                     std::string t = type_text(v->m_type_info, m_types);
                     if ((t.empty() || t == "auto") && v->m_initializer) t = type_text(v->m_initializer->expr_type.type);
@@ -710,8 +912,15 @@ public:
                 break;
             }
 
-            case K::EnumValue:
-                declare(static_cast<N::EnumValue*>(n)->name, nullptr, "enumMember");
+            case K::EnumValue: {
+                auto* v = static_cast<N::EnumValue*>(n);
+                declare(v->name, nullptr, "enumMember");
+                if (v->symbol) describe(v->name, v->symbol, nullptr, 3);
+                break;
+            }
+
+            case K::ImportExportDeclaration:
+                imports(static_cast<N::ImportExportDeclaration*>(n));
                 break;
 
             case K::NamespaceDeclaration:
@@ -844,7 +1053,7 @@ public:
         };
 
         for (const auto& [at, h] : m_hovers) {
-            if (h.code.empty() && h.types.empty() && h.values.empty() && h.results.empty()) continue;
+            if (h.code.empty() && h.types.empty() && h.values.empty() && h.results.empty() && h.doc.empty()) continue;
             if (!first) out << ",";
             first = false;
             const Position p = position(at, h.len);
@@ -855,6 +1064,7 @@ public:
             list("types", h.types);
             list("values", h.values);
             list("results", h.results);
+            if (!h.doc.empty()) out << ",\"doc\":" << json_string(h.doc);
             out << "}";
         }
 
@@ -922,6 +1132,7 @@ private:
         std::vector<std::string> values;
         std::vector<std::string> results;
         bool                     guess = false;
+        std::string              doc;
     };
 
     std::map<std::size_t, Hover> m_hovers;
@@ -948,6 +1159,8 @@ private:
     std::map<const char*, long>                  m_location_ids;
     std::map<FileId, std::vector<std::size_t>>   m_file_lines;
     std::map<std::size_t, Link>                  m_links;
+    const std::unordered_map<std::string, FileId>* m_imports = nullptr;
+    std::vector<std::pair<std::string_view, const S::Symbol*>> m_declared;
 
     const S::Symbol* origin(const S::Symbol* s) const {
         s = follow(s);
@@ -1252,6 +1465,288 @@ private:
         if (std::find(list.begin(), list.end(), text) == list.end()) list.push_back(text);
     }
 
+    void note(std::string_view at, const std::string& code, const std::string& doc, int rank) {
+        if (at.empty() || !inside(at.data(), at.size())) return;
+        Hover& h = m_hovers[offset(at.data())];
+        if (h.len == 0) h.len = static_cast<std::uint32_t>(at.size());
+        if (!code.empty() && (h.code.empty() || rank > h.rank)) {
+            h.code = code;
+            h.rank = rank;
+        }
+        if (!doc.empty() && h.doc.empty()) h.doc = doc;
+    }
+
+    bool has_hover(const char* at) const {
+        const auto it = m_hovers.find(offset(at));
+        return it != m_hovers.end() && (!it->second.code.empty() || !it->second.doc.empty());
+    }
+
+    std::string library_file(const S::Symbol* s) {
+        if (!s || !m_sources) return std::string();
+        const std::string_view name = name_in(s->decl);
+        if (name.empty()) return std::string();
+        const FileId file = file_holding(name.data());
+        if (file == INVALID_FILE) return std::string();
+        const std::string& path = m_sources->absolute_path(file);
+        const std::string root = std::string(SourceManager::LIBRARY_ROOT) + "/";
+        return path.rfind(root, 0) == 0 ? path.substr(root.size()) : std::string();
+    }
+
+public:
+    void set_imports(const std::unordered_map<std::string, FileId>* imports) { m_imports = imports; }
+
+    long path_location(const std::string& path) {
+        auto p = std::find(m_paths.begin(), m_paths.end(), path);
+        if (p == m_paths.end()) { m_paths.push_back(path); p = m_paths.end() - 1; }
+        Location l;
+        l.file = static_cast<std::size_t>(p - m_paths.begin());
+        const long id = static_cast<long>(m_locations.size());
+        m_locations.push_back(l);
+        return id;
+    }
+
+    std::string include_target(std::string_view written, bool angled) const {
+        if (!m_sources || m_main == INVALID_FILE || written.empty()) return std::string();
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const std::string want(written);
+        if (!angled) {
+            const std::string& main_path = m_sources->absolute_path(m_main);
+            const fs::path here = fs::path(main_path).parent_path() / want;
+            if (main_path.rfind(SourceManager::LIBRARY_ROOT, 0) != 0 && fs::is_regular_file(here, ec)) return fs::absolute(here, ec).lexically_normal().string();
+        }
+        for (std::size_t i = 0; i < m_sources->file_count(); ++i) {
+            const std::string& path = m_sources->absolute_path(static_cast<FileId>(i));
+            const std::string generic = fs::path(path).generic_string();
+            if (generic.size() > want.size() && generic.compare(generic.size() - want.size(), want.size(), want) == 0 && generic[generic.size() - want.size() - 1] == '/') return path;
+        }
+        return std::string();
+    }
+
+    void include_link(const char* line_start, const char* line_end) {
+        const char* p = line_start;
+        while (p < line_end && (*p == ' ' || *p == '\t')) ++p;
+        if (p >= line_end || *p != '#') return;
+        ++p;
+        while (p < line_end && (*p == ' ' || *p == '\t')) ++p;
+        if (line_end - p < 7 || std::string_view(p, 7) != "include") return;
+        p += 7;
+        while (p < line_end && (*p == ' ' || *p == '\t')) ++p;
+        if (p >= line_end || (*p != '"' && *p != '<')) return;
+        const char close = *p == '"' ? '"' : '>';
+        const bool angled = *p == '<';
+        const char* b = ++p;
+        while (p < line_end && *p != close) ++p;
+        if (p >= line_end || p == b) return;
+        const std::string_view written(b, static_cast<std::size_t>(p - b));
+        const std::string target = include_target(written, angled);
+        if (target.empty()) return;
+        const std::string root = std::string(SourceManager::LIBRARY_ROOT) + "/";
+        const std::string shown = target.rfind(root, 0) == 0 ? target.substr(root.size()) : target;
+        note(written, "#include " + std::string(1, angled ? '<' : '"') + std::string(written) + (angled ? ">" : "\""), "**Included file** `" + shown + "`. Ctrl+click opens it.", 3);
+        Link k;
+        k.len = static_cast<std::uint32_t>(written.size());
+        k.rank = 3;
+        k.definition = path_location(target == m_sources->absolute_path(m_main) ? std::string() : target);
+        m_links[offset(written.data())] = std::move(k);
+    }
+
+    bool linked(const char* at) const { return m_links.count(offset(at)) != 0; }
+
+    bool coded(const char* at) const {
+        const auto it = m_hovers.find(offset(at));
+        return it != m_hovers.end() && !it->second.code.empty();
+    }
+
+    void words() {
+        const char* p = m_begin;
+        const char* line_start = m_begin;
+        bool directive = false;
+        struct Word { const char* at; std::string_view text; TK kind; };
+        std::vector<Word> list;
+        const auto line_end = [this](const char* q) { while (q < m_end && *q != '\n') ++q; return q; };
+        include_link(line_start, line_end(line_start));
+        {
+            const char* q = m_begin;
+            while (q < m_end && (*q == ' ' || *q == '\t')) ++q;
+            directive = q < m_end && *q == '#';
+        }
+        while (p < m_end) {
+            const char c = *p;
+            if (c == '\n') {
+                ++p;
+                line_start = p;
+                include_link(line_start, line_end(line_start));
+                const char* q = p;
+                while (q < m_end && (*q == ' ' || *q == '\t')) ++q;
+                directive = q < m_end && *q == '#';
+                continue;
+            }
+            if (directive) { ++p; continue; }
+            if (c == '/' && p + 1 < m_end && p[1] == '/') { while (p < m_end && *p != '\n') ++p; continue; }
+            if (c == '/' && p + 1 < m_end && p[1] == '*') {
+                int depth = 0;
+                while (p < m_end) {
+                    if (p + 1 < m_end && p[0] == '/' && p[1] == '*') { ++depth; p += 2; continue; }
+                    if (p + 1 < m_end && p[0] == '*' && p[1] == '/') { p += 2; if (--depth == 0) break; continue; }
+                    ++p;
+                }
+                continue;
+            }
+            if (c == '"' || c == '\'' || c == '`') {
+                ++p;
+                while (p < m_end && *p != c) { if (*p == '\\') ++p; ++p; }
+                ++p;
+                continue;
+            }
+            if (c == ' ' || c == '\t' || c == '\r') { ++p; continue; }
+            if (word_start(c)) {
+                const char* b = p;
+                while (p < m_end && (word_start(*p) || (*p >= '0' && *p <= '9'))) ++p;
+                const std::string_view w(b, static_cast<std::size_t>(p - b));
+                const TK k = get_keyword(w);
+                if (k != TK::Unexpected) list.push_back(Word{ b, w, k });
+                else list.push_back(Word{ b, w, TK::Identifier });
+                continue;
+            }
+            if (c >= '0' && c <= '9') { while (p < m_end && (word_start(*p) || (*p >= '0' && *p <= '9') || *p == '.')) ++p; continue; }
+            list.push_back(Word{ p, std::string_view(p, 1), TK::Unexpected });
+            ++p;
+        }
+
+        const auto after_member = [&list](std::size_t i) {
+            if (i == 0) return false;
+            const std::string_view prev = list[i - 1].text;
+            if (prev == ".") return true;
+            if (i >= 2 && ((prev == ">" && list[i - 2].text == "-") || (prev == ":" && list[i - 2].text == ":"))) return true;
+            return false;
+        };
+
+        for (std::size_t i = 0; i + 2 < list.size(); ++i) {
+            if (list[i].kind != TK::EndKeyword || list[i + 1].kind == TK::Unexpected || list[i + 1].kind == TK::Identifier) continue;
+            const Word& name = list[i + 2];
+            if (name.kind == TK::Unexpected || coded(name.at)) continue;
+            const S::Symbol* found = nullptr;
+            for (const auto& [text, sym] : m_declared) {
+                if (text == name.text && text.data() < name.at) found = sym;
+            }
+            if (!found) continue;
+            link(name.text, found);
+            describe(name.text, found, nullptr, 1);
+        }
+
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            const Word& w = list[i];
+            if (w.kind == TK::Unexpected || w.kind == TK::Identifier) continue;
+            if (after_member(i) || coded(w.at) || linked(w.at)) continue;
+            if (type_word(w.kind) && w.kind != TK::VoidKeyword && w.kind != TK::AutoDeclaration && w.kind != TK::DynamicDeclaration) {
+                std::vector<std::string_view> run{ w.text };
+                std::size_t j = i + 1;
+                bool has_base = !width_word(w.kind) && w.kind != TK::UnsignedDeclaration;
+                const bool numeric_run = w.kind == TK::UnsignedDeclaration || width_word(w.kind) || w.kind == TK::IntegerDeclaration || w.kind == TK::DecimalDeclaration;
+                while (numeric_run && !has_base && j < list.size() && (width_word(list[j].kind) || list[j].kind == TK::IntegerDeclaration || list[j].kind == TK::DecimalDeclaration)) {
+                    run.push_back(list[j].text);
+                    has_base = !width_word(list[j].kind);
+                    ++j;
+                }
+                const char* end = run.back().data() + run.back().size();
+                const std::string_view at(w.at, static_cast<std::size_t>(end - w.at));
+                std::string code;
+                for (std::string_view part : run) code += (code.empty() ? "" : " ") + std::string(part);
+                std::string doc = "**Walnut builtin type.**";
+                const std::string what = builtin_type_doc(run);
+                if (!what.empty()) doc += " " + what;
+                if (run.size() == 1) {
+                    const std::string aliases = keyword_aliases(w.kind, w.text);
+                    if (!aliases.empty() && !numeric_run) doc += " Also written " + aliases + ".";
+                }
+                note(at, code, doc, 0);
+                i = j - 1;
+                continue;
+            }
+            const KeywordDoc* d = keyword_doc(w.kind);
+            const std::string category = d ? d->category : "keyword";
+            std::string doc = category == "type" ? "**Walnut builtin type.**" : category == "literal" ? "**Walnut literal.**" : category == "operator" ? "**Walnut builtin operator.**" : "**Walnut keyword.**";
+            if (d && d->doc[0]) doc += std::string(" ") + d->doc;
+            const std::string aliases = keyword_aliases(w.kind, w.text);
+            if (!aliases.empty()) doc += " Also written " + aliases + ".";
+            note(w.text, d && d->syntax[0] ? std::string(d->syntax) : std::string(w.text), doc, 0);
+        }
+    }
+
+    long file_location(FileId file) {
+        if (!m_sources || file == INVALID_FILE) return -1;
+        const std::string path = file == m_main ? std::string() : m_sources->absolute_path(file);
+        auto p = std::find(m_paths.begin(), m_paths.end(), path);
+        if (p == m_paths.end()) { m_paths.push_back(path); p = m_paths.end() - 1; }
+        Location l;
+        l.file = static_cast<std::size_t>(p - m_paths.begin());
+        const long id = static_cast<long>(m_locations.size());
+        m_locations.push_back(l);
+        return id;
+    }
+
+    void file_link(std::string_view at, FileId file) {
+        if (at.empty() || !inside(at.data(), at.size())) return;
+        const long def = file_location(file);
+        if (def < 0) return;
+        Link k;
+        k.len = static_cast<std::uint32_t>(at.size());
+        k.rank = 3;
+        k.definition = def;
+        m_links[offset(at.data())] = std::move(k);
+    }
+
+    std::string shown_file(FileId file) const {
+        const std::string& path = m_sources->absolute_path(file);
+        const std::string root = std::string(SourceManager::LIBRARY_ROOT) + "/";
+        return path.rfind(root, 0) == 0 ? path.substr(root.size()) : path;
+    }
+
+    bool library(FileId file) const {
+        return m_sources && m_sources->absolute_path(file).rfind(std::string(SourceManager::LIBRARY_ROOT) + "/", 0) == 0;
+    }
+
+    void imports(const N::ImportExportDeclaration* d) {
+        if (!d->is_import() || !m_imports || !m_sources) return;
+        for (const N::ImportExportItem& it : d->get_items()) {
+            if (!it.has_source) continue;
+            const auto found = m_imports->find(std::string(it.source));
+            if (found == m_imports->end()) continue;
+            const FileId file = found->second;
+            std::string_view at;
+            if (it.from_module_path && !it.module_parts.empty()) {
+                const char* b = it.module_parts.front().data();
+                const char* e = it.module_parts.back().data() + it.module_parts.back().size();
+                if (!inside(b) || !inside(e - 1) || e <= b) continue;
+                if (inside(b - 7, 7) && std::string_view(b - 7, 7) == "module.") b -= 7;
+                at = std::string_view(b, static_cast<std::size_t>(e - b));
+            } else {
+                at = it.source;
+                if (!inside(at.data(), at.size())) continue;
+                if (at.size() >= 2 && at.front() == '"' && at.back() == '"') at = at.substr(1, at.size() - 2);
+            }
+            const std::string shown = shown_file(file);
+            if (it.from_module_path) {
+                std::string dotted;
+                for (std::string_view part : it.module_parts) dotted += (dotted.empty() ? "" : ".") + std::string(part);
+                if (library(file)) note(at, "module std::" + dotted, "**Walnut library module**, from `" + shown + "`. Ctrl+click opens it.", 3);
+                else note(at, "module " + dotted, "**Module**, from `" + shown + "`. Ctrl+click opens it.", 3);
+            } else {
+                note(at, "file \"" + std::string(at) + "\"", "**Imported file** `" + shown + "`. Ctrl+click opens it.", 3);
+            }
+            file_link(at, file);
+        }
+    }
+
+    std::string enum_underlying(const S::Symbol* e) const {
+        if (!e || !e->decl || e->decl->kind != K::EnumDeclaration) return "int";
+        const auto* d = static_cast<const N::EnumDeclaration*>(e->decl);
+        if (!d->has_underlying_type) return "int";
+        const std::string t = type_text(d->underlying_type, m_types);
+        return t.empty() ? std::string("int") : t;
+    }
+
     void hover(std::string_view at, const std::string& code, const std::string& type, const std::string& value, const std::string& result, int rank) {
         if (at.empty() || !inside(at.data(), at.size())) return;
         if (code.empty() && type.empty() && value.empty() && result.empty()) return;
@@ -1366,13 +1861,26 @@ private:
                 break;
             }
 
-            case S::SymbolKind::Enum:          code = "enum " + qualified_name(s); break;
-            case S::SymbolKind::EnumConstant:
-                code = qualified_name(s);
+            case S::SymbolKind::Enum:          code = "enum " + qualified_name(s) + " : " + enum_underlying(s); break;
+            case S::SymbolKind::EnumConstant: {
+                const S::Symbol* owner = s->owner ? follow(s->owner->owner_symbol) : nullptr;
+                code = enum_underlying(owner) + ": " + qualified_name(s);
                 if (m_eval) value = value_text(m_eval->value_of(const_cast<S::Symbol*>(s)), nullptr);
+                if (!value.empty()) code += " = " + value;
                 break;
+            }
             case S::SymbolKind::Namespace:
-            case S::SymbolKind::Module:        code = "namespace " + qualified_name(s); break;
+            case S::SymbolKind::Module: {
+                const std::string name = qualified_name(s);
+                code = "namespace " + name;
+                const std::string file = library_file(s);
+                if (name == "std") note(at, "", "**Walnut library.** Every library module lives in `std`: `import module.io` gives `std::io`, and `std::core` is always there.", rank);
+                else if (!file.empty() && name.rfind("std::", 0) == 0 && name.find("::", 5) == std::string::npos) {
+                    const std::string module = name.substr(5);
+                    note(at, "", module == "core" ? "**Walnut library module** `core`, from `core.walh`. It's always available, so it needs no import." : "**Walnut library module** `" + module + "`, from `" + file + "`. `import module." + module + "` brings it in.", rank);
+                }
+                break;
+            }
             case S::SymbolKind::Concept:       code = "concept " + qualified_name(s); break;
             case S::SymbolKind::TemplateParam:
                 if (s->decl && s->decl->kind == K::TemplateParameter) code = "(template parameter) " + template_parameter_text(static_cast<const N::TemplateParameter*>(s->decl), m_types);
@@ -1515,6 +2023,7 @@ private:
         if (is_variable_template(s)) mods |= VariableTemplate;
         add(name, kind, Declaration | mods, 3);
         if (s) link(name, s);
+        if (s && !name.empty() && inside(name.data(), name.size())) m_declared.emplace_back(name, s);
     }
 
     void op_text(const char* at, std::string_view text) {
@@ -1573,6 +2082,7 @@ private:
             if (!o) return;
             add(parts[i], kind_of(o), 0, 1);
             link(parts[i], o);
+            describe(parts[i], o, nullptr, 1);
             sc = o->owner;
         }
     }
@@ -1593,6 +2103,7 @@ private:
             if (!parts.empty() && t.resolved) {
                 use(parts.back(), t.resolved);
                 describe(parts.back(), t.resolved, nullptr, 1);
+                if (parts.size() > 1) qualifiers(parts, parts.size() - 1, t.resolved);
                 const S::Symbol* r = follow(t.resolved);
 
                 if (t.canonical && r) {
@@ -1625,6 +2136,8 @@ std::string highlight_json(CompilerPipeline& compiler) {
     const bool was_frozen = instantiator.frozen();
     instantiator.freeze();
     Collector c(sources.data(*main), sources.size(*main), semantic ? &instantiator.evaluator() : nullptr, semantic ? &compiler.mutable_types() : nullptr, &sources, *main, semantic ? &instantiator : nullptr);
+    const auto imported = compiler.file_imports().find(*main);
+    if (imported != compiler.file_imports().end()) c.set_imports(&imported->second);
 
     for (const CompilerPipeline::AnalyzedUnit& u : compiler.analyzed_units()) {
         if (u.file == *main && u.ast) c.walk(u.ast);
@@ -1634,6 +2147,7 @@ std::string highlight_json(CompilerPipeline& compiler) {
         if (I.decl) c.walk_instantiation(I.decl);
     });
 
+    c.words();
     instantiator.freeze(was_frozen);
     return c.json(compiler.get_reporter(), compiler.get_warnings(), *main, sources, semantic, error_limit, warning_limit);
 }

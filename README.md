@@ -92,6 +92,7 @@ walnut <command> [options] <main.wal> [more.wal ...] [C/C++ files] [-- program a
 | `walnut emit main.wal` | Print the generated C++ (or write it with `-o file.cpp`) |
 | `walnut clean` | Delete the build cache |
 | `walnut highlight main.wal` | Print what each name and operator is, and the errors, as JSON for editors (`--stdin` reads the text from standard input) |
+| `walnut library` | List the library files built into `walnut`; `walnut library io.walh` prints one and `walnut library --extract <dir>` writes them all to a folder, so editors can open them |
 
 Arguments after `--` go to your program: `walnut run main.wal -- input.txt 3`.
 

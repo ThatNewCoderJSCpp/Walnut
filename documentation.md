@@ -3555,6 +3555,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `run` | Builds the program and runs it |
 | `clean` | Deletes the build cache |
 | `highlight` | Prints what each name and operator in the file is, and its errors and warnings, as JSON for editors. With `--stdin`, the file's text comes from standard input. It also takes a `.walh` file. The format is in [the VS Code extension's README](Tools/vscode-walnut/README.md#the-highlight-command) |
+| `library` | Lists the library files built into `walnut`. `walnut library io.walh` prints one, and `walnut library --extract <dir>` writes them all into a folder, so an editor can open them |
 | `help`, `-h`, `--help` | Shows the usage |
 
 | Option | Meaning |

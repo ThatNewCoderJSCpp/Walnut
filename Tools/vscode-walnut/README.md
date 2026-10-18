@@ -27,7 +27,11 @@ Hold the mouse over code to see what the compiler knows about it:
 | An operator | The type of that expression, and its value if it's constant, as in the `+` of `2 + 3 * 4` |
 | `sizeof`, `countof`, `alignof`, `typeid` | The value |
 | `typeof`, `decltype` | The type it stands for |
-| A type, alias or enum member | What it is: `using Name = string`, `struct geo::Point`, `Color::Blue` with its value |
+| A type, alias or enum | What it is: `using Name = string`, `struct geo::Point`, `enum Color : short int` |
+| An enum member | Its underlying type and value: `short int: Color::Green = 5` |
+| A variable made with a constructor, as in `Pair: p(3, 4)` | Which constructor made it |
+| A keyword, builtin type or literal | What it is and how it's written: `if (condition) then { ... }` with "Walnut keyword", `long int` as a 64-bit signed integer |
+| `std`, a library module or an `import module.io` | Which library module it is and the file it comes from |
 
 Inside a template, a name or operator lists the type it has in each instantiation, such as `int, float`. Turn hovers off with the `walnut.hover` setting.
 
@@ -37,7 +41,7 @@ When a function, constructor or operator has more than one overload, its hover h
 
 ## Go to Definition
 
-`Ctrl+Click` a name (or press `F12`) to go to what it really refers to: the overload, constructor or operator function the compiler picked for that call, the variable or type the name resolves to, or the library file a `std::` name comes from. On a function's definition, it goes to its earlier declarations (`function area(int: w) -> int;`) instead; on such a declaration, it goes to the definition. **Go to Declaration** always lists the declarations. Library files are found in the `Library` folder of the Walnut folder the compiler was built in.
+`Ctrl+Click` a name (or press `F12`) to go to what it really refers to: the overload, constructor or operator function the compiler picked for that call, the variable or type the name resolves to, or the library file a `std::` name comes from. On a variable made with a constructor (`Pair: p(3, 4)`), it goes to that constructor. On `import module.io`, an imported file or an `#include`, it opens the file, and on the name after `end` it goes to what that `end` closes. On a function's definition, it goes to its earlier declarations (`function area(int: w) -> int;`) instead; on such a declaration, it goes to the definition. **Go to Declaration** always lists the declarations. Library files are found in the `Library` folder of the Walnut folder the compiler was built in; when that isn't there, the extension asks the compiler for them (`walnut library --extract`) and opens a copy from your temp folder.
 
 ## Installing
 
@@ -173,7 +177,7 @@ The extension also has two color themes, **Walnut Dark** (based on VS Code's Dar
 
 Each token is `[line, column, length, kind, modifiers]`, with lines counted from 0 and columns and lengths in UTF-16 code units, as editors count them. The kinds are `namespace`, `class`, `struct`, `enum`, `type`, `typeParameter`, `concept`, `function`, `method`, `variable`, `parameter`, `property`, `enumMember`, `operator` and `unresolved`. When the compiler lists no `unresolved` names, the extension treats any name in the file that the compiler didn't list as unresolved. The modifiers are `declaration`, `overloaded`, `templateQualifier` and `variableTemplate`. Built-in operators aren't listed, so any operator in the list calls an operator function. `semantic` is `false` when the file has a syntax error, since then only the errors are known. A diagnostic with `len` 0 covers its whole line.
 
-The result also has `hovers`, `locations` and `links`. A hover is `{ "line", "col", "len", "code", "overloads", "guess", "types", "values", "results" }`, where `overloads` (only there when there is more than one) lists the signatures, best fit first. `guess` is `true` on a call the compiler couldn't settle, because it's an error or it depends on a template parameter; then `overloads` lists every candidate, most likely first, and `code` is the most likely one. `code` shows initializers and default values as they're written (`int: b = 2`, `T*: slots = nullptr`, `template <typename T, bool Reverse = false>`). `locations` is a list of `[file, line, column, length]`, where `file` is `""` for the file itself, or a path, or `<walnut>/name.walh` for a library file. Each link is `[line, column, length, definition, [declarations]]`, where `definition` and `declarations` are indexes into `locations`.
+The result also has `hovers`, `locations` and `links`. A hover is `{ "line", "col", "len", "code", "overloads", "guess", "types", "values", "results", "doc" }`, where `overloads` (only there when there is more than one) lists the signatures, best fit first. `guess` is `true` on a call the compiler couldn't settle, because it's an error or it depends on a template parameter; then `overloads` lists every candidate, most likely first, and `code` is the most likely one. `code` shows initializers and default values as they're written (`int: b = 2`, `T*: slots = nullptr`, `template <typename T, bool Reverse = false>`). `doc` is a line of Markdown saying what something is, such as `**Walnut keyword.** ...` on a keyword or which library module a `std::` namespace is. `locations` is a list of `[file, line, column, length]`, where `file` is `""` for the file itself, or a path, or `<walnut>/name.walh` for a library file. Each link is `[line, column, length, definition, [declarations]]`, where `definition` and `declarations` are indexes into `locations`.
 
 ## Other editors
 
