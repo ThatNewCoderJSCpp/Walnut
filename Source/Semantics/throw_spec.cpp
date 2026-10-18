@@ -82,7 +82,17 @@ const ThrowInfo& ThrowAnalyzer::of_function_body(Symbol* fn) {
     } else {
         if (f.decl->kind == nodes::ASTNode::Kind::ConstructorDeclaration) {
             auto* ct = static_cast<nodes::ConstructorDeclaration*>(f.decl);
-            for (nodes::ASTNode* e : ct->get_init_list()) info.merge(of_expr(e));
+            for (nodes::ASTNode* e : ct->get_init_list()) {
+                const auto* call = e && e->kind == nodes::ASTNode::Kind::CallExpression ? static_cast<nodes::CallExpression*>(e) : nullptr;
+                const nodes::ASTNode* callee = call ? call->m_callee : nullptr;
+                const Symbol* field = callee && callee->kind == nodes::ASTNode::Kind::Identifier ? static_cast<const nodes::Identifier*>(callee)->resolved : nullptr;
+                if (!field || field->kind != SymbolKind::Variable) {
+                    info.merge(of_expr(e));
+                    continue;
+                }
+                for (nodes::ASTNode* a : call->m_arguments) info.merge(of_expr(a));
+                if (call->resolved && !declared_noexcept(call->resolved)) info.merge(of_function_body(call->resolved));
+            }
         }
         info.merge(of_stmt(f.body));
     }

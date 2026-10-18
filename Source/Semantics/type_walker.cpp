@@ -27,6 +27,8 @@ TypeWalker::TypeWalker(
     m_saved_conversions_hook = m_types.conversions_hook;
     m_types.conversions_hook = [this](Type* t) { ensure_conversions(t); };
     m_saved_range_element_hook = m_types.range_element_hook;
+    m_saved_lifecycle_hook = m_types.lifecycle_trait_hook;
+    m_types.lifecycle_trait_hook = [this](int trait, const std::vector<Type*>& args) { return lifecycle_trait(static_cast<parser_types::TypeTrait>(trait), args); };
     m_types.range_element_hook = [this](Type* t, nodes::ASTNode* site) { return range_element(t, site); };
     m_saved_member_value_hook = m_types.member_value_hook;
     m_types.member_value_hook = [this](Type* rec, std::string_view name, TemplateArg& out) {
@@ -641,7 +643,11 @@ void TypeWalker::build(nodes::ASTNode* node) {
                     check_condition(cond);
 
                     if (br->is_constexpr) {
-                        ConstValue v = eval_checked(cond, true);
+                        ConstValue v;
+                        {
+                            ConstEvaluator::RandomPermit permit(m_eval, cond);
+                            v = eval_checked(cond, true);
+                        }
                         bool ok = false;
                         const bool taken = v.ok() && ConstEvaluator::truthy(v, ok);
                         if (v.ok() && ok) br->constant_value = taken ? 1 : 0;
@@ -836,7 +842,11 @@ void TypeWalker::build(nodes::ASTNode* node) {
             if (Type* t = type_of(sa->constraint))
                 if (!is_bool_testable(t)) SemanticError::condition_not_bool(m_reporter, file_of(sa), sa->line, type_str(t));
 
-            ConstValue v = eval_checked(sa->constraint, true);
+            ConstValue v;
+            {
+                ConstEvaluator::RandomPermit permit(m_eval, sa->constraint);
+                v = eval_checked(sa->constraint, true);
+            }
 
             if (v.ok()) {
                 bool ok = false;
@@ -1346,12 +1356,19 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             auto* q = static_cast<nodes::TypeQueryExpression*>(e);
 
             if (q->op == nodes::TypeQueryExpression::Op::Trait) {
-                q->queried = q->operand ? m_types.canonicalize(q->operand->type) : nullptr;
-                q->extra_queried.clear();
-                for (parser_types::TemplateArgument* x : q->extra_operands) q->extra_queried.push_back(x ? m_types.canonicalize(x->type) : nullptr);
+                std::vector<Type*> args;
 
-                std::vector<Type*> args{ q->queried };
-                args.insert(args.end(), q->extra_queried.begin(), q->extra_queried.end());
+                if (trait_has_pack(q->extra_operands)) {
+                    q->queried = nullptr;
+                    q->extra_queried.clear();
+                    args = trait_operands(m_types, q->operand, q->extra_operands);
+                } else {
+                    q->queried = q->operand ? m_types.canonicalize(q->operand->type) : nullptr;
+                    q->extra_queried.clear();
+                    for (parser_types::TemplateArgument* x : q->extra_operands) q->extra_queried.push_back(x ? m_types.canonicalize(x->type) : nullptr);
+                    args.push_back(q->queried);
+                    args.insert(args.end(), q->extra_queried.begin(), q->extra_queried.end());
+                }
                 std::string error;
                 eval_type_trait(m_types, q->trait, args, error);
                 if (!error.empty() && m_types.type_error_hook) m_types.type_error_hook(error);
@@ -4736,7 +4753,13 @@ void TypeWalker::check_constant_init(nodes::VariableDeclaration* v, Type* target
     Type* t = target ? m_types.strip_cv(target) : nullptr;
     if (!t || t->is_dependent() || !ConstEvaluator::is_constant_type(t)) return;
 
-    ConstValue raw = eval_checked(v->m_initializer, true);
+    ConstValue raw;
+    if (mods.has(RM::Constexpr) || mods.has(RM::Constinit)) {
+        ConstEvaluator::RandomPermit permit(m_eval, v);
+        raw = eval_checked(v->m_initializer, true);
+    } else {
+        raw = eval_checked(v->m_initializer, true);
+    }
     if (raw.is_error()) return;
 
     if (!raw.ok()) {

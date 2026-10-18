@@ -446,7 +446,9 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
             if (q->op == QOp::Trait) {
                 std::vector<Type*> types;
 
-                if (q->queried) {
+                if (trait_has_pack(q->extra_operands)) {
+                    types = trait_operands(m_types, q->operand, q->extra_operands);
+                } else if (q->queried) {
                     types.push_back(m_types.apply_subst(q->queried));
                     for (Type* x : q->extra_queried) types.push_back(x ? m_types.apply_subst(x) : nullptr);
                 } else {
@@ -680,11 +682,18 @@ ConstValue ConstEvaluator::eval_symbol(Symbol* s) {
             if (cacheable) if (auto it = m_symbol_cache.find(s); it != m_symbol_cache.end()) return it->second;
             if (!m_visiting.insert(s).second) return {};          
             if (env) m_types.push_subst(env);
-            ConstValue v = coerce(eval(vd->m_initializer), m_types.canonicalize(vd->get_type_info()));
+            const std::size_t draws = m_random_draws;
+            ConstValue v;
+            if (mods.has(RM::Constexpr) || mods.has(RM::Constinit)) {
+                RandomPermit permit(*this, vd);
+                v = coerce(eval(vd->m_initializer), m_types.canonicalize(vd->get_type_info()));
+            } else {
+                v = coerce(eval(vd->m_initializer), m_types.canonicalize(vd->get_type_info()));
+            }
             if (v.is_special()) v.fail = ConstValue::Fail::NotConstant;
             if (env) m_types.pop_subst();
             m_visiting.erase(s);
-            if (cacheable && v.ok()) m_symbol_cache.emplace(s, v);
+            if (cacheable && v.ok() && draws == m_random_draws) m_symbol_cache.emplace(s, v);
             return v;
         }
 
@@ -759,6 +768,7 @@ ConstValue ConstEvaluator::eval_incdec(nodes::UnaryExpression* u) {
 
 ConstValue ConstEvaluator::eval_call(nodes::CallExpression* c) {
     Symbol* fn = c->resolved;
+    if (is_random_function(fn)) return eval_random(c, fn);
     if (!fn || fn->kind != SymbolKind::Function || !fn->decl || fn->decl->kind != K::FunctionDeclaration) return {};
     auto* fd = static_cast<nodes::FunctionDeclaration*>(fn->decl);
     if (!is_constexpr_function(fd) || !fd->has_body()) return {};

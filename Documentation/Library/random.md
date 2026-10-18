@@ -17,7 +17,8 @@ Everything in `random` is in the namespace `std::random`. The functions use Fizm
 5. [Strings and text](#strings-and-text)
 6. [Shuffling](#shuffling)
 7. [Generator](#generator)
-8. [Errors](#errors)
+8. [While compiling](#while-compiling)
+9. [Errors](#errors)
 
 ## A first example
 
@@ -129,6 +130,35 @@ Here `same` is always `true`.
 | `random_int`, `random_float`, `random_bool`, `random_char`, `random_string`, `random_text`, `shuffle` | The same as the free functions |
 
 A generator is fast, but its numbers are predictable to anyone who knows the seed, so use the free functions for passwords, keys and tokens.
+
+## While compiling
+
+The free functions also work in code that runs while compiling: the initializer of a `constexpr` or `constinit` variable, a `static_assert`, an `if constexpr` condition, and `constexpr` functions called from those. The value is picked once, by the compiler, and built into the program.
+
+```walnut
+import module.random
+
+constexpr int: roll = std::random::random_int(1, 6);
+constexpr string: build_id = std::random::random_string(16);
+
+constexpr function die() -> int {
+    return std::random::random_int(1, 6);
+} end function die
+
+constexpr int: first = die();
+constexpr int: second = die();
+
+static_assert(roll >= 1 && roll <= 6, "a die roll");
+```
+
+- `random_int`, `random_float`, `random_bool`, `random_char`, `random_string` and `random_text` all work, in both forms, for every width.
+- The numbers come from ChaCha20, keyed with 256 bits from the operating system's secure random source (the same source the free functions use when the program runs). The key is new every time `walnut` runs, so each build gets new values, and nobody can work them out without that key.
+- Each variable, `static_assert` or `if constexpr` gets its own numbers, and so does each call inside it, so `first` and `second` above are separate rolls. A variable keeps its value everywhere it's used in one build: `roll * 10` uses the same `roll`.
+- `--random-seed <text>` (or the `WALNUT_RANDOM_SEED` environment variable) keys the generator from that text instead, so every build gets the same values. That is for tests and reproducible builds; a value anyone can rebuild isn't secret.
+- A value built into a program is in the program file, so anyone who has the file can read it. Use compile-time values for things that must differ between builds, not for secrets the program's users mustn't see.
+- Outside those places, such as `const int: n = random_int(1, 6);` or a call in an ordinary function, the call still happens when the program runs.
+- Editors don't show the value of a compile-time random variable, because they ask a separate run of `walnut` that has a different key; the hover says the value is picked while compiling instead. With `--random-seed` they show it.
+- `Generator` and `shuffle` only work when the program runs.
 
 ## Errors
 

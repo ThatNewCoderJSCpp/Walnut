@@ -268,6 +268,16 @@ Every `bool` trait comes in two parts: the value `std::traits::is_integer<T>` th
 | `is_copy_constructible<T>`, `is_move_constructible<T>` | Can be copied, or moved, into a new object |
 | `is_copy_assignable<T>`, `is_move_assignable<T>` | Can be copied, or moved, into an existing object |
 | `is_copyable<T>`, `is_movable<T>` | Both of the above |
+| `is_constructible<T, Args...>` | Can be made from values of the types `Args` (none means with no arguments), the way `T(args...)` would. A type like `int&` stands for a variable, `int` or `int&&` for a temporary |
+| `is_nothrow_constructible<T, Args...>` | Can be made that way without throwing: the constructor it picks is `noexcept` or can't throw, the same answer `noexcept(T(args...))` gives. For a constructor Walnut writes itself, every base and field has to be made without throwing too |
+| `is_constexpr_constructible<T, Args...>` | Can be made that way while compiling: the constructor it picks is `constexpr` (or `consteval`), or Walnut writes it and every base and field qualifies, with constant initializers. Built-in numbers, `bool`, `char`, strings, enums and pointers always can; `var`, variants and lambdas can't |
+| `is_nothrow_default_constructible<T>`, `is_nothrow_copy_constructible<T>`, `is_nothrow_move_constructible<T>` | `is_nothrow_constructible` with no arguments, a `const T&` or a `T&&` |
+| `is_constexpr_default_constructible<T>`, `is_constexpr_copy_constructible<T>`, `is_constexpr_move_constructible<T>` | The same for `is_constexpr_constructible` |
+| `is_assignable<T, U>` | A `T` variable can be given a `U` with `=`: `T` isn't `const`, and the value converts, or `T` has an `operator(=)` that takes it, or `U` is a `T` and every field can be assigned (no `const` or reference fields) |
+| `is_nothrow_assignable<T, U>`, `is_constexpr_assignable<T, U>` | That assignment can't throw, or is `constexpr` |
+| `is_nothrow_copy_assignable<T>`, `is_nothrow_move_assignable<T>`, `is_constexpr_copy_assignable<T>`, `is_constexpr_move_assignable<T>` | The same with a `const T&` or a `T&&` |
+| `is_destructible<T>` | Can be destroyed: not `void` or a function type, and no `destructor() = delete` of its own or in a base |
+| `is_nothrow_destructible<T>` | The same as `is_destructible`, since destructors are always `noexcept` |
 | `is_equality_comparable<T>` | Has `==` and `!=` |
 | `is_totally_ordered<T>` | Has `==`, `!=`, `<`, `>`, `<=` and `>=` |
 | `is_iterable<T>` | Has `begin()` and `end()` |

@@ -2,6 +2,7 @@
 #include "Codegen/cpp_emitter.hpp"
 #include "Common/file_kind.hpp"
 #include "Driver/build_cache.hpp"
+#include "Semantics/compile_time_random.hpp"
 #include "Driver/highlight.hpp"
 #include "Preprocessor/native_headers.hpp"
 #include <algorithm>
@@ -96,6 +97,7 @@ struct Options {
     bool                                             unbuffered = false;
     bool                                             from_stdin = false;
     bool                                             no_cache = false;
+    std::string                                      random_seed;
     bool                                             opt_set = false;
     DebugMode                                        debug = DebugMode::None;
     bool                                             line_map = false;
@@ -134,6 +136,8 @@ void print_usage(std::ostream& os) {
           "  -M <dir>           add a folder searched by 'import module.<name>' (also --module-dir)\n"
           "  --keep-cpp         keep the generated C++ next to the executable (builds without the cache)\n"
           "  --no-cache         build everything from scratch in a temporary folder, without the build cache\n"
+          "  --random-seed <s>  make std::random calls in constexpr code give the same values every build (also WALNUT_RANDOM_SEED);\n"
+          "                     without it they come from the operating system's secure random source, new each build\n"
           "  --tokens <file>    write the token list of the input to a .txt file\n"
           "  --ast <file>       write the syntax tree of the input to a .txt file\n"
           "  --errors <dest>    where errors go: stderr (default), stdout or a file path\n"
@@ -209,6 +213,7 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     if (argc < 2) { print_usage(std::cerr); exit_code = 2; return false; }
     const std::string cmd = argv[1];
 
+    if (const char* env = std::getenv("WALNUT_RANDOM_SEED")) if (*env) o.random_seed = env;
     if (cmd == "-h" || cmd == "--help" || cmd == "help") { print_usage(std::cout); return false; }
     if (cmd == "check")      o.command = Command::Check;
     else if (cmd == "emit")  o.command = Command::Emit;
@@ -255,6 +260,7 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         else if (a == "-M" || a == "--module-dir") { const char* v = need(i, a); if (!v) return false; o.module_dirs.push_back(v); }
         else if (a == "--keep-cpp")    o.keep_cpp = true;
         else if (a == "--no-cache")    o.no_cache = true;
+        else if (a == "--random-seed") { const char* v = need(i, a); if (!v) return false; o.random_seed = v; }
         else if (a == "--tokens")      { const char* v = need(i, a); if (!v) return false; o.tokens_path = v; }
         else if (a == "--ast")         { const char* v = need(i, a); if (!v) return false; o.ast_path = v; }
         else if (a == "--errors")      { const char* v = need(i, a); if (!v) return false; o.errors_to = v; }
@@ -1280,6 +1286,7 @@ int main(int argc, char** argv) {
     Options o;
     int code = 0;
     if (!parse_args(argc, argv, o, code)) return code;
+    if (!o.random_seed.empty()) walnut::semantics::set_compile_time_random_seed(o.random_seed);
 
     try {
         return run(o);

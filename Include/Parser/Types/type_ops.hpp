@@ -138,7 +138,15 @@ enum class TypeTrait : std::uint8_t {
     FloatBits,
     FloatMantissaBits,
     FloatExponentBits,
-    ArrayExtent
+    ArrayExtent,
+    IsConstructible,
+    IsNothrowConstructible,
+    IsConstexprConstructible,
+    IsAssignable,
+    IsNothrowAssignable,
+    IsConstexprAssignable,
+    IsDestructible,
+    IsNothrowDestructible
 };
 
 struct TypeTraitInfo {
@@ -195,7 +203,26 @@ inline constexpr TypeTraitInfo kTypeTraits[] = {
     { "float_mantissa_bits", TypeTrait::FloatMantissaBits, 1, true, OverloadPolicy::Allowed },
     { "float_exponent_bits", TypeTrait::FloatExponentBits, 1, true, OverloadPolicy::Allowed },
     { "array_extent",   TypeTrait::ArrayExtent,   1, true },
+    { "is_constructible",           TypeTrait::IsConstructible,          -1 },
+    { "is_nothrow_constructible",   TypeTrait::IsNothrowConstructible,   -1 },
+    { "is_constexpr_constructible", TypeTrait::IsConstexprConstructible, -1 },
+    { "is_assignable",              TypeTrait::IsAssignable,             2 },
+    { "is_nothrow_assignable",      TypeTrait::IsNothrowAssignable,      2 },
+    { "is_constexpr_assignable",    TypeTrait::IsConstexprAssignable,    2 },
+    { "is_destructible",            TypeTrait::IsDestructible,           1 },
+    { "is_nothrow_destructible",    TypeTrait::IsNothrowDestructible,    1 },
 };
+
+inline bool is_lifecycle_trait(TypeTrait trait) {
+    switch (trait) {
+        case TypeTrait::IsConstructible: case TypeTrait::IsNothrowConstructible: case TypeTrait::IsConstexprConstructible:
+        case TypeTrait::IsAssignable: case TypeTrait::IsNothrowAssignable: case TypeTrait::IsConstexprAssignable:
+        case TypeTrait::IsDestructible: case TypeTrait::IsNothrowDestructible:
+            return true;
+        default:
+            return false;
+    }
+}
 
 inline const TypeTraitInfo* find_type_trait(std::string_view name) {
     for (const TypeTraitInfo& t : kTypeTraits) if (t.name == name) return &t;

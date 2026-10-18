@@ -462,6 +462,8 @@ public:
     std::function<Type*(Type*, std::string_view)>      member_type_hook;
     std::function<bool(Type*, std::string_view, TemplateArg&)> member_value_hook;
     std::map<std::pair<Type*, std::string>, TemplateArg> member_value_memo;
+    std::function<std::optional<std::int64_t>(int, const std::vector<Type*>&)> lifecycle_trait_hook;
+    std::map<std::pair<int, std::vector<Type*>>, std::int64_t> lifecycle_trait_memo;
     std::function<Type*(Type*, std::string_view, const std::vector<parser_types::TemplateArgument*>&)> member_alias_type_hook;
     std::function<Symbol*(Type*, Type*)>               callable_hook;
     std::function<bool(Type*, Type*)>                  closure_hook;

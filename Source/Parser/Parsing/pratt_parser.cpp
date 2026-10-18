@@ -339,12 +339,20 @@ nodes::ASTNode* Parser::parse_atom() {
                 auto* arg = make<parser_types::TemplateArgument>();
                 arg->form = parser_types::TemplateArgument::Form::Type;
                 arg->type = parse_type_info();
+                if (match(tokenizing::Token::Kind::Ellipsis)) {
+                    if (trait->arity >= 0 || operands.empty()) throw ParserError::invalid_expression(reporter, at, std::string(trait->name) + " can't take a pack here; only the types after the first one of a trait that takes any number of types can be a pack");
+                    arg->type.pack_expansion = true;
+                }
                 operands.push_back(arg);
             } while (match(tokenizing::Token::Kind::Comma));
 
             expect(tokenizing::Token::Kind::RightParen, "Expected ')' to close the type trait");
 
-            if (static_cast<int>(operands.size()) != trait->arity) {
+            if (trait->arity < 0 && operands.empty()) {
+                throw ParserError::invalid_expression(reporter, at, std::string(trait->name) + " takes at least 1 type, but none was given");
+            }
+
+            if (trait->arity >= 0 && static_cast<int>(operands.size()) != trait->arity) {
                 throw ParserError::invalid_expression(reporter, at,
                     std::string(trait->name) + " takes " + std::to_string(trait->arity) + (trait->arity == 1 ? " type" : " types") + ", but " + std::to_string(operands.size()) + (operands.size() == 1 ? " was given" : " were given"));
             }

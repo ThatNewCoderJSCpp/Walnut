@@ -2945,6 +2945,8 @@ function main() -> int {
 
 **`if constexpr`** keeps only the branch whose condition is true, so the other branches may contain code that wouldn't compile for this type.
 
+**Random values while compiling.** `std::random`'s functions work here too: `constexpr int: roll = std::random::random_int(1, 6);` picks a number with a cryptographically secure generator while compiling and builds it into the program. See [random](Documentation/Library/random.md#while-compiling).
+
 ```walnut
 constexpr function fib(int: n) -> int {
     if (n < 2) then {
@@ -3050,6 +3052,7 @@ Traits are [variable templates](#variable-templates) in the namespace `std::trai
 | `is_same<A, B>`, `is_convertible<From, To>`, `is_base_of<Base, Derived>` | `bool` |
 | `is_const<T>`, `is_volatile<T>`, `is_ref<T>`, `is_lvalue_ref<T>`, `is_rvalue_ref<T>`, `is_pointer<T>`, `is_array<T>`, `is_function<T>`, `is_void<T>` | `bool` |
 | `is_integer<T>`, `is_float<T>`, `is_number<T>`, `is_signed<T>`, `is_unsigned<T>`, `is_bool<T>`, `is_char<T>`, `is_string<T>`, `is_enum<T>`, `is_class<T>`, `is_dynamic<T>` and [about 60 more](Documentation/Library/core.md#stdtraits) | `bool` |
+| `is_constructible<T, Args...>`, `is_nothrow_constructible<T, Args...>`, `is_constexpr_constructible<T, Args...>`, `is_assignable<T, U>`, `is_nothrow_assignable<T, U>`, `is_constexpr_assignable<T, U>`, `is_destructible<T>`, `is_nothrow_destructible<T>`, and `nothrow`/`constexpr` versions of the default, copy and move ones | `bool`: whether `T(args...)` or `t = u` works, can't throw, or can run while compiling; see [What a type can do](Documentation/Library/core.md#stdtraits) |
 | `integer_rank<T>` | An `int`: the width step of an integer type. `int` is 0, `long int` 1, `short int` -1, and so on up to 6 for `long long integer` |
 | `float_rank<T>` | The same for floats: `float` is 0, `short float` -1, `double` 2 |
 | `integer_bits<T>`, `float_bits<T>`, `float_mantissa_bits<T>`, `float_exponent_bits<T>`, `array_extent<T>` | `int` sizes |
@@ -3075,6 +3078,8 @@ function main() -> int {
     static_assert(std::traits::is_same<typeof(x + 2.5), float>, "int + float is float");
     static_assert(std::traits::is_unsigned<typeof(u)>, "make_unsigned made it unsigned");
     static_assert(std::traits::integer_rank<long int> == 1 && std::traits::float_rank<double> == 2, "ranks");
+    static_assert(std::traits::is_nothrow_constructible<int, float> && std::traits::is_constexpr_copy_constructible<string>, "numbers and strings");
+    static_assert(std::traits::is_assignable<int, short int> && !std::traits::is_assignable<const int, int>, "a const can't be assigned");
     return 0;
 } end function main
 ```
@@ -3572,6 +3577,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `--keep-cpp` | Keeps the generated C++ next to the program (builds without the cache) |
 | `-u`, `--unbuffered` | Makes the program flush `cout` and `clog` after every write, like `python -u` (setting `WALNUT_UNBUFFERED=1` when it runs does the same) |
 | `--no-cache` | Builds from scratch in a temporary folder, without the build cache |
+| `--random-seed <text>` | Makes `std::random` calls in `constexpr` code give the same values every build (also `WALNUT_RANDOM_SEED`); without it they're new each build, from the operating system's secure random source. See [random](Documentation/Library/random.md#while-compiling) |
 | `-g` | Builds for a debugger, which then shows `.wal` lines (defaults to `-O0`) |
 | `--debug-cpp` | Builds for a debugger that shows the generated C++ |
 | `--line-map[=file]` | Writes which `.wal` line each block of C++ came from |

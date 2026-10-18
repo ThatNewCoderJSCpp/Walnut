@@ -918,8 +918,26 @@ std::string CppEmitter::folded_or(nodes::VariableDeclaration* v, Type* t, bool p
     auto* b = as_builtin(vt);
     const bool scalar = (b && (b->base() == BK::Int || b->base() == BK::Float || b->base() == BK::Bool || b->base() == BK::Char)) || (vt && vt->is_enum());
 
-    if (scalar && (prefer_constant || v->get_type_info().modifiers.has(RM::Constexpr))) {
-        semantics::ConstValue cv = m_eval.eval(v->m_initializer);
+    const bool constant_required = v->get_type_info().modifiers.has(RM::Constexpr) || v->get_type_info().modifiers.has(RM::Constinit);
+
+    if (constant_required && !scalar && v->m_initializer) {
+        const std::size_t draws = m_eval.random_draws();
+        semantics::ConstValue cv;
+        {
+            semantics::ConstEvaluator::RandomPermit permit(m_eval, v);
+            cv = m_eval.eval(v->m_initializer);
+        }
+        if (draws != m_eval.random_draws() && cv.is_string()) return constant_value_code(cv, vt, v);
+    }
+
+    if (scalar && (prefer_constant || constant_required)) {
+        semantics::ConstValue cv;
+        if (constant_required) {
+            semantics::ConstEvaluator::RandomPermit permit(m_eval, v);
+            cv = m_eval.eval(v->m_initializer);
+        } else {
+            cv = m_eval.eval(v->m_initializer);
+        }
         if (cv.ok() && !cv.is_bool() == !(b && b->base() == BK::Bool)) {
             if (vt->is_enum() && cv.is_int()) return "static_cast<" + cpp_type(vt, v) + ">(" + cv.i->to_string() + "LL)";
             if (!vt->is_enum()) return constant_value_code(cv, vt, v);

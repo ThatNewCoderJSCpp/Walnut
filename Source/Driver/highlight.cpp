@@ -1,5 +1,6 @@
 #include "Driver/highlight.hpp"
 #include "Lexer/keywords.hpp"
+#include "Semantics/compile_time_random.hpp"
 #include "Parser/Nodes/node_children.hpp"
 #include "Semantics/const_evaluator.hpp"
 #include "Semantics/instantiator.hpp"
@@ -1828,7 +1829,11 @@ public:
                         if (!init.empty()) code += " = " + init;
                     }
                 }
-                if (m_eval) value = value_text(m_eval->value_of(const_cast<S::Symbol*>(s)), s->type ? s->type->canonical : nullptr);
+                if (m_eval) {
+                    m_eval->hidden_random_hit = false;
+                    value = value_text(m_eval->value_of(const_cast<S::Symbol*>(s)), s->type ? s->type->canonical : nullptr);
+                    if (m_eval->hidden_random_hit) note(at, "", S::compile_time_random_is_seeded() ? "**Picked while compiling** by `std::random` from the `--random-seed` you gave, so it's the same every build." : "**Picked while compiling** by `std::random` from the operating system's secure random source, so each build gets its own value.", rank);
+                }
                 break;
             }
 
@@ -2136,6 +2141,8 @@ std::string highlight_json(CompilerPipeline& compiler) {
     const bool was_frozen = instantiator.frozen();
     instantiator.freeze();
     Collector c(sources.data(*main), sources.size(*main), semantic ? &instantiator.evaluator() : nullptr, semantic ? &compiler.mutable_types() : nullptr, &sources, *main, semantic ? &instantiator : nullptr);
+    const bool hid_random = instantiator.evaluator().hide_random;
+    if (!S::compile_time_random_is_seeded()) instantiator.evaluator().hide_random = true;
     const auto imported = compiler.file_imports().find(*main);
     if (imported != compiler.file_imports().end()) c.set_imports(&imported->second);
 
@@ -2148,6 +2155,7 @@ std::string highlight_json(CompilerPipeline& compiler) {
     });
 
     c.words();
+    instantiator.evaluator().hide_random = hid_random;
     instantiator.freeze(was_frozen);
     return c.json(compiler.get_reporter(), compiler.get_warnings(), *main, sources, semantic, error_limit, warning_limit);
 }

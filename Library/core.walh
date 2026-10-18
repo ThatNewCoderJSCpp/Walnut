@@ -411,6 +411,78 @@ namespace std {
             struct is_move_assignable inherits std::bool_constant<(std::concepts::move_assignable<T>)> {
             } end struct is_move_assignable
 
+            template <typename T, typename... Args>
+            struct is_constructible inherits std::bool_constant<__is_constructible(T, Args...)> {
+            } end struct is_constructible
+
+            template <typename T, typename... Args>
+            struct is_nothrow_constructible inherits std::bool_constant<__is_nothrow_constructible(T, Args...)> {
+            } end struct is_nothrow_constructible
+
+            template <typename T, typename... Args>
+            struct is_constexpr_constructible inherits std::bool_constant<__is_constexpr_constructible(T, Args...)> {
+            } end struct is_constexpr_constructible
+
+            template <typename T>
+            struct is_nothrow_default_constructible inherits std::bool_constant<__is_nothrow_constructible(T)> {
+            } end struct is_nothrow_default_constructible
+
+            template <typename T>
+            struct is_nothrow_copy_constructible inherits std::bool_constant<__is_nothrow_constructible(T, const T&)> {
+            } end struct is_nothrow_copy_constructible
+
+            template <typename T>
+            struct is_nothrow_move_constructible inherits std::bool_constant<__is_nothrow_constructible(T, T&&)> {
+            } end struct is_nothrow_move_constructible
+
+            template <typename T>
+            struct is_constexpr_default_constructible inherits std::bool_constant<__is_constexpr_constructible(T)> {
+            } end struct is_constexpr_default_constructible
+
+            template <typename T>
+            struct is_constexpr_copy_constructible inherits std::bool_constant<__is_constexpr_constructible(T, const T&)> {
+            } end struct is_constexpr_copy_constructible
+
+            template <typename T>
+            struct is_constexpr_move_constructible inherits std::bool_constant<__is_constexpr_constructible(T, T&&)> {
+            } end struct is_constexpr_move_constructible
+
+            template <typename T, typename U>
+            struct is_assignable inherits std::bool_constant<__is_assignable(T, U)> {
+            } end struct is_assignable
+
+            template <typename T, typename U>
+            struct is_nothrow_assignable inherits std::bool_constant<__is_nothrow_assignable(T, U)> {
+            } end struct is_nothrow_assignable
+
+            template <typename T, typename U>
+            struct is_constexpr_assignable inherits std::bool_constant<__is_constexpr_assignable(T, U)> {
+            } end struct is_constexpr_assignable
+
+            template <typename T>
+            struct is_nothrow_copy_assignable inherits std::bool_constant<__is_nothrow_assignable(T, const T&)> {
+            } end struct is_nothrow_copy_assignable
+
+            template <typename T>
+            struct is_nothrow_move_assignable inherits std::bool_constant<__is_nothrow_assignable(T, T&&)> {
+            } end struct is_nothrow_move_assignable
+
+            template <typename T>
+            struct is_constexpr_copy_assignable inherits std::bool_constant<__is_constexpr_assignable(T, const T&)> {
+            } end struct is_constexpr_copy_assignable
+
+            template <typename T>
+            struct is_constexpr_move_assignable inherits std::bool_constant<__is_constexpr_assignable(T, T&&)> {
+            } end struct is_constexpr_move_assignable
+
+            template <typename T>
+            struct is_destructible inherits std::bool_constant<__is_destructible(T)> {
+            } end struct is_destructible
+
+            template <typename T>
+            struct is_nothrow_destructible inherits std::bool_constant<__is_nothrow_destructible(T)> {
+            } end struct is_nothrow_destructible
+
             template <typename T>
             struct is_copyable inherits std::bool_constant<(std::concepts::copyable<T>)> {
             } end struct is_copyable
@@ -624,6 +696,60 @@ namespace std {
 
         template <typename T>
         constexpr bool: is_move_assignable = std::traits::extend::is_move_assignable<T>::value;
+
+        template <typename T, typename... Args>
+        constexpr bool: is_constructible = std::traits::extend::is_constructible<T, Args...>::value;
+
+        template <typename T, typename... Args>
+        constexpr bool: is_nothrow_constructible = std::traits::extend::is_nothrow_constructible<T, Args...>::value;
+
+        template <typename T, typename... Args>
+        constexpr bool: is_constexpr_constructible = std::traits::extend::is_constexpr_constructible<T, Args...>::value;
+
+        template <typename T>
+        constexpr bool: is_nothrow_default_constructible = std::traits::extend::is_nothrow_default_constructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_nothrow_copy_constructible = std::traits::extend::is_nothrow_copy_constructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_nothrow_move_constructible = std::traits::extend::is_nothrow_move_constructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_constexpr_default_constructible = std::traits::extend::is_constexpr_default_constructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_constexpr_copy_constructible = std::traits::extend::is_constexpr_copy_constructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_constexpr_move_constructible = std::traits::extend::is_constexpr_move_constructible<T>::value;
+
+        template <typename T, typename U>
+        constexpr bool: is_assignable = std::traits::extend::is_assignable<T, U>::value;
+
+        template <typename T, typename U>
+        constexpr bool: is_nothrow_assignable = std::traits::extend::is_nothrow_assignable<T, U>::value;
+
+        template <typename T, typename U>
+        constexpr bool: is_constexpr_assignable = std::traits::extend::is_constexpr_assignable<T, U>::value;
+
+        template <typename T>
+        constexpr bool: is_nothrow_copy_assignable = std::traits::extend::is_nothrow_copy_assignable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_nothrow_move_assignable = std::traits::extend::is_nothrow_move_assignable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_constexpr_copy_assignable = std::traits::extend::is_constexpr_copy_assignable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_constexpr_move_assignable = std::traits::extend::is_constexpr_move_assignable<T>::value;
+
+        template <typename T>
+        constexpr bool: is_destructible = std::traits::extend::is_destructible<T>::value;
+
+        template <typename T>
+        constexpr bool: is_nothrow_destructible = std::traits::extend::is_nothrow_destructible<T>::value;
 
         template <typename T>
         constexpr bool: is_copyable = std::traits::extend::is_copyable<T>::value;

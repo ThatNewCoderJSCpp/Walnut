@@ -42,6 +42,7 @@ public:
         m_types.type_error_hook = m_saved_error_hook;
         m_types.conversions_hook = m_saved_conversions_hook;
         m_types.range_element_hook = m_saved_range_element_hook;
+        m_types.lifecycle_trait_hook = m_saved_lifecycle_hook;
         m_types.template_conversion_hook = nullptr;
         if (m_saved_member_value_hook) {
             m_types.member_value_hook = m_saved_member_value_hook;
@@ -124,6 +125,24 @@ private:
     std::function<void(const std::string&)> m_saved_error_hook;
     std::function<void(Type*)>              m_saved_conversions_hook;
     std::function<Type*(Type*, nodes::ASTNode*)> m_saved_range_element_hook;
+    std::function<std::optional<std::int64_t>(int, const std::vector<Type*>&)> m_saved_lifecycle_hook;
+
+    enum class Want : std::uint8_t { Exists = 0, NoThrow, Constexpr };
+
+    struct ConstructChoice {
+        bool    ok = false;
+        Symbol* ctor = nullptr;
+        bool    implicit = false;
+    };
+
+    std::optional<std::int64_t> lifecycle_trait(parser_types::TypeTrait trait, const std::vector<Type*>& args);
+    ConstructChoice quiet_constructor(Type* record, const std::vector<Type*>& args);
+    bool can_construct(Type* t, const std::vector<Type*>& args, Want want, int depth);
+    bool can_assign(Type* to, Type* from, Want want, int depth);
+    bool can_destroy(Type* t, int depth);
+    bool members_can(Type* record, int kind, Want want, int depth);
+    bool symbol_nothrow(Symbol* s);
+    static bool symbol_constexpr(const Symbol* s);
     std::function<bool(Type*, std::string_view, TemplateArg&)> m_saved_member_value_hook;
     std::function<int(nodes::TemplateInstantiation*)> m_saved_concept_value;
     std::function<ConstValue(nodes::TemplateInstantiation*)> m_saved_variable_template_value;

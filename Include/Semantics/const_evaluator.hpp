@@ -144,7 +144,29 @@ public:
 
     static WideInt from_twos(const WideUInt& pattern, unsigned bits, bool is_signed);
 
+    struct RandomPermit {
+        RandomPermit(ConstEvaluator& evaluator, const nodes::ASTNode* root);
+        ~RandomPermit();
+        RandomPermit(const RandomPermit&) = delete;
+        RandomPermit& operator=(const RandomPermit&) = delete;
+        ConstEvaluator& ev;
+    };
+
+    bool hide_random = false;
+    bool hidden_random_hit = false;
+    std::size_t random_draws() const { return m_random_draws; }
+    static bool is_random_function(const Symbol* fn);
+
 private:
+    struct RandomScope {
+        std::uint64_t site = 0;
+        std::uint64_t count = 0;
+    };
+
+    std::vector<RandomScope> m_random_scopes;
+    std::size_t m_random_draws = 0;
+    ConstValue eval_random(nodes::CallExpression* c, Symbol* fn);
+
     using K  = nodes::ASTNode::Kind;
     using TK = tokenizing::Token::Kind;
 

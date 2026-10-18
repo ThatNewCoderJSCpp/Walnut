@@ -314,9 +314,41 @@ Type* apply_type_op(TypeContext& ctx, Op op, const std::vector<Type*>& args, std
     return t;
 }
 
+bool trait_has_pack(const std::vector<parser_types::TemplateArgument*>& extra) {
+    for (const parser_types::TemplateArgument* x : extra) if (x && x->type.pack_expansion) return true;
+    return false;
+}
+
+std::vector<Type*> trait_operands(TypeContext& ctx, const parser_types::TemplateArgument* first, const std::vector<parser_types::TemplateArgument*>& extra) {
+    std::vector<Type*> out;
+    out.push_back(first ? ctx.canonicalize(first->type) : nullptr);
+    for (const parser_types::TemplateArgument* x : extra) {
+        if (!x) { out.push_back(nullptr); continue; }
+        if (x->type.pack_expansion) {
+            if (const std::vector<Type*>* pack = ctx.find_pack(x->type.resolved)) {
+                out.insert(out.end(), pack->begin(), pack->end());
+                continue;
+            }
+            out.push_back(nullptr);
+            continue;
+        }
+        out.push_back(ctx.canonicalize(x->type));
+    }
+    return out;
+}
+
 std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const std::vector<Type*>& args, std::string& error) {
     for (Type* a : args) {
         if (!a || a->is_error() || a->is_dependent()) return std::nullopt;
+    }
+
+    if (parser_types::is_lifecycle_trait(trait)) {
+        const std::pair<int, std::vector<Type*>> key{ static_cast<int>(trait), args };
+        if (const auto it = ctx.lifecycle_trait_memo.find(key); it != ctx.lifecycle_trait_memo.end()) return it->second;
+        if (!ctx.lifecycle_trait_hook) return std::nullopt;
+        const std::optional<std::int64_t> r = ctx.lifecycle_trait_hook(static_cast<int>(trait), args);
+        if (r) ctx.lifecycle_trait_memo.emplace(key, *r);
+        return r;
     }
 
     if (args.size() == 1) {
@@ -424,6 +456,9 @@ std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const
             if (trait == Trait::FloatExponentBits) return exp;
             return bits - exp;
         }
+
+        default:
+            break;
     }
 
     return std::nullopt;

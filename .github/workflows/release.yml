@@ -166,15 +166,21 @@ jobs:
         with:
           msystem: ${{ matrix.msystem }}
           update: true
-          install: >-
-            git
-            unzip
-            ${{ matrix.prefix }}-cc
-            ${{ matrix.prefix }}-cmake
-            ${{ matrix.prefix }}-ninja
-            ${{ matrix.prefix }}-zlib
-            ${{ matrix.prefix }}-libjpeg-turbo
-            ${{ matrix.prefix }}-vulkan-headers
+
+      - name: Install packages
+        run: |
+          sed -i 's/^#\?ParallelDownloads.*/ParallelDownloads = 2/' /etc/pacman.conf
+          packages="git unzip ${{ matrix.prefix }}-cc ${{ matrix.prefix }}-cmake ${{ matrix.prefix }}-ninja ${{ matrix.prefix }}-zlib ${{ matrix.prefix }}-libjpeg-turbo ${{ matrix.prefix }}-vulkan-headers"
+          for attempt in 1 2 3 4 5 6; do
+            if pacman -S --needed --noconfirm --overwrite '*' $packages; then
+              exit 0
+            fi
+            wait=$((attempt * 30))
+            echo "::warning::pacman couldn't download everything (attempt $attempt of 6); the MSYS2 mirrors are probably rate limiting, so trying again in $wait seconds"
+            sleep $wait
+          done
+          echo "::error::pacman still couldn't download the packages after 6 attempts"
+          exit 1
 
       - name: Configure
         run: |
