@@ -1,0 +1,223 @@
+import module.collections
+
+namespace std {
+    namespace regex {
+        constexpr long int: ignore_case = 1;
+        constexpr long int: multiline = 2;
+        constexpr long int: dot_all = 4;
+        constexpr long int: extended = 8;
+        constexpr long int: unicode_classes = 16;
+
+        extern "C++" from "<walnut_regex.hpp>" {
+            class Match as "walnut_rt::rx::match" {
+            public:
+                constructor();
+                function found() const -> bool;
+                function value() const -> string;
+                function group(long int: index) const -> string;
+                function named(const string&: name) const -> string;
+                function has_group(long int: index) const -> bool;
+                function has_named(const string&: name) const -> bool;
+                function group_count() const -> long int;
+                function start() const -> long int;
+                function stop() const -> long int;
+                function length() const -> long int;
+                function group_start(long int: index) const -> long int;
+                function group_stop(long int: index) const -> long int;
+                function before() const -> string;
+                function after() const -> string;
+
+                operator(bool) function() const explicit {
+                    return found();
+                }
+            } end class Match
+
+            class Regex as "walnut_rt::rx::regex" {
+                function collect(const string&: subject, std::collections::Vector<Match>&: out) const -> void;
+                function split_into(const string&: subject, std::collections::Vector<string>&: out) const -> void;
+
+            public:
+                constructor();
+                constructor(const string&: pattern);
+                constructor(const string&: pattern, long int: flags);
+
+                function ok() const -> bool;
+                function error() const -> string;
+                function error_position() const -> long int;
+                function pattern() const -> string;
+                function group_count() const -> long int;
+                function gave_up() const -> bool;
+                function set_step_limit(long int: steps) -> void;
+
+                function matches(const string&: subject) const -> bool;
+                function contains(const string&: subject) const -> bool;
+                function whole(const string&: subject) const -> Match;
+                function search(const string&: subject) const -> Match;
+                function search_from(const string&: subject, long int: start) const -> Match;
+                function match_at(const string&: subject, long int: position) const -> Match;
+                function count(const string&: subject) const -> long int;
+                function replace(const string&: subject, const string&: replacement) const -> string;
+                function replace_first(const string&: subject, const string&: replacement) const -> string;
+                function replace_count(const string&: subject, const string&: replacement, long int: limit) const -> string;
+                function explain() const -> string;
+                static function escape(const string&: literal) -> string;
+
+                function find_all(const string&: subject) const -> std::collections::Vector<Match> {
+                    std::collections::Vector<Match>: out;
+                    collect(subject, out);
+                    return out;
+                } end function find_all
+
+                function split(const string&: subject) const -> std::collections::Vector<string> {
+                    std::collections::Vector<string>: out;
+                    split_into(subject, out);
+                    return out;
+                } end function split
+            } end class Regex
+
+            class CharSet as "walnut_rt::rx::charset" {
+            public:
+                constructor();
+                static function everything() -> CharSet;
+                static function nothing() -> CharSet;
+                static function of(const string&: chars) -> CharSet;
+                static function between(char: first, char: last) -> CharSet;
+                static function digits() -> CharSet;
+                static function numbers() -> CharSet;
+                static function letters() -> CharSet;
+                static function uppercase() -> CharSet;
+                static function lowercase() -> CharSet;
+                static function spaces() -> CharSet;
+                static function punctuation() -> CharSet;
+                static function symbols() -> CharSet;
+                static function special_characters() -> CharSet;
+                static function emoji() -> CharSet;
+                static function hex_digits() -> CharSet;
+                static function word_characters() -> CharSet;
+                static function ascii() -> CharSet;
+
+                function allow(const string&: chars) -> CharSet&;
+                function disable(const string&: chars) -> CharSet&;
+                function allow_char(char: c) -> CharSet&;
+                function disable_char(char: c) -> CharSet&;
+                function allow_range(char: first, char: last) -> CharSet&;
+                function disable_range(char: first, char: last) -> CharSet&;
+                function allow_set(const CharSet&: other) -> CharSet&;
+                function disable_set(const CharSet&: other) -> CharSet&;
+                function allow_digits() -> CharSet&;
+                function disable_digits() -> CharSet&;
+                function allow_numbers() -> CharSet&;
+                function disable_numbers() -> CharSet&;
+                function allow_letters() -> CharSet&;
+                function disable_letters() -> CharSet&;
+                function allow_uppercase() -> CharSet&;
+                function disable_uppercase() -> CharSet&;
+                function allow_lowercase() -> CharSet&;
+                function disable_lowercase() -> CharSet&;
+                function allow_spaces() -> CharSet&;
+                function disable_spaces() -> CharSet&;
+                function allow_newlines() -> CharSet&;
+                function disable_newlines() -> CharSet&;
+                function allow_punctuation() -> CharSet&;
+                function disable_punctuation() -> CharSet&;
+                function disable_punctuation_except(const string&: keep) -> CharSet&;
+                function allow_symbols() -> CharSet&;
+                function disable_symbols() -> CharSet&;
+                function disable_symbols_except(const string&: keep) -> CharSet&;
+                function allow_special() -> CharSet&;
+                function disable_special() -> CharSet&;
+                function disable_special_except(const string&: keep) -> CharSet&;
+                function allow_emoji() -> CharSet&;
+                function disable_emoji() -> CharSet&;
+                function allow_control() -> CharSet&;
+                function disable_control() -> CharSet&;
+                function only_ascii() -> CharSet&;
+                function allow_hex_digits() -> CharSet&;
+
+                function contains(char: c) const -> bool;
+                function accepts(const string&: subject) const -> bool;
+                function first_rejected(const string&: subject) const -> long int;
+                function filter(const string&: subject) const -> string;
+                function inverted() const -> CharSet;
+                function to_regex() const -> string;
+                function describe() const -> string;
+            } end class CharSet
+
+            class Pattern as "walnut_rt::rx::pattern" {
+            public:
+                constructor();
+                static function literal(const string&: words) -> Pattern;
+                static function one_of(const CharSet&: set) -> Pattern;
+                static function one_of_chars(const string&: chars) -> Pattern;
+                static function not_one_of(const string&: chars) -> Pattern;
+                static function any_character() -> Pattern;
+                static function any_except_newline() -> Pattern;
+                static function digit() -> Pattern;
+                static function letter() -> Pattern;
+                static function whitespace() -> Pattern;
+                static function word_character() -> Pattern;
+                static function start_of_text() -> Pattern;
+                static function end_of_text() -> Pattern;
+                static function start_of_line() -> Pattern;
+                static function end_of_line() -> Pattern;
+                static function word_boundary() -> Pattern;
+                static function either(const Pattern&: a, const Pattern&: b) -> Pattern;
+                static function same_as(const string&: group_name) -> Pattern;
+                static function same_as_group(long int: number) -> Pattern;
+                static function raw(const string&: regex) -> Pattern;
+                static function digits(long int: at_least) -> Pattern;
+                static function integer_number() -> Pattern;
+                static function unsigned_integer() -> Pattern;
+                static function decimal_number() -> Pattern;
+                static function identifier() -> Pattern;
+                static function hex_number() -> Pattern;
+                static function hex_color() -> Pattern;
+                static function email() -> Pattern;
+                static function word() -> Pattern;
+
+                function and_then(const Pattern&: next) const -> Pattern;
+                function and_then_literal(const string&: words) const -> Pattern;
+                function or_else(const Pattern&: other) const -> Pattern;
+                function optional() const -> Pattern;
+                function one_or_more() const -> Pattern;
+                function zero_or_more() const -> Pattern;
+                function times(long int: n) const -> Pattern;
+                function times_between(long int: min, long int: max) const -> Pattern;
+                function at_least(long int: n) const -> Pattern;
+                function at_most(long int: n) const -> Pattern;
+                function as_few_as_possible() const -> Pattern;
+                function no_backtracking() const -> Pattern;
+                function capture() const -> Pattern;
+                function capture_as(const string&: name) const -> Pattern;
+                function group() const -> Pattern;
+                function followed_by(const Pattern&: next) const -> Pattern;
+                function not_followed_by(const Pattern&: next) const -> Pattern;
+                function preceded_by(const Pattern&: before) const -> Pattern;
+                function not_preceded_by(const Pattern&: before) const -> Pattern;
+                function whole() const -> Pattern;
+
+                function to_regex() const -> string;
+                function compile() const -> Regex;
+                function compile_with(long int: flags) const -> Regex;
+                function matches(const string&: subject) const -> bool;
+                function explain() const -> string;
+            } end class Pattern
+        } end extern
+
+        function matches(const string&: pattern, const string&: subject) -> bool {
+            return Regex(pattern).matches(subject);
+        } end function matches
+
+        function search(const string&: pattern, const string&: subject) -> Match {
+            return Regex(pattern).search(subject);
+        } end function search
+
+        function replace(const string&: pattern, const string&: subject, const string&: replacement) -> string {
+            return Regex(pattern).replace(subject, replacement);
+        } end function replace
+
+        function explain(const string&: pattern) -> string {
+            return Regex(pattern).explain();
+        } end function explain
+    } end namespace regex
+} end namespace std
