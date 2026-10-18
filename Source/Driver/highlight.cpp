@@ -6,6 +6,7 @@
 #include "Semantics/symbol.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <map>
 #include <set>
@@ -220,6 +221,43 @@ std::string prefix(const modifiers::RawModifiers& m) {
 
 std::string iterable_text(const N::FunctionParameter* p, S::TypeContext* types);
 
+std::string default_after(std::string_view name, bool angle) {
+    if (name.empty() || !name.data()) return std::string();
+    const char* p = name.data() + name.size();
+    const char* limit = p + 400;
+    while (p < limit && *p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) ++p;
+    if (p >= limit || *p != '=' || p[1] == '=') return std::string();
+    ++p;
+    while (p < limit && *p && (*p == ' ' || *p == '\t')) ++p;
+    const char* start = p;
+    int depth = 0;
+    int angles = 0;
+    char quote = 0;
+    for (; p < limit && *p; ++p) {
+        const char c = *p;
+        if (quote) {
+            if (c == '\\' && p[1]) ++p;
+            else if (c == quote) quote = 0;
+            continue;
+        }
+        if (c == '"' || c == '\'') { quote = c; continue; }
+        if (c == '(' || c == '[' || c == '{') { ++depth; continue; }
+        if ((c == ')' || c == ']' || c == '}') && depth > 0) { --depth; continue; }
+        if (angle && c == '<') { ++angles; continue; }
+        if (angle && c == '>' && angles > 0) { --angles; continue; }
+        if (depth == 0 && angles == 0 && (c == ',' || c == ';' || c == ')' || c == ']' || c == '}' || c == '\n' || (angle && c == '>'))) break;
+    }
+    std::string out(start, static_cast<std::size_t>(p - start));
+    while (!out.empty() && (out.back() == ' ' || out.back() == '\t' || out.back() == '\r')) out.pop_back();
+    if (out.size() > 80) out = out.substr(0, 77) + "...";
+    return out;
+}
+
+std::string default_text(std::string_view name, bool angle) {
+    const std::string text = default_after(name, angle);
+    return text.empty() ? std::string("...") : text;
+}
+
 std::string signature(const N::FunctionDeclaration* f, S::TypeContext* types = nullptr) {
     if (f->variable_template) {
         std::string t = type_text(f->m_return_type, types);
@@ -244,7 +282,7 @@ std::string signature(const N::FunctionDeclaration* f, S::TypeContext* types = n
             }
 
             if (!p->m_name.empty()) out += ": " + std::string(p->m_name);
-            if (p->m_initializer) out += " = ...";
+            if (p->m_initializer) out += " = " + default_text(p->m_name, false);
         }
     }
 
@@ -277,10 +315,27 @@ std::string params_text(const N::FunctionParameters* ps, S::TypeContext* types) 
         }
 
         if (!p->m_name.empty()) out += ": " + std::string(p->m_name);
-        if (p->m_initializer) out += " = ...";
+        if (p->m_initializer) out += " = " + default_text(p->m_name, false);
     }
 
     return out;
+}
+
+std::string template_default(const N::TemplateParameter* p, S::TypeContext* types) {
+    if (!p) return std::string();
+    if (p->m_has_default_type) {
+        const std::string t = type_text(p->m_default_type, types);
+        if (!t.empty()) return " = " + t;
+    }
+    if (p->m_default_value || p->m_has_default_type) return " = " + default_text(p->m_name, true);
+    return std::string();
+}
+
+std::string template_parameter_text(const N::TemplateParameter* p, S::TypeContext* types) {
+    std::string out = p->is_type_param() ? std::string("typename") : type_text(p->m_type, types);
+    if (p->m_is_pack) out += "...";
+    if (!p->m_name.empty()) out += " " + std::string(p->m_name);
+    return out + template_default(p, types);
 }
 
 std::string template_prefix(const S::Symbol* s, S::TypeContext* types) {
@@ -296,6 +351,7 @@ std::string template_prefix(const S::Symbol* s, S::TypeContext* types) {
         else out += type_text(p->m_type, types);
         if (p->m_is_pack) out += "...";
         if (!p->m_name.empty()) out += " " + std::string(p->m_name);
+        out += template_default(p, types);
     }
 
     if (first) return std::string();
@@ -527,6 +583,7 @@ public:
                     hover(callee, "", type_text(n->expr_type.type), "", evaluate(n), 2);
                     if (c->resolved && !via_operator) overload_hover(callee, c->resolved, n, 2);
                     if (c->resolved && !via_operator) link(callee, c->resolved, 2);
+                    if (!c->resolved) candidate_hover(callee, c);
                 }
 
                 targs(c->m_template_args);
@@ -578,7 +635,7 @@ public:
                 if (p->is_iterable) type(p->iterable_element);
                 declare(p->m_name, nullptr, "parameter");
                 const std::string t = p->is_iterable ? iterable_text(p, m_types) : type_text(p->m_type, m_types);
-                if (!t.empty()) hover(p->m_name, t + (p->is_variadic() ? "...: " : ": ") + std::string(p->m_name), "", "", "", 3);
+                if (!t.empty()) hover(p->m_name, t + (p->is_variadic() ? "...: " : ": ") + std::string(p->m_name) + (p->m_initializer ? " = " + default_text(p->m_name, false) : std::string()), "", "", "", 3);
                 break;
             }
 
@@ -664,6 +721,7 @@ public:
             case K::TemplateParameter: {
                 auto* t = static_cast<N::TemplateParameter*>(n);
                 declare(t->m_name, nullptr, "typeParameter");
+                hover(t->m_name, "(template parameter) " + template_parameter_text(t, m_types), "", "", "", 3);
                 type(t->m_type);
                 type(t->m_default_type);
                 break;
@@ -792,7 +850,8 @@ public:
             const Position p = position(at, h.len);
             out << "{\"line\":" << p.line << ",\"col\":" << p.col << ",\"len\":" << p.len;
             if (!h.code.empty()) out << ",\"code\":" << json_string(h.code);
-            if (h.overloads.size() > 1) list("overloads", h.overloads);
+            if (h.overloads.size() > 1 || (h.guess && !h.overloads.empty())) list("overloads", h.overloads);
+            if (h.guess) out << ",\"guess\":true";
             list("types", h.types);
             list("values", h.values);
             list("results", h.results);
@@ -862,6 +921,7 @@ private:
         std::vector<std::string> types;
         std::vector<std::string> values;
         std::vector<std::string> results;
+        bool                     guess = false;
     };
 
     std::map<std::size_t, Hover> m_hovers;
@@ -950,7 +1010,7 @@ private:
         if (set.size() < 2) return;
         Hover& h = m_hovers[offset(at.data())];
         if (h.len == 0) h.len = static_cast<std::uint32_t>(at.size());
-        if (!h.overloads.empty() && rank < h.overload_rank) return;
+        if (!h.overloads.empty() && (rank < h.overload_rank || h.guess)) return;
         std::vector<std::string> list;
         const S::Symbol* resolved = follow(chosen);
         std::string head = function_signature(resolved, m_types);
@@ -966,6 +1026,125 @@ private:
         h.overloads = std::move(list);
         h.overload_rank = rank;
         if (h.code.empty() || rank >= h.rank) { h.code = h.overloads.front(); h.rank = rank; }
+    }
+
+    static const N::FunctionParameters* parameters_of(const S::Symbol* s) {
+        if (!s || !s->decl) return nullptr;
+        if (s->decl->kind == K::FunctionDeclaration) return static_cast<const N::FunctionDeclaration*>(s->decl)->m_parameters;
+        if (s->decl->kind == K::ConstructorDeclaration) return static_cast<const N::ConstructorDeclaration*>(s->decl)->m_parameters;
+        if (s->decl->kind == K::OperatorFunctionDeclaration) return static_cast<const N::OperatorFunctionDeclaration*>(s->decl)->m_parameters;
+        return nullptr;
+    }
+
+    static std::string bare_type(std::string t) {
+        for (const char* word : { "const ", "volatile " }) {
+            for (std::size_t at = t.find(word); at != std::string::npos; at = t.find(word)) t.erase(at, std::string(word).size());
+        }
+        while (!t.empty() && (t.back() == '&' || t.back() == ' ')) t.pop_back();
+        return t;
+    }
+
+    static bool numeric_type(const std::string& t) {
+        for (const char* n : { "bool", "char", "short", "int", "long", "float", "double", "unsigned", "signed", "size_t" }) {
+            if (t.find(n) != std::string::npos && t.find('*') == std::string::npos && t.find('<') == std::string::npos) return true;
+        }
+        return false;
+    }
+
+    static int candidate_score(const S::Symbol* s, const N::CallExpression* c) {
+        const N::FunctionParameters* ps = parameters_of(s);
+        const std::size_t given = c->m_arguments.size();
+        std::size_t required = 0;
+        std::size_t total = 0;
+        bool variadic = false;
+        if (ps) {
+            for (const N::FunctionParameter* p : ps->m_params) {
+                if (!p) continue;
+                if (p->is_variadic()) {
+                    variadic = true;
+                    continue;
+                }
+                ++total;
+                if (!p->m_initializer) ++required;
+            }
+        }
+        int score = 0;
+        if (given >= required && (given <= total || variadic)) score += 1000;
+        else score -= 50 * static_cast<int>(given < required ? required - given : given - total);
+        if (!ps) return score;
+        std::size_t i = 0;
+        for (const N::FunctionParameter* p : ps->m_params) {
+            if (!p || i >= given) break;
+            const N::ASTNode* arg = c->m_arguments[i++];
+            if (!arg || !arg->expr_type.type || arg->expr_type.type->is_dependent() || p->is_variadic()) continue;
+            const std::string want = bare_type(type_text(p->m_type, nullptr));
+            const std::string have = bare_type(type_text(arg->expr_type.type));
+            if (want.empty() || have.empty()) continue;
+            if (want == have) score += 20;
+            else if (numeric_type(want) && numeric_type(have)) score += 8;
+            else if ((want.find('*') != std::string::npos) == (have.find('*') != std::string::npos) && want.find_first_of("<") == std::string::npos) score += 2;
+            else if (want.size() == 1 || (want.size() < 4 && std::isupper(static_cast<unsigned char>(want[0])))) score += 5;
+            else score -= 10;
+        }
+        return score;
+    }
+
+    std::vector<const S::Symbol*> candidates_for(const N::CallExpression* c) const {
+        std::vector<const S::Symbol*> out;
+        const auto add_chain = [&out](const S::Symbol* first) {
+            for (const S::Symbol* o = first; o; o = o->next_overload) {
+                const S::Symbol* f = follow(o);
+                if (!f || o->merged_into || !is_callable(f)) continue;
+                if (std::find(out.begin(), out.end(), f) == out.end()) out.push_back(f);
+            }
+        };
+        const auto add_constructors = [&](const S::Symbol* type) {
+            type = follow(type);
+            if (!type || type->kind != S::SymbolKind::Type || !type->inner_scope) return;
+            add_chain(type->inner_scope->find_local("constructor"));
+        };
+        const N::ASTNode* callee = c->m_callee;
+        if (callee && callee->kind == K::TemplateInstantiation) callee = static_cast<const N::TemplateInstantiation*>(callee)->m_template;
+        const S::Symbol* named = nullptr;
+        if (callee && callee->kind == K::Identifier) named = static_cast<const N::Identifier*>(callee)->resolved;
+        else if (callee && callee->kind == K::QualifiedIdentifier) named = static_cast<const N::QualifiedIdentifier*>(callee)->resolved;
+        else if (callee && callee->kind == K::MemberAccessExpression) {
+            const auto* m = static_cast<const N::MemberAccessExpression*>(callee);
+            named = m->resolved ? m->resolved : scope_member(m);
+            if (!named) named = dot_member(m);
+        }
+        named = follow(named);
+        if (!named) return out;
+        if (named->kind == S::SymbolKind::Type) {
+            add_constructors(named);
+            return out;
+        }
+        if (!is_callable(named)) return out;
+        if (named->owner) add_chain(named->owner->find_local(named->name));
+        if (out.empty()) out.push_back(named);
+        return out;
+    }
+
+    void candidate_hover(std::string_view at, const N::CallExpression* c) {
+        if (at.empty() || !inside(at.data(), at.size())) return;
+        std::vector<const S::Symbol*> set = candidates_for(c);
+        if (set.empty()) return;
+        std::vector<std::pair<int, const S::Symbol*>> ranked;
+        for (const S::Symbol* s : set) ranked.emplace_back(candidate_score(s, c), s);
+        std::stable_sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        std::vector<std::string> list;
+        for (const auto& r : ranked) {
+            const std::string sig = function_signature(r.second, m_types);
+            if (!sig.empty() && std::find(list.begin(), list.end(), sig) == list.end()) list.push_back(sig);
+        }
+        if (list.empty()) return;
+        Hover& h = m_hovers[offset(at.data())];
+        if (h.len == 0) h.len = static_cast<std::uint32_t>(at.size());
+        h.overloads = list;
+        h.overload_rank = 3;
+        h.code = list.front();
+        h.rank = 3;
+        h.guess = true;
     }
 
     void operator_hover(std::string_view at, const S::Symbol* chosen, const N::ASTNode* site) {
@@ -1147,6 +1326,13 @@ private:
                 const std::string t = symbol_type(s, use);
                 const std::string shown = mods.find("constexpr") != std::string::npos ? without_const(t) : t;
                 code = mods + (shown.empty() ? std::string() : shown + ": ") + qualified_name(s);
+                if (s->decl && s->decl->kind == K::VariableDeclaration) {
+                    const auto* v = static_cast<const N::VariableDeclaration*>(s->decl);
+                    if (v->m_initializer) {
+                        const std::string init = default_after(v->m_name, false);
+                        if (!init.empty()) code += " = " + init;
+                    }
+                }
                 if (m_eval) value = value_text(m_eval->value_of(const_cast<S::Symbol*>(s)), s->type ? s->type->canonical : nullptr);
                 break;
             }
@@ -1154,6 +1340,10 @@ private:
             case S::SymbolKind::Parameter: {
                 const std::string t = symbol_type(s, use);
                 code = (t.empty() ? std::string() : t + ": ") + std::string(s->name);
+                if (s->decl && s->decl->kind == K::FunctionParameter) {
+                    const auto* p = static_cast<const N::FunctionParameter*>(s->decl);
+                    if (p->m_initializer) code += " = " + default_text(p->m_name, false);
+                }
                 break;
             }
 
@@ -1161,10 +1351,13 @@ private:
                 code = function_signature(s, m_types);
                 break;
 
-            case S::SymbolKind::Type:
-                if (s->decl && s->decl->kind == K::RecordDeclaration && static_cast<const N::RecordDeclaration*>(s->decl)->m_form != N::RecordDeclaration::Form::Class) code = "struct " + qualified_name(s);
-                else code = "class " + qualified_name(s);
+            case S::SymbolKind::Type: {
+                std::string head = template_prefix(s, m_types);
+                if (!head.empty()) head.back() = '\n';
+                if (s->decl && s->decl->kind == K::RecordDeclaration && static_cast<const N::RecordDeclaration*>(s->decl)->m_form != N::RecordDeclaration::Form::Class) code = head + "struct " + qualified_name(s);
+                else code = head + "class " + qualified_name(s);
                 break;
+            }
 
             case S::SymbolKind::TypeAlias: {
                 code = "using " + qualified_name(s);
@@ -1181,7 +1374,10 @@ private:
             case S::SymbolKind::Namespace:
             case S::SymbolKind::Module:        code = "namespace " + qualified_name(s); break;
             case S::SymbolKind::Concept:       code = "concept " + qualified_name(s); break;
-            case S::SymbolKind::TemplateParam: code = "template parameter " + std::string(s->name); break;
+            case S::SymbolKind::TemplateParam:
+                if (s->decl && s->decl->kind == K::TemplateParameter) code = "(template parameter) " + template_parameter_text(static_cast<const N::TemplateParameter*>(s->decl), m_types);
+                else code = "template parameter " + std::string(s->name);
+                break;
             case S::SymbolKind::Import:        break;
         }
 

@@ -735,10 +735,12 @@ function hoverMarkdown(h, uri) {
         md.supportThemeIcons = true;
         md.appendCodeblock(shorten(overloads[page]), 'walnut');
         md.appendMarkdown(`[$(chevron-left)](command:walnut.previousOverload?${args} "Previous overload") ${page + 1} of ${overloads.length} [$(chevron-right)](command:walnut.nextOverload?${args} "Next overload")`);
+        if (h.guess) md.appendMarkdown('  \n*Can\'t be decided here, so these are the candidates, most likely first.*');
         if (page > 0) return md;
         md.appendMarkdown('  \n');
     } else if (h.code) {
         md.appendCodeblock(shorten(h.code), 'walnut');
+        if (h.guess) md.appendMarkdown('*Can\'t be decided here; this is the most likely match.*  \n');
     }
 
     const lines = [];
