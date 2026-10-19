@@ -294,6 +294,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
         case K::VariableDeclaration: {
             auto* v = static_cast<nodes::VariableDeclaration*>(node);
             walk_expr(v->m_initializer);
+            if (!type_of(v->m_initializer)) reject_type_as_value(v->m_initializer);
             Type* init = type_of(v->m_initializer);
             parser_types::TypeInfo& ti = v->get_type_info();
 
@@ -305,6 +306,10 @@ void TypeWalker::build(nodes::ASTNode* node) {
             if (prim_is(ti, parser_types::PrimitiveType::BaseKind::Auto)) {
                 if (!init) {
                     if (!v->has_initializer()) SemanticError::auto_needs_initializer(m_reporter, file_of(v), v->line, v->get_name());
+                    ti.canonical = m_types.error_();
+                    break;
+                }
+                if (init->is_error()) {
                     ti.canonical = m_types.error_();
                     break;
                 }
@@ -543,6 +548,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
         case K::ReturnStatement: {
             auto* rs = static_cast<nodes::ReturnStatement*>(node);
             walk_expr(rs->get_value());
+            if (rs->has_value() && !type_of(rs->get_value())) reject_type_as_value(rs->get_value());
             if (m_returns.empty()) break;
             ReturnFrame& f = m_returns.back();
             if (rs->has_value()) f.saw_value_return = true;
@@ -967,6 +973,9 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                 walk_expr(b->left); walk_expr(b->right);
             }
 
+            if (!type_of(b->left)) reject_type_as_value(b->left);
+            if (!type_of(b->right)) reject_type_as_value(b->right);
+
             VC vc = is_assignment_op(b->op) ? VC::LValue : VC::RValue;
             Symbol* op = nullptr;
             Type* t = decay_ref(type_binary(b, op), vc);
@@ -1072,6 +1081,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             for (nodes::ASTNode* a : c->m_arguments) {
                 if (a && a->kind == K::Identifier) m_unassigned.erase(static_cast<nodes::Identifier*>(a)->resolved);
                 if (a != pre_walked) walk_expr(a);
+                if (!type_of(a)) reject_type_as_value(a);
                 args.push_back(type_of(a));
             }
             VC vc = VC::RValue;
@@ -6514,6 +6524,63 @@ ConstValue TypeWalker::eval_checked(nodes::ASTNode* e, bool required) {
     }
 
     return v;
+}
+
+bool TypeWalker::reject_type_as_value(nodes::ASTNode* e) {
+    if (!e) return false;
+    Symbol* s = nullptr;
+    std::string name;
+
+    if (e->kind == K::Identifier) {
+        auto* id = static_cast<nodes::Identifier*>(e);
+        s = id->resolved;
+        name = std::string(id->get_name());
+    } else if (e->kind == K::QualifiedIdentifier) {
+        auto* q = static_cast<nodes::QualifiedIdentifier*>(e);
+        s = q->resolved;
+        if (q->is_global()) name = "::";
+        for (std::size_t i = 0; i < q->parts().size(); ++i) {
+            if (i) name += "::";
+            name += std::string(q->parts()[i]);
+        }
+    } else if (e->kind == K::MemberAccessExpression && static_cast<nodes::MemberAccessExpression*>(e)->is_scope()) {
+        auto* m = static_cast<nodes::MemberAccessExpression*>(e);
+        s = m->resolved;
+        name = std::string(m->get_member());
+    } else {
+        return false;
+    }
+
+    if (s && s->kind == SymbolKind::Import && s->import_target) s = s->import_target;
+    if (!s) return false;
+
+    std::string msg;
+    switch (s->kind) {
+        case SymbolKind::Type:
+        case SymbolKind::TypeAlias:
+        case SymbolKind::Enum:
+            msg = "'" + name + "' is a type, not a value, so it can't be used here; make an object with '" + name + "(...)' or '" + name + "{...}', or use typeid(" + name + ") to get its name as a string";
+            break;
+        case SymbolKind::TemplateParam:
+            if (!s->decl || s->decl->kind != K::TemplateParameter || !static_cast<nodes::TemplateParameter*>(s->decl)->is_type_param()) return false;
+            msg = "'" + name + "' is a type template parameter, not a value, so it can't be used here; make an object with '" + name + "(...)' or '" + name + "{...}', or use typeid(" + name + ") to get its name as a string";
+            break;
+        case SymbolKind::Namespace:
+            msg = "'" + name + "' is a namespace, not a value, so it can't be used here; name something inside it, as in '" + name + "::member'";
+            break;
+        case SymbolKind::Module:
+            msg = "'" + name + "' is a module, not a value, so it can't be used here; name something inside it, as in '" + name + "::member'";
+            break;
+        case SymbolKind::Concept:
+            msg = "'" + name + "' is a concept, not a value, so it can't be used here; check a type against it with '" + name + "<T>'";
+            break;
+        default:
+            return false;
+    }
+
+    SemanticError::emit(m_reporter, file_of(e), e->line, "Type", msg);
+    assign_typed(e, m_types.error_(), VC::RValue);
+    return true;
 }
 
 std::string_view TypeWalker::callee_name(nodes::ASTNode* n) {

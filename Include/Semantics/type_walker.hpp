@@ -388,6 +388,8 @@ private:
 
     Symbol* callee_symbol(nodes::ASTNode* n);
 
+    bool reject_type_as_value(nodes::ASTNode* e);
+
     void check_convertible(Type* from, Type* to, nodes::ASTNode* site);
 
     bool binds_nonconst_lvalue_ref_to_rvalue(nodes::ASTNode* expr, Type* from, Type* to);
