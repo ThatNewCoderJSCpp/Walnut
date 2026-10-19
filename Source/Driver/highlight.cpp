@@ -3,6 +3,7 @@
 #include "Semantics/compile_time_random.hpp"
 #include "Parser/Nodes/node_children.hpp"
 #include "Semantics/const_evaluator.hpp"
+#include "Semantics/conversion.hpp"
 #include "Semantics/instantiator.hpp"
 #include "Semantics/scope.hpp"
 #include "Semantics/symbol.hpp"
@@ -2158,6 +2159,245 @@ std::string highlight_json(CompilerPipeline& compiler) {
     instantiator.evaluator().hide_random = hid_random;
     instantiator.freeze(was_frozen);
     return c.json(compiler.get_reporter(), compiler.get_warnings(), *main, sources, semantic, error_limit, warning_limit);
+}
+
+namespace {
+
+S::Scope* scope_of_node(N::ASTNode* n) {
+    switch (n->kind) {
+        case K::BlockStatement: return static_cast<N::BlockStatement*>(n)->scope;
+        case K::IfBranch: return static_cast<N::IfBranch*>(n)->scope;
+        case K::ForStatement: return static_cast<N::ForStatement*>(n)->scope;
+        case K::SwitchStatement: return static_cast<N::SwitchStatement*>(n)->scope;
+        case K::LambdaExpression: return static_cast<N::LambdaExpression*>(n)->scope;
+        case K::RecordDeclaration: return static_cast<N::RecordDeclaration*>(n)->scope;
+        case K::TemplateDeclaration: return static_cast<N::TemplateDeclaration*>(n)->scope;
+        case K::NamespaceDeclaration: {
+            const S::Symbol* sym = static_cast<N::NamespaceDeclaration*>(n)->symbol;
+            return sym ? sym->inner_scope : nullptr;
+        }
+        default: return nullptr;
+    }
+}
+
+struct Site {
+    N::ASTNode* node = nullptr;
+    S::Scope* scope = nullptr;
+    std::uint32_t line = 0;
+};
+
+struct SiteFinder {
+    std::string_view placeholder;
+    std::uint32_t want_line = 0;
+    Site found;
+    Site best_line;
+    std::uint32_t best_span = static_cast<std::uint32_t>(-1);
+
+    std::uint32_t max_line(N::ASTNode* n, int depth = 0) {
+        std::uint32_t m = n->line;
+        if (depth > 400) return m;
+        N::for_each_child(n, [&](N::ASTNode* c) { m = std::max(m, max_line(c, depth + 1)); });
+        return m;
+    }
+
+    bool matches(N::ASTNode* n) const {
+        switch (n->kind) {
+            case K::Identifier: return static_cast<N::Identifier*>(n)->name == placeholder;
+            case K::QualifiedIdentifier: {
+                const auto& parts = static_cast<N::QualifiedIdentifier*>(n)->m_parts;
+                return !parts.empty() && parts.back() == placeholder;
+            }
+            case K::MemberAccessExpression: return static_cast<N::MemberAccessExpression*>(n)->m_member == placeholder;
+            default: return false;
+        }
+    }
+
+    void walk(N::ASTNode* n, S::Scope* scope, int depth = 0) {
+        if (!n || found.node || depth > 400) return;
+        if (S::Scope* own = scope_of_node(n)) scope = own;
+        if (matches(n)) {
+            found = Site{ n, scope, n->line };
+            return;
+        }
+        if (scope_of_node(n) && want_line > 0 && n->line <= want_line) {
+            const std::uint32_t last = max_line(n) + 1;
+            if (last >= want_line && last - n->line <= best_span) {
+                best_span = last - n->line;
+                best_line = Site{ n, scope, n->line };
+            }
+        }
+        N::for_each_child(n, [&](N::ASTNode* c) { walk(c, scope, depth + 1); });
+    }
+};
+
+std::string_view grove_kind(const S::Symbol* s) {
+    const std::string_view k = kind_of(s);
+    if (k == "property") return "field";
+    if (k == "enumMember") return "constant";
+    if (k == "typeParameter" || k == "concept") return "type";
+    return k;
+}
+
+struct Candidates {
+    S::TypeContext* types = nullptr;
+    std::vector<std::string> order;
+    std::map<std::string, std::pair<const S::Symbol*, int>> by_name;
+    std::string_view placeholder;
+
+    void add(const S::Symbol* raw) {
+        if (!raw) return;
+        const S::Symbol* s = follow(raw);
+        if (!s || raw->name.empty() || raw->name == placeholder) return;
+        const std::string name(raw->name);
+        if (name[0] == '~' || name.rfind("operator", 0) == 0 || name.rfind("__", 0) == 0) return;
+        if (s->decl && (s->decl->kind == K::ConstructorDeclaration || s->decl->kind == K::DestructorDeclaration || s->decl->kind == K::OperatorFunctionDeclaration)) return;
+        if (kind_of(s).empty() || kind_of(s) == "operator") return;
+        auto it = by_name.find(name);
+        if (it != by_name.end()) {
+            if (s->kind == S::SymbolKind::Function && it->second.first->kind == S::SymbolKind::Function && it->second.first != s) ++it->second.second;
+            return;
+        }
+        int overloads = 0;
+        for (const S::Symbol* o = s->next_overload; o && overloads < 64; o = o->next_overload) ++overloads;
+        by_name.emplace(name, std::make_pair(s, overloads));
+        order.push_back(name);
+    }
+
+    void members(const S::Scope* scope, int depth = 0) {
+        if (!scope || depth > 16) return;
+        for (const S::Symbol* s : scope->symbols) add(s);
+        for (const S::Scope* b : scope->bases) members(b, depth + 1);
+    }
+
+    std::string detail(const S::Symbol* s) const {
+        switch (s->kind) {
+            case S::SymbolKind::Function: return function_signature(s, types);
+            case S::SymbolKind::Variable:
+            case S::SymbolKind::Parameter: return s->type ? type_text(*s->type, types) : std::string();
+            case S::SymbolKind::Type:
+            case S::SymbolKind::Enum:
+            case S::SymbolKind::Namespace:
+            case S::SymbolKind::Module:
+            case S::SymbolKind::Concept: return std::string(kind_of(s));
+            default: return std::string();
+        }
+    }
+
+    std::string json(std::size_t start, std::string_view mode) const {
+        std::string out = "{\"start\":" + std::to_string(start) + ",\"mode\":\"" + std::string(mode) + "\",\"items\":[";
+        bool first = true;
+        for (const std::string& name : order) {
+            const auto& [s, overloads] = by_name.at(name);
+            std::string d = detail(s);
+            if (overloads > 0) d += " (+" + std::to_string(overloads) + " overload" + (overloads == 1 ? "" : "s") + ")";
+            if (!first) out += ",";
+            first = false;
+            out += "{\"label\":" + json_string(name) + ",\"kind\":" + json_string(grove_kind(s)) + ",\"detail\":" + json_string(d) + "}";
+        }
+        out += "]}\n";
+        return out;
+    }
+};
+
+S::Type* receiver_type(S::Type* t, S::TypeContext& types, bool arrow) {
+    for (int i = 0; t && i < 8; ++i) {
+        if (t->is_reference()) {
+            t = static_cast<S::ReferenceType*>(t)->referent();
+            continue;
+        }
+        break;
+    }
+    t = types.strip_cv(t);
+    if (arrow && t && t->is_pointer()) t = types.strip_cv(static_cast<S::PointerType*>(t)->pointee());
+    return t;
+}
+
+const S::Scope* resolve_qualifier(const S::Scope* scope, const std::vector<std::string_view>& parts) {
+    if (!scope || parts.empty()) return nullptr;
+    const S::Symbol* s = follow(scope->resolve(parts[0]));
+    for (std::size_t i = 1; s && i < parts.size(); ++i) {
+        if (!s->inner_scope) return nullptr;
+        s = follow(s->inner_scope->find_member(parts[i]));
+    }
+    return s ? s->inner_scope : nullptr;
+}
+
+} // namespace
+
+std::string complete_json(CompilerPipeline& compiler, std::string_view placeholder, const CompletionRequest& request) {
+    Candidates cands;
+    cands.placeholder = placeholder;
+    cands.types = &compiler.mutable_types();
+    const std::optional<FileId> main = compiler.load_input();
+    if (!main) return cands.json(request.start, "none");
+    SiteFinder finder;
+    finder.placeholder = placeholder;
+    finder.want_line = request.line;
+    S::Scope* root = nullptr;
+    for (const CompilerPipeline::AnalyzedUnit& u : compiler.analyzed_units()) {
+        if (u.file != *main || !u.ast) continue;
+        root = u.root;
+        finder.walk(u.ast, u.root);
+        if (finder.found.node) break;
+    }
+    const Site site = finder.found.node ? finder.found : finder.best_line.node ? finder.best_line : Site{ nullptr, root, 0 };
+    const S::Scope* scope = site.scope ? site.scope : root;
+    const char* caret = site.node ? site.node->at : nullptr;
+    std::string_view mode = "name";
+
+    if (request.mode == CompletionRequest::Mode::Member || request.mode == CompletionRequest::Mode::Arrow) {
+        mode = "member";
+        const S::Scope* members = nullptr;
+        if (site.node && site.node->kind == K::MemberAccessExpression) {
+            const auto* m = static_cast<N::MemberAccessExpression*>(site.node);
+            S::Type* t = m->m_object ? m->m_object->expr_type.type : nullptr;
+            t = receiver_type(t, compiler.mutable_types(), request.mode == CompletionRequest::Mode::Arrow || m->is_arrow());
+            if (t) members = S::record_scope_of(t, compiler.mutable_types());
+        }
+        if (!members && !request.qualifier.empty() && scope) {
+            const S::Symbol* v = follow(scope->resolve(request.qualifier.front()));
+            if (v && (v->kind == S::SymbolKind::Variable || v->kind == S::SymbolKind::Parameter) && v->type) {
+                const S::Symbol* type_sym = follow(scope->resolve(type_text(*v->type, nullptr)));
+                if (type_sym) members = type_sym->inner_scope;
+            }
+        }
+        cands.members(members);
+        return cands.json(request.start, mode);
+    }
+
+    if (request.mode == CompletionRequest::Mode::Scope) {
+        mode = "scope";
+        const S::Scope* inner = nullptr;
+        if (site.node && site.node->kind == K::MemberAccessExpression) {
+            const auto* m = static_cast<N::MemberAccessExpression*>(site.node);
+            const S::Symbol* base = nullptr;
+            if (m->m_object && m->m_object->kind == K::Identifier) base = static_cast<N::Identifier*>(m->m_object)->resolved;
+            else if (m->m_object && m->m_object->kind == K::QualifiedIdentifier) base = static_cast<N::QualifiedIdentifier*>(m->m_object)->resolved;
+            base = follow(base);
+            if (base) inner = base->inner_scope;
+        }
+        if (!inner) {
+            std::vector<std::string_view> parts(request.qualifier.begin(), request.qualifier.end());
+            for (const S::Scope* s = scope; s && !inner; s = s->parent) inner = resolve_qualifier(s, parts);
+        }
+        if (inner) {
+            for (const S::Symbol* s : inner->symbols) cands.add(s);
+            for (const S::Scope* b : inner->bases) cands.members(b);
+        }
+        return cands.json(request.start, mode);
+    }
+
+    for (const S::Scope* s = scope; s; s = s->parent) {
+        const bool local = s->kind == S::Scope::Kind::Block || s->kind == S::Scope::Kind::Function || s->kind == S::Scope::Kind::Lambda;
+        for (const S::Symbol* sym : s->symbols) {
+            if (local && caret && sym->decl && sym->decl->file_id == *main && sym->decl->at && sym->decl->at > caret) continue;
+            cands.add(sym);
+        }
+        if (s->kind == S::Scope::Kind::Record) {
+            for (const S::Scope* b : s->bases) cands.members(b);
+        }
+    }
+    return cands.json(request.start, mode);
 }
 
 } // namespace driver

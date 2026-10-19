@@ -3560,6 +3560,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `run` | Builds the program and runs it |
 | `clean` | Deletes the build cache |
 | `highlight` | Prints what each name and operator in the file is, and its errors and warnings, as JSON for editors. With `--stdin`, the file's text comes from standard input. It also takes a `.walh` file. The format is in [the VS Code extension's README](Tools/vscode-walnut/README.md#the-highlight-command) |
+| `complete` | With `--at LINE:COL` (from 1, the column in bytes), prints what can be typed at that spot as JSON, for editors' autocomplete. After `.` or `->` it lists the members of the value's type, after `::` what's inside the namespace, class or enum, and otherwise every name in scope there (locals declared further down are left out). It works on unfinished code, so the line being typed doesn't have to compile. The answer is `{"start": column, "mode": "member" \| "scope" \| "name" \| "none", "items": [{"label", "kind", "detail"}]}`, where `start` is the byte column (from 0) where the word being completed starts and `detail` is a type or signature. Also takes `--stdin` and `.walh` files |
 | `library` | Lists the library files built into `walnut`. `walnut library io.walh` prints one, and `walnut library --extract <dir>` writes them all into a folder, so an editor can open them |
 | `help`, `-h`, `--help` | Shows the usage |
 

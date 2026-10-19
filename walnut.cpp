@@ -65,7 +65,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-enum class Command { Check, Emit, Build, Run, Clean, Highlight };
+enum class Command { Check, Emit, Build, Run, Clean, Highlight, Complete };
 
 enum class DebugMode { None, Walnut, Cpp };
 
@@ -96,6 +96,8 @@ struct Options {
     bool                                             keep_cpp = false;
     bool                                             unbuffered = false;
     bool                                             from_stdin = false;
+    std::size_t                                      at_line = 0;
+    std::size_t                                      at_column = 0;
     bool                                             no_cache = false;
     std::string                                      random_seed;
     bool                                             opt_set = false;
@@ -117,6 +119,7 @@ void print_usage(std::ostream& os) {
           "  run     build the program and run it\n"
           "  clean   delete walnut's build cache\n"
           "  highlight  print what each name and operator in the file is, as JSON, for editors (with --stdin, the file's text is read from standard input)\n"
+          "  complete   print the names that fit at --at LINE:COLUMN (from 1, in bytes), as JSON, for editors' autocomplete; also takes --stdin\n"
           "  library    list the library files built into walnut; 'library <file>' prints one, 'library --extract <dir>' writes them all to a folder\n"
           "\n"
           "options:\n"
@@ -221,6 +224,7 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     else if (cmd == "run")   o.command = Command::Run;
     else if (cmd == "clean") { o.command = Command::Clean; return true; }
     else if (cmd == "highlight") o.command = Command::Highlight;
+    else if (cmd == "complete") o.command = Command::Complete;
     else { std::cerr << "walnut: unknown command '" << cmd << "'\n"; print_usage(std::cerr); exit_code = 2; return false; }
 
     auto need = [&](int& i, const std::string& flag) -> const char* {
@@ -251,6 +255,18 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         else if (a == "-g")            o.debug = DebugMode::Walnut;
         else if (a == "-u" || a == "--unbuffered") o.unbuffered = true;
         else if (a == "--stdin")       o.from_stdin = true;
+        else if (a == "--at") {
+            const char* v = need(i, a);
+            if (!v) return false;
+            const std::string at = v;
+            const std::size_t colon = at.find(':');
+            char* end = nullptr;
+            const unsigned long line = std::strtoul(at.c_str(), &end, 10);
+            const unsigned long column = colon == std::string::npos ? 1ul : std::strtoul(at.c_str() + colon + 1, nullptr, 10);
+            if (line == 0 || column == 0) { std::cerr << "walnut: --at needs LINE:COLUMN, both from 1\n"; exit_code = 2; return false; }
+            o.at_line = line;
+            o.at_column = column;
+        }
         else if (a == "--debug-cpp")   { o.debug = DebugMode::Cpp; o.keep_cpp = true; }
         else if (a == "--line-map")    o.line_map = true;
         else if (a.rfind("--line-map=", 0) == 0) { o.line_map = true; o.line_map_path = a.substr(11); }
@@ -281,7 +297,7 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
             } else if (kind == walnut::FileKind::Walnut) {
                 if (o.input.empty()) o.input = a;
                 else o.extra_inputs.push_back(a);
-            } else if (kind == walnut::FileKind::WalnutHeader && o.command == Command::Highlight && o.input.empty()) {
+            } else if (kind == walnut::FileKind::WalnutHeader && (o.command == Command::Highlight || o.command == Command::Complete) && o.input.empty()) {
                 o.input = a;
             } else if (kind == walnut::FileKind::WalnutHeader) {
                 std::cerr << "walnut: '" << name << "' is a Walnut header; #include or import it from a .wal file instead of passing it to walnut\n";
@@ -1158,6 +1174,105 @@ int highlight(const Options& o) {
     return 0;
 }
 
+bool completion_ident(char c) {
+    const unsigned char u = static_cast<unsigned char>(c);
+    return std::isalnum(u) || c == '_' || u >= 0x80;
+}
+
+std::string completion_pass(const Options& o, std::string text, std::string_view placeholder, const walnut::driver::CompletionRequest& request) {
+    walnut::CompilerPipeline compiler(o.input);
+    compiler.set_path_style(walnut::PathStyle::Absolute);
+    compiler.report_silent();
+    compiler.warn_silent();
+    for (const auto& d : o.include_dirs) compiler.add_include_dir(d);
+    for (const auto& d : o.module_dirs) compiler.add_module_dir(d);
+    for (const auto& d : o.module_env_dirs) compiler.add_module_dir(d);
+    compiler.add_module_dir(o.runtime_dir);
+    for (const walnut_library::File& f : walnut_library::files) if (f.path) compiler.add_library_file(f.path, std::string(reinterpret_cast<const char*>(f.data), f.size));
+    for (const auto& [name, value] : o.defines) compiler.define_macro(name, value);
+    for (const std::string& extra : o.extra_inputs) compiler.add_input(extra);
+    compiler.set_native_header_args([&o](bool cpp) { return native_header_args(o, cpp); });
+    compiler.set_input_text(std::move(text));
+    try {
+        compiler.compile();
+    } catch (const std::exception&) {
+    }
+    if (compiler.had_front_end_errors()) return std::string();
+    return walnut::driver::complete_json(compiler, placeholder, request);
+}
+
+int complete(const Options& o) {
+    std::string text;
+    if (o.from_stdin) {
+        std::ostringstream in;
+        in << std::cin.rdbuf();
+        text = in.str();
+    } else {
+        std::ifstream in(o.input, std::ios::binary);
+        if (!in) { std::cerr << "walnut: cannot read '" << o.input << "'\n"; return 1; }
+        std::ostringstream all;
+        all << in.rdbuf();
+        text = all.str();
+    }
+    if (o.at_line == 0) { std::cerr << "walnut: complete needs --at LINE:COLUMN\n"; return 2; }
+
+    std::size_t line_start = 0;
+    for (std::size_t l = 1; l < o.at_line && line_start <= text.size(); ++l) {
+        const std::size_t nl = text.find('\n', line_start);
+        if (nl == std::string::npos) { line_start = text.size() + 1; break; }
+        line_start = nl + 1;
+    }
+    if (line_start > text.size()) line_start = text.size();
+    std::size_t line_end = text.find('\n', line_start);
+    if (line_end == std::string::npos) line_end = text.size();
+    const std::size_t caret = std::min(line_start + o.at_column - 1, line_end);
+    std::size_t start = caret;
+    while (start > line_start && completion_ident(text[start - 1])) --start;
+    std::size_t end = caret;
+    while (end < line_end && completion_ident(text[end])) ++end;
+
+    walnut::driver::CompletionRequest request;
+    request.start = start - line_start;
+    request.line = static_cast<std::uint32_t>(o.at_line);
+    std::size_t before = start;
+    auto ends_with = [&](std::string_view s) { return before >= line_start + s.size() && std::string_view(text).substr(before - s.size(), s.size()) == s; };
+    if (ends_with("::")) request.mode = walnut::driver::CompletionRequest::Mode::Scope;
+    else if (ends_with("->")) request.mode = walnut::driver::CompletionRequest::Mode::Arrow;
+    else if (ends_with(".") && !ends_with("..")) request.mode = walnut::driver::CompletionRequest::Mode::Member;
+    if (request.mode != walnut::driver::CompletionRequest::Mode::Name) {
+        std::size_t q = before - (request.mode == walnut::driver::CompletionRequest::Mode::Member ? 1 : 2);
+        std::vector<std::string> parts;
+        while (q > line_start) {
+            std::size_t w = q;
+            while (w > line_start && completion_ident(text[w - 1])) --w;
+            if (w == q) break;
+            parts.insert(parts.begin(), text.substr(w, q - w));
+            if (request.mode != walnut::driver::CompletionRequest::Mode::Scope || w < line_start + 2 || text.compare(w - 2, 2, "::") != 0) break;
+            q = w - 2;
+        }
+        request.qualifier = std::move(parts);
+    }
+
+    const std::string placeholder = "__walnut_complete__";
+    bool rest_blank = true;
+    for (std::size_t i = end; i < line_end; ++i) rest_blank = rest_blank && (text[i] == ' ' || text[i] == '\t' || text[i] == '\r');
+    std::string patched = text.substr(0, start) + placeholder + (rest_blank ? ";" : "") + text.substr(end);
+    std::string json = completion_pass(o, patched, placeholder, request);
+    if (json.empty() && !rest_blank) {
+        patched = text.substr(0, start) + placeholder + ";" + text.substr(line_end);
+        json = completion_pass(o, patched, placeholder, request);
+    }
+    if (json.empty()) {
+        std::string blank = text;
+        for (std::size_t i = line_start; i < line_end; ++i) if (blank[i] != '\r') blank[i] = ' ';
+        json = completion_pass(o, blank, placeholder, request);
+    }
+    if (json.empty()) json = "{\"start\":" + std::to_string(request.start) + ",\"mode\":\"none\",\"items\":[]}\n";
+    std::cout << json;
+    std::cout.flush();
+    return 0;
+}
+
 int run(const Options& o) {
     if (o.command == Command::Clean) {
         const fs::path root = walnut::build::default_cache_root();
@@ -1169,6 +1284,7 @@ int run(const Options& o) {
     }
 
     if (o.command == Command::Highlight) return highlight(o);
+    if (o.command == Command::Complete) return complete(o);
     if (!fs::exists(o.input)) { std::cerr << "walnut: cannot open '" << o.input << "'\n"; return 1; }
     const bool cached = (o.command == Command::Build || o.command == Command::Run) && !o.no_cache && !o.keep_cpp && !o.line_map && o.debug != DebugMode::Cpp;
     std::string raw;
