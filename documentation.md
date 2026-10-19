@@ -3565,7 +3565,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 
 | Option | Meaning |
 |---|---|
-| `-o <path>` | Output path |
+| `-o <path>` | Output path; with `build` on Windows, `.exe` is added when the path has no extension |
 | `-O0`, `-O1`, `-O2`, `-O3`, `-Os` | Optimization (default `-O2`) |
 | `-I <dir>` | Folder for `#include` |
 | `-D <name>[=value]` | Defines a macro |

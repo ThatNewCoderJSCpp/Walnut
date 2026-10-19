@@ -102,7 +102,7 @@ Common options:
 
 | Option | Meaning |
 |---|---|
-| `-o <path>` | Output path |
+| `-o <path>` | Output path; with `build` on Windows, `.exe` is added when the path has no extension |
 | `-O0` … `-O3`, `-Os` | Optimization level (default `-O2`) |
 | `-I <dir>` | Include directory for `#include` |
 | `-M <dir>` | Folder searched by `import module.<name>` (also `--module-dir`, or the `WALNUT_MODULE_PATH` environment variable) |

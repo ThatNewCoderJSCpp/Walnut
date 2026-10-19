@@ -741,6 +741,15 @@ fs::path default_exe_path(const Options& o) {
     return p;
 }
 
+fs::path exe_output_path(const Options& o) {
+    if (o.output.empty()) return default_exe_path(o);
+    fs::path p(o.output);
+#ifdef _WIN32
+    if (!p.has_extension()) p += ".exe";
+#endif
+    return p;
+}
+
 struct LineMapEntry {
     std::size_t cpp_first = 0;
     std::size_t cpp_last  = 0;
@@ -1178,7 +1187,7 @@ int run(const Options& o) {
         if (!build_with_cache(o, split, exe)) return 1;
 
         if (o.command == Command::Build) {
-            const fs::path out = o.output.empty() ? default_exe_path(o) : fs::path(o.output);
+            const fs::path out = exe_output_path(o);
             std::error_code ec;
             if (out.has_parent_path()) fs::create_directories(out.parent_path(), ec);
             fs::remove(out, ec);
@@ -1208,7 +1217,7 @@ int run(const Options& o) {
     }
 
     if (o.command == Command::Build) {
-        const fs::path exe = o.output.empty() ? default_exe_path(o) : fs::path(o.output);
+        const fs::path exe = exe_output_path(o);
         fs::path cpp_path;
         fs::path tmp;
 
