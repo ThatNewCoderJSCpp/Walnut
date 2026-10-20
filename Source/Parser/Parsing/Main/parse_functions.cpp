@@ -558,10 +558,14 @@ nodes::ASTNode* Parser::parse_return_statement() {
         return_value = parse_expression();
     }
     
-    if (concrete_match(tokenizing::Token::Kind::Semicolon) || concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
-        consume_semicolons();
+    if (!concrete_match(tokenizing::Token::Kind::Semicolon) && !concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
+        throw ParserError::missing_token(
+            reporter, current_token(), tokenizing::Token::Kind::Semicolon,
+            "Return statement must end with a semicolon"
+        );
     }
-    
+
+    consume_semicolons();
     return make<nodes::ReturnStatement>(return_value, line_number);
 }
 
@@ -827,10 +831,14 @@ nodes::ASTNode* Parser::parse_co_return_statement() {
         value = parse_expression();
     }
 
-    if (concrete_match(tokenizing::Token::Kind::Semicolon) || concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
-        consume_semicolons();
+    if (!concrete_match(tokenizing::Token::Kind::Semicolon) && !concrete_match(tokenizing::Token::Kind::DoubleSemicolon)) {
+        throw ParserError::missing_token(
+            reporter, current_token(), tokenizing::Token::Kind::Semicolon,
+            "co_return statement must end with a semicolon"
+        );
     }
 
+    consume_semicolons();
     return make<nodes::CoReturnStatement>(value, line_number);
 }
 

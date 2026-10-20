@@ -292,6 +292,8 @@ std::string signature(const N::FunctionDeclaration* f, S::TypeContext* types = n
     }
 
     out += ")";
+    if (f->m_qualifiers.has(modifiers::FunctionQualifiers::Const)) out += " const";
+    if (f->m_qualifiers.has(modifiers::FunctionQualifiers::Noexcept)) out += " noexcept";
     const std::string ret = type_text(f->m_return_type, types);
     if (!ret.empty()) out += " -> " + ret;
     return out;
@@ -415,6 +417,7 @@ std::string function_signature(const S::Symbol* s, S::TypeContext* types) {
     if (s->decl->kind == K::OperatorFunctionDeclaration) {
         const auto* o = static_cast<const N::OperatorFunctionDeclaration*>(s->decl);
         std::string out = template_prefix(s, types) + "operator(" + operator_spelling(o, types) + ") function(" + params_text(o->m_parameters, types) + ")";
+        if (o->m_qualifiers.has(modifiers::FunctionQualifiers::Const)) out += " const";
         const std::string ret = type_text(o->m_return_type, types);
         if (!ret.empty() && !o->is_conversion()) out += " -> " + ret;
         return out;

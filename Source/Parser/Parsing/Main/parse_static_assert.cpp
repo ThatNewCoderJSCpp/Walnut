@@ -8,7 +8,7 @@ nodes::ASTNode* Parser::parse_static_assert() {
     expect(tokenizing::Token::Kind::StaticAssertKeyword);
     expect(tokenizing::Token::Kind::LeftParen, "Expected '(<condition>, \"message\")' for static assert");
     nodes::ASTNode* cond = parse_expression();
-    expect(tokenizing::Token::Kind::Comma, "Expected comma to seperate static_assert condition and message");
+    expect(tokenizing::Token::Kind::Comma, "Expected a comma to separate static_assert condition and message");
     
     if (!current_token().is(tokenizing::Token::Kind::String)) {
         throw ParserError::unexpected_token(reporter, current_token(), {tokenizing::Token::Kind::String}, "A string message is required in static_assert");
