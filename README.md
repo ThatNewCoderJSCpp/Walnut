@@ -260,6 +260,16 @@ cmake --build build
 
 That `walnut` uses the runtime and Fizmo from the build tree, so it only works on the machine that built it. To make a download like the ones on the Releases page, configure with `-DWALNUT_PACKAGE=ON` and run `cpack` in the build folder.
 
+## Changing the built-in character names
+
+The names `\s{...}` knows (`alpha`, `rarr`, `le`, ...) all come from [`Data/special_names.json`](Data/special_names.json). Each character is one line, grouped by type, with the character itself so you can see what you're naming:
+
+```json
+{ "symbol": "ċ", "code": "U+010B", "names": ["cdot"], "unicode": "LATIN SMALL LETTER C WITH DOT ABOVE" },
+```
+
+Change, add or remove names in `names`, then rebuild: the build turns the file into the compiler's table and the runtime's `walnut_special_names.hpp` (for `parse_string`), sorted for you. Canopy builds its own copy from the same file. To add a character, add a line with its `symbol`, `code` and `names` to any category (or a new category); `unicode` is only there to help you read the file. Mistakes stop the build with the line they're on: a name used twice, a name with characters other than letters, digits and `_`, a `symbol` that isn't the character `code` says, or a character listed twice. Invisible characters (tab, no-break space, ...) are written as JSON escapes like `"\u0009"`.
+
 ## Troubleshooting
 
 **`walnut: cannot find the C++ compiler 'c++'`**

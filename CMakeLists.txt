@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(walnut VERSION 0.1.23 LANGUAGES CXX)
+project(walnut VERSION 0.1.24 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -16,8 +16,26 @@ FetchContent_MakeAvailable(fizmo)
 
 option(WALNUT_PACKAGE "Build Walnut as a standalone download that finds its runtime next to itself" OFF)
 
+add_executable(walnut_special_names_gen "${CMAKE_CURRENT_SOURCE_DIR}/Tools/special_names/special_names_gen.cpp")
+target_compile_features(walnut_special_names_gen PRIVATE cxx_std_17)
+set(WALNUT_SPECIAL_NAMES_JSON "${CMAKE_CURRENT_SOURCE_DIR}/Data/special_names.json" CACHE FILEPATH "The JSON file of \\s{...} character names Walnut is built with")
+set(WALNUT_SPECIAL_NAMES_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/special_names")
+set(WALNUT_SPECIAL_NAMES_CPP "${WALNUT_SPECIAL_NAMES_DIR}/special_names.cpp")
+set(WALNUT_SPECIAL_NAMES_RUNTIME "${WALNUT_SPECIAL_NAMES_DIR}/runtime/walnut_special_names.hpp")
+file(MAKE_DIRECTORY "${WALNUT_SPECIAL_NAMES_DIR}/runtime")
+add_custom_command(
+    OUTPUT "${WALNUT_SPECIAL_NAMES_CPP}" "${WALNUT_SPECIAL_NAMES_RUNTIME}"
+    COMMAND walnut_special_names_gen lexer "${WALNUT_SPECIAL_NAMES_JSON}" "${WALNUT_SPECIAL_NAMES_CPP}"
+    COMMAND walnut_special_names_gen runtime "${WALNUT_SPECIAL_NAMES_JSON}" "${WALNUT_SPECIAL_NAMES_RUNTIME}"
+    DEPENDS walnut_special_names_gen "${WALNUT_SPECIAL_NAMES_JSON}"
+    COMMENT "Generating the \\s{...} character names from special_names.json"
+    VERBATIM)
+add_custom_target(walnut_special_names DEPENDS "${WALNUT_SPECIAL_NAMES_CPP}" "${WALNUT_SPECIAL_NAMES_RUNTIME}")
+
 file(GLOB_RECURSE WALNUT_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Source/*.cpp")
-add_library(walnut_core STATIC ${WALNUT_SOURCES})
+add_library(walnut_core STATIC ${WALNUT_SOURCES} "${WALNUT_SPECIAL_NAMES_CPP}")
+add_dependencies(walnut_core walnut_special_names)
+set_source_files_properties("${WALNUT_SPECIAL_NAMES_CPP}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 target_compile_features(walnut_core PUBLIC cxx_std_17)
 target_include_directories(walnut_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Include")
 if(TARGET fizmo::core)
@@ -178,7 +196,7 @@ else()
             string(APPEND _walnut_include_list ";$<TARGET_PROPERTY:${dep},INTERFACE_INCLUDE_DIRECTORIES>")
         endif()
     endforeach()
-    set(WALNUT_RUNTIME_INCLUDES "$<JOIN:$<REMOVE_DUPLICATES:$<FILTER:${_walnut_include_list},EXCLUDE,^(/usr/include|/usr/local/include)?$>>,;>")
+    set(WALNUT_RUNTIME_INCLUDES "$<JOIN:$<REMOVE_DUPLICATES:$<FILTER:${_walnut_include_list},EXCLUDE,^(/usr/include|/usr/local/include)?$>>,;>;${WALNUT_SPECIAL_NAMES_DIR}/runtime")
     set(WALNUT_RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Runtime")
     set(WALNUT_PACKAGE_CXX "${CMAKE_CXX_COMPILER}")
     set(WALNUT_RELOCATABLE 0)
@@ -254,6 +272,7 @@ if(WALNUT_PACKAGE)
 
     install(TARGETS walnut RUNTIME DESTINATION bin)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Runtime/" DESTINATION runtime)
+    install(FILES "${WALNUT_SPECIAL_NAMES_RUNTIME}" DESTINATION runtime)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/documentation.md" DESTINATION docs)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Documentation/Library/" DESTINATION docs/Documentation/Library)
     install(FILES ${WALNUT_FIZMO_INSTALL_FILES} DESTINATION fizmo/lib)
