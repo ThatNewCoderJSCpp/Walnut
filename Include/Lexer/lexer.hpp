@@ -36,6 +36,8 @@ private:
     bool skip_interpolation() noexcept;
     bool skip_quoted(char quote) noexcept;
     void report_error(const std::string& message) noexcept;
+    void report_error_at(const std::string& message, const char* at, std::size_t width, std::size_t line) noexcept;
+    void check_escapes(const char* start, bool character) noexcept;
     char peek() const noexcept { return *m_beg; }
 
     template <bool CheckNewline>

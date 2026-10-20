@@ -1,4 +1,7 @@
 #include "Lexer/lexer.hpp"
+#include "Lexer/escapes.hpp"
+
+#include <cctype>
 
 namespace walnut {
 namespace tokenizing {
@@ -41,6 +44,7 @@ Token Lexer::string_literal() noexcept {
 
         switch (quote_type) {
             case '"':
+                check_escapes(start, false);
                 return Token(Token::Kind::String, start + 1, m_beg - start - 2, m_line_number);
             case '`':
                 return Token(Token::Kind::TextLiteral, start + 1, m_beg - start - 2, m_line_number);
@@ -52,6 +56,7 @@ Token Lexer::string_literal() noexcept {
                     return Token(Token::Kind::Unexpected, start, m_beg - start, m_line_number);
                 }
                 
+                check_escapes(start, true);
                 return Token(Token::Kind::Character, start + 1, interior, m_line_number);
             }
             default:
@@ -563,6 +568,52 @@ namespace tokenizing {
 void Lexer::report_error(const std::string& message) noexcept {
     ++m_error_count;
     m_reporter.report_at(ErrorPhase::Lexer, m_reporter.current_file(), m_line_number, message, m_beg, 1);
+}
+
+void Lexer::report_error_at(const std::string& message, const char* at, std::size_t width, std::size_t line) noexcept {
+    ++m_error_count;
+    m_reporter.report_at(ErrorPhase::Lexer, m_reporter.current_file(), line, message, at, width == 0 ? 1 : width);
+}
+
+void Lexer::check_escapes(const char* start, bool character) noexcept {
+    const std::string_view interior(start + 1, static_cast<std::size_t>(m_beg - start - 2));
+    EscapeError err = EscapeError::None;
+    std::size_t bad = 0;
+    bool ok = true;
+    if (character) {
+        std::uint32_t cp = 0;
+        ok = decode_char(interior, cp, err);
+        if (!ok && err != EscapeError::MultiCharLiteral) {
+            std::string scratch;
+            EscapeError inner = EscapeError::None;
+            if (!decode_literal(interior, scratch, inner, &bad)) err = inner;
+        }
+    } else {
+        std::string scratch;
+        ok = decode_literal(interior, scratch, err, &bad);
+    }
+    if (ok) return;
+    std::size_t line = m_line_number;
+    for (std::size_t k = bad; k < interior.size(); ++k) {
+        if (interior[k] == '\n' && line > 1) --line;
+    }
+    if (err == EscapeError::MultiCharLiteral) {
+        report_error_at("A character literal holds exactly one character, but '" + std::string(interior) + "' has more; write \"" + std::string(interior) + "\" for a string",
+                        start, interior.size() + 2, line);
+        return;
+    }
+    std::size_t width = 1;
+    if (bad < interior.size() && interior[bad] == '\\') {
+        width = 2;
+        while (bad + width < interior.size() && width < 12 && interior[bad + width] != '\\' && interior[bad + width] != ' ' && interior[bad + width] != '\n' && (std::isxdigit(static_cast<unsigned char>(interior[bad + width])) || interior[bad + width] == '{' || interior[bad + width] == '}')) ++width;
+    }
+    const std::string shown(interior.substr(bad, std::min(width, interior.size() - bad)));
+    std::string message;
+    if (err == EscapeError::InvalidUtf8) message = std::string("Malformed UTF-8 in this ") + (character ? "character" : "string") + " literal; save the file as UTF-8";
+    else if (err == EscapeError::MissingHexDigits && shown.size() >= 2 && (shown[1] == 'u' || shown[1] == 'U')) message = "Invalid escape '" + shown + "' in this " + (character ? "character" : "string") + " literal: " + (shown[1] == 'u' ? "'\\u' takes exactly 4 hex digits, as in \\u00e9; use \\u{...} for any number of them" : "'\\U' takes exactly 8 hex digits, as in \\U0001F600");
+    else if (err != EscapeError::UnknownEscape) message = "Invalid escape '" + shown + "' in this " + (character ? "character" : "string") + " literal: " + escape_error_text(err);
+    else message = "Invalid escape '" + shown + "' in this " + (character ? "character" : "string") + " literal: " + escape_error_text(err) + ". The escapes are \\n \\t \\r \\a \\b \\f \\v \\e \\0 \\\\ \\' \\\" \\? \\` \\$, \\xHH, \\uXXXX, \\UXXXXXXXX and \\u{...}";
+    report_error_at(message, start + 1 + bad, width, line);
 }
 
 Token Lexer::atom(Token::Kind kind) noexcept { return Token(kind, m_beg++, 1, m_line_number); }
