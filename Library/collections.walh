@@ -4498,6 +4498,348 @@ namespace std {
             } end function to_vector
         } end class Set
 
+        extern "C++" from "<walnut_trie.hpp>" {
+            template <typename V>
+            class TrieMap as "walnut_rt::trie::map" {
+                function slot(const string&: key) -> V&;
+
+            public:
+                constructor();
+                constructor(bool: ignore_case);
+
+                static function ignoring_case() -> TrieMap {
+                    return TrieMap(true);
+                } end function ignoring_case
+
+                function ignores_case() const -> bool;
+                function size() const -> long int;
+                function empty() const -> bool;
+                function clear() -> void;
+                function insert(const string&: key, const V&: value) -> bool;
+                function set(const string&: key, const V&: value) -> bool;
+                function find(const string&: key) -> V*;
+                function find(const string&: key) const -> const V*;
+                function contains(const string&: key) const -> bool;
+                function remove(const string&: key) -> bool;
+                function has_prefix(const string&: prefix) const -> bool;
+                function count_prefix(const string&: prefix) const -> long int;
+                function keys_with_prefix(const string&: prefix, long int: limit) const -> Vector<string>;
+                function values_with_prefix(const string&: prefix, long int: limit) const -> Vector<V>;
+                function keys() const -> Vector<string>;
+                function complete(const string&: prefix) const -> string;
+                function longest_prefix_of(const string&: subject) const -> long int;
+                function nearest(const string&: word, long int: max_distance, long int: limit) const -> Vector<string>;
+                function nearest_distances(const string&: word, long int: max_distance, long int: limit) const -> Vector<long int>;
+
+                operator([]) function(const string&: key) -> V& {
+                    return slot(key);
+                }
+
+                function at(const string&: key) -> V& {
+                    V*: found = find(key);
+                    if (found == nullptr) then {
+                        throw std::errors::collection_error(static_cast<string>(`"${key}" isn't in the trie`));
+                    }
+                    return *found;
+                } end function at
+
+                function get(const string&: key, const V&: fallback) const -> V {
+                    const V*: found = find(key);
+                    return found == nullptr ? fallback : *found;
+                } end function get
+
+                function keys_with_prefix(const string&: prefix) const -> Vector<string> {
+                    return keys_with_prefix(prefix, -1);
+                } end function keys_with_prefix
+
+                function values_with_prefix(const string&: prefix) const -> Vector<V> {
+                    return values_with_prefix(prefix, -1);
+                } end function values_with_prefix
+
+                function entries_with_prefix(const string&: prefix) const -> Vector<Pair<string, V>> {
+                    Vector<Pair<string, V>>: out;
+                    for (const string&: key in keys_with_prefix(prefix, -1)) {
+                        out.push_back(Pair<string, V>(key, *find(key)));
+                    }
+                    return out;
+                } end function entries_with_prefix
+
+                function nearest(const string&: word, long int: max_distance) const -> Vector<string> {
+                    return nearest(word, max_distance, 10);
+                } end function nearest
+            } end class TrieMap
+
+            class Trie as "walnut_rt::trie::set" {
+            public:
+                constructor();
+                constructor(bool: ignore_case);
+
+                constructor(string...: words) {
+                    for (const string&: word in words) {
+                        insert(word);
+                    }
+                }
+
+                static function ignoring_case() -> Trie {
+                    return Trie(true);
+                } end function ignoring_case
+
+                function ignores_case() const -> bool;
+                function size() const -> long int;
+                function empty() const -> bool;
+                function clear() -> void;
+                function insert(const string&: word) -> bool;
+                function contains(const string&: word) const -> bool;
+                function remove(const string&: word) -> bool;
+                function has_prefix(const string&: prefix) const -> bool;
+                function count_prefix(const string&: prefix) const -> long int;
+                function with_prefix(const string&: prefix, long int: limit) const -> Vector<string>;
+                function words() const -> Vector<string>;
+                function complete(const string&: prefix) const -> string;
+                function longest_prefix_of(const string&: subject) const -> long int;
+                function nearest(const string&: word, long int: max_distance, long int: limit) const -> Vector<string>;
+                function nearest_distances(const string&: word, long int: max_distance, long int: limit) const -> Vector<long int>;
+
+                function with_prefix(const string&: prefix) const -> Vector<string> {
+                    return with_prefix(prefix, -1);
+                } end function with_prefix
+
+                function nearest(const string&: word, long int: max_distance) const -> Vector<string> {
+                    return nearest(word, max_distance, 10);
+                } end function nearest
+            } end class Trie
+        } end extern
+
+        using TrieSet = Trie;
+
+        template <typename K, typename V>
+        class Cache {
+            UnorderedMap<K, long int>: m_index;
+            Vector<K>: m_keys;
+            Vector<V>: m_values;
+            Vector<long int>: m_newer;
+            Vector<long int>: m_older;
+            Vector<long int>: m_free;
+            long int: m_newest = -1;
+            long int: m_oldest = -1;
+            long int: m_capacity = 256;
+            long int: m_hits = 0;
+            long int: m_misses = 0;
+            long int: m_evictions = 0;
+
+            function unlink(long int: slot) -> void {
+                const long int: newer = m_newer[slot];
+                const long int: older = m_older[slot];
+                if (newer >= 0) then {
+                    m_older[newer] = older;
+                } else then {
+                    m_newest = older;
+                }
+                if (older >= 0) then {
+                    m_newer[older] = newer;
+                } else then {
+                    m_oldest = newer;
+                }
+                m_newer[slot] = -1;
+                m_older[slot] = -1;
+            } end function unlink
+
+            function make_newest(long int: slot) -> void {
+                m_newer[slot] = -1;
+                m_older[slot] = m_newest;
+                if (m_newest >= 0) then {
+                    m_newer[m_newest] = slot;
+                }
+                m_newest = slot;
+                if (m_oldest < 0) then {
+                    m_oldest = slot;
+                }
+            } end function make_newest
+
+            function touch(long int: slot) -> void {
+                if (slot == m_newest) then {
+                    return;
+                }
+                unlink(slot);
+                make_newest(slot);
+            } end function touch
+
+            function drop(long int: slot) -> void {
+                unlink(slot);
+                m_index.remove(m_keys[slot]);
+                m_keys[slot] = K();
+                m_values[slot] = V();
+                m_free.push_back(slot);
+            } end function drop
+
+            function trim(long int: room) -> void {
+                if (m_capacity <= 0) then {
+                    return;
+                }
+                while (m_oldest >= 0 && m_index.size() + room > m_capacity) {
+                    drop(m_oldest);
+                    m_evictions += 1;
+                }
+            } end function trim
+
+            function add(const K&: key, const V&: value) -> long int {
+                trim(1);
+                long int: slot = -1;
+                if (m_free.empty()) then {
+                    slot = m_keys.size();
+                    m_keys.push_back(key);
+                    m_values.push_back(value);
+                    m_newer.push_back(-1);
+                    m_older.push_back(-1);
+                } else then {
+                    slot = m_free.pop_back();
+                    m_keys[slot] = key;
+                    m_values[slot] = value;
+                }
+                m_index.set(key, slot);
+                make_newest(slot);
+                return slot;
+            } end function add
+
+            function slot_of(const K&: key) const -> long int {
+                return m_index.get(key, -1);
+            } end function slot_of
+
+        public:
+            constructor() { }
+
+            constructor(long int: capacity) : m_capacity = capacity { }
+
+            function size() const -> long int {
+                return m_index.size();
+            } end function size
+
+            function empty() const -> bool {
+                return m_index.empty();
+            } end function empty
+
+            function capacity() const -> long int {
+                return m_capacity;
+            } end function capacity
+
+            function set_capacity(long int: capacity) -> void {
+                m_capacity = capacity;
+                trim(0);
+            } end function set_capacity
+
+            function put(const K&: key, const V&: value) -> void {
+                const long int: slot = slot_of(key);
+                if (slot >= 0) then {
+                    m_values[slot] = value;
+                    touch(slot);
+                    return;
+                }
+                add(key, value);
+            } end function put
+
+            function find(const K&: key) -> V* {
+                const long int: slot = slot_of(key);
+                if (slot < 0) then {
+                    m_misses += 1;
+                    return nullptr;
+                }
+                m_hits += 1;
+                touch(slot);
+                return &m_values[slot];
+            } end function find
+
+            function peek(const K&: key) const -> const V* {
+                const long int: slot = slot_of(key);
+                return slot < 0 ? nullptr : &m_values[slot];
+            } end function peek
+
+            function get(const K&: key, const V&: fallback) -> V {
+                V*: found = find(key);
+                return found == nullptr ? fallback : *found;
+            } end function get
+
+            function get_or_add(const K&: key, std::Supplier<V>: make) -> V& {
+                V*: found = find(key);
+                if (found != nullptr) then {
+                    return *found;
+                }
+                const V: made = make();
+                return m_values[add(key, made)];
+            } end function get_or_add
+
+            function get_or_compute(const K&: key, std::Transform<K, V>: make) -> V& {
+                V*: found = find(key);
+                if (found != nullptr) then {
+                    return *found;
+                }
+                const V: made = make(key);
+                return m_values[add(key, made)];
+            } end function get_or_compute
+
+            function contains(const K&: key) const -> bool {
+                return slot_of(key) >= 0;
+            } end function contains
+
+            function remove(const K&: key) -> bool {
+                const long int: slot = slot_of(key);
+                if (slot < 0) then {
+                    return false;
+                }
+                drop(slot);
+                return true;
+            } end function remove
+
+            function clear() -> void {
+                m_index.clear();
+                m_keys.clear();
+                m_values.clear();
+                m_newer.clear();
+                m_older.clear();
+                m_free.clear();
+                m_newest = -1;
+                m_oldest = -1;
+            } end function clear
+
+            function hits() const -> long int {
+                return m_hits;
+            } end function hits
+
+            function misses() const -> long int {
+                return m_misses;
+            } end function misses
+
+            function evictions() const -> long int {
+                return m_evictions;
+            } end function evictions
+
+            function hit_rate() const -> double {
+                const long int: total = m_hits + m_misses;
+                return total == 0 ? 0.0 : static_cast<double>(m_hits) / static_cast<double>(total);
+            } end function hit_rate
+
+            function reset_stats() -> void {
+                m_hits = 0;
+                m_misses = 0;
+                m_evictions = 0;
+            } end function reset_stats
+
+            function keys() const -> Vector<K> {
+                Vector<K>: out;
+                for (long int: slot = m_newest; slot >= 0; slot = m_older[slot]) {
+                    out.push_back(m_keys[slot]);
+                }
+                return out;
+            } end function keys
+
+            function values() const -> Vector<V> {
+                Vector<V>: out;
+                for (long int: slot = m_newest; slot >= 0; slot = m_older[slot]) {
+                    out.push_back(m_values[slot]);
+                }
+                return out;
+            } end function values
+        } end class Cache
+
         template <typename C, typename E>
         class WhereQuery {
             C*: m_items = nullptr;

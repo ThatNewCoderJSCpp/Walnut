@@ -1,8 +1,8 @@
 # collections
 
-`collections` has the containers most programs need: growable arrays, linked lists, double-ended queues, stacks, queues, priority queues, hash maps and sets, sorted maps and sets, pairs and tuples, and views over memory.
+`collections` has the containers most programs need: growable arrays, linked lists, double-ended queues, stacks, queues, priority queues, hash maps and sets, sorted maps and sets, tries for prefix search, caches, pairs and tuples, and views over memory.
 
-`Vector` is C++'s `std::vector`, and `DynamicArray` and `SmallVector` are Fizmo's arrays of the same names, used from Walnut as [C++ classes](../../documentation.md#using-c-classes). The other containers are written in Walnut.
+`Vector` is C++'s `std::vector`, and `DynamicArray`, `SmallVector`, `TrieMap` and `Trie` are Fizmo's containers of the same names, used from Walnut as [C++ classes](../../documentation.md#using-c-classes). The other containers are written in Walnut.
 
 ```walnut
 import module.collections
@@ -26,13 +26,15 @@ Everything in `collections` is in the namespace `std::collections`. `import modu
 12. [UnorderedMap](#unorderedmap)
 13. [UnorderedSet](#unorderedset)
 14. [Map and Set](#map-and-set)
-15. [Pair](#pair)
-16. [Tuple](#tuple)
-17. [Searching, sorting and more](#searching-sorting-and-more)
-18. [WhereQuery](#wherequery)
-19. [Hashing](#hashing)
-20. [Errors](#errors)
-21. [What the element type needs](#what-the-element-type-needs)
+15. [TrieMap and Trie](#triemap-and-trie)
+16. [Cache](#cache)
+17. [Pair](#pair)
+18. [Tuple](#tuple)
+19. [Searching, sorting and more](#searching-sorting-and-more)
+20. [WhereQuery](#wherequery)
+21. [Hashing](#hashing)
+22. [Errors](#errors)
+23. [What the element type needs](#what-the-element-type-needs)
 
 ## A first example
 
@@ -81,6 +83,9 @@ This prints `apple fig fig pear pear` and `pears: 2, kinds: 3`.
 | `UnorderedSet<T>` | A hash table of keys only | Fast membership tests |
 | `Map<K, V>` | A red-black tree of keys and values | Visiting keys in order; finding the nearest key |
 | `Set<T>` | A red-black tree of values | Visiting values in order; the `i`th smallest value |
+| `TrieMap<V>` | Fizmo's trie from strings to values | Autocomplete, prefix search, "did you mean" |
+| `Trie` | Fizmo's trie of strings (also called `TrieSet`) | The same for a set of words |
+| `Cache<K, V>` | A map that forgets the least recently used entries | Keeping results that are expensive to make, up to a size limit |
 | `Pair<A, B>` | Two values | Returning or storing two things together |
 | `Tuple<Ts...>` | Any number of values, each of its own type | Returning or storing several things together |
 
@@ -383,6 +388,112 @@ This prints `apple=1 fig=2 pear=3`. `smallest` is `1`, `place` is `2` (`5` is th
 
 **Choosing between a tree and a hash table.** `UnorderedMap` finds a key in constant time and is usually the fastest map when the order of the keys doesn't matter. Use `Map` when you need the keys in order, the smallest or largest key, or the nearest key to a value. Compared with keeping the keys in a sorted array, the tree is much faster at adding and removing keys once there are more than a few hundred of them, and about as fast at finding them, but looping over it is slower, because each step follows a pointer to a different node.
 
+## TrieMap and Trie
+
+`TrieMap<V>` maps strings to values and `Trie` holds a set of strings. Both are a tree of letters where words that start the same way share the same branch, so they can answer questions about prefixes quickly: every word starting with `"ve"`, how many there are, how far a prefix can be completed, or which words are close to a misspelled one. `TrieSet` is another name for `Trie`.
+
+```walnut
+import module.collections
+import module.io
+
+function main() -> int {
+    std::collections::TrieMap<int>: words;
+    words.insert("vector", 1);
+    words.insert("vec", 2);
+    words["value"] = 3;
+
+    std::collections::Vector<string>: ve = words.keys_with_prefix("ve");
+    long int: count = words.count_prefix("v");
+    string: rest = words.complete("vect");
+    long int: longest = words.longest_prefix_of("values!");
+    std::collections::Vector<string>: guesses = words.nearest("vectr", 2);
+
+    std::collections::Trie: names = std::collections::Trie::ignoring_case();
+    names.insert("Vector");
+    bool: found = names.contains("VECTOR");
+    return 0;
+} end function main
+```
+
+Here `ve` is `{"vec", "vector"}`, `count` is `3`, `rest` is `"vector"` (the only way to go on), `longest` is `5` (`"value"` is the longest key `"values!"` starts with), `guesses` is `{"vector", "vec"}` (closest first) and `found` is `true`.
+
+| `TrieMap<V>` method | Does |
+|---|---|
+| `m[key]` | The value for `key`, adding `V()` first if the key is new |
+| `at(key)` | The value for `key`; throws a `std::errors::collection_error` if it's missing |
+| `get(key, fallback)` | The value for `key`, or `fallback` if it's missing |
+| `find(key)` | A pointer to the value, or `nullptr` if it's missing |
+| `insert(key, value)` | Add the key only if it's new; `true` if it was added |
+| `set(key, value)` | Add the key or replace its value; `true` if it was added |
+| `contains(key)`, `remove(key)` | Check for, or remove, a key |
+| `has_prefix(prefix)` | Whether any key starts with `prefix` |
+| `count_prefix(prefix)` | How many keys start with `prefix`, without visiting them |
+| `keys_with_prefix(prefix)`, `keys_with_prefix(prefix, limit)` | Those keys in order, at most `limit` of them |
+| `values_with_prefix(prefix)`, `values_with_prefix(prefix, limit)` | Their values, in the same order |
+| `entries_with_prefix(prefix)` | Both, as a `Vector<Pair<string, V>>` |
+| `keys()` | Every key, in order |
+| `complete(prefix)` | `prefix` plus as much as every key starting with it shares, like a shell's Tab |
+| `longest_prefix_of(text)` | The length of the longest key `text` starts with, or `-1` if none does |
+| `nearest(word, max_distance)`, `nearest(word, max_distance, limit)` | Keys within `max_distance` edits (adding, removing or changing a letter) of `word`, closest first; at most `limit`, 10 by default |
+| `nearest_distances(word, max_distance, limit)` | How many edits away each of those keys is |
+
+`Trie` has the same without values: `insert(word)`, `contains`, `remove`, `has_prefix`, `count_prefix`, `with_prefix(prefix)` (and with a `limit`), `words()`, `complete`, `longest_prefix_of`, `nearest` and `nearest_distances`. It can also be made from a list of words: `std::collections::Trie: fruit("apple", "apply", "banana");`.
+
+- `TrieMap<V>(true)`, `Trie(true)` and `ignoring_case()` make a trie that ignores the case of `A` to `Z`: `"Vector"`, `"vector"` and `"VECTOR"` are one key, stored and returned in lowercase. `ignores_case()` tells which kind a trie is.
+- Keys are bytes, so UTF-8 works as it is. Keys come back in byte order, which is alphabetical for ASCII.
+- Finding, adding and removing a key take time proportional to the key's length, not to how many keys there are. Listing the keys with a prefix costs the length of the prefix plus what's listed.
+- A pointer from `find` or a reference from `m[key]` stays good until that key is removed.
+
+## Cache
+
+`Cache<K, V>` is a map with a size limit. When it's full, adding a key forgets the entry that was used least recently, so the cache keeps what a program keeps asking for. Use it for results that are expensive to make and likely to be asked for again: loaded files, rendered images, parsed documents, answers from a server.
+
+```walnut
+import module.collections
+
+function slow_square(const int&: n) -> int {
+    return n * n;
+} end function slow_square
+
+function main() -> int {
+    std::collections::Cache<string, int>: lengths(2);
+    lengths.put("a", 1);
+    lengths.put("b", 2);
+    lengths.find("a");
+    lengths.put("c", 3);
+    bool: kept = lengths.contains("a");
+    bool: forgot = !lengths.contains("b");
+
+    std::collections::Cache<int, int>: squares(100);
+    int: first = squares.get_or_compute(12, slow_square);
+    int: again = squares.get_or_compute(12, slow_square);
+    double: rate = squares.hit_rate();
+    return 0;
+} end function main
+```
+
+Here `kept` and `forgot` are both `true`: `find("a")` made `"a"` the most recently used, so adding `"c"` forgot `"b"`. `first` and `again` are `144`; `slow_square` ran once, and `rate` is `0.5` (one miss, then one hit).
+
+| Method | Does |
+|---|---|
+| `Cache<K, V>()`, `Cache<K, V>(capacity)` | A cache that holds up to `capacity` entries (256 by default); `0` or less means no limit |
+| `put(key, value)` | Add the key or replace its value, and make it the most recently used |
+| `find(key)` | A pointer to the value (making it the most recently used), or `nullptr`; counts a hit or a miss |
+| `get(key, fallback)` | The value, or `fallback` if it's missing; counts a hit or a miss |
+| `get_or_compute(key, make)` | The value; if it's missing, `make(key)` makes it and it's added |
+| `get_or_add(key, make)` | The same, with a `make()` that takes no arguments |
+| `peek(key)` | A pointer to the value without counting or changing the order, or `nullptr` |
+| `contains(key)` | Whether the key is there, without counting or changing the order |
+| `remove(key)`, `clear()` | Forget one key, or all of them |
+| `capacity()`, `set_capacity(n)` | The limit; lowering it forgets the least recently used entries right away |
+| `hits()`, `misses()`, `hit_rate()` | How often a lookup found its key |
+| `evictions()` | How many entries were forgotten to make room |
+| `reset_stats()` | Set the hit, miss and eviction counts back to `0` |
+| `keys()`, `values()` | Everything in the cache, most recently used first |
+
+- Keys need `==` and [`hash_of`](#hashing), as for `UnorderedMap`. Looking up, adding and forgetting a key each take constant time.
+- A pointer from `find` or `peek`, or a reference from `get_or_compute`, is only good until the next key is added, because adding can forget that entry or move the values.
+
 ## Pair
 
 `Pair<A, B>` holds `first` and `second`. It has `==` and `!=`, and works with structured bindings: `auto: [a, b] = p;`.
@@ -589,7 +700,8 @@ Mistakes that can only be found while the program runs throw a `std::errors::col
 
 - an index out of range: `index 9 is out of range for a collection of size 3`;
 - taking an element from an empty container: `pop() on an empty collection`;
-- `at(key)` on a map without that key: `the key isn't in the map`.
+- `at(key)` on a map without that key: `the key isn't in the map`;
+- `at(key)` on a `TrieMap` without that key: `"key" isn't in the trie`.
 
 ```walnut
 import module.collections
@@ -611,6 +723,6 @@ function main() -> int {
 - Every container needs to be able to create its element type without arguments (`T()`) and to assign it, because it sets aside space for elements before they are filled in.
 - `find`, `contains`, `remove` and `==` need `==` on the element type.
 - `sort`, `PriorityQueue`, `Map` and `Set` need `<`. `sort` uses C++'s `std::sort` for numbers, `bool`, `char`, enums and strings, and a Walnut introsort, built on the class's own `<`, for classes.
-- `UnorderedMap` and `UnorderedSet` need `==` and [`hash_of`](#hashing).
+- `UnorderedMap`, `UnorderedSet` and the keys of `Cache` need `==` and [`hash_of`](#hashing).
 
 A method that needs an operator is only checked when it's used, so `Vector<Point>` works even if `Point` has no `<`, as long as `sort()` isn't called on it.

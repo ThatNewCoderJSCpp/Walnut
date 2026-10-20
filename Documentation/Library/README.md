@@ -19,7 +19,7 @@ function main() -> int {
 | Module | Contents |
 |---|---|
 | [algorithms](algorithms.md) | Searching and sorting over iterator ranges, C++-style: `sort`, `stable_sort`, `partial_sort`, `nth_element`, many named sorts (`heap_sort`, `radix_sort`, `counting_sort` and more), `find`, `count_if`, `lower_bound`, `binary_search`, `exponential_search`, `reverse`, `rotate`, `remove_if`, `unique`, `partition`, `merge`, set operations, heaps and more |
-| [collections](collections.md) | `Vector`, `DynamicArray`, `SmallVector`, `Span`, `LinkedList`, `Deque`, `Stack`, `Queue`, `PriorityQueue`, `UnorderedMap`, `UnorderedSet`, `Map`, `Set`, `Pair`, `Tuple`, `make_tuple`, `hash_of`; sorting, searching and editing methods on the array containers; `WhereQuery` |
+| [collections](collections.md) | `Vector`, `DynamicArray`, `SmallVector`, `Span`, `LinkedList`, `Deque`, `Stack`, `Queue`, `PriorityQueue`, `UnorderedMap`, `UnorderedSet`, `Map`, `Set`, `TrieMap`, `Trie`, `Cache`, `Pair`, `Tuple`, `make_tuple`, `hash_of`; sorting, searching and editing methods on the array containers; `WhereQuery` |
 | [colors](colors.md) | `Color` with hex, HSL and HSV conversions, mixing, lightening and contrast, and the 148 CSS named colors |
 | [combinatorics](combinatorics.md) | `ncr`, `npr`, `combinations`, `permutations`, `factorial`, `lock_combinations`, `lock_permutations`, combinations and permutations with repetition, `multinomial`, `derangements`, and helpers for combining probabilities (`bayes`, `conditional_probability` and more) |
 | [constants](constants.md) | `pi`, `e`, `phi`, `sqrt2`, `euler_mascheroni` and other constants, and numbered ones such as `bernoulli(n)`, for every float type and `BigFloat` |
