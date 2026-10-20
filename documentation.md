@@ -640,7 +640,20 @@ Here `joined` is `"abcdefd"`, `s` is `"abc!"`, `t` is ``"back`tick"``, `letters`
 
 **Literals**
 - `"..."` is a `string`, `` `...` `` is a `text` and `'x'` is a `char`. String and text literals may span lines.
-- Escapes: `\n \t \r \a \b \f \v \e \0 \\ \' \" \? \` \$`, `\xHH`, `\uXXXX`, `\UXXXXXXXX` and `\u{...}`.
+- Escapes: `\n \t \r \a \b \f \v \e \0 \\ \' \" \? \` \$`, `\xHH`, `\uXXXX`, `\UXXXXXXXX` `\u{...}` and `\s{name}`.
+- `\s{name}` is a character by name, so you don't need to look up its code: `'\s{alpha}'` is `'α'`, `"\s{Beta}"` is `"Β"`, and `` `x \s{le} \s{infin}` `` is `` `x ≤ ∞` ``. It works in `char`, `string` and `text` literals. The names are the HTML ones (the same as `&alpha;` in HTML, so `\s{rarr}` is `→`, `\s{copy}` is `©` and `\s{nbsp}` is a no-break space), plus some LaTeX ones HTML doesn't have, such as `\s{infty}`, `\s{neq}`, `\s{to}`, `\s{partial}`, `\s{exists}` and `\s{cdots}`. Names are case-sensitive: `\s{delta}` is `δ` and `\s{Delta}` is `Δ`. A misspelled name is an error that suggests the closest one.
+- You can add your own names in a `walnut.bark` file next to your main `.wal` file or in any folder above it (the project's top folder is the usual place). Walnut uses the nearest one, and your names work alongside the built-in ones:
+
+  ```
+  names {
+      a: alpha;        // another built-in name
+      dg: "\u{B0}";    // a character in quotes, written directly or with an escape
+      hrt: U+2665;     // a code (0x2665 works too)
+      a2: a;           // another of your own names
+  }
+  ```
+
+  A name uses letters, digits and `_`, can't be one of the built-in names, and stands for exactly one character. Mistakes in the file stop `check`, `build` and `run` with the line they're on. Canopy edits this file from Settings > Special Characters. `std::io::parse_string` and `parse_text` know only the built-in names, since the program running them has no project file.
 - Source files are UTF-8, so literals can contain any character directly.
 
 **Operations**

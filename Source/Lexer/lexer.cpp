@@ -1,5 +1,6 @@
 #include "Lexer/lexer.hpp"
 #include "Lexer/escapes.hpp"
+#include "Lexer/special_names.hpp"
 
 #include <cctype>
 
@@ -607,12 +608,34 @@ void Lexer::check_escapes(const char* start, bool character) noexcept {
         width = 2;
         while (bad + width < interior.size() && width < 12 && interior[bad + width] != '\\' && interior[bad + width] != ' ' && interior[bad + width] != '\n' && (std::isxdigit(static_cast<unsigned char>(interior[bad + width])) || interior[bad + width] == '{' || interior[bad + width] == '}')) ++width;
     }
+    if (bad + 1 < interior.size() && interior[bad] == '\\' && interior[bad + 1] == 's') {
+        width = 2;
+        while (bad + width < interior.size() && width < 48 && interior[bad + width] != '}' && interior[bad + width] != '\\' && interior[bad + width] != '\n' && interior[bad + width] != ' ') ++width;
+        if (bad + width < interior.size() && interior[bad + width] == '}') ++width;
+    }
     const std::string shown(interior.substr(bad, std::min(width, interior.size() - bad)));
     std::string message;
+    if (err == EscapeError::UnknownSpecialName) {
+        const std::string name = shown.size() > 4 ? shown.substr(3, shown.size() - 4) : std::string();
+        message = "Unknown character name '" + name + "' in '" + shown + "'";
+        const std::string guess = special_character_suggestion(name);
+        std::uint32_t guess_cp = 0;
+        if (!guess.empty() && special_character(guess, guess_cp)) {
+            std::string glyph;
+            if (guess_cp > 0x20 && guess_cp != 0x7F) utf8_encode(guess_cp, glyph);
+            message += "; did you mean \\s{" + guess + "}";
+            if (!glyph.empty()) message += " (" + glyph + ")";
+            message += "?";
+        } else {
+            message += ". Names are the HTML ones (alpha, Beta, rarr, le, infin...) plus some LaTeX ones (infty, neq, to, partial...)";
+        }
+        report_error_at(message, start + 1 + bad, width, line);
+        return;
+    }
     if (err == EscapeError::InvalidUtf8) message = std::string("Malformed UTF-8 in this ") + (character ? "character" : "string") + " literal; save the file as UTF-8";
     else if (err == EscapeError::MissingHexDigits && shown.size() >= 2 && (shown[1] == 'u' || shown[1] == 'U')) message = "Invalid escape '" + shown + "' in this " + (character ? "character" : "string") + " literal: " + (shown[1] == 'u' ? "'\\u' takes exactly 4 hex digits, as in \\u00e9; use \\u{...} for any number of them" : "'\\U' takes exactly 8 hex digits, as in \\U0001F600");
     else if (err != EscapeError::UnknownEscape) message = "Invalid escape '" + shown + "' in this " + (character ? "character" : "string") + " literal: " + escape_error_text(err);
-    else message = "Invalid escape '" + shown + "' in this " + (character ? "character" : "string") + " literal: " + escape_error_text(err) + ". The escapes are \\n \\t \\r \\a \\b \\f \\v \\e \\0 \\\\ \\' \\\" \\? \\` \\$, \\xHH, \\uXXXX, \\UXXXXXXXX and \\u{...}";
+    else message = "Invalid escape '" + shown + "' in this " + (character ? "character" : "string") + " literal: " + escape_error_text(err) + ". The escapes are \\n \\t \\r \\a \\b \\f \\v \\e \\0 \\\\ \\' \\\" \\? \\` \\$, \\xHH, \\uXXXX, \\UXXXXXXXX, \\u{...} and \\s{name}";
     report_error_at(message, start + 1 + bad, width, line);
 }
 

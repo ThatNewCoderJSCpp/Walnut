@@ -18,10 +18,14 @@ enum class EscapeError : std::uint8_t {
     UnicodeSurrogate,     // D800..DFFF is not a scalar value
     InvalidUtf8,          // malformed raw source bytes
     EmptyCharLiteral,
-    MultiCharLiteral
+    MultiCharLiteral,
+    BadSpecialBrace,
+    UnknownSpecialName
 };
 
 const char* escape_error_text(EscapeError e);
+
+std::string escape_problem_text(std::string_view literal, std::size_t at, EscapeError e);
 
 constexpr bool is_hex(char c) {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');

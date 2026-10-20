@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "walnut_special_names.hpp"
+
 namespace walnut_rt {
 namespace io_native {
 
@@ -592,6 +594,17 @@ inline bool unescape_into(const std::string& s, std::string& out) {
                 if (!read_hex(8, cp) || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return false;
                 walnut_rt::append_utf8(out, cp);
                 break;
+            case 's': {
+                if (i >= n || s[i] != '{') return false;
+                const std::size_t open = ++i;
+                while (i < n && s[i] != '}') ++i;
+                if (i == open || i >= n) return false;
+                std::uint32_t code = 0;
+                if (!walnut_rt::special_character(std::string_view(s).substr(open, i - open), code)) return false;
+                ++i;
+                walnut_rt::append_utf8(out, static_cast<char32_t>(code));
+                break;
+            }
             default: return false;
         }
     }

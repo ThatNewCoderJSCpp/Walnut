@@ -1,4 +1,7 @@
 #include "Lexer/escapes.hpp"
+#include "Lexer/special_names.hpp"
+
+#include <cctype>
 
 namespace walnut {
 namespace tokenizing {
@@ -14,8 +17,33 @@ const char* escape_error_text(EscapeError e) {
         case EscapeError::InvalidUtf8:        return "malformed UTF-8 in source";
         case EscapeError::EmptyCharLiteral:   return "character literal is empty";
         case EscapeError::MultiCharLiteral:   return "character literal must hold exactly one code point";
+        case EscapeError::BadSpecialBrace:    return "'\\s{...}' must contain a character name and a closing '}', as in \\s{alpha}";
+        case EscapeError::UnknownSpecialName: return "unknown character name in '\\s{...}'";
         default:                              return "invalid literal";
     }
+}
+
+std::string escape_problem_text(std::string_view literal, std::size_t at, EscapeError e) {
+    if (e != EscapeError::UnknownSpecialName) return escape_error_text(e);
+    std::size_t open = literal.find("\\s{", at > 0 ? at - 1 : 0);
+    if (open == std::string_view::npos) open = literal.find("\\s{");
+    if (open == std::string_view::npos) return escape_error_text(e);
+    const std::size_t close = literal.find('}', open + 3);
+    if (close == std::string_view::npos) return escape_error_text(e);
+    const std::string name(literal.substr(open + 3, close - open - 3));
+    std::string out = "unknown character name '" + name + "' in '\\s{" + name + "}'";
+    const std::string guess = special_character_suggestion(name);
+    std::uint32_t code = 0;
+    if (!guess.empty() && special_character(guess, code)) {
+        out += "; did you mean \\s{" + guess + "}";
+        if (code > 0x20 && code != 0x7F) {
+            std::string glyph;
+            utf8_encode(code, glyph);
+            out += " (" + glyph + ")";
+        }
+        out += "?";
+    }
+    return out;
 }
 
 bool valid_scalar(std::uint32_t cp, EscapeError& err) {
@@ -134,6 +162,17 @@ bool decode_escape(std::string_view s, std::size_t& i, std::uint32_t& cp, Escape
             i += want;
             cp = v;
             return valid_scalar(cp, err);
+        }
+
+        case 's': {
+            if (i >= s.size() || s[i] != '{') { err = EscapeError::BadSpecialBrace; return false; }
+            const std::size_t open = ++i;
+            while (i < s.size() && (std::isalnum(static_cast<unsigned char>(s[i])) || s[i] == '_')) ++i;
+            if (i == open || i >= s.size() || s[i] != '}') { err = EscapeError::BadSpecialBrace; return false; }
+            const std::string_view name = s.substr(open, i - open);
+            ++i;
+            if (!special_character(name, cp)) { err = EscapeError::UnknownSpecialName; return false; }
+            return true;
         }
 
         default:

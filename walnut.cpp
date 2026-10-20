@@ -5,6 +5,7 @@
 #include "Semantics/compile_time_random.hpp"
 #include "Driver/highlight.hpp"
 #include "Preprocessor/native_headers.hpp"
+#include "Lexer/special_names.hpp"
 #include <algorithm>
 #include <atomic>
 #include <thread>
@@ -1273,6 +1274,26 @@ int complete(const Options& o) {
     return 0;
 }
 
+bool load_project_names(const Options& o) {
+    namespace wt = walnut::tokenizing;
+    wt::clear_project_names();
+    const std::string file = wt::find_project_file(o.input);
+    if (file.empty()) return true;
+    const wt::ProjectNames names = wt::read_project_names(file);
+    wt::use_project_names(names);
+    if (names.problems.empty() || o.command == Command::Highlight || o.command == Command::Complete) return true;
+    std::error_code ec;
+    std::string shown = fs::relative(file, fs::current_path(ec), ec).generic_string();
+    if (ec || shown.empty() || shown.rfind("..", 0) == 0) shown = file;
+    for (const wt::ProjectNameProblem& p : names.problems) {
+        std::cerr << "[Project] " << shown;
+        if (p.line > 0) std::cerr << ":" << p.line;
+        std::cerr << ": " << p.message << "\n";
+    }
+    std::cerr << "walnut: " << shown << " has " << names.problems.size() << (names.problems.size() == 1 ? " problem" : " problems") << " in its 'names' section\n";
+    return false;
+}
+
 int run(const Options& o) {
     if (o.command == Command::Clean) {
         const fs::path root = walnut::build::default_cache_root();
@@ -1283,6 +1304,7 @@ int run(const Options& o) {
         return 0;
     }
 
+    if (!load_project_names(o)) return 1;
     if (o.command == Command::Highlight) return highlight(o);
     if (o.command == Command::Complete) return complete(o);
     if (!fs::exists(o.input)) { std::cerr << "walnut: cannot open '" << o.input << "'\n"; return 1; }

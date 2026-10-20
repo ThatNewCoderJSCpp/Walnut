@@ -66,7 +66,7 @@ nodes::ASTNode* Parser::parse_text_template(const tokenizing::Token& tok) {
         const std::string_view piece = raw.substr(from, to - from);
         tokenizing::EscapeError err = tokenizing::EscapeError::None;
         std::size_t at = 0;
-        if (!tokenizing::validate_literal(piece, err, &at)) throw ParserError::invalid_escape_sequence(reporter, tok, tokenizing::escape_error_text(err), from + at);
+        if (!tokenizing::validate_literal(piece, err, &at)) throw ParserError::invalid_escape_sequence(reporter, tok, tokenizing::escape_problem_text(piece, at, err), from + at);
         auto* lit = arena.alloc<nodes::Literal>(piece, K::TextLiteral, line);
         lit->file_id = tok.file_id();
         parts.push_back(lit);

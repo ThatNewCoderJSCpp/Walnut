@@ -337,8 +337,8 @@ ParserError ParserError::invalid_escape_sequence(
     std::stringstream ss;
     ss << build_error_header(token, "String") << why;
     if (offset) ss << " (at offset " << offset << " in the literal)";
-    ss << "\nSupported escapes: \\n \\t \\r \\a \\b \\f \\v \\0 \\\\ \\' \\\" \\?"
-          ", \\xNN, \\uXXXX, \\UXXXXXXXX, \\u{XXXXX}";
+    ss << "\nSupported escapes: \\n \\t \\r \\a \\b \\f \\v \\e \\0 \\\\ \\' \\\" \\? \\` \\$"
+          ", \\xNN, \\uXXXX, \\UXXXXXXXX, \\u{XXXXX} and \\s{name}";
     return make_and_report(reporter, token, ss.str());
 }
 

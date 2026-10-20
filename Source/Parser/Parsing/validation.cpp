@@ -20,7 +20,7 @@ void Parser::validate_string_literal(const tokenizing::Token& token) {
     std::size_t at = 0;
 
     if (!validate_literal(token.lexeme(), err, &at)) {
-        throw ParserError::invalid_escape_sequence(reporter, token, escape_error_text(err), at);
+        throw ParserError::invalid_escape_sequence(reporter, token, escape_problem_text(token.lexeme(), at, err), at);
     }
 }
 
@@ -48,7 +48,7 @@ void Parser::validate_character_literal(const tokenizing::Token& token) {
     EscapeError err = EscapeError::None;
 
     if (!decode_char(token.lexeme(), cp, err)) {
-        throw ParserError::invalid_escape_sequence(reporter, token, escape_error_text(err), 0);
+        throw ParserError::invalid_escape_sequence(reporter, token, escape_problem_text(token.lexeme(), 0, err), 0);
     }
 }
 

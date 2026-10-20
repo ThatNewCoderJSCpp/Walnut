@@ -202,7 +202,7 @@ Here `a` is `42`, `b` is `255`, `c` is `11`, `f` is `2500`, `yes` holds `true`, 
 - **Too big for the type.** A whole number that doesn't fit gives `inf` (or `-inf` for a negative one), so `parse_int("99999999999")` is `inf` for a 32-bit `int`; parse into a wider type with `parse_int<long int>` to keep it. A float that's too big becomes `inf` the same way.
 - **Special words.** `inf`, `-inf`, `infinity`, `nan`, `undefined` and `indeterminate` parse to those values, in any case.
 - **Bases.** `base` is `2` to `36`, and `10` when it's left out. A `0x`, `0o` or `0b` prefix matching the base is allowed (`parse_int("0xff", 16)`). Base `0` reads the base from the prefix: `0x` is 16, `0o` is 8, `0b` is 2, and anything else is 10. `_` and `'` may separate digits, as in literals.
-- **Strings and text.** If `s` is a quoted literal (in `"`, `` ` `` or `'` quotes), `parse_string` and `parse_text` remove the quotes and turn its escapes (`\n`, `\t`, `\"`, `\u{1F600}` and the rest, the same as in Walnut literals) into the characters they stand for. A bad escape gives `undefined`. If `s` isn't quoted, it is given back unchanged, spaces included.
+- **Strings and text.** If `s` is a quoted literal (in `"`, `` ` `` or `'` quotes), `parse_string` and `parse_text` remove the quotes and turn its escapes (`\n`, `\t`, `\"`, `\u{1F600}`, `\s{alpha}` and the rest, the same as in Walnut literals) into the characters they stand for. A bad escape gives `undefined`. If `s` isn't quoted, it is given back unchanged, spaces included.
 
 To read values one at a time from a longer string, use a [string stream](#string-and-text-streams) and `>>` instead.
 
