@@ -20,6 +20,7 @@
 #include "Driver/resolve_pass.hpp"
 #include "Driver/define_pass.hpp"
 #include "Driver/walk_pass.hpp" 
+#include "Semantics/ownership.hpp"
 
 #include <fstream>
 #include <string>
@@ -57,6 +58,7 @@ private:
     std::string ast_output_path;
 
     bool m_report_timing = false;
+    bool m_ownership = false;
     std::vector<std::string> m_include_dirs{ "include" };
     std::vector<std::string> m_module_dirs;
     std::vector<std::pair<std::string, std::string>> m_defines;
@@ -107,6 +109,9 @@ public:
     const semantics::Instantiator& get_instantiator() const noexcept { return instantiator; }
 
 public:
+    CompilerPipeline& enable_ownership_checks(bool on = true) { m_ownership = on; return *this; }
+    bool ownership_checks() const noexcept { return m_ownership; }
+
     CompilerPipeline& enable_token_output() {
         m_output_tokens = true;
         return *this;
@@ -201,6 +206,15 @@ private:
 
         driver::WalkPass walker(reporter, warnings, types, ast_arena, instantiator);
         walker.run(front);
+
+        if (m_ownership && !reporter.count(ErrorPhase::Semantic)) {
+            semantics::OwnershipChecker ownership(reporter, warnings);
+            for (const AnalyzedUnit& u : m_units) {
+                if (!u.ast) continue;
+                if (sources.absolute_path(u.file).rfind(SourceManager::LIBRARY_ROOT, 0) == 0) continue;
+                ownership.run(u.file, u.ast);
+            }
+        }
     }
 
     std::vector<std::string> m_missing_native;

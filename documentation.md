@@ -3600,10 +3600,88 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `--tokens <file.txt>`, `--ast <file.txt>` | Writes the token list or syntax tree |
 | `--time` | Shows how long each stage takes |
 | `-v`, `--verbose` | Prints the C++ compiler command |
+| `--check-bounds`, `--check-null`, `--check-overflow`, `--check-dangling`, `--checks` | Runtime safety checks; see [Safety checks](#safety-checks) |
+| `--leak-check[=warn\|error]` | Lists memory from `new` that was never deleted when the program ends |
+| `--gc` | Turns on the garbage collector |
+| `--ownership` | Compile-time checks for moved, deleted and dangling values |
+| `--safe` | `--checks`, `--leak-check` and `--ownership` together |
 
 `-I`, `-D`, `-L` and `-l` also accept their value attached, as in `-Iinclude`.
 
 Arguments after `--` go to the program.
+
+### Safety checks
+
+Walnut programs are as fast as C++ by default, which also means a wrong index, a null pointer or a forgotten `delete` behaves the way it would in C++. Each safety feature below is off unless you ask for it, because each one makes the program slower or bigger. Turn them on while writing and testing, and leave them off for the final build, or keep the ones you want.
+
+| Flag | What it does | Cost |
+|---|---|---|
+| `--check-bounds` | Stops the program when an index reaches outside memory made with `new T[n]`, or into memory that was already deleted | Every `new` is recorded, and pointer indexing looks it up |
+| `--check-null` | Stops the program when `*p`, `p->` or `p[i]` uses a null or deleted pointer, and when something is deleted twice or wasn't made with `new` | Every `new` is recorded, and each dereference checks the pointer |
+| `--check-overflow` | Stops the program when `+`, `-`, `*` or negation of fixed-width integers doesn't fit | A check after each of those operations |
+| `--check-dangling` | Stops the program when `*p`, `p->` or `p[i]` uses a pointer to a local variable of a function that has already returned | Each dereference compares the pointer with the stack |
+| `--checks` | All four above | |
+| `--leak-check` | When the program ends, lists the memory from `new` that was never deleted, grouped by the line that made it. `--leak-check=error` also makes the program exit with code 3. Setting `WALNUT_LEAKS` to `off`, `warn` or `error` when the program runs overrides it | Every `new` is recorded |
+| `--gc` | A garbage collector frees objects made with `new` once nothing points to them anymore. `delete` still works and frees them right away | Collection pauses, and every allocation is a little larger |
+| `--ownership` | Compile-time checks; see below | Only compile time |
+| `--safe` | `--checks`, `--leak-check` and `--ownership` | |
+
+A runtime check stops the program with the `.wal` file and line, the way an uncaught exception does, and exit code 70. A crash such as a segmentation fault also prints the last `.wal` line that ran when any check is on:
+
+```
+walnut runtime error: shop.wal:7: index 5 is outside the 3 ints made with new (made at shop.wal:4)
+```
+
+```
+walnut leak warning: 3 objects (72 bytes) made with new were never deleted
+  shop.wal:10: new Node (3 times, 72 bytes)
+```
+
+**The garbage collector.** With `--gc`, objects made with `new` are collected when the program can no longer reach them. It looks for pointers in local variables, globals and other memory from `new`, and treats anything that looks like a pointer as one, so an object is sometimes kept a little longer than needed but never freed while in use. Destructors of collected objects run when they're collected, in no particular order, so a destructor shouldn't use other objects that may already be gone. Collection only happens while a single thread is running; while threads from `std::threading` run, memory grows until they finish. Pointers hidden from it, such as a pointer stored only inside C or C++ code or written into a file, don't keep an object alive.
+
+**Ownership checks.** `--ownership` looks at each function while compiling and reports:
+
+- Using a variable after `std::core::move` gave its value away. Assigning it a new value makes it usable again.
+- Using a pointer through `*`, `->` or `[]` after it was deleted, and deleting it a second time. This follows copies: after `int*: alias = p;` or `int&: r = *p;` (or `p->field`, `p[i]`), `delete p;` makes `*alias`, `r` and `delete alias;` errors too.
+- Returning a reference to a local variable or by-value parameter, or a pointer to one (`return &value;`, or a pointer that was set to `&value`), including a field or element of one (`return local.field;` from a function returning a reference, `return &numbers[1];` for a local array).
+- Using a pointer to a variable, or to one of its fields or elements, after the block that variable was declared in has ended.
+- `delete` of something that wasn't made with `new`, such as `delete &value;` or a local array.
+- As warnings: memory from `new` that a function never deletes, returns, stores or passes to another function, and a pointer that is given a new value while still holding memory from `new`.
+
+```walnut
+import module.io as io
+
+function main() -> int {
+    string: a = "hello";
+    string: b = std::core::move(a);
+    io::println(a);
+
+    int*: q = nullptr;
+    {
+        int: inner = 5;
+        q = &inner;
+    }
+    io::println(*q);
+    return 0;
+} end function main
+```
+
+`walnut check --ownership` reports:
+
+```
+[Semantic] moved.wal:6: 'a' is used after it was moved on line 5
+[Semantic] moved.wal:13: 'q' points to 'inner' (declared on line 10), which no longer exists after its block ended
+```
+
+Pointers kept in a struct or class, including one pointing to the same type (`Node*: next;` inside `Node`), are normal and fine. What's reported is a pointer to a local variable stored somewhere that outlives that variable:
+
+- `holder.field = &local;` or `list.push_back(&local);` (also `insert`, `emplace_back`, `push`, `add`, `append`, `set` and similar), where `holder` or `list` was declared in an outer block: using `*holder.field`, `holder.field->...`, `*list[i]`, or a pointer from `for (T*: p in list)` after the local's block has ended is an error. Giving the field a new value, or calling `list.clear()`, before that is fine.
+- Returning a struct whose field points to a local of the function is an error.
+- Storing the address of a local in a field of `this`, a global, or an object reached through a reference, pointer or parameter is a warning, since that object is still there after the function returns.
+
+What the compile-time checks can't see (a pointer passed through several functions, kept in a container that's copied, or a pointer into a `Vector` that has since grown) is left to the runtime checks: `--check-null` catches memory from `new` used after it was deleted, through any pointer to it, and `--check-dangling` catches a pointer to a local variable used after its function returned. `--check-dangling` compares the pointer with the part of the stack still in use, so it catches the pointer when it's used in the function that called the one that returned, or anywhere above that, but not after a deeper call has reused that part of the stack.
+
+The checks follow `if`, loops, `switch`, `break`, `continue`, `return` and `try`. When a variable is moved or deleted on only some of the paths, it isn't reported. A pointer passed to a function or stored somewhere else counts as handed off, so it's never reported as leaked. Functions that use `goto` stop being checked at the `goto`. The library's own files aren't checked.
 
 **Reading errors.** Each error names the file and line, says what is wrong and, where it can, how to fix it, then shows the line itself. A `^` marks the exact spot when Walnut knows it, so a forgotten `;` points at the end of the line that is missing it rather than at the next line:
 

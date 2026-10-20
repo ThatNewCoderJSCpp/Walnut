@@ -123,6 +123,11 @@ Common options:
 | `--debug-cpp` | Build for a debugger that steps through the generated C++ instead; the C++ is kept next to the program |
 | `--line-map[=file]` | Write which `.wal` line each line of generated C++ came from (to the terminal when no file is given) |
 | `-v`, `--verbose` | Print the C++ compiler command |
+| `--checks` | Stop with the `.wal` line on an index outside memory from `new[]`, a null or deleted pointer, a pointer to a local of a function that already returned, or integer overflow (or pick one: `--check-bounds`, `--check-null`, `--check-dangling`, `--check-overflow`) |
+| `--leak-check[=warn\|error]` | List memory from `new` that was never deleted when the program ends |
+| `--gc` | Free objects made with `new` automatically once nothing points to them |
+| `--ownership` | Report use after move or delete, double deletes, leaks and dangling pointers or references while compiling |
+| `--safe` | `--checks`, `--leak-check` and `--ownership` together. All of these are off unless asked for; see [Safety checks](documentation.md#safety-checks) |
 
 `walnut --help` lists everything.
 

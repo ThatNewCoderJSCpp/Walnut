@@ -78,7 +78,17 @@ struct runtime_error : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+} // namespace walnut_rt
+
+#include "walnut_safety.hpp"
+
+namespace walnut_rt {
+
+#if defined(WALNUT_SAFETY)
+[[noreturn]] inline void fail(const std::string& message) { throw runtime_error(safety::where_now() + message); }
+#else
 [[noreturn]] inline void fail(const std::string& message) { throw runtime_error(message); }
+#endif
 
 enum class special_kind : std::uint8_t { none = 0, pos_inf, neg_inf, nan, undefined, indeterminate };
 
@@ -639,18 +649,32 @@ inline T special_bits(const T& a, const T& b) {
     return T::undefined();
 }
 
+template <typename T, typename R>
+inline R checked_norm(const R& v, const char* op) {
+#if defined(WALNUT_CHECK_OVERFLOW)
+    const R n = raw_norm(v);
+    if (!(n == v)) {
+        fail(std::string("integer overflow: the result of ") + op + " doesn't fit in " + (int_info<T>::is_signed ? "a signed " : "an unsigned ") + std::to_string(int_info<T>::bits) + "-bit integer");
+    }
+    return n;
+#else
+    (void)op;
+    return raw_norm(v);
+#endif
+}
+
 template <typename T> inline T op_add(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_add(a, b); return T(raw_norm(a.raw() + b.raw())); }
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_add(a, b); return T(checked_norm<T>(a.raw() + b.raw(), "+")); }
     else return a + b;
 }
 
 template <typename T> inline T op_sub(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_sub(a, b); return T(raw_norm(a.raw() - b.raw())); }
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_sub(a, b); return T(checked_norm<T>(a.raw() - b.raw(), "-")); }
     else return a - b;
 }
 
 template <typename T> inline T op_mul(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_mul(a, b); return T(raw_norm(a.raw() * b.raw())); }
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_mul(a, b); return T(checked_norm<T>(a.raw() * b.raw(), "*")); }
     else return a * b;
 }
 
@@ -658,7 +682,7 @@ template <typename T> inline T op_neg(const T& a) {
     if constexpr (is_int_v<T>) {
         if (a.is_unordered()) return a;
         if (a.is_infinite()) return T::from_kind(inf_kind(a.kind() == special_kind::pos_inf));
-        return T(raw_norm(typename int_info<T>::raw_type() - a.raw()));
+        return T(checked_norm<T>(typename int_info<T>::raw_type() - a.raw(), "negating"));
     } else {
         return -a;
     }
@@ -924,6 +948,9 @@ inline std::vector<T> fill_from(std::vector<T> target, const std::vector<T>& val
 
 template <typename T, typename I>
 inline T& index(T* p, const I& i) {
+#if defined(WALNUT_CHECK_BOUNDS) || defined(WALNUT_CHECK_NULL) || defined(WALNUT_CHECK_DANGLING)
+    safety::check_index(p, to_ll(i));
+#endif
     return p[to_ll(i)];
 }
 
@@ -939,6 +966,9 @@ template <typename C, typename I>
 inline decltype(auto) index(C& c, const I& i) {
     long long n = to_ll(i);
     if constexpr (std::is_pointer_v<std::decay_t<C>>) {
+#if defined(WALNUT_CHECK_BOUNDS) || defined(WALNUT_CHECK_NULL) || defined(WALNUT_CHECK_DANGLING)
+        safety::check_index(c, n);
+#endif
         return c[n];
     } else {
         if (n < 0 || static_cast<std::size_t>(n) >= c.size()) fail("array index " + std::to_string(n) + " out of range");
@@ -1753,8 +1783,10 @@ private:
 
 template <typename F>
 inline int run_program(F&& body) {
+    volatile char stack_anchor = 0;
+    safety::start(const_cast<char*>(&stack_anchor));
     try {
-        return body();
+        return safety::finish(body());
     } catch (const runtime_error& e) {
         std::cout.flush();
         std::cerr << "walnut runtime error: " << e.what() << "\n";

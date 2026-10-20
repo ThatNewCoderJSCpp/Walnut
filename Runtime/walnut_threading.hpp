@@ -49,6 +49,7 @@ public:
     thread() = default;
 
     explicit thread(std::function<void()> body) : m_thread([body = std::move(body)]() {
+        safety::thread_scope scope;
         try {
             body();
         } catch (const std::exception& e) {

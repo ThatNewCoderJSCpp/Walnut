@@ -4,6 +4,8 @@
 #include "Common/file_kind.hpp"
 #include "Common/source_manager.hpp"
 
+#include <cstring>
+
 namespace walnut {
 namespace codegen {
 
@@ -60,6 +62,7 @@ bool CppEmitter::emit(const std::vector<CodegenUnit>& units, std::ostream& out) 
 
 std::string CppEmitter::main_function_code() {
     std::ostringstream out;
+    out << "#if defined(WALNUT_GC)\n#include \"walnut_gc_main.hpp\"\n#endif\n\n";
     out << "int main(int argc, char** argv) {\n";
     out << "    return walnut_rt::run_program([&]() -> int {\n";
     if (unbuffered) out << "        walnut_rt::io_native::unbuffered_request() = true;\n";
@@ -1181,7 +1184,7 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
         case K::DereferenceExpression: {
             auto* d = static_cast<nodes::DereferenceExpression*>(e);
             if (d->resolved) return call_operator_symbol(d->resolved, { d->operand }, e);
-            return "(*" + expr(d->operand) + ")";
+            return "(*walnut_rt::safety::checked(" + expr(d->operand) + "))";
         }
 
         case K::ReferenceExpression:
@@ -1234,8 +1237,9 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
                 return "walnut_rt::custom_new<" + tc + ">(" + alloc + (n->args.empty() && !n->ctor ? std::string() : ", " + call_args(n->ctor, n->args, e)) + ")";
             }
 
-            if (n->is_array) return "new " + tc + "[walnut_rt::to_ll(" + expr(n->array_size) + ")]()";
-            return "new " + tc + "(" + call_args(n->ctor, n->args, e) + ")";
+            const std::string shown = "\"" + new_type_text(n, tc) + "\"";
+            if (n->is_array) return "walnut_rt::safety::new_array<" + tc + ">(walnut_rt::to_ll(" + expr(n->array_size) + "), " + shown + ", __FILE__, __LINE__)";
+            return "walnut_rt::safety::track_new(new " + tc + "(" + call_args(n->ctor, n->args, e) + "), " + shown + ", __FILE__, __LINE__)";
         }
 
         case K::DeleteExpression: {
@@ -1247,7 +1251,7 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
                 return std::string(d->is_array ? "walnut_rt::custom_delete_array(" : "walnut_rt::custom_delete(") + expr(d->operand) + ", " + release + ")";
             }
 
-            return std::string(d->is_array ? "delete[] " : "delete ") + expr(d->operand);
+            return std::string(d->is_array ? "walnut_rt::safety::delete_array(" : "walnut_rt::safety::delete_one(") + expr(d->operand) + ", __FILE__, __LINE__)";
         }
 
         case K::BraceConstructExpression: {
@@ -1790,7 +1794,7 @@ std::string CppEmitter::member_object(nodes::MemberAccessExpression* m) {
     if (!m->is_arrow()) return expr(m->m_object) + ".";
     std::string code = expr(m->m_object);
     for (Sym* op : m->arrow_ops) code = "(" + code + ")." + function_name(op) + "()";
-    return code + "->";
+    return "walnut_rt::safety::checked(" + code + ")->";
 }
 
 void CppEmitter::call_arg_parts(Sym* fn, const std::vector<nodes::ASTNode*>& args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes) {
@@ -2525,6 +2529,30 @@ void CppEmitter::switch_statement(std::ostream& os, nodes::SwitchStatement* s) {
     os << pad() << "}\n";
 }
 
+std::string CppEmitter::new_type_text(const nodes::NewExpression* n, const std::string& cpp) {
+    std::string text;
+    if (n->at) {
+        const char* p = n->at;
+        if (std::strncmp(p, "new", 3) == 0) p += 3;
+        while (*p == ' ' || *p == '\t') ++p;
+        while (*p && *p != '(' && *p != '[' && *p != '{' && *p != ';' && *p != '\n' && *p != ')' && *p != ',' && text.size() < 60) text += *p++;
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.pop_back();
+    }
+    if (text.empty()) {
+        text = cpp;
+        for (const char* prefix : { "wlu::", "walnut_rt::" }) {
+            std::size_t at = 0;
+            while ((at = text.find(prefix, at)) != std::string::npos) text.erase(at, std::strlen(prefix));
+        }
+    }
+    std::string out;
+    for (const char c : text) {
+        if (c == '"' || c == '\\') out += '\\';
+        out += c;
+    }
+    return out;
+}
+
 const nodes::ASTNode* CppEmitter::located(const nodes::ASTNode* n, int depth) {
     if (!n || depth > 16) return nullptr;
     if (n->line != 0 && n->file_id != INVALID_FILE) return n;
@@ -2575,6 +2603,26 @@ void CppEmitter::statement(std::ostream& os, nodes::ASTNode* s) {
 void CppEmitter::statement_body(std::ostream& os, nodes::ASTNode* s) {
     if (!s) return;
     line_marker(os, s);
+
+    switch (s->kind) {
+        case K::ExpressionStatement:
+        case K::VariableDeclaration:
+        case K::ArrayDeclaration:
+        case K::ReturnStatement:
+        case K::IfStatement:
+        case K::WhileStatement:
+        case K::DoWhileStatement:
+        case K::ForStatement:
+        case K::ForEachStatement:
+        case K::SwitchStatement:
+            if (source_path) {
+                const nodes::ASTNode* at = located(s, 0);
+                if (at && (tracks_lines ? tracks_lines(at->file_id) : !source_path(at->file_id).empty())) os << pad() << "WALNUT_HERE();\n";
+            }
+            break;
+        default:
+            break;
+    }
 
     switch (s->kind) {
         case K::BlockStatement:

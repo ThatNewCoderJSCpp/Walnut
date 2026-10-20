@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <atomic>
 #include <thread>
+#include <memory>
+#include <unordered_map>
 
 #include "walnut_library.hpp"
 #if __has_include("walnut_config.hpp")
@@ -108,6 +110,8 @@ struct Options {
     bool                                             no_warnings = false;
     bool                                             report_timing = false;
     bool                                             verbose = false;
+    bool                                             ownership = false;
+    std::vector<std::string>                         safety;
 };
 
 void print_usage(std::ostream& os) {
@@ -147,6 +151,20 @@ void print_usage(std::ostream& os) {
           "  --errors <dest>    where errors go: stderr (default), stdout or a file path\n"
           "  --warnings <dest>  where warnings go: stderr (default), stdout or a file path\n"
           "  --no-warnings      suppress warnings\n"
+          "\n"
+          "safety (all off unless asked, since each one makes the program slower or bigger):\n"
+          "  --check-bounds     stop with the .wal line when an index is outside memory made with new[]\n"
+          "  --check-null       stop with the .wal line when a null or deleted pointer is used\n"
+          "  --check-overflow   stop with the .wal line when integer +, -, * or negation overflows\n"
+          "  --check-dangling   stop with the .wal line when a pointer to a local variable is used after its function returned\n"
+          "  --checks           all four checks above\n"
+          "  --leak-check[=warn|error]  list memory from new that was never deleted when the program ends;\n"
+          "                     with =error the program also exits with code 3 (WALNUT_LEAKS=off|warn|error overrides it)\n"
+          "  --gc               a garbage collector frees objects made with new once nothing points to them;\n"
+          "                     delete still works and frees them right away\n"
+          "  --ownership        check at compile time for use after move or delete, double delete, leaks\n"
+          "                     and pointers or references to variables that no longer exist\n"
+          "  --safe             --checks, --leak-check and --ownership together\n"
           "  --time             report how long each compiler stage takes\n"
           "  -v, --verbose      print the C++ compiler command\n"
           "  -h, --help         show this help\n";
@@ -284,6 +302,17 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         else if (a == "--warnings")    { const char* v = need(i, a); if (!v) return false; o.warnings_to = v; }
         else if (a == "--no-warnings") o.no_warnings = true;
         else if (a == "--time")        o.report_timing = true;
+        else if (a == "--check-bounds")   o.safety.push_back("-DWALNUT_CHECK_BOUNDS");
+        else if (a == "--check-null")     o.safety.push_back("-DWALNUT_CHECK_NULL");
+        else if (a == "--check-overflow") o.safety.push_back("-DWALNUT_CHECK_OVERFLOW");
+        else if (a == "--check-dangling") o.safety.push_back("-DWALNUT_CHECK_DANGLING");
+        else if (a == "--checks")      { for (const char* d : { "-DWALNUT_CHECK_BOUNDS", "-DWALNUT_CHECK_NULL", "-DWALNUT_CHECK_OVERFLOW", "-DWALNUT_CHECK_DANGLING" }) o.safety.push_back(d); }
+        else if (a == "--leak-check" || a == "--leak-check=warn") o.safety.push_back("-DWALNUT_LEAK_CHECK");
+        else if (a == "--leak-check=error") { o.safety.push_back("-DWALNUT_LEAK_CHECK"); o.safety.push_back("-DWALNUT_LEAK_ERROR"); }
+        else if (a.rfind("--leak-check=", 0) == 0) { std::cerr << "walnut: --leak-check takes warn or error, not '" << a.substr(13) << "'\n"; exit_code = 2; return false; }
+        else if (a == "--gc")          o.safety.push_back("-DWALNUT_GC");
+        else if (a == "--ownership")   o.ownership = true;
+        else if (a == "--safe")        { for (const char* d : { "-DWALNUT_CHECK_BOUNDS", "-DWALNUT_CHECK_NULL", "-DWALNUT_CHECK_OVERFLOW", "-DWALNUT_CHECK_DANGLING", "-DWALNUT_LEAK_CHECK" }) o.safety.push_back(d); o.ownership = true; }
         else if (a == "-v" || a == "--verbose") o.verbose = true;
         else if (a == "-h" || a == "--help") { print_usage(std::cout); return false; }
         else if (a == "-L" || a == "-l") { const char* v = need(i, a); if (!v) return false; o.native_link.push_back(a + v); }
@@ -317,6 +346,9 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     }
 
     if (o.input.empty()) { std::cerr << "walnut: no input file\n"; exit_code = 2; return false; }
+    std::sort(o.safety.begin(), o.safety.end());
+    o.safety.erase(std::unique(o.safety.begin(), o.safety.end()), o.safety.end());
+    for (const std::string& d : o.safety) o.cxx_flags.push_back(d);
 
     for (const auto& [flag, path] : { std::pair<const char*, const std::string*>{ "--tokens", &o.tokens_path }, { "--ast", &o.ast_path } }) {
         if (path->empty()) continue;
@@ -483,6 +515,7 @@ bool generate(const Options& o, std::string& cpp, walnut::codegen::SplitProgram*
     if (!o.tokens_path.empty()) compiler.output_tokens(o.tokens_path);
     if (!o.ast_path.empty()) compiler.output_ast(o.ast_path);
     if (o.report_timing) compiler.report_timing();
+    if (o.ownership) compiler.enable_ownership_checks();
     compiler.set_native_header_args([&o](bool cpp) { return native_header_args(o, cpp); });
     if (!route_messages(compiler.error_reporter(), o.errors_to, "--errors")) return false;
     if (!route_messages(compiler.warning_reporter(), o.warnings_to, "--warnings")) return false;
@@ -499,6 +532,21 @@ bool generate(const Options& o, std::string& cpp, walnut::codegen::SplitProgram*
     for (const auto& u : compiler.analyzed_units()) units.push_back({ u.file, u.ast, u.root });
     walnut::codegen::CppEmitter emitter(compiler.mutable_types(), compiler.mutable_instantiator(), compiler.error_reporter());
     emitter.source_path = [&compiler](walnut::FileId f) { return compiler.get_sources().absolute_path(f); };
+    std::error_code runtime_ec;
+    const std::string runtime_root = fs::weakly_canonical(fs::path(o.runtime_dir), runtime_ec).generic_string();
+    auto tracked = std::make_shared<std::unordered_map<walnut::FileId, bool>>();
+    emitter.tracks_lines = [&compiler, runtime_root, tracked](walnut::FileId f) {
+        if (auto it = tracked->find(f); it != tracked->end()) return it->second;
+        const std::string path = compiler.get_sources().absolute_path(f);
+        bool user = !path.empty() && path.rfind(walnut::SourceManager::LIBRARY_ROOT, 0) != 0;
+        if (user && !runtime_root.empty()) {
+            std::error_code ec;
+            const std::string p = fs::weakly_canonical(fs::path(path), ec).generic_string();
+            if (!ec && p.size() > runtime_root.size() && p.compare(0, runtime_root.size(), runtime_root) == 0 && (p[runtime_root.size()] == '/' || runtime_root.back() == '/')) user = false;
+        }
+        tracked->emplace(f, user);
+        return user;
+    };
     emitter.unbuffered = o.unbuffered;
     emitter.path_of_text = [&compiler](const char* p) {
         const std::optional<walnut::FileId> f = compiler.get_sources().file_containing(p);
@@ -775,7 +823,7 @@ struct LineMapEntry {
 };
 
 std::string finalize_cpp(const std::string& raw, const Options& o, const std::string& cpp_name, std::vector<LineMapEntry>& map) {
-    const bool keep_markers = o.debug == DebugMode::Walnut;
+    const bool keep_markers = o.debug == DebugMode::Walnut || !o.safety.empty();
     std::string escaped_name;
     for (char c : cpp_name) { if (c == '\\' || c == '"') escaped_name += '\\'; escaped_name += c; }
 
@@ -1155,6 +1203,7 @@ int highlight(const Options& o) {
     compiler.set_path_style(walnut::PathStyle::Absolute);
     compiler.report_silent();
     compiler.warn_silent();
+    if (o.ownership) compiler.enable_ownership_checks();
     for (const auto& d : o.include_dirs) compiler.add_include_dir(d);
     for (const auto& d : o.module_dirs) compiler.add_module_dir(d);
     for (const auto& d : o.module_env_dirs) compiler.add_module_dir(d);

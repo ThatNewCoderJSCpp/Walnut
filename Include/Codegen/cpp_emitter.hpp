@@ -73,6 +73,7 @@ public:
 
     static constexpr const char* kLineReset = "#pragma walnut_line_reset";
     std::function<std::string(FileId)> source_path;
+    std::function<bool(FileId)> tracks_lines;
     bool unbuffered = false;
 
 private:
@@ -503,6 +504,7 @@ private:
     void emit_globals(std::ostream& os, bool as_extern = false);
     bool needs_header_body(const FuncInfo& f);
     std::string main_function_code();
+    std::string new_type_text(const nodes::NewExpression* n, const std::string& cpp);
 
     void emit_definitions(std::ostream& os);
 
