@@ -278,5 +278,11 @@ namespace std {
             return std::math::detail::Fn<T>::euler_number(n);
         } end function euler_number
 
+        template <typename T = float>
+        requires std::math::detail::RealValue<T>
+        function eulerian_number(long int: n, long int: k) -> T {
+            return std::math::detail::Fn<T>::eulerian_number(n, k);
+        } end function eulerian_number
+
     } end namespace constants
 } end namespace std

@@ -115,6 +115,7 @@ struct Options {
     bool                                             report_timing = false;
     bool                                             verbose = false;
     bool                                             ownership = false;
+    bool                                             warn_unused = false;
     std::vector<std::string>                         safety;
 };
 
@@ -156,6 +157,8 @@ void print_usage(std::ostream& os) {
           "  --errors <dest>    where errors go: stderr (default), stdout or a file path\n"
           "  --warnings <dest>  where warnings go: stderr (default), stdout or a file path\n"
           "  --no-warnings      suppress warnings\n"
+          "  --warn-unused      warn about local variables that are defined but never used in their scope\n"
+          "                     (names starting with _ are left alone)\n"
           "\n"
           "safety (all off unless asked, since each one makes the program slower or bigger):\n"
           "  --check-bounds     stop with the .wal line when an index is outside memory made with new[]\n"
@@ -317,6 +320,7 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         else if (a.rfind("--leak-check=", 0) == 0) { std::cerr << "walnut: --leak-check takes warn or error, not '" << a.substr(13) << "'\n"; exit_code = 2; return false; }
         else if (a == "--gc")          o.safety.push_back("-DWALNUT_GC");
         else if (a == "--ownership")   o.ownership = true;
+        else if (a == "--warn-unused") o.warn_unused = true;
         else if (a == "--safe")        { for (const char* d : { "-DWALNUT_CHECK_BOUNDS", "-DWALNUT_CHECK_NULL", "-DWALNUT_CHECK_OVERFLOW", "-DWALNUT_CHECK_DANGLING", "-DWALNUT_LEAK_CHECK" }) o.safety.push_back(d); o.ownership = true; }
         else if (a == "-v" || a == "--verbose") o.verbose = true;
         else if (a == "-h" || a == "--help") { print_usage(std::cout); return false; }
@@ -521,6 +525,7 @@ bool generate(const Options& o, std::string& cpp, walnut::codegen::SplitProgram*
     if (!o.ast_path.empty()) compiler.output_ast(o.ast_path);
     if (o.report_timing) compiler.report_timing();
     if (o.ownership) compiler.enable_ownership_checks();
+    if (o.warn_unused) compiler.enable_unused_warnings();
     compiler.set_native_header_args([&o](bool cpp) { return native_header_args(o, cpp); });
     if (!route_messages(compiler.error_reporter(), o.errors_to, "--errors")) return false;
     if (!route_messages(compiler.warning_reporter(), o.warnings_to, "--warnings")) return false;
@@ -1213,6 +1218,7 @@ int highlight(const Options& o) {
     compiler.report_silent();
     compiler.warn_silent();
     if (o.ownership) compiler.enable_ownership_checks();
+    if (o.warn_unused) compiler.enable_unused_warnings();
     for (const auto& d : o.include_dirs) compiler.add_include_dir(d);
     for (const auto& d : o.module_dirs) compiler.add_module_dir(d);
     for (const auto& d : o.module_env_dirs) compiler.add_module_dir(d);

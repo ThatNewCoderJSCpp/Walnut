@@ -49,14 +49,14 @@ The type can be any float type, from `short short float` to `long long double`, 
 | `sqrt2`, `inv_sqrt2`, `sqrt3`, `inv_sqrt3`, `sqrt5`, `inv_sqrt5` | Square roots |
 | `phi`, `inv_phi`, `psi`, `silver_ratio`, `bronze_ratio`, `silver_constant` | The golden ratio, its conjugate `psi`, and their relatives |
 | `euler_mascheroni`, `catalan`, `apery` (`zeta(3)`), `zeta2` (`zeta(2)`) | Other named constants |
-| `bernoulli(n)`, `euler_number(n)`, `tangent_number(n)`, `secant_number(n)`, `stieltjes(n)` | Numbered sequences |
+| `bernoulli(n)`, `euler_number(n)`, `tangent_number(n)`, `secant_number(n)`, `stieltjes(n)`, `eulerian_number(n, k)` | Numbered sequences |
 | `metallic_ratio(n)`, `inv_metallic_ratio(n)`, `metallic_mean(n)`, `inv_metallic_mean(n)`, `beraha(n)` | Numbered families of constants |
 
-The numbered ones take a `long int` index: `bernoulli<long float>(10)`.
+The numbered ones take a `long int` index: `bernoulli<long float>(10)`. `eulerian_number(n, k)` takes two, and counts the permutations of n items with k ascents.
 
 ## Errors
 
-A negative index for a numbered constant, such as `bernoulli(-1)`, stops the program with a runtime error.
+A negative index for a numbered constant, such as `bernoulli(-1)` or `eulerian_number(3, -1)`, stops the program with a runtime error.
 
 ## Differences from C++
 

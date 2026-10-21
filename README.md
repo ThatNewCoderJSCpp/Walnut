@@ -162,6 +162,7 @@ Common options:
 | `--keep-cpp` | Keep the generated C++ next to the executable (builds without the cache) |
 | `--no-cache` | Build from scratch, without the build cache |
 | `--no-warnings` | Hide warnings |
+| `--warn-unused` | Warn about local variables that are defined but never used in their scope (off unless asked for; names starting with `_` are skipped) |
 | `--errors <dest>`, `--warnings <dest>` | Send errors or warnings to `stderr` (default), `stdout` or a file |
 | `--tokens <file>`, `--ast <file>` | Write the token list or syntax tree, for debugging |
 | `--time` | Show how long each compiler stage takes |

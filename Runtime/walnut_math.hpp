@@ -222,6 +222,8 @@ WALNUT_MATH_FN(chebyshev_t, chebyshev_t)
 WALNUT_MATH_FN(chebyshev_u, chebyshev_u)
 WALNUT_MATH_FN(chebyshev_v, chebyshev_v)
 WALNUT_MATH_FN(chebyshev_w, chebyshev_w)
+WALNUT_MATH_FN(fibonacci, fibonacci)
+WALNUT_MATH_FN(lucas, lucas)
 WALNUT_MATH_FN(fibonacci_polynomial, fibonacci_polynomial)
 WALNUT_MATH_FN(lucas_polynomial, lucas_polynomial)
 WALNUT_MATH_FN(legendre_p, legendre_p)
@@ -295,6 +297,16 @@ WALNUT_MATH_INDEXED_CONST(beraha, mp::constants::beraha(k, context()))
 WALNUT_MATH_INDEXED_CONST(tangent_number, mp::BigFloat(mp::constants::tangent_number(k)))
 WALNUT_MATH_INDEXED_CONST(secant_number, mp::BigFloat(mp::constants::secant_number(k)))
 WALNUT_MATH_INDEXED_CONST(euler_number, mp::BigFloat(mp::constants::euler_number(k)))
+
+template <typename W>
+inline W eulerian_number(long long n, long long m) {
+    if (n < 0) fail("eulerian_number: the index " + std::to_string(n) + " is negative");
+    if (m < 0) fail("eulerian_number: the index " + std::to_string(m) + " is negative");
+    const std::size_t a = static_cast<std::size_t>(n);
+    const std::size_t b = static_cast<std::size_t>(m);
+    if constexpr (has_native<W>::value) return W(native_tag{}, mp::BigFloat(mp::constants::eulerian_number(a, b)));
+    else return mp::constants::eulerian_number<W>(a, b);
+}
 
 #undef WALNUT_MATH_FN
 #undef WALNUT_MATH_CONST

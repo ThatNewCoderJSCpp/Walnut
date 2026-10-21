@@ -134,6 +134,7 @@ The rounding functions give a float of the same type, not an integer; `static_ca
 | Carlson forms | `carlson_rc(x, y)`, `carlson_rf(x, y, z)`, `carlson_rd(x, y, z)`, `carlson_rg(x, y, z)`, `carlson_rj(x, y, z, p)` |
 | Jacobi elliptic functions | `jacobi_am(u, m)`, and `jacobi_sn`, `jacobi_cn`, `jacobi_dn`, `jacobi_ns`, `jacobi_nc`, `jacobi_nd`, `jacobi_sc`, `jacobi_sd`, `jacobi_cs`, `jacobi_cd`, `jacobi_ds`, `jacobi_dc`, all `(u, m)` |
 | Polynomials | `chebyshev_t(x, n)`, `chebyshev_u(x, n)`, `chebyshev_v(x, n)`, `chebyshev_w(x, n)`, `legendre_p(x, n)`, `legendre_q(x, n)`, `fibonacci_polynomial(x, n)`, `lucas_polynomial(x, n)` |
+| Fibonacci and Lucas | `fibonacci(x)` and `lucas(x)`, the Fibonacci and Lucas numbers continued to every real x (real only) |
 | Debye | `debye(x, n)`, `debye_integral(x, n)`, `debye_tail(x, n)` |
 
 A parameter written `n` above is a `long int`; the others have the type of the first argument.

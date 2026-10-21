@@ -271,6 +271,8 @@ namespace std {
                     static function chebyshev_u(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_u";
                     static function chebyshev_v(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_v";
                     static function chebyshev_w(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_w";
+                    static function fibonacci(const T&: x) -> T as "walnut_rt::math::fibonacci";
+                    static function lucas(const T&: x) -> T as "walnut_rt::math::lucas";
                     static function fibonacci_polynomial(const T&: x, long int: n) -> T as "walnut_rt::math::fibonacci_polynomial";
                     static function lucas_polynomial(const T&: x, long int: n) -> T as "walnut_rt::math::lucas_polynomial";
                     static function legendre_p(const T&: x, long int: n) -> T as "walnut_rt::math::legendre_p";
@@ -344,6 +346,7 @@ namespace std {
                     static function tangent_number(long int: n) -> T as "walnut_rt::math::tangent_number<T>";
                     static function secant_number(long int: n) -> T as "walnut_rt::math::secant_number<T>";
                     static function euler_number(long int: n) -> T as "walnut_rt::math::euler_number<T>";
+                    static function eulerian_number(long int: n, long int: k) -> T as "walnut_rt::math::eulerian_number<T>";
                 } end class Fn
 
                 class Api as "walnut_rt::math::api" {
@@ -2107,6 +2110,30 @@ namespace std {
         function chebyshev_w(const T&: x, long int: n) -> T {
             return detail::Fn<T>::chebyshev_w(x, n);
         } end function chebyshev_w
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function fibonacci(const T&: x) -> float {
+            return detail::Fn<float>::fibonacci(static_cast<float>(x));
+        } end function fibonacci
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function fibonacci(const T&: x) -> T {
+            return detail::Fn<T>::fibonacci(x);
+        } end function fibonacci
+
+        template <typename T>
+        requires std::traits::is_builtin_integer<T>
+        function lucas(const T&: x) -> float {
+            return detail::Fn<float>::lucas(static_cast<float>(x));
+        } end function lucas
+
+        template <typename T>
+        requires detail::RealValue<T>
+        function lucas(const T&: x) -> T {
+            return detail::Fn<T>::lucas(x);
+        } end function lucas
 
         template <typename T>
         requires std::traits::is_builtin_integer<T>

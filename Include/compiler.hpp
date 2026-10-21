@@ -21,6 +21,7 @@
 #include "Driver/define_pass.hpp"
 #include "Driver/walk_pass.hpp" 
 #include "Semantics/ownership.hpp"
+#include "Semantics/unused_checker.hpp"
 
 #include <fstream>
 #include <string>
@@ -59,6 +60,7 @@ private:
 
     bool m_report_timing = false;
     bool m_ownership = false;
+    bool m_warn_unused = false;
     std::vector<std::string> m_include_dirs{ "include" };
     std::vector<std::string> m_module_dirs;
     std::vector<std::pair<std::string, std::string>> m_defines;
@@ -111,6 +113,8 @@ public:
 public:
     CompilerPipeline& enable_ownership_checks(bool on = true) { m_ownership = on; return *this; }
     bool ownership_checks() const noexcept { return m_ownership; }
+    CompilerPipeline& enable_unused_warnings(bool on = true) { m_warn_unused = on; return *this; }
+    bool unused_warnings() const noexcept { return m_warn_unused; }
 
     CompilerPipeline& enable_token_output() {
         m_output_tokens = true;
@@ -213,6 +217,15 @@ private:
                 if (!u.ast) continue;
                 if (sources.absolute_path(u.file).rfind(SourceManager::LIBRARY_ROOT, 0) == 0) continue;
                 ownership.run(u.file, u.ast);
+            }
+        }
+
+        if (m_warn_unused && !reporter.count(ErrorPhase::Semantic)) {
+            semantics::UnusedVariableChecker unused(warnings);
+            for (const AnalyzedUnit& u : m_units) {
+                if (!u.ast) continue;
+                if (sources.absolute_path(u.file).rfind(SourceManager::LIBRARY_ROOT, 0) == 0) continue;
+                unused.run(u.file, u.ast);
             }
         }
     }

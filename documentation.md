@@ -3597,6 +3597,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `--debug-cpp` | Builds for a debugger that shows the generated C++ |
 | `--line-map[=file]` | Writes which `.wal` line each block of C++ came from |
 | `--no-warnings` | Hides warnings |
+| `--warn-unused` | Warns about local variables that are defined but never used in their scope |
 | `--errors <dest>`, `--warnings <dest>` | Sends errors or warnings to `stderr`, `stdout` or a file |
 | `--tokens <file.txt>`, `--ast <file.txt>` | Writes the token list or syntax tree |
 | `--time` | Shows how long each stage takes |
@@ -3610,6 +3611,21 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 `-I`, `-D`, `-L` and `-l` also accept their value attached, as in `-Iinclude`.
 
 Arguments after `--` go to the program.
+
+### Unused variables
+
+`--warn-unused` (off unless asked for) warns about every variable or array declared inside a function, constructor, destructor, operator or lambda that nothing in its scope ever reads or writes again:
+
+```walnut
+function main() -> int {
+    int: total = 0;
+    int: spare = 1;
+    int: _later = 2;
+    return total;
+} end function main
+```
+
+`walnut check --warn-unused` reports `variable 'spare' is defined but never used`. Names starting with `_` are left alone, so `_later` is skipped, and so are function parameters, record fields, global variables and the files of the built-in library. A structured binding is reported only when none of its names are used. The flag works with `check`, `build`, `run` and `emit`, and editors that run `walnut check` can pass it too.
 
 ### Safety checks
 
