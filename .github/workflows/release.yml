@@ -91,6 +91,19 @@ jobs:
             exit 1
           '
 
+      - name: Test walnut init on a system with no C++ compiler
+        run: |
+          docker run --rm -v "$PWD/smoke:/smoke" ubuntu:22.04 bash -c '
+            set -e
+            if /smoke/Walnut-*/bin/walnut init --status; then
+              echo "::error::walnut init --status found a compiler on a system without one"
+              exit 1
+            fi
+            DEBIAN_FRONTEND=noninteractive /smoke/Walnut-*/bin/walnut init --yes > /dev/null
+            /smoke/Walnut-*/bin/walnut init --status
+            /smoke/Walnut-*/bin/walnut run /smoke/ok.wal
+          '
+
       - uses: actions/upload-artifact@v4
         with:
           name: walnut-linux-${{ matrix.arch }}
@@ -211,6 +224,21 @@ jobs:
           unzip -q build/Walnut-*.zip -d smoke
           printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
           smoke/Walnut-*/bin/walnut.exe run smoke/ok.wal
+
+      - name: Test walnut init without MSYS2
+        shell: pwsh
+        run: |
+          $walnut = (Get-ChildItem smoke -Directory -Filter "Walnut-*" | Select-Object -First 1).FullName + "\bin\walnut.exe"
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+          $env:WALNUT_TOOLCHAIN_DIR = "$env:RUNNER_TEMP\walnut-toolchain"
+          & $walnut init --yes
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $walnut init --status
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $walnut build smoke\ok.wal -o smoke\ok-init.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & smoke\ok-init.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - uses: actions/upload-artifact@v4
         with:

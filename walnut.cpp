@@ -2,11 +2,13 @@
 #include "Codegen/cpp_emitter.hpp"
 #include "Common/file_kind.hpp"
 #include "Driver/build_cache.hpp"
+#include "Driver/toolchain.hpp"
 #include "Semantics/compile_time_random.hpp"
 #include "Driver/highlight.hpp"
 #include "Preprocessor/native_headers.hpp"
 #include "Lexer/special_names.hpp"
 #include <algorithm>
+#include <optional>
 #include <atomic>
 #include <thread>
 #include <memory>
@@ -84,6 +86,8 @@ struct Options {
     std::vector<std::string>                         module_env_dirs;
     std::vector<std::pair<std::string, std::string>> defines;
     std::string                                      cxx = WALNUT_DEFAULT_CXX;
+    bool                                             cxx_from_user = false;
+    bool                                             managed_cxx = false;
     std::string                                      opt = "-O2";
     std::string                                      runtime_dir = WALNUT_RUNTIME_DIR;
     std::string                                      extra_includes = WALNUT_RUNTIME_INCLUDES;
@@ -126,6 +130,7 @@ void print_usage(std::ostream& os) {
           "  highlight  print what each name and operator in the file is, as JSON, for editors (with --stdin, the file's text is read from standard input)\n"
           "  complete   print the names that fit at --at LINE:COLUMN (from 1, in bytes), as JSON, for editors' autocomplete; also takes --stdin\n"
           "  library    list the library files built into walnut; 'library <file>' prints one, 'library --extract <dir>' writes them all to a folder\n"
+          "  init       set up a C++ compiler for walnut (see 'walnut init --help')\n"
           "\n"
           "options:\n"
           "  -o <path>          output path\n"
@@ -228,7 +233,7 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     o.optional_libs  = relocate(o.optional_libs);
     o.optional_archives = relocate(o.optional_archives);
     if (const char* env = std::getenv("WALNUT_RUNTIME_DIR")) if (*env) o.runtime_dir = env;
-    if (const char* env = std::getenv("WALNUT_CXX")) if (*env) o.cxx = env;
+    if (const char* env = std::getenv("WALNUT_CXX")) if (*env) { o.cxx = env; o.cxx_from_user = true; }
     if (const char* env = std::getenv("WALNUT_MODULE_PATH")) if (*env) o.module_env_dirs = split_on(env, kPathListSeparator);
 
     exit_code = 0;
@@ -289,7 +294,7 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         else if (a == "--debug-cpp")   { o.debug = DebugMode::Cpp; o.keep_cpp = true; }
         else if (a == "--line-map")    o.line_map = true;
         else if (a.rfind("--line-map=", 0) == 0) { o.line_map = true; o.line_map_path = a.substr(11); }
-        else if (a == "--cxx")         { const char* v = need(i, a); if (!v) return false; o.cxx = v; }
+        else if (a == "--cxx")         { const char* v = need(i, a); if (!v) return false; o.cxx = v; o.cxx_from_user = true; }
         else if (a == "--cxx-flag")    { const char* v = need(i, a); if (!v) return false; o.cxx_flags.push_back(v); }
         else if (a == "--runtime")     { const char* v = need(i, a); if (!v) return false; o.runtime_dir = v; }
         else if (a == "-M" || a == "--module-dir") { const char* v = need(i, a); if (!v) return false; o.module_dirs.push_back(v); }
@@ -629,6 +634,7 @@ void explain_missing_compiler(const std::string& cxx) {
     std::cerr << "walnut: install one, for example 'sudo apt install g++' (Debian/Ubuntu), 'sudo dnf install gcc-c++' (Fedora) or 'sudo pacman -S gcc' (Arch)\n";
 #endif
     std::cerr << "walnut: or pick a compiler with --cxx <compiler> or the WALNUT_CXX environment variable\n";
+    std::cerr << "walnut: 'walnut init' sets one up for you\n";
 }
 
 std::vector<fs::path> library_dirs(const Options& o) {
@@ -1172,6 +1178,9 @@ bool build_with_cache(const Options& o, const walnut::codegen::SplitProgram& pro
         for (const fs::path& obj : objects) cmd += " " + quote(obj.string());
         for (const fs::path& in : link_inputs) cmd += " " + quote(in.string());
         cmd += " -o " + quote(part.string()) + libs.args;
+#ifdef _WIN32
+        if (o.managed_cxx && std::find(o.cxx_flags.begin(), o.cxx_flags.end(), "-shared") == o.cxx_flags.end()) cmd += " -static";
+#endif
         if (o.verbose) std::cerr << cmd << "\n";
         const int status = exit_status_of(run_command(cmd));
 
@@ -1477,11 +1486,83 @@ int library_command(int argc, char** argv) {
     return 1;
 }
 
+void use_installed_toolchain(Options& o) {
+    if (o.cxx_from_user) return;
+    const std::optional<fs::path> managed = walnut::toolchain::installed_compiler();
+    if (!managed) return;
+    o.cxx = managed->string();
+    o.managed_cxx = true;
+    walnut::toolchain::add_to_path(walnut::toolchain::installed_path_dirs());
+}
+
+void print_init_usage(std::ostream& os) {
+    os << "usage: walnut init [--yes] [--force] | --status | --print-compiler | --remove\n"
+          "\n"
+          "Sets up a C++ compiler for walnut, which builds programs by compiling the C++ it generates.\n"
+          "On Windows it downloads a pinned compiler that matches this walnut, checks its SHA-256, and unpacks it into\n"
+          "a folder of its own (" << walnut::toolchain::root().string() << "); nothing else on the system changes.\n"
+          "On Linux it installs the distribution's g++ with its package manager (asking for your password), and on\n"
+          "macOS it opens Apple's installer for the Command Line Tools.\n"
+          "\n"
+          "  -y, --yes          don't ask before downloading or installing\n"
+          "  --force            install walnut's own compiler even when another one is already on PATH\n"
+          "  --status           show which compiler walnut uses and its version\n"
+          "  --print-compiler   print only the path of the compiler walnut uses (for editors and build tools)\n"
+          "  --remove           delete the compiler walnut init downloaded\n"
+          "  --cxx <compiler>   check this compiler instead (with --status or --print-compiler)\n"
+          "\n"
+          "walnut picks its compiler in this order: --cxx, then WALNUT_CXX, then the one walnut init downloaded,\n"
+          "then " WALNUT_DEFAULT_CXX " from PATH. WALNUT_TOOLCHAIN_DIR puts the downloaded compiler somewhere else.\n";
+}
+
+int init_command(int argc, char** argv) {
+    Options o;
+    walnut::toolchain::InitOptions io;
+    if (const char* env = std::getenv("WALNUT_CXX")) if (*env) { o.cxx = env; o.cxx_from_user = true; }
+    for (int i = 2; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "-y" || a == "--yes") io.yes = true;
+        else if (a == "--force") io.force = true;
+        else if (a == "--remove") io.remove = true;
+        else if (a == "--status") io.status = true;
+        else if (a == "--print-compiler") io.print_compiler = true;
+        else if (a == "--cxx" && i + 1 < argc) { o.cxx = argv[++i]; o.cxx_from_user = true; }
+        else if (a == "-h" || a == "--help") { print_init_usage(std::cout); return 0; }
+        else { std::cerr << "walnut: unknown option '" << a << "' for init\n"; print_init_usage(std::cerr); return 2; }
+    }
+    use_installed_toolchain(o);
+    io.current_cxx = o.cxx;
+    io.cxx_from_user = o.cxx_from_user;
+    return walnut::toolchain::init(io);
+}
+
+bool offer_init(Options& o) {
+    if (o.cxx_from_user || find_program(o.cxx) || !walnut::toolchain::interactive()) return true;
+    std::cerr << "walnut: Walnut builds programs with a C++ compiler, and there isn't one ('" << o.cxx << "' isn't on PATH)\n";
+    walnut::toolchain::InitOptions io;
+    io.current_cxx = o.cxx;
+    if (walnut::toolchain::init(io) != 0) return false;
+    use_installed_toolchain(o);
+    if (!o.managed_cxx) {
+        for (const char* c : { "c++", "g++", "clang++" }) {
+            if (find_program(o.cxx)) break;
+            if (find_program(c)) o.cxx = c;
+        }
+    }
+    return find_program(o.cxx);
+}
+
 int main(int argc, char** argv) {
     if (argc >= 2 && std::string(argv[1]) == "library") return library_command(argc, argv);
+    if (argc >= 2 && std::string(argv[1]) == "init") return init_command(argc, argv);
     Options o;
     int code = 0;
     if (!parse_args(argc, argv, o, code)) return code;
+    use_installed_toolchain(o);
+    if ((o.command == Command::Build || o.command == Command::Run) && !offer_init(o)) {
+        explain_missing_compiler(o.cxx);
+        return 1;
+    }
     if (!o.random_seed.empty()) walnut::semantics::set_compile_time_random_seed(o.random_seed);
 
     try {
