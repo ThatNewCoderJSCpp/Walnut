@@ -20,6 +20,10 @@ namespace toolchain {
 
 namespace fs = std::filesystem;
 
+#if defined(_WIN32)
+extern "C" __declspec(dllimport) unsigned long __stdcall GetModuleFileNameW(void* module, wchar_t* filename, unsigned long size);
+#endif
+
 namespace {
 
 const char* const kMarker = "walnut-toolchain.txt";
@@ -411,27 +415,27 @@ std::optional<Pinned> pinned() {
     p.path_dirs = { "bin", "aarch64-w64-mingw32/bin" };
     p.size = 185737889;
     return p;
-#elif defined(_WIN32) && defined(_UCRT)
+#elif defined(_WIN32) && (defined(__i386__) || defined(_M_IX86))
     Pinned p;
-    p.name = "winlibs-gcc-16.2.0-ucrt-r3";
-    p.description = "WinLibs GCC 16.2.0 with MinGW-w64 14.0.0 (UCRT, x86_64)";
-    p.url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/16.2.0posix-23.1.3-14.0.0-ucrt-r3/winlibs-x86_64-posix-seh-gcc-16.2.0-mingw-w64ucrt-14.0.0-r3.zip";
-    p.sha256 = "3c69305081e4a647144339a936244fcf7d3d9e558319e1ad7be2cd2886d4b6a1";
-    p.archive_root = "mingw64";
-    p.compiler = "bin/g++.exe";
-    p.path_dirs = { "bin" };
-    p.size = 276414382;
+    p.name = "llvm-mingw-20261020-ucrt-i686";
+    p.description = "llvm-mingw 20261020 (Clang 23.1.4, UCRT, 32-bit x86)";
+    p.url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20261020/llvm-mingw-20261020-ucrt-i686.zip";
+    p.sha256 = "8e8eaf7f0c178ffe0582a5d871dbf3ac50f0a54d71cf5d5edb2e3634f6f9f002";
+    p.archive_root = "llvm-mingw-20261020-ucrt-i686";
+    p.compiler = "bin/clang++.exe";
+    p.path_dirs = { "bin", "i686-w64-mingw32/bin" };
+    p.size = 195295414;
     return p;
 #elif defined(_WIN32)
     Pinned p;
-    p.name = "winlibs-gcc-16.2.0-msvcrt-r3";
-    p.description = "WinLibs GCC 16.2.0 with MinGW-w64 14.0.0 (MSVCRT, x86_64)";
-    p.url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/16.2.0posix-23.1.3-14.0.0-msvcrt-r3/winlibs-x86_64-posix-seh-gcc-16.2.0-mingw-w64msvcrt-14.0.0-r3.zip";
-    p.sha256 = "62af32ea58acdea1318ea5dd8eb7017eaee694dd40b269d52a59c769dcfefb82";
-    p.archive_root = "mingw64";
-    p.compiler = "bin/g++.exe";
-    p.path_dirs = { "bin" };
-    p.size = 277203392;
+    p.name = "llvm-mingw-20261020-ucrt-x86_64";
+    p.description = "llvm-mingw 20261020 (Clang 23.1.4, UCRT, x86_64)";
+    p.url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20261020/llvm-mingw-20261020-ucrt-x86_64.zip";
+    p.sha256 = "fd5462b7f5d93b2ff981fcd3f9c7e427e47f3203c64ea91c27bcc444eebd74cd";
+    p.archive_root = "llvm-mingw-20261020-ucrt-x86_64";
+    p.compiler = "bin/clang++.exe";
+    p.path_dirs = { "bin", "x86_64-w64-mingw32/bin" };
+    p.size = 190612575;
     return p;
 #else
     return std::nullopt;
@@ -455,9 +459,33 @@ fs::path install_dir(const Pinned& p) {
     return root() / p.name;
 }
 
+fs::path bundle_dir() {
+#if defined(_WIN32)
+    std::wstring buf(32768, L'\0');
+    const unsigned long n = GetModuleFileNameW(nullptr, buf.data(), static_cast<unsigned long>(buf.size()));
+    if (n == 0) return {};
+    buf.resize(n);
+    return fs::path(buf).parent_path().parent_path() / "toolchain";
+#else
+    return {};
+#endif
+}
+
+std::optional<fs::path> bundled_compiler() {
+    const std::optional<Pinned> p = pinned();
+    if (!p) return std::nullopt;
+    const fs::path dir = bundle_dir();
+    if (dir.empty()) return std::nullopt;
+    std::error_code ec;
+    const fs::path cxx = dir / p->archive_root / p->compiler;
+    if (!fs::is_regular_file(dir / kMarker, ec) || !fs::is_regular_file(cxx, ec)) return std::nullopt;
+    return cxx.lexically_normal().make_preferred();
+}
+
 std::optional<fs::path> installed_compiler() {
     const std::optional<Pinned> p = pinned();
     if (!p) return std::nullopt;
+    if (const std::optional<fs::path> bundled = bundled_compiler()) return bundled;
     const fs::path dir = install_dir(*p);
     std::error_code ec;
     const fs::path cxx = dir / p->archive_root / p->compiler;
@@ -469,7 +497,8 @@ std::vector<fs::path> installed_path_dirs() {
     std::vector<fs::path> out;
     const std::optional<Pinned> p = pinned();
     if (!p || !installed_compiler()) return out;
-    for (const std::string& d : p->path_dirs) out.push_back((install_dir(*p) / p->archive_root / d).lexically_normal().make_preferred());
+    const fs::path base = bundled_compiler() ? bundle_dir() : install_dir(*p);
+    for (const std::string& d : p->path_dirs) out.push_back((base / p->archive_root / d).lexically_normal().make_preferred());
     return out;
 }
 
@@ -568,7 +597,7 @@ int init(const InitOptions& o) {
         if (o.cxx_from_user) source = "--cxx or WALNUT_CXX";
         else if (managed && found) {
             std::error_code ec;
-            if (fs::equivalent(*found, *managed, ec)) source = "walnut init";
+            if (fs::equivalent(*found, *managed, ec)) source = bundled_compiler() ? "the compiler bundled with walnut" : "walnut init";
         }
         if (!found) {
             std::cout << "compiler: none (looked for '" << o.current_cxx << "')\n"
@@ -583,6 +612,10 @@ int init(const InitOptions& o) {
     }
 
     if (p) {
+        if (managed && bundled_compiler()) {
+            std::cout << "walnut: this walnut comes with its compiler; programs are compiled with " << managed->string() << "\n";
+            return 0;
+        }
         if (managed && !o.force) {
             std::cout << "walnut: already set up; programs are compiled with " << managed->string() << "\n";
             return 0;

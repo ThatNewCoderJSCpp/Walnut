@@ -630,11 +630,8 @@ void explain_missing_compiler(const std::string& cxx) {
     std::cerr << "walnut: cannot find the C++ compiler '" << cxx << "'\n"
               << "walnut: Walnut turns programs into C++, so 'build' and 'run' need a C++17 compiler (GCC 9 or newer, or Clang 9 or newer)\n";
 #ifdef _WIN32
-    std::cerr << "walnut: install MSYS2 (https://www.msys2.org) and the compiler that matches this download:\n"
-              << "walnut:     pacman -S mingw-w64-ucrt-x86_64-cc         (windows-ucrt64, in the UCRT64 shell)\n"
-              << "walnut:     pacman -S mingw-w64-x86_64-cc              (windows-mingw64, in the MINGW64 shell)\n"
-              << "walnut:     pacman -S mingw-w64-clang-aarch64-cc       (windows-clangarm64, in the CLANGARM64 shell)\n"
-              << "walnut: then run walnut from that MSYS2 shell, or add its bin folder to PATH\n";
+    std::cerr << "walnut: Walnut for Windows is built with llvm-mingw, so programs need that compiler too:\n"
+              << "walnut:     'walnut init' downloads it (about 190 MB), or use the Walnut download that ends in -with-compiler\n";
 #else
     std::cerr << "walnut: install one, for example 'sudo apt install g++' (Debian/Ubuntu), 'sudo dnf install gcc-c++' (Fedora) or 'sudo pacman -S gcc' (Arch)\n";
 #endif

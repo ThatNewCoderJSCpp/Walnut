@@ -20,7 +20,7 @@ Walnut needs a **C++17 compiler** to build programs, because it compiles to C++.
 | Platform | What you need |
 |---|---|
 | Linux (x86_64, arm64, i686) | GCC 9 or newer, or Clang 9 or newer, available as `c++`; `walnut init` installs `g++` with your package manager |
-| Windows (x86_64, arm64) | nothing: `walnut init` downloads a compiler that matches your download. [MSYS2](https://www.msys2.org) with the matching compiler works too |
+| Windows (x86_64, i686, arm64) | nothing: the `-with-compiler` downloads include llvm-mingw, and for the others `walnut init` downloads it |
 | macOS | Not supported yet (planned) |
 
 Visual Studio's compiler (MSVC) can't be used to build Walnut programs, because Walnut calls the compiler with GCC-style options.
@@ -36,9 +36,11 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
    | `Walnut-<version>-linux-x86_64.tar.gz` | 64-bit Intel/AMD Linux |
    | `Walnut-<version>-linux-arm64.tar.gz` | 64-bit ARM Linux |
    | `Walnut-<version>-linux-i686.tar.gz` | 32-bit Linux |
-   | `Walnut-<version>-windows-ucrt64.zip` | 64-bit Windows, MSYS2 **UCRT64** |
-   | `Walnut-<version>-windows-mingw64.zip` | 64-bit Windows, MSYS2 **MINGW64** |
-   | `Walnut-<version>-windows-clangarm64.zip` | ARM Windows, MSYS2 **CLANGARM64** |
+   | `Walnut-<version>-windows-ucrt64.zip` | 64-bit Intel/AMD Windows |
+   | `Walnut-<version>-windows-i686.zip` | 32-bit Windows |
+   | `Walnut-<version>-windows-clangarm64.zip` | ARM Windows |
+
+   Each Windows download also comes as `...-with-compiler.zip` (about 200 MB more), which has the C++ compiler inside, so it works offline as soon as it's unpacked and step 4 isn't needed. The smaller download gets the same compiler with `walnut init` the first time it's needed. Walnut for Windows doesn't need MSYS2.
 
 2. Extract it anywhere. Keep the folders together: `walnut` finds its runtime and Fizmo next to itself.
 
@@ -48,6 +50,7 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
      runtime/              the Walnut runtime header
      fizmo/                Fizmo's library and headers
      docs/                 the language and library documentation
+     toolchain/            the C++ compiler (only in the -with-compiler downloads)
    ```
 
 3. Add the `bin` folder to your `PATH`.
@@ -68,15 +71,7 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
    sudo pacman -S gcc            # Arch
    ```
 
-   On Windows, install MSYS2, open the shell that matches your download, and install its compiler:
-
-   | Download | MSYS2 shell | Command |
-   |---|---|---|
-   | `windows-ucrt64` | UCRT64 | `pacman -S mingw-w64-ucrt-x86_64-cc` |
-   | `windows-mingw64` | MINGW64 | `pacman -S mingw-w64-x86_64-cc` |
-   | `windows-clangarm64` | CLANGARM64 | `pacman -S mingw-w64-clang-aarch64-cc` |
-
-   Run `walnut` from that shell, or add that environment's `bin` folder (for example `C:\msys64\ucrt64\bin`) to your Windows `PATH`. The compiler has to come from the same MSYS2 environment as the download, or programs won't link.
+   On Windows, Walnut's libraries are built with [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) (Clang with libc++), so programs have to be compiled with llvm-mingw too; other MinGW compilers such as MSYS2's GCC won't link them. Use `walnut init` or the `-with-compiler` download rather than installing one yourself.
 
 5. Check that it works:
 
@@ -90,7 +85,7 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
 
 | System | What `walnut init` does |
 |---|---|
-| Windows | Downloads a compiler that matches your Walnut download, checks its SHA-256, and unpacks it into `%LOCALAPPDATA%\walnut\toolchain`. It needs no administrator rights, installs nothing system-wide and doesn't change `PATH`. |
+| Windows | With a `-with-compiler` download, nothing: Walnut uses the compiler in its own `toolchain` folder. Otherwise it downloads the compiler that matches your Walnut download, checks its SHA-256, and unpacks it into `%LOCALAPPDATA%\walnut\toolchain`. It needs no administrator rights, installs nothing system-wide and doesn't change `PATH`. |
 | Linux | Installs your distribution's `g++` with its package manager (`apt`, `dnf`, `pacman`, `zypper`, `apk` or `xbps`), using `sudo`, so it asks for your password. |
 | macOS | Opens Apple's installer for the Command Line Tools. |
 
@@ -98,9 +93,11 @@ The Windows compilers are pinned, so every Walnut version uses the exact compile
 
 | Download | Compiler | Size |
 |---|---|---|
-| `windows-ucrt64` | [WinLibs](https://winlibs.com) GCC 16.2.0, MinGW-w64 14.0.0, UCRT | about 280 MB |
-| `windows-mingw64` | WinLibs GCC 16.2.0, MinGW-w64 14.0.0, MSVCRT | about 280 MB |
-| `windows-clangarm64` | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) 20261020 (Clang 23.1.4), UCRT, ARM64 | about 190 MB |
+| `windows-ucrt64` | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) 20261020 (Clang 23.1.4), UCRT, x86_64 | about 190 MB |
+| `windows-i686` | llvm-mingw 20261020 (Clang 23.1.4), UCRT, 32-bit x86 | about 195 MB |
+| `windows-clangarm64` | llvm-mingw 20261020 (Clang 23.1.4), UCRT, ARM64 | about 185 MB |
+
+Walnut looks for a compiler in this order: `--cxx`, `WALNUT_CXX`, the compiler in a `-with-compiler` download's `toolchain` folder, the one `walnut init` downloaded, then `c++` on `PATH`.
 
 Programs built with the downloaded compiler are linked statically, so the `.exe` runs on other Windows machines without extra DLLs.
 
@@ -313,7 +310,17 @@ cmake --build build
 
 That `walnut` uses the runtime and Fizmo from the build tree, so it only works on the machine that built it. To make a download like the ones on the Releases page, configure with `-DWALNUT_PACKAGE=ON` and run `cpack` in the build folder.
 
-The compilers `walnut init` downloads on Windows are pinned in `Source/Driver/toolchain.cpp` (the URL, SHA-256 and size of each). The Windows releases are built with MSYS2's compiler, so when MSYS2 moves to a newer GCC or Clang than the pinned one, update the pinned compiler too: the release workflow runs `walnut init` without MSYS2 and builds a program with it, so a mismatch fails the release instead of reaching users.
+The compilers `walnut init` downloads on Windows are pinned in `Source/Driver/toolchain.cpp` (the URL, SHA-256 and size of each). The Windows releases are cross-compiled on Linux with the same llvm-mingw version (`LLVM_MINGW_VERSION` in `.github/workflows/release.yml`), so update both together. `cmake/llvm-mingw.cmake` is the toolchain file, and `.github/scripts/windows-deps.sh` builds zlib, libjpeg-turbo and the Vulkan headers for it. To build a Windows Walnut on Linux:
+
+```
+export PATH=/path/to/llvm-mingw/bin:$PATH LLVM_MINGW_TARGET=x86_64-w64-mingw32 LLVM_MINGW_DEPS=$PWD/windows-deps
+bash .github/scripts/windows-deps.sh $LLVM_MINGW_TARGET $LLVM_MINGW_DEPS
+cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/llvm-mingw.cmake \
+  -DJPEG_LIBRARY=$LLVM_MINGW_DEPS/lib/libjpeg.a -DZLIB_LIBRARY=$LLVM_MINGW_DEPS/lib/libzs.a
+cmake --build build-windows
+```
+
+The release workflow tests each Windows package on a real Windows machine (x86_64 and ARM): it runs a program with the bundled compiler, and runs `walnut init` with the plain package and builds a program with what it downloads, so a mismatch fails the release instead of reaching users.
 
 ## Changing the built-in character names
 
@@ -331,13 +338,13 @@ Change, add or remove names in `names`, then rebuild: the build turns the file i
 Run `walnut init` (see [Setting up a compiler](#setting-up-a-compiler)), or point Walnut at a compiler with `--cxx` or `WALNUT_CXX`.
 
 **`walnut init` says the download failed or isn't the expected file**
-The download was interrupted or changed on the way. Walnut deletes a file whose SHA-256 doesn't match instead of using it. Run `walnut init` again. Behind a proxy that blocks GitHub downloads, install MSYS2's compiler instead (see [Installing](#installing)).
+The download was interrupted or changed on the way. Walnut deletes a file whose SHA-256 doesn't match instead of using it. Run `walnut init` again. Behind a proxy that blocks GitHub downloads, use the `-with-compiler` download instead.
 
 **`walnut: runtime header not found`**
 The `runtime` folder isn't next to `bin` any more. Keep the extracted folder together, or point at it with `--runtime <dir>` or `WALNUT_RUNTIME_DIR`.
 
 **Linker errors on Windows**
-The MSYS2 environment doesn't match the download. For example, the `ucrt64` download needs the UCRT64 compiler. `walnut init --status` shows which compiler Walnut is using, and `walnut init --force` switches to the matching one.
+The compiler isn't llvm-mingw (for example MSYS2's GCC, whose C++ library doesn't match Walnut's). `walnut init --status` shows which compiler Walnut is using, and `walnut init --force` switches to the matching one.
 
 **`undefined reference` errors mentioning X11, Pango, Cairo or OpenSSL**
 Your C or C++ code uses a part of Fizmo that needs those libraries, and they aren't installed. Walnut lists the ones it couldn't find; install their development packages (for example `libx11-dev` on Debian or Ubuntu).

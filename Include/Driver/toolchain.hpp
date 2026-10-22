@@ -27,6 +27,10 @@ std::filesystem::path root();
 
 std::filesystem::path install_dir(const Pinned& p);
 
+std::filesystem::path bundle_dir();
+
+std::optional<std::filesystem::path> bundled_compiler();
+
 std::optional<std::filesystem::path> installed_compiler();
 
 std::vector<std::filesystem::path> installed_path_dirs();

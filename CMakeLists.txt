@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(walnut VERSION 0.1.29 LANGUAGES CXX)
+project(walnut VERSION 0.1.30 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(FetchContent)
 FetchContent_Declare(fizmo
     GIT_REPOSITORY https://github.com/ThatNewCoderJSCpp/Fizmo.git
-    GIT_TAG        v0.2.34
+    GIT_TAG        v0.2.35
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(fizmo)
 
@@ -257,6 +257,8 @@ if(WALNUT_PACKAGE)
         check_cxx_source_compiles("#include <cstdlib>\n#ifndef _UCRT\n#error msvcrt\n#endif\nint main() { return 0; }" WALNUT_MINGW_UCRT)
         if(_walnut_arch STREQUAL "arm64")
             set(_walnut_platform windows-clangarm64)
+        elseif(_walnut_arch STREQUAL "i686")
+            set(_walnut_platform windows-i686)
         elseif(WALNUT_MINGW_UCRT)
             set(_walnut_platform windows-ucrt64)
         else()
