@@ -152,7 +152,7 @@ jobs:
   windows:
     name: Windows ${{ matrix.platform }}
     needs: version
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -175,6 +175,7 @@ jobs:
       LLVM_MINGW_TARGET: ${{ matrix.target }}
       LLVM_MINGW_DEPS: ${{ github.workspace }}/windows-deps
       WINEDEBUG: -all
+      WINEPREFIX: ${{ github.workspace }}/.wineprefix
     steps:
       - uses: actions/checkout@v4
 

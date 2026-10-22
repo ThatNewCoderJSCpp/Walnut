@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(walnut VERSION 0.1.30 LANGUAGES CXX)
+project(walnut VERSION 0.1.32 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(FetchContent)
 FetchContent_Declare(fizmo
     GIT_REPOSITORY https://github.com/ThatNewCoderJSCpp/Fizmo.git
-    GIT_TAG        v0.2.35
+    GIT_TAG        v0.2.37
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(fizmo)
 
@@ -18,6 +18,21 @@ option(WALNUT_PACKAGE "Build Walnut as a standalone download that finds its runt
 
 add_executable(walnut_special_names_gen "${CMAKE_CURRENT_SOURCE_DIR}/Tools/special_names/special_names_gen.cpp")
 target_compile_features(walnut_special_names_gen PRIVATE cxx_std_17)
+set(WALNUT_SPECIAL_NAMES_GENERATOR walnut_special_names_gen)
+if(CMAKE_CROSSCOMPILING)
+    find_program(WALNUT_HOST_CXX NAMES c++ g++ clang++ NO_CMAKE_FIND_ROOT_PATH)
+    if(NOT WALNUT_HOST_CXX)
+        message(FATAL_ERROR "Cross-compiling Walnut needs a C++ compiler for this machine too, to build walnut_special_names_gen; set WALNUT_HOST_CXX")
+    endif()
+    set(WALNUT_SPECIAL_NAMES_GENERATOR "${CMAKE_CURRENT_BINARY_DIR}/host/walnut_special_names_gen")
+    add_custom_command(
+        OUTPUT "${WALNUT_SPECIAL_NAMES_GENERATOR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/host"
+        COMMAND "${WALNUT_HOST_CXX}" -std=c++17 -O1 "${CMAKE_CURRENT_SOURCE_DIR}/Tools/special_names/special_names_gen.cpp" -o "${WALNUT_SPECIAL_NAMES_GENERATOR}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Tools/special_names/special_names_gen.cpp"
+        COMMENT "Building walnut_special_names_gen for this machine"
+        VERBATIM)
+endif()
 set(WALNUT_SPECIAL_NAMES_JSON "${CMAKE_CURRENT_SOURCE_DIR}/Data/special_names.json" CACHE FILEPATH "The JSON file of \\s{...} character names Walnut is built with")
 set(WALNUT_SPECIAL_NAMES_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/special_names")
 set(WALNUT_SPECIAL_NAMES_CPP "${WALNUT_SPECIAL_NAMES_DIR}/special_names.cpp")
@@ -25,9 +40,9 @@ set(WALNUT_SPECIAL_NAMES_RUNTIME "${WALNUT_SPECIAL_NAMES_DIR}/runtime/walnut_spe
 file(MAKE_DIRECTORY "${WALNUT_SPECIAL_NAMES_DIR}/runtime")
 add_custom_command(
     OUTPUT "${WALNUT_SPECIAL_NAMES_CPP}" "${WALNUT_SPECIAL_NAMES_RUNTIME}"
-    COMMAND walnut_special_names_gen lexer "${WALNUT_SPECIAL_NAMES_JSON}" "${WALNUT_SPECIAL_NAMES_CPP}"
-    COMMAND walnut_special_names_gen runtime "${WALNUT_SPECIAL_NAMES_JSON}" "${WALNUT_SPECIAL_NAMES_RUNTIME}"
-    DEPENDS walnut_special_names_gen "${WALNUT_SPECIAL_NAMES_JSON}"
+    COMMAND ${WALNUT_SPECIAL_NAMES_GENERATOR} lexer "${WALNUT_SPECIAL_NAMES_JSON}" "${WALNUT_SPECIAL_NAMES_CPP}"
+    COMMAND ${WALNUT_SPECIAL_NAMES_GENERATOR} runtime "${WALNUT_SPECIAL_NAMES_JSON}" "${WALNUT_SPECIAL_NAMES_RUNTIME}"
+    DEPENDS ${WALNUT_SPECIAL_NAMES_GENERATOR} "${WALNUT_SPECIAL_NAMES_JSON}"
     COMMENT "Generating the \\s{...} character names from special_names.json"
     VERBATIM)
 add_custom_target(walnut_special_names DEPENDS "${WALNUT_SPECIAL_NAMES_CPP}" "${WALNUT_SPECIAL_NAMES_RUNTIME}")
