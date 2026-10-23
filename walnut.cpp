@@ -147,6 +147,11 @@ void print_usage(std::ostream& os) {
           "  --cxx <compiler>   C++ compiler used by build and run (default: " WALNUT_DEFAULT_CXX ")\n"
           "  --cxx-flag <flag>  pass an extra flag to the C++ compiler\n"
           "  --runtime <dir>    directory containing walnut_runtime.hpp and the standard modules\n"
+          "  --runtime-libs <l> the libraries every program links, separated by ';' (also WALNUT_RUNTIME_LIBS);\n"
+          "                     point it at another platform's fizmo archives to cross-compile, e.g. for Android\n"
+          "  --optional-libs <l>, --optional-archives <l>\n"
+          "                     the libraries linked only when they're installed (also WALNUT_OPTIONAL_LIBS and\n"
+          "                     WALNUT_OPTIONAL_ARCHIVES); an empty list links none\n"
           "  -M <dir>           add a folder searched by 'import module.<name>' (also --module-dir)\n"
           "  --keep-cpp         keep the generated C++ next to the executable (builds without the cache)\n"
           "  --no-cache         build everything from scratch in a temporary folder, without the build cache\n"
@@ -238,6 +243,9 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     if (const char* env = std::getenv("WALNUT_RUNTIME_DIR")) if (*env) o.runtime_dir = env;
     if (const char* env = std::getenv("WALNUT_CXX")) if (*env) { o.cxx = env; o.cxx_from_user = true; }
     if (const char* env = std::getenv("WALNUT_MODULE_PATH")) if (*env) o.module_env_dirs = split_on(env, kPathListSeparator);
+    if (const char* env = std::getenv("WALNUT_RUNTIME_LIBS")) o.extra_libs = env;
+    if (const char* env = std::getenv("WALNUT_OPTIONAL_LIBS")) o.optional_libs = env;
+    if (const char* env = std::getenv("WALNUT_OPTIONAL_ARCHIVES")) o.optional_archives = env;
 
     exit_code = 0;
     if (argc < 2) { print_usage(std::cerr); exit_code = 2; return false; }
@@ -300,6 +308,9 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         else if (a == "--cxx")         { const char* v = need(i, a); if (!v) return false; o.cxx = v; o.cxx_from_user = true; }
         else if (a == "--cxx-flag")    { const char* v = need(i, a); if (!v) return false; o.cxx_flags.push_back(v); }
         else if (a == "--runtime")     { const char* v = need(i, a); if (!v) return false; o.runtime_dir = v; }
+        else if (a == "--runtime-libs") { const char* v = need(i, a); if (!v) return false; o.extra_libs = v; }
+        else if (a == "--optional-libs") { const char* v = need(i, a); if (!v) return false; o.optional_libs = v; }
+        else if (a == "--optional-archives") { const char* v = need(i, a); if (!v) return false; o.optional_archives = v; }
         else if (a == "-M" || a == "--module-dir") { const char* v = need(i, a); if (!v) return false; o.module_dirs.push_back(v); }
         else if (a == "--keep-cpp")    o.keep_cpp = true;
         else if (a == "--no-cache")    o.no_cache = true;
