@@ -115,6 +115,8 @@ inline std::string random_bytes(long long count) {
 
 inline bool secure_equals(const std::string& a, const std::string& b) { return fc::secure_equals(a, b); }
 
+inline bool strequal(const std::string& a, const std::string& b) { return fc::strequal(a, b); }
+
 inline unsigned long long crc32(const std::string& s) {
     static const std::array<std::uint32_t, 256> table = [] {
         std::array<std::uint32_t, 256> t{};

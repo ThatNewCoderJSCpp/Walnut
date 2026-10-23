@@ -79,7 +79,22 @@ Decoding text that isn't in the right form is a runtime error that says so.
 
 `random_bytes(count)` gives bytes from the operating system's secure random source. `random_token(bytes = 32)` gives that many random bytes as hex, `random_token_base64url(bytes = 32)` as base64url, and `uuid_v4()` a random UUID such as `0f8fad5b-d9cb-469f-a165-70867728950e`.
 
-`secure_equals(a, b)` compares two strings in time that doesn't depend on where they differ, which is how secrets such as tokens and MACs should be compared.
+`secure_equals(a, b)` compares two strings in time that doesn't depend on where they differ, which is how secrets such as tokens and MACs should be compared. It still answers at once when the lengths differ.
+
+`strequal(a, b)` goes further: it never stops early. It goes through every character of the longer string, notes any difference (including a difference in length) and only gives its answer at the end, so the time it takes depends only on the longer length. Use it to check a password or token typed by a user against the real one.
+
+```walnut
+import module.crypto
+
+function main() -> int {
+    bool: same = std::crypto::strequal("s3cret-token", "s3cret-token");
+    bool: wrong = std::crypto::strequal("s3cret-token", "s3cret-tokem");
+    bool: short = std::crypto::strequal("s3cret-token", "s3cret");
+    return 0;
+} end function main
+```
+
+Here `same` is `true`, and `wrong` and `short` are `false`.
 
 ## Checksums
 

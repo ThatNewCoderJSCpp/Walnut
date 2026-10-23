@@ -216,6 +216,22 @@ nodes::ASTNode* Parser::parse_expression_pratt(int min_precedence) {
             else if (op == tokenizing::Token::Kind::Identifier && current_token().lexeme() == "not" && lookahead(1).kind() == tokenizing::Token::Kind::InKeyword) { skip = 2; negate = true; }
             else if (op == tokenizing::Token::Kind::ExclamationMark && lookahead(1).kind() == tokenizing::Token::Kind::InKeyword) { skip = 2; negate = true; }
 
+            const auto has_word = [](const tokenizing::Token& t) { return t.kind() == tokenizing::Token::Kind::Identifier && t.lexeme() == "has"; };
+            std::size_t has_skip = 0;
+            if (has_word(current_token())) has_skip = 1;
+            else if (op == tokenizing::Token::Kind::ExclamationMark && has_word(lookahead(1))) { has_skip = 2; negate = true; }
+            else if (op == tokenizing::Token::Kind::Identifier && current_token().lexeme() == "not" && has_word(lookahead(1))) { has_skip = 2; negate = true; }
+
+            if (has_skip) {
+                const std::uint32_t at = static_cast<std::uint32_t>(current_token().line());
+                const char* op_at = current_token().data();
+                for (std::size_t i = 0; i < has_skip; ++i) advance();
+                nodes::ASTNode* value = parse_expression_pratt(to_int(Precedence::Comparison) + 1);
+                left = make_in_test(value, left, negate, at);
+                if (left && !left->at) left->at = op_at;
+                continue;
+            }
+
             if (skip) {
                 const std::uint32_t at = static_cast<std::uint32_t>(current_token().line());
                 const char* op_at = current_token().data();

@@ -878,7 +878,7 @@ From lowest to highest precedence:
 | `^` | Bitwise xor |
 | `&` | Bitwise and |
 | `== !=` | Also written `===` and `!==` |
-| `< <= > >=`, `in`, `not in`, `is`, `as` | Comparison, [membership](#in-and-not-in) and [type checks](#checking-types-with-is-and-as) |
+| `< <= > >=`, `in`, `not in`, `has`, `is`, `as` | Comparison, [membership](#in-and-not-in) and [type checks](#checking-types-with-is-and-as) |
 | `<< >>` | Shifts |
 | `+ -` | |
 | `* / %` | |
@@ -951,6 +951,7 @@ Here `a`, `b`, `c`, `d` and `e` are `true`, and `f` is `false`.
 - `x in {1, 9, 25}` compares `x` with each value, which is shorter than a chain of `==` and `||`.
 - `in` and `not in` sit with `<` and the other comparisons, so `a + 1 in items` means `(a + 1) in items`.
 - `for (T: x in items)` is still a loop; `in` is only an operator outside a `for`'s parentheses.
+- `items has x` is the same test written the other way round, and `items !has x` (or `items not has x`) is its opposite. `has` is only special between two values, so it can still be used as a name.
 
 ### Slices
 
