@@ -239,5 +239,260 @@ namespace std {
         function nothing() -> Optional<T> {
             return Optional<T>();
         } end function nothing
+
+        template <typename T, typename E>
+        class Result {
+            Optional<T>: m_value;
+            Optional<E>: m_error;
+
+        public:
+            using value_type = T;
+            using error_type = E;
+
+            constructor() { }
+
+            static function ok(const T&: value) -> Result {
+                Result: out;
+                out.m_value.set(value);
+                return out;
+            } end function ok
+
+            static function err(const E&: error) -> Result {
+                Result: out;
+                out.m_error.set(error);
+                return out;
+            } end function err
+
+            function is_ok() const -> bool {
+                return m_value.has_value();
+            } end function is_ok
+
+            function is_err() const -> bool {
+                return !m_value.has_value();
+            } end function is_err
+
+            operator(bool) function() const explicit {
+                return m_value.has_value();
+            }
+
+            function value() const -> const T& {
+                if (!m_value.has_value()) then {
+                    throw std::errors::optional_error("value() on a Result that holds an error");
+                }
+                return m_value.value();
+            } end function value
+
+            function error() const -> const E& {
+                if (!m_error.has_value()) then {
+                    throw std::errors::optional_error("error() on a Result that holds a value");
+                }
+                return m_error.value();
+            } end function error
+
+            function value_or(const T&: fallback) const -> T {
+                return m_value.has_value() ? m_value.value() : fallback;
+            } end function value_or
+
+            function ok_value() const -> Optional<T> {
+                return m_value;
+            } end function ok_value
+
+            function err_value() const -> Optional<E> {
+                return m_error;
+            } end function err_value
+
+            template <typename U>
+            function map(std::Transform<T, U>: func) const -> Result<U, E> {
+                if (m_value.has_value()) then {
+                    return Result<U, E>::ok(func(m_value.value()));
+                }
+                return Result<U, E>::err(m_error.value());
+            } end function map
+
+            template <typename F>
+            function map_error(std::Transform<E, F>: func) const -> Result<T, F> {
+                if (m_value.has_value()) then {
+                    return Result<T, F>::ok(m_value.value());
+                }
+                return Result<T, F>::err(func(m_error.value()));
+            } end function map_error
+
+            function to_string() const -> string {
+                if (m_value.has_value()) then {
+                    return "ok(" + std::core::to_string(m_value.value()) + ")";
+                }
+                return "error(" + std::core::to_string(m_error.value()) + ")";
+            } end function to_string
+
+            operator(==) function(const Result&: other) const -> bool {
+                return m_value == other.m_value && m_error == other.m_error;
+            }
+
+            operator(!=) function(const Result&: other) const -> bool {
+                return !(*this == other);
+            }
+        } end class Result
+
+        template <typename T>
+        struct Ok {
+            T: value;
+
+            template <typename E>
+            operator(Result<T, E>) function() const {
+                return Result<T, E>::ok(value);
+            }
+        } end struct Ok
+
+        template <typename E>
+        struct Err {
+            E: error;
+
+            template <typename T>
+            operator(Result<T, E>) function() const {
+                return Result<T, E>::err(error);
+            }
+        } end struct Err
+
+        template <typename T>
+        function ok(const T&: value) -> Ok<T> {
+            return Ok<T>{value};
+        } end function ok
+
+        template <typename E>
+        function error(const E&: error) -> Err<E> {
+            return Err<E>{error};
+        } end function error
+
+        namespace detail {
+            class Propagated {
+            public:
+                constructor() { }
+
+                function what() const virtual -> string {
+                    return "a '?' found nothing to unwrap";
+                } end function what
+            } end class Propagated
+
+            template <typename T>
+            function coalesce(T*: value, std::Supplier<T*>: fallback) -> T* {
+                if (value != nullptr) then {
+                    return value;
+                }
+                return fallback();
+            } end function coalesce
+
+            template <typename T>
+            function coalesce(const Optional<T>&: value, std::Supplier<T>: fallback) -> T {
+                if (value.has_value()) then {
+                    return value.value();
+                }
+                return fallback();
+            } end function coalesce
+
+            template <typename T>
+            function coalesce(const Optional<T>&: value, std::Supplier<Optional<T>>: fallback) -> Optional<T> {
+                if (value.has_value()) then {
+                    return value;
+                }
+                return fallback();
+            } end function coalesce
+
+            template <typename P>
+            concept pointer_object = requires (const P&: p) { p.get(); p.get() == nullptr; } && !requires (const P&: p) { p.has_value(); }
+
+            template <typename U>
+            concept optional_object = requires (const U&: u) { u.has_value(); u.value_or(u.value()); }
+
+            template <typename U>
+            constexpr bool: empty_means_nothing = std::traits::is_pointer<U> || pointer_object<U> || optional_object<U>;
+
+            template <typename T, typename F>
+            function chain(const Optional<T>&: value, F: step) -> {
+                using U = std::traits::discard_cv<typeof(step(value.value()))>;
+                using R = std::traits::conditional<empty_means_nothing<U>, U, Optional<U>>;
+                if (value.has_value()) then {
+                    return R(step(value.value()));
+                }
+                return R();
+            } end function chain
+
+            template <typename T, typename F>
+            function chain(T*: value, F: step) -> {
+                using U = std::traits::discard_cv<typeof(step(*value))>;
+                using R = std::traits::conditional<empty_means_nothing<U>, U, Optional<U>>;
+                if (value != nullptr) then {
+                    return R(step(*value));
+                }
+                return R();
+            } end function chain
+
+            template <typename P, typename F>
+            requires pointer_object<P>
+            function chain(const P&: value, F: step) -> {
+                using U = std::traits::discard_cv<typeof(step(*value.get()))>;
+                using R = std::traits::conditional<empty_means_nothing<U>, U, Optional<U>>;
+                if (value.get() != nullptr) then {
+                    return R(step(*value.get()));
+                }
+                return R();
+            } end function chain
+
+            template <typename P, typename F>
+            requires pointer_object<P>
+            function coalesce(const P&: value, F: fallback) -> P {
+                if (value.get() != nullptr) then {
+                    return value;
+                }
+                return fallback();
+            } end function coalesce
+
+            template <typename E>
+            class PropagatedError inherits Propagated {
+            public:
+                E: error;
+
+                constructor(const E&: e) : error = e { }
+
+                function what() const override -> string {
+                    return "a '?' found an error";
+                } end function what
+            } end class PropagatedError
+
+            template <typename R>
+            concept optional_like = requires (R: r) { r.has_value(); r.reset(); }
+
+            template <typename R>
+            concept result_like = requires (R: r) { r.is_ok(); r.error(); }
+
+            template <typename T>
+            function unwrap(const Optional<T>&: value) -> T {
+                if (!value.has_value()) then {
+                    throw Propagated();
+                }
+                return value.value();
+            } end function unwrap
+
+            template <typename T, typename E>
+            function unwrap(const Result<T, E>&: result) -> T {
+                if (result.is_err()) then {
+                    throw PropagatedError<E>(result.error());
+                }
+                return result.value();
+            } end function unwrap
+
+            template <typename R>
+            function propagate(const Propagated&: missing) -> R {
+                static_assert(optional_like<R> || result_like<R>, "'?' can only be used in a function that returns an Optional or a Result");
+                if constexpr (optional_like<R>) then {
+                    return R();
+                } else then {
+                    const PropagatedError<R::error_type>*: failed = dynamic_cast<const PropagatedError<R::error_type>*>(&missing);
+                    if (failed == nullptr) then {
+                        throw std::errors::optional_error("'?' found an empty Optional, but this function returns a Result, which needs an error to pass on");
+                    }
+                    return R::err(failed->error);
+                }
+            } end function propagate
+        } end namespace detail
     } end namespace optional
 } end namespace std

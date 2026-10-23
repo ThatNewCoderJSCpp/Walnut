@@ -147,10 +147,19 @@ nodes::ASTNode* Parser::parse_for_each_loop() {
 bool Parser::looks_like_for_each() {
     using K = tokenizing::Token::Kind;
     if (lookahead(1).kind() != K::LeftParen) { return false; }
-    int paren = 1, square = 0, curly = 0;
+    int paren = 1, square = 0, curly = 0, angle = 0;
+    bool in_type = true;
 
     for (std::size_t i = 2; ; ++i) {
         const tokenizing::Token& t = lookahead(i);
+
+        if (in_type && paren == 1) {
+            if (t.kind() == K::Colon || t.kind() == K::Equal || t.kind() == K::Semicolon) in_type = false;
+            else if (t.kind() == K::LessThan) { ++angle; continue; }
+            else if (t.kind() == K::GreaterThan && angle > 0) { --angle; continue; }
+            else if (t.kind() == K::DoubleGreaterThan && angle > 0) { angle = angle > 1 ? angle - 2 : 0; continue; }
+            else if (t.kind() == K::Comma && angle > 0) continue;
+        }
 
         switch (t.kind()) {
             case K::End: return false;

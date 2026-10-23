@@ -40,6 +40,8 @@ ASTNode* VariableDeclaration::clone_into(Arena& a) const {
     else                         c = make_in<VariableDeclaration>(a, m_type_info.clone_into(a), m_name,     clone_child(m_initializer, a), line);
     c->direct_init = direct_init;
     c->pack_field = pack_field;
+    c->receiver_copy = receiver_copy;
+    c->synthetic = synthetic;
     copy_base_to(c);
     return c;
 }

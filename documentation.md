@@ -35,8 +35,9 @@ This file describes the language itself. Walnut's library is documented separate
 25. [Files, imports and modules](#files-imports-and-modules)
 26. [Calling C and C++](#calling-c-and-c)
 27. [The preprocessor](#the-preprocessor)
-28. [The command line](#the-command-line)
-29. [Left out on purpose](#left-out-on-purpose)
+28. [Safe code](#safe-code)
+29. [The command line](#the-command-line)
+30. [Left out on purpose](#left-out-on-purpose)
 
 ## A first program
 
@@ -870,20 +871,20 @@ From lowest to highest precedence:
 | Operators | Notes |
 |---|---|
 | `= += -= *= /= %= **= &= \|= ^= <<= >>=` | Assignment, right to left; `a = b = 5` works |
-| `? :` | Conditional |
+| `? :`, `??` | Conditional, and [`??`](#missing-values-and-errors) for a fallback; both right to left |
 | `\|\|` | Logical or |
 | `&&` | Logical and |
 | `\|` | Bitwise or |
 | `^` | Bitwise xor |
 | `&` | Bitwise and |
 | `== !=` | Also written `===` and `!==` |
-| `< <= > >=`, `is`, `as` | Comparison and [type checks](#checking-types-with-is-and-as) |
+| `< <= > >=`, `in`, `not in`, `is`, `as` | Comparison, [membership](#in-and-not-in) and [type checks](#checking-types-with-is-and-as) |
 | `<< >>` | Shifts |
 | `+ -` | |
 | `* / %` | |
 | `**` | Power, right to left |
 | `- + ! ~ * & ++ --` | Prefix |
-| `++ -- [] () . -> ::` | Postfix, member access, scope |
+| `++ -- [] () . -> :: ?. ?` | Postfix, member access, scope, [slices](#slices) (`v[a:b]`) and [missing values](#missing-values-and-errors) (`?.` and `?`) |
 
 ```walnut
 function main() -> int {
@@ -921,6 +922,143 @@ Integer division or `%` by zero doesn't stop the program: it gives `undefined` (
 - `&&`, `||` and `!` accept anything that can be tested as true or false: numbers, pointers, `bool`.
 
 **Mixing number types** widens to the larger type: `int + float` is a `float`, and `int + long int` is a `long int`.
+
+### in and not in
+
+`x in items` is `true` when `items` holds a value equal to `x`, and `x not in items` (also written `x !in items`) is the opposite. `items` can be anything a [`for ... in` loop](#loops) can go through: an array, a string, a container from the [collections library](Documentation/Library/collections.md), or a brace list.
+
+```walnut
+import module.collections
+
+function main() -> int {
+    std::collections::Vector<int>: primes = {2, 3, 5, 7};
+    std::collections::OrderedMap<string, int>: ages;
+    ages["ann"] = 31;
+    bool: a = 5 in primes;
+    bool: b = 4 not in primes;
+    bool: c = 'e' in "hello";
+    bool: d = 9 in {1, 9, 25};
+    bool: e = "ann" in ages;
+    bool: f = "bob" in ages;
+    return 0;
+} end function main
+```
+
+Here `a`, `b`, `c`, `d` and `e` are `true`, and `f` is `false`.
+
+- A container with a `contains` method uses it, so `in` on a set or a map is a quick lookup, and on a map it checks the keys.
+- Anything else is searched from the start, comparing each element with `==`.
+- `x in {1, 9, 25}` compares `x` with each value, which is shorter than a chain of `==` and `||`.
+- `in` and `not in` sit with `<` and the other comparisons, so `a + 1 in items` means `(a + 1) in items`.
+- `for (T: x in items)` is still a loop; `in` is only an operator outside a `for`'s parentheses.
+
+### Slices
+
+`v[start:stop]` gives a copy of the elements of a `Vector`, `DynamicArray` or `SmallVector` from `start` up to, but not including, `stop`, the same as in Python. `v[start:stop:step]` takes every `step`th one.
+
+```walnut
+import module.collections
+
+function main() -> int {
+    std::collections::Vector<int>: v = {10, 20, 30, 40, 50};
+    auto: middle = v[1:4];
+    auto: tail = v[2:];
+    auto: last_two = v[-2:];
+    auto: every_other = v[::2];
+    auto: backwards = v[::-1];
+    auto: too_far = v[3:100];
+    return 0;
+} end function main
+```
+
+Here `middle` holds `20, 30, 40`, `tail` holds `30, 40, 50`, `last_two` holds `40, 50`, `every_other` holds `10, 30, 50`, `backwards` holds `50, 40, 30, 20, 10` and `too_far` holds `40, 50`.
+
+- A slice is a new container of the same kind, so changing it doesn't change `v`.
+- Any of the three parts can be left out. A missing `start` or `stop` means the beginning or the end (the other way round when `step` is negative), and a missing `step` is `1`.
+- A negative `start` or `stop` counts from the end, so `-1` is the last element. A value past either end is moved back to that end instead of being an error.
+- A `step` of `0` throws a `std::errors::collection_error`.
+- When the step is a name rather than a number, put a space between the colons, as in `v[: :k]` or `v[1: :k]`, because `::k` would be read as a [qualified name](#namespaces).
+- Only slices count from the end. A plain `v[-1]` is still an index out of range.
+- A slice calls the container's `sliced(start, stop, step, has_start, has_stop)` method, which a class of your own can provide to support slices too.
+
+### Missing values and errors
+
+Three operators handle values that might be missing: an [`Optional`](Documentation/Library/optional.md), a pointer, or a smart pointer from the [memory library](Documentation/Library/memory.md). `?` also works with a [`Result`](Documentation/Library/optional.md#result), which holds either a value or an error. The `optional` library is always loaded, so none of this needs an `import`.
+
+| Written | Gives |
+|---|---|
+| `a ?? b` | The value in `a`, or `b` when `a` is empty or `nullptr`. `b` is only worked out when it's needed |
+| `a?.name`, `a?.method(...)` | The member when `a` has a value, or an empty result when it doesn't |
+| `a?` | The value in `a`. When `a` is empty or holds an error, the function returns at once and passes that on |
+
+```walnut
+import module.memory
+
+using std::optional::Optional;
+using std::optional::Result;
+
+struct Node {
+    int: value;
+    std::memory::SharedPtr<Node>: next;
+} end struct Node
+
+function find_name(int: id) -> Optional<string> {
+    if (id == 1) then {
+        return Optional<string>("ann");
+    }
+    return std::optional::none;
+} end function find_name
+
+function name_length(int: id) -> Optional<int> {
+    string: name = find_name(id)?;
+    return Optional<int>(countof(name));
+} end function name_length
+
+function parse_digit(char: c) -> Result<int, string> {
+    if (c in "0123456789") then {
+        return std::optional::ok(static_cast<int>(c) - static_cast<int>('0'));
+    }
+    return std::optional::error("not a digit: " + c.to_string());
+} end function parse_digit
+
+function two_digits(char: a, char: b) -> Result<int, string> {
+    int: high = parse_digit(a)?;
+    int: low = parse_digit(b)?;
+    return std::optional::ok(high * 10 + low);
+} end function two_digits
+
+function main() -> int {
+    string: shown = find_name(2) ?? "anonymous";
+    Optional<int>: size = find_name(1)?.length();
+    auto: head = std::memory::make_shared<Node>();
+    head->value = 1;
+    int: second = head?.next?.value ?? -1;
+    Optional<int>: a = name_length(1);
+    Optional<int>: b = name_length(5);
+    Result<int, string>: good = two_digits('4', '2');
+    Result<int, string>: bad = two_digits('4', 'x');
+    return 0;
+} end function main
+```
+
+Here `shown` is `"anonymous"`, `size` holds `3`, `second` is `-1` because `head` has no `next`, `a` holds `3`, `b` is empty, `good` holds `42` and `bad` holds the error `"not a digit: x"`.
+
+**`??`**
+- With an `Optional<T>` on the left, the right side can be a `T`, giving a `T`, or another `Optional<T>`, giving an `Optional<T>`. So `a ?? b ?? 0` tries `a`, then `b`, then `0`.
+- With a pointer or a `SharedPtr` on the left, the right side is another one of the same type.
+- `??` sits with `? :` below `||`, and groups right to left.
+
+**`?.`**
+- When `a` has a value, `a?.x` is `a.x` for an `Optional` and `a->x` for a pointer or smart pointer.
+- The result is an `Optional` of the member's type, which is empty when `a` was. When the member is already an `Optional`, a pointer or a smart pointer, the result is that type instead, empty or `nullptr` when `a` was. That is what lets `head?.next?.value` follow a chain: `head?.next` is a `SharedPtr<Node>`, not an `Optional` of one.
+- Whatever follows the member (more `.x`, `(...)`, `[i]` or `->`) is part of the same step, so `a?.items[0]` doesn't index anything when `a` is empty.
+- The member has to give a value: a method that returns `void` can't be called with `?.`.
+
+**`?`**
+- `x?` works on an `Optional` or a `Result`, in a function or lambda whose result type is written out and is an `Optional` or a `Result`. Using it anywhere else is a compile error that points at the `?`.
+- In a function that returns an `Optional`, an empty `Optional` or a `Result` holding an error makes it return an empty `Optional`. In a function that returns a `Result`, a `Result` holding an error makes it return that same error. An empty `Optional` there throws a `std::errors::optional_error`, because there is no error to hand on.
+- `?` has to end its part of the expression: it is followed by `;`, `)`, `]`, `}` or `,`. Write `(x?) + 1`, not `x? + 1`, which would read as the start of `? :`.
+- It works by throwing a private exception that the function catches at its end, so a `catch (...)` around the `?` in the same function would catch it first.
 
 ## Conversions and casts
 
@@ -1164,6 +1302,33 @@ Here `found` is `32`: the search stops at `r` = 3, `c` = 2, and `continue rows` 
 - The label must belong to a loop around the jump; anything else is an error. A label is only visible inside its own loop, so two separate loops can use the same label.
 - Labelled jumps work in `constexpr` functions too.
 
+### Comprehensions
+
+`[expression for (T: x in items)]` builds a [`Vector`](Documentation/Library/collections.md) from a loop in one line, as in Python. An `if (condition)` clause keeps only some of the values, and more `for` clauses loop inside each other, from left to right.
+
+```walnut
+import module.collections
+
+function main() -> int {
+    std::collections::Vector<int>: numbers = {1, 2, 3, 4, 5, 6};
+    auto: squares = [n * n for (int: n in numbers)];
+    auto: even_squares = [n * n for (int: n in numbers) if (n % 2 == 0)];
+    auto: pairs = [a * 10 + b for (int: a in {1, 2}) for (int: b in {7, 8})];
+    std::collections::OrderedMap<string, int>: stock;
+    stock["apples"] = 3;
+    stock["pears"] = 0;
+    auto: available = [name for (auto: [name, count] in stock) if (count > 0)];
+    return 0;
+} end function main
+```
+
+Here `squares` holds `1, 4, 9, 16, 25, 36`, `even_squares` holds `4, 16, 36`, `pairs` holds `17, 18, 27, 28` and `available` holds `"apples"`.
+
+- The result is a `std::collections::Vector` of the expression's type, without `const`. A comprehension loads the collections library by itself, so it works without an `import`.
+- The `for` clauses are written like [`for ... in`](#loops), with a type or `auto` and with `[a, b]` unpacking, and can go through anything a `for ... in` can.
+- An `if` clause can use every name from the clauses before it, and later clauses can use earlier names: `[x + y for (int: x in xs) if (x > 0) for (int: y in ys)]`.
+- The expression and the conditions can use the variables around the comprehension.
+
 ### goto
 
 `goto name;` jumps to `label name;` in the same function. The label is a statement of its own, so no `:` is involved.
@@ -1305,6 +1470,172 @@ function main() -> int {
 
 Here `a` is `2` and `b` is `0`.
 
+### match
+
+`match` picks the first case whose pattern fits a value. It is like a `switch` that can also compare with `<`, test types, take structs and variadic parameters apart and name the parts, and it can be used both as a statement and as an expression that gives a value.
+
+```walnut
+function describe(int: n) -> string {
+    return match (n) {
+        case 0 => "zero",
+        case 1, 2, 3 => "small",
+        case < 0 => "negative",
+        case in {10, 100, 1000} => "round",
+        case _ if (n % 2 == 0) => "even",
+        default => "odd"
+    };
+} end function describe
+
+function main() -> int {
+    string: a = describe(2);
+    string: b = describe(-4);
+    string: c = describe(100);
+    string: d = describe(8);
+    string: e = describe(7);
+    return 0;
+} end function main
+```
+
+Here `a` is `"small"`, `b` is `"negative"`, `c` is `"round"`, `d` is `"even"` and `e` is `"odd"`.
+
+**Cases**
+- `case pattern => ...` runs when the pattern fits. Several patterns separated by commas fit when any of them does.
+- `case pattern if (condition) => ...` also needs the condition, which can use the names the pattern gives.
+- `default => ...` runs when no case fits, and has to be the last case.
+- Cases are tried in order and only the first one that fits runs. Nothing falls through, so no `break` is needed, and `break` or `continue` in a case acts on the loop around the `match`.
+- `match` is only special when it is followed by `(...)` and `{`, so a function or variable called `match` keeps working.
+
+**As a statement**, a case runs one statement or a block: `case 1 => count++;` or `case 1 => { ... }`. A `return` in it returns from the function.
+
+**As an expression**, a case gives a value, and the cases are separated by commas. Every case has to give the same type. When no case fits and there is no `default`, it throws a `std::errors::match_error`.
+
+**Patterns**
+
+| Pattern | Fits when |
+|---|---|
+| `5`, `"text"`, `Color::red`, `limit + 1` | The value is `==` to it |
+| `< 0`, `>= limit`, `!= 3`, `== x` | The comparison with the value is true |
+| `in items`, `not in items` | The value is, or isn't, [in](#in-and-not-in) `items`, which can be a brace list |
+| `_` | Always |
+| `T: name` | The value is a `T`; it is then called `name` |
+| `is T` | The value is a `T` |
+| `(p1, p2, ...)` | The value is a struct, tuple or fixed-size array whose parts fit `p1`, `p2` and so on |
+| `()`, `(p1, p2)`, `(first, rest...)` | On a variadic parameter: the arguments it got, see below |
+
+```walnut
+struct Point {
+    int: x;
+    int: y;
+} end struct Point
+
+class Shape {
+public:
+    function name() const virtual -> string { return "shape"; } end function name
+} end class Shape
+
+class Square inherits Shape {
+public:
+    int: side = 2;
+    function name() const override -> string { return "square"; } end function name
+} end class Square
+
+function kind(variant(int, string, double): v) -> string {
+    match (v) {
+        case int: n if (n > 100) => return "a big int";
+        case int: n => return "the int " + n.to_string();
+        case string: s => return "the string " + s;
+        default => return "something else";
+    }
+    return "";
+} end function kind
+
+function where(const Point&: p) -> string {
+    return match (p) {
+        case (0, 0) => "origin",
+        case (0, y) => "on the y axis at " + y.to_string(),
+        case (x, _) if (x < 0) => "left",
+        default => "right"
+    };
+} end function where
+
+function area(const Shape&: s) -> int {
+    return match (s) {
+        case Square: sq => sq.side * sq.side,
+        default => 0
+    };
+} end function area
+
+function main() -> int {
+    string: a = kind(7);
+    string: b = kind(500);
+    string: c = kind("hi");
+    string: d = where(Point{0, 4});
+    string: e = where(Point{-2, 9});
+    Square: sq;
+    int: f = area(sq);
+    return 0;
+} end function main
+```
+
+Here `a` is `"the int 7"`, `b` is `"a big int"`, `c` is `"the string hi"`, `d` is `"on the y axis at 4"`, `e` is `"left"` and `f` is `4`.
+
+**Type patterns.** On a [variant](#variants), a `var`, or a class with virtual functions (an object, a reference or a pointer), `T: name` checks the type while the program runs, the same as [`is` and `as`](#checking-types-with-is-and-as). On any other value it is decided from the value's type when the program is compiled. For a class type the name refers to the object itself, so nothing is copied; for a pointer or a built-in type such as `int` or `string` the name holds a copy. Write the pointer type to match a pointer: `case Square*: sq => sq->side`.
+
+**Taking a value apart.** Inside `( )` each part has its own pattern: a name gives that part the name, `_` skips it, `T: name` checks its type, and anything else (a literal, `< 0`, `in ...`) tests it. On a struct, a `std::collections::Tuple` or a fixed-size array this works like a [structured binding](#variables), so it needs one pattern for each part. A `( )` around a single value without a comma is just a value in parentheses.
+
+**Variadic parameters.** When the value is a variadic parameter, either a runtime one (`int...: xs`) or a template pack (`Ts...: args`), the patterns in `( )` describe its arguments:
+
+- `()` fits when there are none, `(a)` when there is exactly one, `(a, b)` when there are two, and so on.
+- `(first, rest...)` fits when there is at least one, and `rest` holds the others. `(a, b, ...)` fits two or more without naming the rest.
+- The arguments can be tested like any other parts: `(0, rest...)`, `(int: n, rest...)`, `(_, _, last)`.
+- For a template pack, `rest` is a pack too: `rest...` expands it, `countof(rest)` counts it and `rest[0]` reads from it. A case whose count or types can't fit the call is left out when the function is compiled for those arguments, the same as an `if constexpr`, so its code only has to make sense for the arguments it fits. Type patterns on a pack check the arguments' types when the program is compiled.
+- For a runtime variadic parameter, `rest` is an `array[]` of the remaining values, and `rest...` passes them on to another variadic parameter (see [Variadic parameters](#variadic-parameters)).
+- A variadic parameter only takes list patterns and `_`.
+
+```walnut
+template <typename... Ts>
+function total(Ts...: args) -> int {
+    return match (args) {
+        case () => 0,
+        case (first, rest...) => first + total(rest...)
+    };
+} end function total
+
+template <typename... Ts>
+function describe(Ts...: args) -> string {
+    return match (args) {
+        case () => "nothing",
+        case (int: n) => "one int, " + n.to_string(),
+        case (string: s, rest...) => "starts with " + s + ", then " + countof(rest).to_string() + " more",
+        default => "something else"
+    };
+} end function describe
+
+function largest(int...: xs) -> int {
+    match (xs) {
+        case () => return 0;
+        case (only) => return only;
+        case (first, rest...) => {
+            int: best = largest(rest...);
+            return first > best ? first : best;
+        }
+    }
+    return 0;
+} end function largest
+
+function main() -> int {
+    int: t = total(1, 2, 3);
+    string: a = describe();
+    string: b = describe(7);
+    string: c = describe("x", 1, 2.5);
+    string: d = describe(1.5);
+    int: m = largest(4, 9, 2);
+    return 0;
+} end function main
+```
+
+Here `t` is `6`, `a` is `"nothing"`, `b` is `"one int, 7"`, `c` is `"starts with x, then 2 more"`, `d` is `"something else"` and `m` is `9`.
+
 ## Functions
 
 ```walnut
@@ -1352,7 +1683,8 @@ Here `n` is `2`, `a` is `11`, `s` is `"ab"`, `t` is `6` and `applied` is `10`.
 **Parameters** are written like variables: `type: name`.
 - `T&` passes by reference, and `const T&` by read-only reference.
 - A parameter can have a default value (`int: b = 10`). It doesn't have to be the last parameter: when a call has no argument that fits it, it takes its default and the arguments go on to the next parameters. `function label(int: n = 1, string: s)` can be called as `label("x")` or `label(2, "x")`.
-- A parameter with a default can't be followed by a parameter of the same type unless a parameter that always needs an argument comes between them, because a call couldn't tell which one an argument is for. This also applies to [variadic parameters](#variadic-parameters) with a default, and to a variadic parameter coming after a defaulted one: `function f(int: a = 1, int...: rest)` is an error, while `function g(int: a = 1, string: s, int: b)` is fine.
+- A parameter with a default can't be followed by a parameter of the same type that has no default, unless a parameter that always needs an argument comes between them, because a call couldn't tell which one an argument is for. Two defaulted parameters of the same type are fine: plain arguments fill them from the left, and a [keyword argument](#keyword-arguments) can give any of them. The rule also applies to [variadic parameters](#variadic-parameters) with a default, and to a variadic parameter coming after a defaulted one: `function f(int: a = 1, int...: rest)` is an error, while `function g(int: a = 1, string: s, int: b)` and `function h(int: a = 1, int: b = 2)` are fine.
+- Any parameter can be given by name in a call, as in `h(b = 5)`. See [Keyword arguments](#keyword-arguments).
 - `T...: name`, `T...[3]: name` and `T...<3>: name` take several arguments at once. See [Variadic parameters](#variadic-parameters).
 - `function(int) -> int` is the type of a function (or lambda) that takes an `int` and returns an `int`. See [Function types](#function-types).
 
@@ -1439,6 +1771,66 @@ The rules behind this:
 - A parameter that gets no exact match can take a converted argument, using the normal [implicit conversions](#implicit-conversions). In `a2` the `int` `3` becomes a `double`. A `double` can't become an `int` this way, so `function p(double...: xs, int: y)` can't be called as `p(1.5, 2.5)`.
 - Once the arguments have moved on to a later parameter, they never go back to an earlier one. With `function k(int...: xs, double: y)`, the call `k(1, 2.5, 3)` is an error: `3` comes after `y` and there is nowhere left to put it.
 - An unbounded `T...` placed directly before another variadic parameter of the same type `T` is an error, because the first one would always take everything. A bounded one is fine: in `function c(int...[2]: xs, int...: ys)`, `c(1, 2, 3, 4, 5)` gives `xs` two values and `ys` three. An ordinary parameter after an unbounded one is also fine, because it always gets its argument first: in `function d(double...: xs, double: y)`, `d(1.5, 2.5, 3.5)` gives `y` the `3.5`.
+**Passing them on.** `name...` spreads a variadic parameter, or any array, into a call's arguments for another variadic parameter. It can be mixed with ordinary arguments, as in `sum(0, xs..., 100)`:
+
+```walnut
+function sum(int...: xs) -> int {
+    int: total = 0;
+    for (int: v in xs) {
+        total += v;
+    }
+    return total;
+} end function sum
+
+function sum_plus(int: extra, int...: xs) -> int {
+    return sum(xs...) + sum(extra, xs..., extra);
+} end function sum_plus
+
+function main() -> int {
+    array[] int: more = {4, 5};
+    int: a = sum_plus(10, 1, 2);
+    int: b = sum(more..., 6);
+    return 0;
+} end function main
+```
+
+Here `a` is `26` (`3 + 23`) and `b` is `15`. A spread array can only go to an unbounded `T...` parameter, because its length is only known when the program runs.
+
+### Keyword arguments
+
+An argument can be given by the name of its parameter: `name = value`. Named arguments come after the plain ones, can be in any order, and let a call skip parameters that have defaults.
+
+```walnut
+function box(int: width = 1, int: height = 1, int: depth = 1, string: label = "box") -> string {
+    return label + " " + (width * height * depth).to_string();
+} end function box
+
+class Window {
+public:
+    int: width;
+    int: height;
+    constructor(int: w = 640, int: h = 480) : width = w, height = h { }
+} end class Window
+
+function main() -> int {
+    string: a = box(2, depth = 5);
+    string: b = box(label = "crate", height = 3);
+    string: c = box(4, 5, 6);
+    Window: tall(h = 900);
+    Window: wide = Window(w = 1920);
+    return 0;
+} end function main
+```
+
+Here `a` is `"box 10"`, `b` is `"crate 3"`, `c` is `"box 120"`, `tall` is 640 by 900 and `wide` is 1920 by 480.
+
+- They work for functions, methods, template functions and constructors, both as `T(name = value)` and as `T: x(name = value)`.
+- A parameter that is skipped gets its default. Skipping one that has no default is an error that names it.
+- A name that isn't a parameter, a parameter named twice, or one a plain argument already filled is an error, and the message lists the parameters.
+- A variadic parameter can't be named; its values are passed as plain arguments.
+- In a template function, a parameter whose type depends on the template can be named but not skipped.
+- With overloads, the first overload that has every name in the call is the one used.
+- If no overload has a parameter with that name, `name = value` is an ordinary assignment passed as an argument, as it always was, so older code keeps its meaning.
 
 ### Function types
 
@@ -1660,7 +2052,9 @@ Here `big` is `9`, `later` is `"b"`, `fifteen` is `15` and `mixed` is `3.5`.
 - `Ts...: args` declares the matching parameters.
 - `args...` expands them, for example into another call.
 - `countof(args)` is how many arguments were passed.
+- `args[0]`, `args[1]` and so on are the arguments one at a time. The index has to be a constant, because each argument can have a different type.
 - Fold expressions combine all of them with one operator: `(args + ...)`, `(args + ... + 0)`, `(args && ...)`.
+- [`match`](#match) can take a pack apart into its first argument and the rest, which is the usual way to handle one argument at a time.
 
 ```walnut
 template <typename... Ts>
@@ -2094,6 +2488,7 @@ Here `got` is `17`, `c.reads` is `1`, `made` is `1`, and `p` is `{7, 8}`.
 - `lazy` fields are computed the first time they are read; see [Lazy fields](#lazy-fields).
 - `this` is a pointer to the current object: use `this->x` and `*this`.
 - `self` is the current object itself, the same as `*this`: `self.x`, `return self;`, and `self(x)` to call the object's own `operator(())`. In a `const` method it is `const`. A lambda that captures `[this]` can use `self` too.
+- A method can also name its object as its first parameter, as in `function get(const self&) -> int`. See [Receivers](#receivers).
 
 **Construction**
 - `Point{7, 8}` sets the fields in order (aggregate initialization).
@@ -2103,6 +2498,61 @@ Here `got` is `17`, `c.reads` is `1`, `made` is `1`, and `p` is `{7, 8}`.
 - A constructor whose only parameter is a [`std::initializer_list<T>`](Documentation/Library/core.md#stdinitializer_list) is chosen first for a brace list whose values all convert to `T`, as in C++: `Bag: b = {1, 2, 3};` passes all three values to it. Parentheses skip that rule, so `Bag: b(1, 2);` still calls a two-parameter constructor.
 
 **Forward declaration.** `class Name;` declares a class before its definition.
+
+### Receivers
+
+A method can say how it uses its object by taking a receiver as its first parameter, the way Rust's methods take `self`. The receiver is written on its own, with no type or name:
+
+```walnut
+class Counter {
+public:
+    int: value = 10;
+
+    function get(const self&) -> int {
+        return self.value;
+    } end function get
+
+    function bump(self&, int: by) -> Counter& {
+        self.value += by;
+        return self;
+    } end function bump
+
+    function plus_one(self) -> Counter {
+        self.value += 1;
+        return self;
+    } end function plus_one
+
+    function take(self&&) -> int {
+        return self.value * 2;
+    } end function take
+} end class Counter
+
+function main() -> int {
+    Counter: c;
+    c.bump(5).bump(1);
+    const Counter: k = c;
+    Counter: d = k.plus_one();
+    int: taken = Counter().take();
+    return 0;
+} end function main
+```
+
+Here `c.get()` is `16`, `d.get()` is `17` while `k` stays `16`, and `taken` is `20`.
+
+| Receiver | What the method gets | In Rust | Can be called on |
+|---|---|---|---|
+| `const self&` | The object, read-only. The same as writing `const` after the parameters | `&self` | Any object, `const` or not |
+| `self&` | The object, and it can change it | `&mut self` | Objects that aren't `const` |
+| `self` | Its own copy of the object, which it can change freely; the caller's object is left as it was | `self` (but copied, not moved) | Any object |
+| `const self` | Its own read-only copy | | Any object |
+| `self&&` | The object, only when it's about to go away: a temporary such as `Counter()`, or `std::core::move(c)`. It can take the object's parts | `self` | Temporaries and moved objects |
+
+- Inside a method with a receiver, the object's fields and methods are always reached through `self` (or `this->`): `self.value`, `self.helper()`. A bare `value` or `helper()` is an error that says what to write instead. `static` members are still written on their own or as `Counter::name`.
+- A receiver says everything `const`, `&` and `&&` after the parameters would, so a method can't have both.
+- With `self` or `const self`, `self` is the copy, so `this` (which points to the caller's object) is an error.
+- Receivers are only for methods, including operators: `operator(+) function(const self&, const Vec2&: other) -> Vec2`. Free functions, `static` methods, constructors, destructors and lambdas can't have one.
+- A method defined outside its class repeats the receiver: `function Vec2::length(const self&) -> float { ... } end function Vec2::length`.
+- Methods without a receiver work as before. In [safe code](#safe-code), every method needs one.
 
 ### Lazy fields
 
@@ -3557,6 +4007,83 @@ function main() -> int {
 
 Here `myvalue` is `16`, `spelled` is `"a + b"`, and `build` is `"release"` (or `"debug"` with `-D DEBUG`).
 
+## Safe code
+
+`safe` marks code that follows stricter rules, in the spirit of Rust: no raw pointer tricks, objects named explicitly, integer overflow caught, and the [ownership checks](#safety-checks) always on. Code that isn't marked works exactly as before, so a program can be made safe one function or class at a time.
+
+```walnut
+import module.io
+import module.memory
+
+safe class Account {
+    long int: balance = 0;
+public:
+    function deposit(self&, long int: amount) -> void {
+        self.balance += amount;
+    } end function deposit
+
+    function total(const self&) -> long int {
+        return self.balance;
+    } end function total
+} end class Account
+
+safe function main() -> int {
+    Account: a;
+    a.deposit(40);
+    auto: shared = std::memory::make_shared<Account>();
+    shared->deposit(2);
+    std::io::println(a.total() + shared->total());
+    return 0;
+} end function main
+```
+
+This prints `42`.
+
+**Marking code safe**
+
+| Written | What is safe |
+|---|---|
+| `safe function f() -> int { ... }` | One function |
+| `safe class Name { ... }`, `safe struct`, `safe union` | Every method, constructor and destructor of the class, including ones defined outside it |
+| `safe namespace name { ... } end namespace name` | Everything in the namespace |
+| `safe { ... } end safe` | Every declaration inside, at file or namespace level; use it to make a whole file safe |
+| `safe { ... }` inside a function | The statements in the block |
+
+`safe` is only special in these places, so it can still be used as a name elsewhere. Lambdas and nested functions follow the code around them.
+
+Code that isn't marked `safe` can already do anything, so there is no `unsafe` keyword. When safe code needs something the rules don't allow, that part goes in a function that isn't marked `safe`, and the safe code calls it.
+
+**The rules.** Breaking one is a compile error that says what to do instead.
+
+- **Methods name their object.** Every method that isn't `static` takes a [receiver](#receivers), and fields and methods are reached through `self` or `this->`.
+- **No raw pointer operations.** `new`, `delete`, reading through a pointer with `*p`, `p->x` or `p[i]`, pointer arithmetic, and `++`/`--` on a pointer are errors. `this->x` and `self` are fine, and so are references, `std::memory::UniquePtr` and `SharedPtr` (`make_unique`, `make_shared`), `std::optional::Optional`, and the containers in `std::collections`. Taking an address with `&x` is allowed, and the pointer can be passed on, but only code that isn't marked `safe` can use it.
+- **No escape hatches.** `reinterpret_cast`, `const_cast`, reading or writing a field of a `union`, `goto`, and `extern "C"` or `extern "C++"` code blocks are errors.
+- **Integer overflow stops the program.** `+`, `-`, `*`, negation, `++`, `--` and the compound assignments (`+=` and so on) on integers are checked while the program runs, and a result that doesn't fit stops it with `walnut runtime error: integer overflow in safe code: ...` and exit code 70. Outside safe code they wrap around, unless the program is built with `--check-overflow`.
+- **Ownership is checked.** The compile-time checks of [`--ownership`](#safety-checks) (use after move, use after `delete`, references and pointers to locals that are gone) run on every safe function without the flag, and what would be warnings there are errors.
+- **`switch` is exhaustive.** A case can't fall through to the next one unless it ends with `fallthrough;`, and a `switch` on an enum must handle every value or have a `default:`.
+
+```walnut
+function read_second(int*: p) -> int {
+    return *(p + 1);
+} end function read_second
+
+safe function second(int: a, int: b) -> int {
+    array[2] int: both = {a, b};
+    return read_second(&both[0]);
+} end function second
+
+function main() -> int {
+    int: got = second(4, 9);
+    return 0;
+} end function main
+```
+
+Here `got` is `9`. Writing `*(&both[0] + 1)` inside `second` would be two errors, one for the arithmetic and one for reading through the pointer; `read_second` isn't marked `safe`, so it may do both.
+
+- A `safe { }` block inside an ordinary function gets the operation, overflow and `switch` rules. The ownership checks only run on functions that are safe as a whole.
+- The `--safe` command-line option is a different thing: it turns on the runtime checks for the whole program (see [Safety checks](#safety-checks)). The two work well together.
+- The library's own files are never checked as safe code, so safe code can use any module.
+
 ## The command line
 
 ```
@@ -3629,7 +4156,7 @@ function main() -> int {
 
 ### Safety checks
 
-Walnut programs are as fast as C++ by default, which also means a wrong index, a null pointer or a forgotten `delete` behaves the way it would in C++. Each safety feature below is off unless you ask for it, because each one makes the program slower or bigger. Turn them on while writing and testing, and leave them off for the final build, or keep the ones you want.
+Walnut programs are as fast as C++ by default, which also means a wrong index, a null pointer or a forgotten `delete` behaves the way it would in C++. Each safety feature below is off unless you ask for it, because each one makes the program slower or bigger. Turn them on while writing and testing, and leave them off for the final build, or keep the ones you want. These are options for the whole program; to hold particular functions and classes to stricter rules while compiling, mark them [`safe`](#safe-code).
 
 | Flag | What it does | Cost |
 |---|---|---|

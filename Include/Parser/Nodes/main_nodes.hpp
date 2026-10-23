@@ -107,6 +107,7 @@ struct ASTNode {
     std::uint32_t order   = 0; 
     ExprType      expr_type;
     const char*   at      = nullptr;
+    std::uint8_t  safety  = 0;
 
     virtual ASTNode* clone_into(Arena& arena) const = 0;
 
@@ -116,10 +117,18 @@ protected:
         c->file_id = file_id; 
         c->order = order; 
         c->at = at;
+        c->safety = safety;
     }
 
     ASTNode(Kind k, std::uint32_t ln = 0) : kind(k), line(ln) {}
 };
+
+enum Safety : std::uint8_t {
+    SafetyNone = 0,
+    SafetySafe = 1
+};
+
+inline bool in_safe_code(const ASTNode* n) { return n && n->safety == SafetySafe; }
 
 bool is_expression(const ASTNode* n);
 

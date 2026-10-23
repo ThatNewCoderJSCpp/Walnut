@@ -133,12 +133,47 @@ nodes::VariableDeclaration* Parser::parse_declarator(const parser_types::TypeInf
             list = make<nodes::BraceInitializerList>(open.line());
 
             if (!concrete_match(tokenizing::Token::Kind::RightParen)) {
-                list->add_element(parse_expression());
-                while (match(tokenizing::Token::Kind::Comma)) list->add_element(parse_expression());
+                list->add_element(parse_call_argument());
+                while (match(tokenizing::Token::Kind::Comma)) list->add_element(parse_call_argument());
             }
 
             if (!match(tokenizing::Token::Kind::RightParen)) {
                 throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::RightParen, "Expected ')' to close the initializer");
+            }
+
+            bool named = false;
+            bool spread = false;
+            for (nodes::ASTNode* e : list->m_elements) {
+                if (e && e->kind == nodes::ASTNode::Kind::BinaryExpression && static_cast<nodes::BinaryExpression*>(e)->named_argument) named = true;
+                if (e && e->kind == nodes::ASTNode::Kind::UnaryExpression && static_cast<nodes::UnaryExpression*>(e)->op == tokenizing::Token::Kind::Ellipsis && !static_cast<nodes::UnaryExpression*>(e)->is_prefix()) spread = true;
+            }
+            if ((named || spread) && !deduced && type_info.type && type_info.type->is_user_defined() && !type_info.has_indirection()) {
+                const auto* user = static_cast<const parser_types::UserDefinedType*>(type_info.type);
+                nodes::ASTNode* callee = nullptr;
+                if (user->parts().size() == 1) {
+                    callee = make<nodes::Identifier>(user->parts().front(), open.line());
+                } else {
+                    auto* q = make<nodes::QualifiedIdentifier>(open.line(), false);
+                    for (std::string_view part : user->parts()) q->add_part(part);
+                    callee = q;
+                }
+                if (!type_info.template_args.empty()) {
+                    std::vector<parser_types::TemplateArgument*> targs;
+                    for (parser_types::TemplateArgument* t : type_info.template_args) targs.push_back(t);
+                    callee = make<nodes::TemplateInstantiation>(callee, targs, open.line());
+                }
+                auto* call = make<nodes::CallExpression>(callee, open.line());
+                for (nodes::ASTNode* e : list->m_elements) call->add_argument(e);
+                auto* decl = make<nodes::VariableDeclaration>(type_info, name, call, line_number);
+                decl->template_specialization = specialization;
+                decl->spec_args = std::move(spec_args);
+                return decl;
+            }
+            for (nodes::ASTNode* e : list->m_elements) {
+                if (e && e->kind == nodes::ASTNode::Kind::BinaryExpression) static_cast<nodes::BinaryExpression*>(e)->named_argument = false;
+            }
+            if (spread) {
+                throw ParserError::invalid_expression(reporter, open, "'...' can only spread values into the constructor of a named type here; write 'T: x = T(values...)' instead");
             }
         } else {
             list = parse_brace_initializer_list();

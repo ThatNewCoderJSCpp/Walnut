@@ -377,7 +377,17 @@ Token Lexer::scan() noexcept {
             } else { 
                 return Token(Token::Kind::Caret, m_beg - 1, 1, m_line_number); 
             }  
-        case '?': return atom(Token::Kind::QuestionMark);
+        case '?':
+            get<false>();
+            if (peek() == '?') {
+                get<false>();
+                return Token(Token::Kind::DoubleQuestion, m_beg - 2, 2, m_line_number);
+            }
+            if (peek() == '.' && !(m_beg[1] >= '0' && m_beg[1] <= '9')) {
+                get<false>();
+                return Token(Token::Kind::QuestionDot, m_beg - 2, 2, m_line_number);
+            }
+            return Token(Token::Kind::QuestionMark, m_beg - 1, 1, m_line_number);
         case '$': return atom(Token::Kind::MoneySymbol);
         // case '_': return atom(Token::Kind::Underscore);
         case '&':

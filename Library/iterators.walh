@@ -568,6 +568,204 @@ namespace std {
                 act(item);
             }
         } end function each
+
+        template <typename T>
+        struct Numbered {
+            long int: index;
+            T: value;
+        } end struct Numbered
+
+        template <typename A, typename B>
+        struct Zipped {
+            A: first;
+            B: second;
+        } end struct Zipped
+
+        namespace detail {
+            template <typename T>
+            class Held {
+            public:
+                T*: items = nullptr;
+                long int: size = 0;
+
+                constructor(long int: n) {
+                    items = new T[n > 0 ? n : 1];
+                }
+
+                destructor() {
+                    delete[] items;
+                }
+            } end class Held
+        } end namespace detail
+
+        function range(long int: start, long int: stop, long int: step) -> generator<long int> {
+            if (step == 0) then {
+                throw std::errors::empty_range("range() needs a step that isn't 0");
+            }
+            if (step > 0) then {
+                for (long int: i = start; i < stop; i += step) {
+                    co_yield i;
+                }
+            } else then {
+                for (long int: i = start; i > stop; i += step) {
+                    co_yield i;
+                }
+            }
+        } end function range
+
+        function range(long int: start, long int: stop) -> generator<long int> {
+            for (long int: i = start; i < stop; i += 1) {
+                co_yield i;
+            }
+        } end function range
+
+        function range(long int: stop) -> generator<long int> {
+            for (long int: i = 0; i < stop; i += 1) {
+                co_yield i;
+            }
+        } end function range
+
+        template <typename T>
+        function enumerate(iterable<T>: items, long int: start = 0) -> generator<Numbered<T>> {
+            long int: i = start;
+            for (const T&: item in items) {
+                co_yield Numbered<T>{i, item};
+                i += 1;
+            }
+        } end function enumerate
+
+        template <typename A, typename B>
+        function zip(iterable<A>: a, iterable<B>: b) -> generator<Zipped<A, B>> {
+            long int: n = 0;
+            for (const B&: item in b) {
+                n += 1;
+            }
+            detail::Held<B>: held(n);
+            for (const B&: item in b) {
+                held.items[held.size] = item;
+                held.size += 1;
+            }
+            long int: j = 0;
+            for (const A&: item in a) {
+                if (j >= held.size) then {
+                    break;
+                }
+                co_yield Zipped<A, B>{item, held.items[j]};
+                j += 1;
+            }
+        } end function zip
+
+        template <typename T>
+        function chain(iterable<T>: a, iterable<T>: b) -> generator<T> {
+            for (const T&: item in a) {
+                co_yield item;
+            }
+            for (const T&: item in b) {
+                co_yield item;
+            }
+        } end function chain
+
+        template <typename T>
+        function take(iterable<T>: items, long int: n) -> generator<T> {
+            long int: given = 0;
+            for (const T&: item in items) {
+                if (given >= n) then {
+                    break;
+                }
+                co_yield item;
+                given += 1;
+            }
+        } end function take
+
+        template <typename T>
+        function skip(iterable<T>: items, long int: n) -> generator<T> {
+            long int: seen = 0;
+            for (const T&: item in items) {
+                if (seen < n) then {
+                    seen += 1;
+                    continue;
+                }
+                co_yield item;
+            }
+        } end function skip
+
+        template <typename T>
+        function take_while(iterable<T>: items, std::Predicate<T>: keep) -> generator<T> {
+            for (const T&: item in items) {
+                if (!keep(item)) then {
+                    break;
+                }
+                co_yield item;
+            }
+        } end function take_while
+
+        template <typename T>
+        function skip_while(iterable<T>: items, std::Predicate<T>: drop) -> generator<T> {
+            bool: dropping = true;
+            for (const T&: item in items) {
+                if (dropping && drop(item)) then {
+                    continue;
+                }
+                dropping = false;
+                co_yield item;
+            }
+        } end function skip_while
+
+        template <typename T>
+        function filter(iterable<T>: items, std::Predicate<T>: keep) -> generator<T> {
+            for (const T&: item in items) {
+                if (keep(item)) then {
+                    co_yield item;
+                }
+            }
+        } end function filter
+
+        template <typename T, typename R>
+        function map(iterable<T>: items, function(const T&) -> R: change) -> generator<R> {
+            for (const T&: item in items) {
+                co_yield change(item);
+            }
+        } end function map
+
+        template <typename T>
+        function pairwise(iterable<T>: items) -> generator<Zipped<T, T>> {
+            bool: started = false;
+            T: previous = T();
+            for (const T&: item in items) {
+                if (started) then {
+                    co_yield Zipped<T, T>{previous, item};
+                }
+                previous = item;
+                started = true;
+            }
+        } end function pairwise
+
+        template <typename T>
+        function repeat(const T&: value, long int: times) -> generator<T> {
+            for (long int: i = 0; i < times; i += 1) {
+                co_yield value;
+            }
+        } end function repeat
+
+        template <typename T>
+        function cycle(iterable<T>: items, long int: times) -> generator<T> {
+            for (long int: i = 0; i < times; i += 1) {
+                for (const T&: item in items) {
+                    co_yield item;
+                }
+            }
+        } end function cycle
+
+        template <typename T>
+        function running(iterable<T>: items) -> generator<T> {
+            bool: started = false;
+            T: total = T();
+            for (const T&: item in items) {
+                total = started ? total + item : item;
+                started = true;
+                co_yield total;
+            }
+        } end function running
     } end namespace iterators
 
     namespace errors {

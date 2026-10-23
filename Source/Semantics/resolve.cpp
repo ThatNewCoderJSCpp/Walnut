@@ -10,6 +10,7 @@ bool visible_at(const Symbol* sym, const nodes::ASTNode* use) {
     if (!sym || !use) { return false; }
     if (sym->is_hoisted || sym->is_imported) { return true; }
     if (sym->owner && (sym->owner->kind == Scope::Kind::Record || sym->owner->kind == Scope::Kind::Enum)) { return true; }
+    if (sym->kind == SymbolKind::Function && sym->owner && (sym->owner->kind == Scope::Kind::Module || sym->owner->kind == Scope::Kind::Namespace)) { return true; }
     const nodes::ASTNode* decl = sym->decl;
     if (!decl) { return true; }
     if (decl->kind == nodes::ASTNode::Kind::TryCatchStatement || decl->kind == nodes::ASTNode::Kind::ForEachStatement) { return true; }

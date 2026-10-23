@@ -211,12 +211,12 @@ private:
         driver::WalkPass walker(reporter, warnings, types, ast_arena, instantiator);
         walker.run(front);
 
-        if (m_ownership && !reporter.count(ErrorPhase::Semantic)) {
+        if (!reporter.count(ErrorPhase::Semantic)) {
             semantics::OwnershipChecker ownership(reporter, warnings);
             for (const AnalyzedUnit& u : m_units) {
                 if (!u.ast) continue;
                 if (sources.absolute_path(u.file).rfind(SourceManager::LIBRARY_ROOT, 0) == 0) continue;
-                ownership.run(u.file, u.ast);
+                ownership.run(u.file, u.ast, m_ownership);
             }
         }
 
@@ -326,6 +326,11 @@ public:
             if (sources.has_virtual(core_path)) {
                 core_id = sources.load(core_path);
                 if (core_id) roots.push_back(*core_id);
+            }
+
+            const std::string optional_path = std::string(SourceManager::LIBRARY_ROOT) + "/optional.walh";
+            if (sources.has_virtual(optional_path)) {
+                if (auto optional_id = sources.load(optional_path)) roots.push_back(*optional_id);
             }
 
             loader.load_all(roots);

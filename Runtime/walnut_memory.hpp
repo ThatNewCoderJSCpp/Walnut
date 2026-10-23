@@ -4,8 +4,10 @@
 #include "walnut_runtime.hpp"
 #include "fizmo/../../Source/Memory/arena.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -146,6 +148,98 @@ private:
     std::atomic<long long> m_strong{1};
     std::atomic<long long> m_weak{1};
 };
+
+struct tracker {};
+
+inline bool gc_running() noexcept {
+#if defined(WALNUT_GC)
+    return true;
+#else
+    return false;
+#endif
+}
+
+inline bool tracking_allocations() noexcept {
+#if defined(WALNUT_TRACK_ALLOCATIONS) || defined(WALNUT_GC)
+    return true;
+#else
+    return false;
+#endif
+}
+
+inline long long collect_garbage() {
+    return static_cast<long long>(safety::collect_garbage());
+}
+
+inline long long live_objects() {
+#if defined(WALNUT_TRACK_ALLOCATIONS)
+    return static_cast<long long>(safety::registry::get().live().size());
+#elif defined(WALNUT_GC)
+    return static_cast<long long>(safety::gc::get().blocks);
+#else
+    return -1;
+#endif
+}
+
+inline long long live_bytes() {
+#if defined(WALNUT_TRACK_ALLOCATIONS)
+    long long total = 0;
+    for (const safety::allocation& a : safety::registry::get().live()) total += static_cast<long long>(a.bytes);
+    return total;
+#elif defined(WALNUT_GC)
+    return static_cast<long long>(safety::gc::get().bytes);
+#else
+    return -1;
+#endif
+}
+
+inline long long peak_bytes() {
+#if defined(WALNUT_TRACK_ALLOCATIONS)
+    return static_cast<long long>(safety::registry::get().peak());
+#else
+    return -1;
+#endif
+}
+
+inline long long allocations_made() {
+#if defined(WALNUT_TRACK_ALLOCATIONS)
+    return static_cast<long long>(safety::registry::get().allocations());
+#else
+    return -1;
+#endif
+}
+
+inline std::string allocation_report() {
+#if defined(WALNUT_TRACK_ALLOCATIONS)
+    std::vector<safety::allocation> live = safety::registry::get().live();
+    if (live.empty()) return "no objects made with new are alive\n";
+    std::vector<std::string> order;
+    std::vector<std::pair<std::size_t, std::size_t>> totals;
+    std::size_t bytes = 0;
+    for (const safety::allocation& a : live) {
+        bytes += a.bytes;
+        const std::string at = safety::describe(a.made);
+        const std::string what = std::string("new ") + (*a.type ? a.type : "object") + (a.array ? "[" + std::to_string(a.count) + "]" : std::string());
+        const std::string key = (at.empty() ? std::string("somewhere") : at) + ": " + what;
+        const auto it = std::find(order.begin(), order.end(), key);
+        if (it == order.end()) {
+            order.push_back(key);
+            totals.push_back({ 1, a.bytes });
+        } else {
+            auto& t = totals[static_cast<std::size_t>(it - order.begin())];
+            t.first += 1;
+            t.second += a.bytes;
+        }
+    }
+    std::string out = std::to_string(live.size()) + (live.size() == 1 ? " object" : " objects") + " (" + std::to_string(bytes) + " bytes) made with new " + (live.size() == 1 ? "is" : "are") + " alive\n";
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        out += "  " + order[i] + (totals[i].first > 1 ? " (" + std::to_string(totals[i].first) + " times, " + std::to_string(totals[i].second) + " bytes)" : " (" + std::to_string(totals[i].second) + " bytes)") + "\n";
+    }
+    return out;
+#else
+    return std::string();
+#endif
+}
 
 } // namespace mem
 } // namespace walnut_rt

@@ -211,6 +211,7 @@ nodes::TemplateParameter* Parser::parse_template_parameter() {
             p->m_name = current_token().lexeme();
             advance();
         }
+        if (p->m_is_pack && !p->m_name.empty()) m_template_pack_names.push_back(p->m_name);
 
         if (match(tokenizing::Token::Kind::Equal)) {
             p->m_default_type = parse_type_info(); 
@@ -228,6 +229,7 @@ nodes::TemplateParameter* Parser::parse_template_parameter() {
         
         if (current_token().kind() == tokenizing::Token::Kind::Identifier) { 
             p->m_name = current_token().lexeme(); advance(); 
+            if (p->m_is_pack) m_template_pack_names.push_back(p->m_name);
         } else {
             throw ParserError::unexpected_token(reporter, current_token(), {tokenizing::Token::Kind::Identifier}, "Expected a name for the constrained template parameter");
         }
@@ -264,6 +266,11 @@ nodes::ASTNode* Parser::parse_template_declaration() {
     expect(tokenizing::Token::Kind::TemplateKeyword, "Expected 'template'");
     expect(tokenizing::Token::Kind::LessThan, "Expected '<' after 'template'");
     auto* decl = make<nodes::TemplateDeclaration>(static_cast<std::uint32_t>(line));
+    struct PackNamesGuard {
+        std::vector<std::string_view>& names;
+        std::size_t size;
+        ~PackNamesGuard() { names.resize(size); }
+    } pack_names_guard{m_template_pack_names, m_template_pack_names.size()};
 
     if (!match_template_close()) {
         decl->add_param(parse_template_parameter());

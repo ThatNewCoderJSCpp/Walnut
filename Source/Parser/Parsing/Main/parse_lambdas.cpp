@@ -64,6 +64,8 @@ nodes::ASTNode* Parser::parse_lambda_expression() {
     auto captures = parse_lambda_capture_list();
     expect(tokenizing::Token::Kind::RightSquare, "Expected ']' to close lambda capture list");
     auto parameters = parse_function_parameters();
+    ParamFrame param_frame(*this, parameters);
+    reject_receiver(parameters, "a lambda uses the object it captures with [this], so it");
     auto quals = parse_function_qualifiers();
     parser_types::TypeInfo return_type;
     bool has_arrow = match(tokenizing::Token::Kind::SingleRightArrow) || match(tokenizing::Token::Kind::DoubleRightArrow);
@@ -81,7 +83,13 @@ nodes::ASTNode* Parser::parse_lambda_expression() {
     }
 
     nodes::ASTNode* body = nullptr;
+    m_propagation.push_back(nullptr);
+    struct PropagationGuard {
+        std::vector<const tokenizing::Token*>& stack;
+        ~PropagationGuard() { stack.pop_back(); }
+    } propagation_guard{m_propagation};
     if (concrete_match(tokenizing::Token::Kind::LeftCurly)) { body = parse_block(); }
+    if (m_propagation.back() && body) body = wrap_propagation(body, return_type, static_cast<std::uint32_t>(line));
     return make<nodes::LambdaExpression>(captures, parameters, return_type, quals, body, line);
 }
 

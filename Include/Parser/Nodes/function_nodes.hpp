@@ -54,8 +54,19 @@ struct FunctionParameter : ASTNode {
     ASTNode* clone_into(Arena& a) const override;
 };
 
+enum class Receiver : std::uint8_t {
+    None = 0,
+    Value,
+    ConstValue,
+    Ref,
+    ConstRef,
+    RValue
+};
+
 struct FunctionParameters : ASTNode {
     std::vector<FunctionParameter*> m_params;
+    Receiver receiver = Receiver::None;
+    std::uint32_t receiver_line = 0;
 
     FunctionParameters() : ASTNode(Kind::FunctionParameters) {}
 
@@ -95,6 +106,9 @@ struct FunctionParameters : ASTNode {
     void clear() { m_params.clear(); }
 
     void set_all_init_in_declaration(bool value);
+
+    bool has_receiver() const { return receiver != Receiver::None; }
+    bool receiver_by_value() const { return receiver == Receiver::Value || receiver == Receiver::ConstValue; }
 
     bool has_variadic() const {
         for (const auto& p : m_params) { if (p->is_variadic()) return true; }

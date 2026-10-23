@@ -26,7 +26,7 @@ namespace tokenizing {
     X(Comment, false, "") X(LongComment, false, "") \
     /* Misc */ \
     X(Pipe, false, "") X(End, false, "") X(Unexpected, false, "") X(NewLine, false, "") X(Backtick, false, "") X(Tilde, false, "") \
-    X(String, false, "") X(RawCode, false, "") X(ExclamationMark, false, "") X(QuestionMark, false, "") X(AtSymbol, false, "") \
+    X(String, false, "") X(RawCode, false, "") X(ExclamationMark, false, "") X(QuestionMark, false, "") X(DoubleQuestion, false, "") X(QuestionDot, false, "") X(AtSymbol, false, "") \
     X(Caret, false, "") X(Percent, false, "") X(BackSlash, false, "") X(MoneySymbol, false, "") X(Ampersand, false, "") X(Underscore, false, "") \
     /* Compound operators */ \
     X(DoublePlus, false, "") X(PlusEqual, false, "") X(DoublePlusEqual, false, "") X(LogicEqual, false, "") \

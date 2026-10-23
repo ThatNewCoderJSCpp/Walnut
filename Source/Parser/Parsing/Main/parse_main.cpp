@@ -1,4 +1,5 @@
 #include "Parser/Parsing/Main/parse_main.hpp"
+#include "Parser/Nodes/node_children.hpp"
 
 namespace walnut {
 namespace parsing {
@@ -6,7 +7,77 @@ namespace parsing {
 nodes::BlockStatement* Parser::parse_program() {
     nodes::BlockStatement* program = make<nodes::BlockStatement>();
     while (current_token().kind() != tokenizing::Token::Kind::End) { parse_declaration_into(program); }
+    if (m_needs_collections) {
+        auto* use = make<nodes::ImportExportDeclaration>(nodes::ImportExportDeclaration::Direction::Import, false, 0u);
+        nodes::ImportExportItem item;
+        item.kind = nodes::ImportExportItem::Kind::File;
+        item.from_module_path = true;
+        item.has_source = true;
+        item.source = "module:collections";
+        item.module_parts.push_back("collections");
+        use->add_item(item);
+        program->statements.insert(program->statements.begin(), use);
+    }
+    mark_safety(program, nodes::SafetyNone);
     return program;
+}
+
+void Parser::mark_safety(nodes::ASTNode* n, std::uint8_t inherited) {
+    if (!n) return;
+    std::uint8_t context = inherited;
+    if (n->safety == nodes::SafetySafe) context = n->safety;
+    else n->safety = inherited;
+    nodes::for_each_child(n, [this, context](nodes::ASTNode* c) { mark_safety(c, context); });
+}
+
+nodes::ASTNode* Parser::parse_safety_region(bool declaration_level, bool list_level, bool injected_candidate, bool nested_hoist, nodes::TemplateDeclaration* owner_template) {
+    using K = tokenizing::Token::Kind;
+    const K next = lookahead(1).kind();
+
+    if (next == K::LeftCurly) {
+        if (declaration_level) {
+            advance();
+            const tokenizing::Token open = current_token();
+            advance();
+            nodes::BlockStatement* holder = make<nodes::BlockStatement>();
+
+            while (current_token().kind() != K::RightCurly && current_token().kind() != K::End) parse_declaration_into(holder);
+
+            if (!match(K::RightCurly)) throw ParserError::missing_token(reporter, current_token(), K::RightCurly, "Expected '}' to close the safe block");
+            if (!match(K::EndKeyword)) throw ParserError::missing_token(reporter, current_token(), K::EndKeyword, "Expected 'end safe' after the safe block");
+            if (current_token().kind() != K::Identifier || current_token().lexeme() != "safe") {
+                throw ParserError::unexpected_token(reporter, current_token(), {K::Identifier}, "Expected 'safe' after 'end'");
+            }
+            advance();
+
+            if (holder->statements.empty()) throw ParserError::empty_block(reporter, open, "safe");
+            for (nodes::ASTNode* d : holder->statements) if (d) d->safety = nodes::SafetySafe;
+            for (std::size_t i = 1; i < holder->statements.size(); ++i) m_spliced.push_back(holder->statements[i]);
+            return holder->statements[0];
+        }
+
+        advance();
+        nodes::ASTNode* block = parse_block();
+        if (block) block->safety = nodes::SafetySafe;
+        return block;
+    }
+
+    const bool declaration_follows = lookahead(1).is_one_of(
+        K::ClassKeyword, K::StructKeyword, K::UnionKeyword, K::FunctionKeyword, K::NamespaceKeyword, K::TemplateKeyword,
+        K::OperatorKeyword, K::StaticKeyword, K::InlineKeyword, K::ConstexprKeyword, K::HiddenKeyword, K::LocalKeyword,
+        K::GlobalKeyword, K::HoistKeyword, K::VirtualKeyword, K::FriendKeyword
+    );
+    if (!declaration_follows) return nullptr;
+
+    advance();
+    m_declaration_level  = declaration_level;
+    m_list_level         = list_level;
+    m_injected_candidate = injected_candidate;
+    m_nested_hoist       = nested_hoist;
+    m_pending_template   = owner_template;
+    nodes::ASTNode* decl = parse_statement();
+    if (decl) decl->safety = nodes::SafetySafe;
+    return decl;
 }
 
 void Parser::drain_spliced(nodes::BlockStatement* block, std::size_t mark) {
@@ -167,6 +238,12 @@ nodes::ASTNode* Parser::parse_statement() {
         consume_semicolons();
         return inv;
     }
+
+    if (current_token().kind() == tokenizing::Token::Kind::Identifier && current_token().lexeme() == "safe") {
+        if (nodes::ASTNode* region = parse_safety_region(declaration_level, list_level, injected_candidate, nested_hoist, owner_template)) return region;
+    }
+
+    if (match_ahead()) return parse_match(false);
 
     if (current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::Colon
         && lookahead(2).is_one_of(tokenizing::Token::Kind::ForKeyword, tokenizing::Token::Kind::WhileKeyword, tokenizing::Token::Kind::DoKeyword)) {

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(walnut VERSION 0.1.32 LANGUAGES CXX)
+project(walnut VERSION 0.1.33 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -8,9 +8,10 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
+set(WALNUT_FIZMO_TAG "v0.2.39" CACHE STRING "Fizmo git tag to fetch")
 FetchContent_Declare(fizmo
     GIT_REPOSITORY https://github.com/ThatNewCoderJSCpp/Fizmo.git
-    GIT_TAG        v0.2.37
+    GIT_TAG        ${WALNUT_FIZMO_TAG}
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(fizmo)
 

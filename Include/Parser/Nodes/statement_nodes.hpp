@@ -40,6 +40,8 @@ struct VariableDeclaration : ASTNode {
     std::vector<semantics::Symbol*> pack_elements;
     bool template_specialization = false;
     std::vector<parser_types::TemplateArgument*> spec_args;
+    bool receiver_copy = false;
+    bool synthetic = false;
 
     VariableDeclaration(const parser_types::TypeInfo& type_info, std::string_view name, ASTNode* init = nullptr, std::uint32_t ln = 0)
 ;

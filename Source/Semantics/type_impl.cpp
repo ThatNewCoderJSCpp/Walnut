@@ -3,6 +3,7 @@
 #include "Parser/Nodes/node_children.hpp"
 #include "Semantics/type_ops.hpp"
 #include <sstream>
+#include <algorithm>
 
 namespace walnut {
 namespace semantics {
@@ -249,6 +250,30 @@ Type* TypeContext::with_cv(Type* base, CV cv) {
     }
 }
 
+bool TypeContext::computed_cache_key(const parser_types::TypeInfo& info, std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>>& key) const {
+    key.first = &info;
+    key.second.clear();
+    for (const SubstEnv* env : m_subst) {
+        if (!env) return false;
+        if (!env->values.empty() || !env->fvalues.empty() || !env->svalues.empty() || !env->forwarded.empty()) return false;
+        std::vector<std::pair<std::uintptr_t, std::uintptr_t>> entries;
+        for (const auto& [sym, type] : env->types) entries.push_back({ reinterpret_cast<std::uintptr_t>(sym), reinterpret_cast<std::uintptr_t>(type) });
+        std::sort(entries.begin(), entries.end());
+        key.second.push_back(entries.size());
+        for (const auto& [a, b] : entries) { key.second.push_back(a); key.second.push_back(b); }
+        std::vector<std::pair<std::uintptr_t, const std::vector<Type*>*>> packs;
+        for (const auto& [sym, list] : env->packs) packs.push_back({ reinterpret_cast<std::uintptr_t>(sym), &list });
+        std::sort(packs.begin(), packs.end());
+        key.second.push_back(packs.size());
+        for (const auto& [a, list] : packs) {
+            key.second.push_back(a);
+            key.second.push_back(list->size());
+            for (Type* t : *list) key.second.push_back(reinterpret_cast<std::uintptr_t>(t));
+        }
+    }
+    return true;
+}
+
 Type* TypeContext::apply_subst(Type* t) {
     if (!t || !t->is_dependent() || m_subst.empty()) return t;
     const std::vector<const SubstEnv*> stack = m_subst;
@@ -429,8 +454,12 @@ Type* TypeContext::alias_template_target(Symbol* alias, const parser_types::Type
 
 Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
     if (info.canonical && m_no_type_cache == 0) return apply_subst(info.canonical);  
+    std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>> cache_key;
+    const bool keyed = !info.canonical && m_no_type_cache == 0 && !m_subst.empty() && computed_cache_key(info, cache_key);
+    if (keyed) if (auto it = m_computed_cache.find(cache_key); it != m_computed_cache.end()) return it->second;
     bool computed = false;
     const std::size_t dims_before = m_dim_evals;
+    const std::size_t computed_before = m_computed_evals;
     const CV base_cv = cv_from_modifiers(info.modifiers);
     Type* base = nullptr;
     Symbol* sym = info.resolved;
@@ -694,7 +723,9 @@ Type* TypeContext::canonicalize(const parser_types::TypeInfo& info) {
         }
     }
 
-    if (m_dim_evals == dims_before && !computed && m_no_type_cache == 0) const_cast<parser_types::TypeInfo&>(info).canonical = result;    
+    if (computed) ++m_computed_evals;
+    if (m_dim_evals == dims_before && m_computed_evals == computed_before && m_no_type_cache == 0) const_cast<parser_types::TypeInfo&>(info).canonical = result;    
+    else if (keyed && m_dim_evals == dims_before && result && !result->is_error()) m_computed_cache[cache_key] = apply_subst(result);
     return apply_subst(result);   
 }
 

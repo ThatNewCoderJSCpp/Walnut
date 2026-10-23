@@ -1222,6 +1222,30 @@ namespace std {
         } end class initializer_list
     } end extern
 
+    namespace errors {
+        class empty_sequence {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class empty_sequence
+
+        class match_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class match_error
+    } end namespace errors
+
     namespace core {
         template <typename T>
         constexpr function move(T&: value) noexcept -> T&& {
@@ -1492,5 +1516,85 @@ namespace std {
             }
             return detail::magnitude(x) < std::traits::float_traits<T>::min();
         } end function is_subnormal
+
+        namespace detail {
+            template <typename C, typename T>
+            concept has_contains = requires (const C&: items, const T&: value) { items.contains(value); }
+        } end namespace detail
+
+        template <typename C, typename T>
+        requires detail::has_contains<C, T>
+        function contains_in(const C&: items, const T&: value) -> bool {
+            return items.contains(value);
+        } end function contains_in
+
+        template <typename C, typename T>
+        requires (!detail::has_contains<C, T>)
+        function contains_in(const C&: items, const T&: value) -> bool {
+            for (const auto&: item in items) {
+                if (item == value) then {
+                    return true;
+                }
+            }
+            return false;
+        } end function contains_in
+
+        template <typename T>
+        function element_of(iterable<T>: items) -> T {
+            for (const T&: item in items) {
+                return item;
+            }
+            throw std::errors::empty_sequence("element_of() was given nothing to look at");
+        } end function element_of
+
+        template <typename T, typename... Ts>
+        function equals_any(const T&: value, const Ts&...: options) -> bool {
+            return ((value == options) || ... || false);
+        } end function equals_any
+
+        namespace detail {
+            template <typename T, typename S>
+            concept checks_type = requires (const S&: value) { value is T; }
+
+            template <typename T, typename S>
+            constexpr bool: same_type = std::traits::is_same<std::traits::discard_cv<std::traits::discard_ref<S>>, T>;
+
+            template <typename T, typename S>
+            function holds_type(const S&: value) -> bool {
+                if constexpr (same_type<T, S>) then {
+                    return true;
+                } else if constexpr (checks_type<T, S>) then {
+                    return value is T;
+                } else then {
+                    return false;
+                }
+            } end function holds_type
+
+            template <typename T, typename S>
+            function view_as(S&&: value) -> std::traits::conditional<(std::traits::is_pointer<T> || std::traits::is_dynamic<std::traits::discard_cv<std::traits::discard_ref<S>>>), T, std::traits::conditional<std::traits::is_const<std::traits::discard_ref<S>>, const T&, T&>> {
+                if constexpr (same_type<T, S>) then {
+                    return value;
+                } else if constexpr (checks_type<T, std::traits::discard_ref<S>>) then {
+                    return value as T;
+                } else then {
+                    throw std::errors::match_error("a value didn't have the type its 'case' asked for");
+                }
+            } end function view_as
+
+            template <typename A>
+            function pack_tail(const A&: items, long int: skip) -> {
+                using T = std::traits::discard_cv<std::traits::discard_ref<typeof(items[0])>>;
+                long int: count = countof(items) > skip ? countof(items) - skip : 0;
+                array[count] T: rest;
+                for (long int: i = 0; i < count; i++) {
+                    rest[i] = items[i + skip];
+                }
+                return rest;
+            } end function pack_tail
+
+            function no_match() -> void {
+                throw std::errors::match_error("no 'case' in the match fit the value, and it has no 'default'");
+            } end function no_match
+        } end namespace detail
     } end namespace core
 } end namespace std

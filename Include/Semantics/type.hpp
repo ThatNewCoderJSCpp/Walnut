@@ -451,6 +451,7 @@ public:
     std::function<Symbol*(Symbol*, Type*)>             template_conversion_hook;
     bool conversion_source_lvalue = false;
     std::function<ConversionRank(std::size_t, Type*)> brace_arg_rank;
+    std::function<Type*(std::size_t, std::size_t)> spread_arg_element;
     std::function<TypeQueryOverloadResult(RecordType*, std::string_view, const std::vector<Type*>&)> type_query_overload_hook;
     std::function<int(Symbol*, TemplateArg&)>          value_symbol_hook;
     std::function<Scope*(RecordType*)>                 record_scope_hook;
@@ -485,6 +486,9 @@ private:
     Type* m_error = nullptr;
     std::vector<const SubstEnv*> m_subst; 
     std::size_t m_dim_evals = 0;
+    std::size_t m_computed_evals = 0;
+    std::map<std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>>, Type*> m_computed_cache;
+    bool computed_cache_key(const parser_types::TypeInfo& info, std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>>& key) const;
 
     struct BuiltinKey {
         std::uint8_t base, length, is_unsigned, cv;

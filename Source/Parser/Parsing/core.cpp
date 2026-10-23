@@ -131,6 +131,10 @@ bool Parser::take_keyword_as_name(bool need_call) {
 }
 
 nodes::ASTNode* Parser::make_self(std::size_t line) {
+    if (m_self_value_depth > 0) {
+        advance();
+        return make<nodes::Identifier>(std::string_view("self"), static_cast<std::uint32_t>(line));
+    }
     auto* self_this = make<nodes::Literal>(std::string_view("this"), tokenizing::Token::Kind::ThisKeyword, line);
     advance();
     return make<nodes::DereferenceExpression>(self_this, static_cast<std::uint32_t>(line));

@@ -48,7 +48,15 @@ nodes::ASTNode* Parser::parse_identifier_or_qualified() {
     std::string_view first = current_token().lexeme();
     advance();
 
-    if (!is_global && current_token().kind() != tokenizing::Token::Kind::DoubleColon) {
+    const bool slice_colons = m_slice_depth > 0 && current_token().kind() == tokenizing::Token::Kind::DoubleColon
+                           && lookahead(1).kind() != tokenizing::Token::Kind::Identifier && !loose_keyword(lookahead(1).kind());
+    if (!is_global && (current_token().kind() != tokenizing::Token::Kind::DoubleColon || slice_colons)) {
+        for (auto it = m_pack_aliases.rbegin(); it != m_pack_aliases.rend(); ++it) {
+            if (it->name != first) continue;
+            auto* alias = make<nodes::Identifier>(it->target, line_num);
+            alias->pack_offset = it->offset;
+            return alias;
+        }
         nodes::ASTNode* id = make<nodes::Identifier>(first, line_num);
         if (m_injected_active && first == m_injected_name && current_token().kind() != tokenizing::Token::Kind::LessThan) {
             return make<nodes::TemplateInstantiation>(id, injected_arguments(), line_num);
@@ -61,6 +69,7 @@ nodes::ASTNode* Parser::parse_identifier_or_qualified() {
 
     while (current_token().kind() == tokenizing::Token::Kind::DoubleColon) {
         if (lookahead(1).kind() == tokenizing::Token::Kind::LessThan) { break; }  // turbofish: leave '::<' 
+        if (m_slice_depth > 0 && lookahead(1).kind() != tokenizing::Token::Kind::Identifier && !loose_keyword(lookahead(1).kind())) { break; }
         advance();
         take_keyword_as_name(false);
 

@@ -64,10 +64,92 @@ nodes::FunctionParameter* Parser::parse_function_parameter() {
     return param;
 }
 
+bool Parser::parse_receiver(nodes::FunctionParameters* params) {
+    using K = tokenizing::Token::Kind;
+    std::size_t i = 0;
+    const bool is_const = current_token().kind() == K::ConstantDeclaration;
+    if (is_const) i = 1;
+    const tokenizing::Token& self_tok = i == 0 ? current_token() : lookahead(i);
+    if (self_tok.kind() != K::SelfKeyword) return false;
+    const tokenizing::Token& after = lookahead(i + 1);
+    nodes::Receiver kind = is_const ? nodes::Receiver::ConstValue : nodes::Receiver::Value;
+    std::size_t used = i + 1;
+
+    if (after.kind() == K::Ampersand) {
+        if (lookahead(i + 2).kind() == K::Ampersand) {
+            kind = nodes::Receiver::RValue;
+            used = i + 3;
+        } else {
+            kind = is_const ? nodes::Receiver::ConstRef : nodes::Receiver::Ref;
+            used = i + 2;
+        }
+    } else if (after.kind() == K::LogicAnd) {
+        kind = nodes::Receiver::RValue;
+        used = i + 2;
+    }
+
+    const tokenizing::Token& follow = lookahead(used);
+    if (!follow.is_one_of(K::Comma, K::RightParen)) {
+        throw ParserError::invalid_expression(reporter, follow, "The receiver is written on its own as the first parameter: 'self', 'const self', 'self&', 'const self&' or 'self&&', without a type or a name");
+    }
+
+    if (kind == nodes::Receiver::RValue && is_const) {
+        throw ParserError::invalid_expression(reporter, self_tok, "'const self&&' isn't a receiver; use 'self&&' to take the object when it's about to go away, or 'const self&' to only read it");
+    }
+
+    params->receiver = kind;
+    params->receiver_line = static_cast<std::uint32_t>(self_tok.line());
+    for (std::size_t k = 0; k < used; ++k) advance();
+    return true;
+}
+
+void Parser::apply_receiver(nodes::FunctionParameters* params, modifiers::FunctionQualifiers& quals, const tokenizing::Token& at) {
+    using FQ = modifiers::FunctionQualifiers;
+    if (!params || !params->has_receiver()) return;
+
+    if (quals.has_any(FQ::Const | FQ::LValueRef | FQ::RValueRef)) {
+        throw ParserError::invalid_declaration(reporter, at, "A method with a 'self' receiver says how it uses the object in the receiver, so it can't also have 'const', '&' or '&&' after its parameters; write 'const self&' instead of 'const'");
+    }
+
+    switch (params->receiver) {
+        case nodes::Receiver::ConstRef:   quals.add(FQ::Const); break;
+        case nodes::Receiver::Value:
+        case nodes::Receiver::ConstValue: quals.add(FQ::Const); break;
+        case nodes::Receiver::RValue:     quals.add(FQ::RValueRef); break;
+        default: break;
+    }
+}
+
+void Parser::reject_receiver(nodes::FunctionParameters* params, const char* what) {
+    if (!params || !params->has_receiver()) return;
+    throw ParserError::invalid_declaration(reporter, current_token(), std::string("Only methods take a 'self' receiver; ") + what + " can't have one");
+}
+
+void Parser::add_receiver_copy(nodes::FunctionParameters* params, nodes::ASTNode* body) {
+    if (!params || !params->receiver_by_value() || !body || body->kind != nodes::ASTNode::Kind::BlockStatement) return;
+    const std::uint32_t at = params->receiver_line;
+    parser_types::TypeInfo info;
+    info.type = parser_types::PrimitiveType::make_auto(arena);
+    if (params->receiver == nodes::Receiver::ConstValue) info.modifiers.add(modifiers::RawModifiers::Const);
+    auto* self_this = make<nodes::Literal>(std::string_view("this"), tokenizing::Token::Kind::ThisKeyword, at);
+    auto* init = make<nodes::DereferenceExpression>(self_this, at);
+    auto* decl = make<nodes::VariableDeclaration>(info, std::string_view("self"), init, at);
+    decl->receiver_copy = true;
+    decl->order = params->order;
+    init->order = params->order;
+    self_this->order = params->order;
+    auto* block = static_cast<nodes::BlockStatement*>(body);
+    block->statements.insert(block->statements.begin(), decl);
+}
+
 nodes::FunctionParameters* Parser::parse_function_parameters() {
     auto params = make<nodes::FunctionParameters>();
     expect(tokenizing::Token::Kind::LeftParen, "Expected '(' to start parameter list");
     if (match(tokenizing::Token::Kind::RightParen)) { return params; }
+    if (parse_receiver(params)) {
+        if (match(tokenizing::Token::Kind::RightParen)) { return params; }
+        expect(tokenizing::Token::Kind::Comma, "Expected ',' or ')' after the receiver 'self'");
+    }
     params->add(parse_function_parameter());
     while (match(tokenizing::Token::Kind::Comma)) { params->add(parse_function_parameter()); }
     expect(tokenizing::Token::Kind::RightParen, "Expected ')' to end parameter list");
@@ -285,7 +367,20 @@ nodes::ASTNode* Parser::parse_function_declaration(
     }
 
     auto parameters = parse_function_parameters();
-    const modifiers::FunctionQualifiers quals = parse_function_qualifiers();
+    ParamFrame param_frame(*this, parameters);
+    modifiers::FunctionQualifiers quals = parse_function_qualifiers();
+    apply_receiver(parameters, quals, current_token());
+    struct SelfDepthGuard {
+        int& depth;
+        int  saved;
+        ~SelfDepthGuard() { depth = saved; }
+    } self_guard{m_self_value_depth, m_self_value_depth};
+    m_self_value_depth = parameters->receiver_by_value() ? 1 : 0;
+    m_propagation.push_back(nullptr);
+    struct PropagationGuard {
+        std::vector<const tokenizing::Token*>& stack;
+        ~PropagationGuard() { stack.pop_back(); }
+    } propagation_guard{m_propagation};
     parser_types::TypeInfo return_type;
     nodes::ASTNode* body = nullptr;
     bool has_arrow = match(tokenizing::Token::Kind::SingleRightArrow) || match(tokenizing::Token::Kind::DoubleRightArrow);
@@ -408,6 +503,8 @@ nodes::ASTNode* Parser::parse_function_declaration(
             }
         }
 
+        add_receiver_copy(parameters, body);
+        if (m_propagation.back() && body) body = wrap_propagation(body, return_type, static_cast<std::uint32_t>(line_number));
         auto* decl = make<nodes::FunctionDeclaration>(
             std::move(name_parts), is_global_qualified, return_type,
             mods, quals, line_number, parameters, body
@@ -537,6 +634,8 @@ nodes::ASTNode* Parser::parse_function_declaration(
         }
     }
 
+    add_receiver_copy(parameters, body);
+    if (m_propagation.back() && body) body = wrap_propagation(body, return_type, static_cast<std::uint32_t>(line_number));
     auto* decl = make<nodes::FunctionDeclaration>(
         std::move(name_parts), is_global_qualified, return_type,
         mods, quals, line_number, parameters, body
@@ -659,7 +758,20 @@ nodes::ASTNode* Parser::parse_operator_function_body(
     bool owner_global = false;
     parse_owner_name(owner, owner_global);
     nodes::FunctionParameters*   parameters = parse_function_parameters();
+    ParamFrame param_frame(*this, parameters);
     modifiers::FunctionQualifiers quals     = parse_function_qualifiers();
+    apply_receiver(parameters, quals, current_token());
+    struct SelfDepthGuard {
+        int& depth;
+        int  saved;
+        ~SelfDepthGuard() { depth = saved; }
+    } self_guard{m_self_value_depth, m_self_value_depth};
+    m_self_value_depth = parameters->receiver_by_value() ? 1 : 0;
+    m_propagation.push_back(nullptr);
+    struct PropagationGuard {
+        std::vector<const tokenizing::Token*>& stack;
+        ~PropagationGuard() { stack.pop_back(); }
+    } propagation_guard{m_propagation};
 
     if (quals.has(modifiers::FunctionQualifiers::Abstract)) {
         throw ParserError::invalid_declaration(reporter, current_token(), "Only methods can be 'abstract'; an operator can be 'virtual' with no body instead");
@@ -699,6 +811,9 @@ nodes::ASTNode* Parser::parse_operator_function_body(
     } else {
         throw ParserError::unexpected_token(reporter, current_token(), { K::LeftCurly, K::Semicolon }, "Operator function requires a body ('{ ... }'), '= delete;' or a terminating ';'");
     }
+
+    add_receiver_copy(parameters, body);
+    if (m_propagation.back() && body) body = wrap_propagation(body, return_type, static_cast<std::uint32_t>(line_number));
 
     if (form == nodes::OperatorFunctionDeclaration::Form::Conversion) {
         auto* node = make<nodes::OperatorFunctionDeclaration>(conversion_type, return_type, mods, quals, static_cast<std::uint32_t>(line_number), parameters, body);

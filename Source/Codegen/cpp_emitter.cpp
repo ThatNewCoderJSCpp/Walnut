@@ -1154,7 +1154,10 @@ bool CppEmitter::needs_volatile_access(const nodes::ASTNode* e) {
 }
 
 std::string CppEmitter::expr(nodes::ASTNode* e) {
+    const bool saved_checked = m_checked_arith;
+    if (e) m_checked_arith = nodes::in_safe_code(e);
     std::string s = expr_unwrapped(e);
+    m_checked_arith = saved_checked;
     if (needs_volatile_access(e)) return "walnut_rt::volatile_access(" + s + ")";
     return s;
 }
@@ -1428,7 +1431,12 @@ auto CppEmitter::common_type(Type* a, Type* b) -> Type* {
     return a;
 }
 
-const char* CppEmitter::arith_helper(TK op) {
+const char* CppEmitter::arith_helper(TK op) const {
+    if (m_checked_arith) {
+        if (op == TK::Plus)     return "walnut_rt::checked::op_add";
+        if (op == TK::Minus)    return "walnut_rt::checked::op_sub";
+        if (op == TK::Asterisk) return "walnut_rt::checked::op_mul";
+    }
     switch (op) {
         case TK::Plus:              return "walnut_rt::op_add";
         case TK::Minus:             return "walnut_rt::op_sub";
@@ -1530,7 +1538,10 @@ int CppEmitter::borrow_bit(nodes::ASTNode* e) {
             auto* m = static_cast<nodes::MemberAccessExpression*>(static_cast<nodes::CallExpression*>(at)->m_callee);
             if (m->is_arrow() || m->is_scope()) return 0;
             Type* rt = type_of(at);
-            if (!rt || !rt->is_reference()) return 0;
+            Sym* chosen = static_cast<nodes::CallExpression*>(at)->resolved;
+            Type* declared = chosen ? return_type_of(chosen) : nullptr;
+            const bool gives_reference = (rt && rt->is_reference()) || (declared && declared->is_reference()) || at->expr_type.vc == nodes::ValueCategory::LValue;
+            if (!gives_reference) return 0;
             object = m->m_object;
         }
         if (!object) return 0;
@@ -1735,11 +1746,11 @@ std::string CppEmitter::unary(nodes::UnaryExpression* u) {
     Type* rt = value_type(type_of(u));
 
     switch (u->op) {
-        case TK::Minus:           return "walnut_rt::op_neg(" + conv(u->operand, rt, u) + ")";
+        case TK::Minus:           return std::string(m_checked_arith ? "walnut_rt::checked::op_neg(" : "walnut_rt::op_neg(") + conv(u->operand, rt, u) + ")";
         case TK::Plus:            return "walnut_rt::op_pos(" + conv(u->operand, rt, u) + ")";
         case TK::ExclamationMark: return "(!" + truthy(u->operand) + ")";
-        case TK::DoublePlus:      return std::string(u->is_prefix() ? "walnut_rt::pre_inc(" : "walnut_rt::post_inc(") + expr(u->operand) + ")";
-        case TK::DoubleMinus:     return std::string(u->is_prefix() ? "walnut_rt::pre_dec(" : "walnut_rt::post_dec(") + expr(u->operand) + ")";
+        case TK::DoublePlus:      return std::string(m_checked_arith ? "walnut_rt::checked::" : "walnut_rt::") + (u->is_prefix() ? "pre_inc(" : "post_inc(") + expr(u->operand) + ")";
+        case TK::DoubleMinus:     return std::string(m_checked_arith ? "walnut_rt::checked::" : "walnut_rt::") + (u->is_prefix() ? "pre_dec(" : "post_dec(") + expr(u->operand) + ")";
         case TK::Asterisk:        return "(*" + expr(u->operand) + ")";
         case TK::Ampersand:       return "(&" + expr(u->operand) + ")";
         case TK::Tilde:           return "walnut_rt::op_bitnot(" + expr(u->operand) + ")";
@@ -1797,6 +1808,10 @@ std::string CppEmitter::member_object(nodes::MemberAccessExpression* m) {
     return "walnut_rt::safety::checked(" + code + ")->";
 }
 
+bool CppEmitter::is_default_gap(const nodes::ASTNode* n) {
+    return n && n->kind == K::Literal && static_cast<const nodes::Literal*>(n)->token_kind == TK::DefaultKeyword;
+}
+
 void CppEmitter::call_arg_parts(Sym* fn, const std::vector<nodes::ASTNode*>& args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes) {
     bool has_group = false;
     std::vector<ParamSlot> slots = param_slots(fn, has_group);
@@ -1807,7 +1822,11 @@ void CppEmitter::call_arg_parts(Sym* fn, const std::vector<nodes::ASTNode*>& arg
     const std::size_t n = std::max(args.size(), params.size());
 
     for (std::size_t i = 0; i < n; ++i) {
-        if (i < args.size()) {
+        if (i < args.size() && is_default_gap(args[i]) && ps && i < ps->m_params.size() && ps->m_params[i]->has_initializer()) {
+            nodes::ASTNode* d = const_cast<nodes::ASTNode*>(ps->m_params[i]->get_initializer());
+            codes.push_back(conv(d, params[i], at));
+            classes.push_back(effect_class(d));
+        } else if (i < args.size()) {
             codes.push_back(i < params.size() ? pass_arg(args[i], params[i], at) : expr(args[i]));
             classes.push_back(effect_class(args[i]) | ((i < params.size() && params[i] && params[i]->is_reference()) ? 4 : 0) | borrow_bit(args[i]));
         } else if (ps && i < ps->m_params.size() && ps->m_params[i]->has_initializer()) {
@@ -1836,8 +1855,26 @@ void CppEmitter::grouped_arg_parts(const std::vector<ParamSlot>& slots, const st
     }
 
     std::vector<std::size_t> takes;
+    std::vector<Type*> spreads;
+    bool any_spread = false;
+    for (nodes::ASTNode* a : args) {
+        Type* el = nullptr;
+        if (a && a->kind == K::UnaryExpression && static_cast<nodes::UnaryExpression*>(a)->op == TK::Ellipsis) {
+            Type* t = type_of(static_cast<nodes::UnaryExpression*>(a)->operand);
+            if (t && t->is_reference()) t = static_cast<semantics::ReferenceType*>(t)->referent();
+            t = t ? m_types.strip_cv(t) : nullptr;
+            if (t && t->is_array()) el = static_cast<semantics::ArrayType*>(t)->element();
+        }
+        spreads.push_back(el);
+        any_spread = any_spread || el;
+    }
+    auto saved_spread = m_types.spread_arg_element;
+    if (any_spread) m_types.spread_arg_element = [&spreads](std::size_t i, std::size_t n) -> Type* { return n == spreads.size() && i < n ? spreads[i] : nullptr; };
+    else m_types.spread_arg_element = nullptr;
+    const bool assigned = semantics::assign_arguments(shapes, arg_types, m_types, takes);
+    m_types.spread_arg_element = saved_spread;
 
-    if (!semantics::assign_arguments(shapes, arg_types, m_types, takes)) {
+    if (!assigned) {
         takes.assign(slots.size(), 0);
         std::size_t remaining = args.size();
 
@@ -1858,13 +1895,22 @@ void CppEmitter::grouped_arg_parts(const std::vector<ParamSlot>& slots, const st
 
         if (s.group) {
             Type* el = m_types.strip_cv(s.type);
-            std::string code = cpp_type(m_types.array(el, std::nullopt), at) + "{";
+            bool gathered = false;
+            for (std::size_t j = a; j < a + took && j < args.size(); ++j) gathered = gathered || spreads[j];
+            const std::string array_type = cpp_type(m_types.array(el, std::nullopt), at);
+            std::string code = gathered ? "walnut_rt::gather<" + array_type + ">(" : array_type + "{";
             int cls = 0;
             std::size_t k = 0;
             for (; k < took && a < args.size(); ++k, ++a) {
                 if (k) code += ", ";
-                code += conv(args[a], el, at);
+                if (spreads[a]) code += "walnut_rt::spread(" + expr(static_cast<nodes::UnaryExpression*>(args[a])->operand) + ")";
+                else code += conv(args[a], el, at);
                 cls = std::max(cls, effect_class(args[a]));
+            }
+            if (gathered) {
+                codes.push_back(code + ")");
+                classes.push_back(cls);
+                continue;
             }
             if (s.param && s.param->has_initializer() && !s.param->is_infinite_variadic()) {
                 nodes::ASTNode* d = const_cast<nodes::ASTNode*>(s.param->get_initializer());
@@ -1879,7 +1925,12 @@ void CppEmitter::grouped_arg_parts(const std::vector<ParamSlot>& slots, const st
             continue;
         }
 
-        if (took && a < args.size()) {
+        if (took && a < args.size() && is_default_gap(args[a]) && s.param && s.param->has_initializer()) {
+            nodes::ASTNode* d = const_cast<nodes::ASTNode*>(s.param->get_initializer());
+            codes.push_back(conv(d, s.type, at));
+            classes.push_back(effect_class(d));
+            ++a;
+        } else if (took && a < args.size()) {
             codes.push_back(pass_arg(args[a], s.type, at));
             classes.push_back(effect_class(args[a]) | ((s.type && s.type->is_reference()) ? 4 : 0) | borrow_bit(args[a]));
             ++a;
@@ -3015,6 +3066,11 @@ std::string CppEmitter::param_list(const nodes::FunctionParameters* ps, const no
                 add("WF" + std::to_string(t - m_templated_params->begin()) + "&& " + local_name(p->get_name()));
                 continue;
             }
+        }
+
+        if (p->is_iterable && pt && pt->is_reference()) {
+            Type* held = m_types.strip_cv(static_cast<semantics::ReferenceType*>(pt)->referent());
+            if (held && held->kind() == semantics::TypeKind::Coroutine && static_cast<semantics::CoroutineType*>(held)->is_generator()) pt = held;
         }
 
         std::string piece = cpp_type(pt, at) + " " + local_name(p->get_name());

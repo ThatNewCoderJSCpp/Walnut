@@ -63,7 +63,7 @@ CandidateMatch match_arguments(const std::vector<ParamShape>& params, const std:
             if (!prev[a].ok) continue;
 
             if (!P.is_pack) {
-                if (a < n) {
+                if (a < n && !(ctx.spread_arg_element && ctx.spread_arg_element(a, n))) {
                     ConversionRank r = (!args[a] && ctx.brace_arg_rank) ? ctx.brace_arg_rank(a, P.element) : rank_conversion(args[a], P.element, ctx);
 
                     if (r != ConversionRank::None) {
@@ -82,7 +82,9 @@ CandidateMatch match_arguments(const std::vector<ParamShape>& params, const std:
             std::size_t max_take = P.unbounded ? (n - a) : std::min<std::size_t>(P.cap, n - a);
 
             for (std::size_t t = 1; t <= max_take; ++t) {
-                ConversionRank r = rank_conversion(args[a + t - 1], P.element, ctx);
+                Type* spread = ctx.spread_arg_element ? ctx.spread_arg_element(a + t - 1, n) : nullptr;
+                if (spread && !P.unbounded) break;
+                ConversionRank r = rank_conversion(spread ? spread : args[a + t - 1], P.element, ctx);
                 if (r == ConversionRank::None) break;
                 acc.push_back(r);
                 if (!P.exact || t == P.cap) relax(cur[a + t], acc);
@@ -125,7 +127,7 @@ bool assign_arguments(const std::vector<ParamShape>& params, const std::vector<T
             if (!prev[a].ok) continue;
 
             if (!P.is_pack) {
-                if (a < n) {
+                if (a < n && !(ctx.spread_arg_element && ctx.spread_arg_element(a, n))) {
                     ConversionRank r = args[a] ? rank_conversion(args[a], P.element, ctx) : ConversionRank::Conversion;
                     if (r != ConversionRank::None) {
                         std::vector<ConversionRank> v = prev[a].ranks;
@@ -142,7 +144,9 @@ bool assign_arguments(const std::vector<ParamShape>& params, const std::vector<T
             const std::size_t max_take = P.unbounded ? (n - a) : std::min<std::size_t>(P.cap, n - a);
 
             for (std::size_t t = 1; t <= max_take; ++t) {
-                ConversionRank r = args[a + t - 1] ? rank_conversion(args[a + t - 1], P.element, ctx) : ConversionRank::Conversion;
+                Type* spread = ctx.spread_arg_element ? ctx.spread_arg_element(a + t - 1, n) : nullptr;
+                if (spread && !P.unbounded) break;
+                ConversionRank r = spread ? rank_conversion(spread, P.element, ctx) : args[a + t - 1] ? rank_conversion(args[a + t - 1], P.element, ctx) : ConversionRank::Conversion;
                 if (r == ConversionRank::None) break;
                 acc.push_back(r);
                 if (!P.exact || t == P.cap) relax(cur[a + t], prev[a], acc, t);
@@ -283,7 +287,7 @@ bool signature_defaults_ok(const std::vector<ParamShape>& params, std::size_t& b
         if (!params[i].has_default) continue;
 
         for (std::size_t j = i + 1; j < pm; ++j) {
-            if (params[j].element == params[i].element) { bad_i = i; bad_j = j; return false; }
+            if (params[j].element == params[i].element && !(params[j].has_default && !params[j].is_pack)) { bad_i = i; bad_j = j; return false; }
             const bool optional = params[j].has_default || (params[j].is_pack && !params[j].exact);
             if (!optional) break;
         }

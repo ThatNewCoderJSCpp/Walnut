@@ -895,6 +895,63 @@ template <typename T> inline T* pre_dec(T*& p)  { return --p; }
 template <typename T> inline T* post_inc(T*& p) { return p++; }
 template <typename T> inline T* post_dec(T*& p) { return p--; }
 
+namespace checked {
+
+template <typename T, typename R>
+inline R norm(const R& v, const char* op) {
+    const R n = raw_norm(v);
+    if (!(n == v)) {
+        fail(std::string("integer overflow in safe code: the result of ") + op + " doesn't fit in " + (int_info<T>::is_signed ? "a signed " : "an unsigned ") + std::to_string(int_info<T>::bits) + "-bit integer");
+    }
+    return n;
+}
+
+template <typename T> inline T op_add(const T& a, const T& b) {
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_add(a, b); return T(norm<T>(a.raw() + b.raw(), "+")); }
+    else return walnut_rt::op_add(a, b);
+}
+
+template <typename T> inline T op_sub(const T& a, const T& b) {
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_sub(a, b); return T(norm<T>(a.raw() - b.raw(), "-")); }
+    else return walnut_rt::op_sub(a, b);
+}
+
+template <typename T> inline T op_mul(const T& a, const T& b) {
+    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_mul(a, b); return T(norm<T>(a.raw() * b.raw(), "*")); }
+    else return walnut_rt::op_mul(a, b);
+}
+
+template <typename T> inline T op_neg(const T& a) {
+    if constexpr (is_int_v<T>) {
+        if (a.is_unordered() || a.is_infinite()) return walnut_rt::op_neg(a);
+        return T(norm<T>(typename int_info<T>::raw_type() - a.raw(), "negating"));
+    } else {
+        return walnut_rt::op_neg(a);
+    }
+}
+
+template <typename T> inline decltype(auto) pre_inc(T& x) {
+    if constexpr (is_int_v<T>) { x = checked::op_add(x, T(1)); return (x); }
+    else return walnut_rt::pre_inc(x);
+}
+
+template <typename T> inline decltype(auto) pre_dec(T& x) {
+    if constexpr (is_int_v<T>) { x = checked::op_sub(x, T(1)); return (x); }
+    else return walnut_rt::pre_dec(x);
+}
+
+template <typename T> inline decltype(auto) post_inc(T& x) {
+    if constexpr (is_int_v<T>) { T old = x; x = checked::op_add(x, T(1)); return old; }
+    else return walnut_rt::post_inc(x);
+}
+
+template <typename T> inline decltype(auto) post_dec(T& x) {
+    if constexpr (is_int_v<T>) { T old = x; x = checked::op_sub(x, T(1)); return old; }
+    else return walnut_rt::post_dec(x);
+}
+
+} // namespace checked
+
 template <typename T, typename I> inline T* ptr_add(T* p, const I& i) { return p + to_ll(i); }
 template <typename T, typename I> inline T* ptr_sub(T* p, const I& i) { return p - to_ll(i); }
 template <typename R, typename T> inline R ptr_diff(T* a, T* b) { return cast<R>(i64(static_cast<long long>(a - b))); }
@@ -960,6 +1017,38 @@ template <typename P, typename C, typename R>
 inline P native_ptr(C& c, R&& r) {
     if constexpr (std::is_pointer_v<std::decay_t<R>>) return r;
     else return c.data() + (r - c.begin());
+}
+
+template <typename C>
+struct spread_part {
+    const C& items;
+};
+
+template <typename C>
+inline spread_part<C> spread(const C& items) {
+    return spread_part<C>{ items };
+}
+
+template <typename T>
+struct is_spread_part : std::false_type {};
+
+template <typename C>
+struct is_spread_part<spread_part<C>> : std::true_type {};
+
+template <typename V, typename P>
+inline void gather_into(V& out, P&& part) {
+    if constexpr (is_spread_part<std::decay_t<P>>::value) {
+        for (const auto& item : part.items) out.push_back(static_cast<typename V::value_type>(item));
+    } else {
+        out.push_back(static_cast<typename V::value_type>(std::forward<P>(part)));
+    }
+}
+
+template <typename V, typename... Parts>
+inline V gather(Parts&&... parts) {
+    V out;
+    (gather_into(out, std::forward<Parts>(parts)), ...);
+    return out;
 }
 
 template <typename C, typename I>
@@ -1514,7 +1603,7 @@ public:
 
     generator() = default;
 
-    iterator begin() {
+    iterator begin() const {
         if (!m_frame) fail("iterated an empty generator");
         if (m_frame->started) fail("a generator can only be iterated once");
         m_frame->started = true;

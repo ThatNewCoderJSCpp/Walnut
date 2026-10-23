@@ -28,7 +28,7 @@ void BinaryExpression::print(std::ostream& os, std::size_t indent) const {
     print_node(right, os, indent + 1);
 }
 
-ASTNode* BinaryExpression::clone_into(Arena& a) const { auto* c = make_in<BinaryExpression>(a, clone_child(left, a), op, clone_child(right, a), line); copy_base_to(c); return c; }
+ASTNode* BinaryExpression::clone_into(Arena& a) const { auto* c = make_in<BinaryExpression>(a, clone_child(left, a), op, clone_child(right, a), line); copy_base_to(c); c->named_argument = named_argument; return c; }
 
 void UnaryExpression::print(std::ostream& os, std::size_t indent) const {
     print_indent(os, indent);

@@ -64,7 +64,15 @@ nodes::ASTNode* Parser::parse_constructor_declaration_body(const modifiers::RawM
     bool owner_global = false;
     parse_owner_name(owner, owner_global);
     nodes::FunctionParameters* params = parse_function_parameters();
+    ParamFrame param_frame(*this, params);
+    reject_receiver(params, "a constructor creates the object instead of being called on one, so it");
     const modifiers::FunctionQualifiers quals = parse_function_qualifiers();
+    struct SelfDepthGuard {
+        int& depth;
+        int  saved;
+        ~SelfDepthGuard() { depth = saved; }
+    } self_guard{m_self_value_depth, m_self_value_depth};
+    m_self_value_depth = 0;
     using Special = nodes::ConstructorDeclaration::Special;
 
     if (quals.has(modifiers::FunctionQualifiers::Abstract)) {

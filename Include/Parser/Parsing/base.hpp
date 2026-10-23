@@ -61,6 +61,16 @@ private:
     std::unordered_set<std::string_view> m_variable_template_names;
     ParseNames*                          m_shared_names = nullptr;
     bool                     m_declaration_level = false;
+    int                      m_self_value_depth = 0;
+    int                      m_slice_depth = 0;
+    std::vector<const tokenizing::Token*> m_propagation;
+    struct ParamInfo { std::string_view name; bool variadic = false; bool template_pack = false; };
+    struct PackAlias { std::string_view name; std::string_view target; std::uint32_t offset = 0; };
+    std::vector<std::vector<ParamInfo>> m_param_frames;
+    std::vector<std::string_view> m_template_pack_names;
+    std::vector<PackAlias> m_pack_aliases;
+    std::size_t m_match_count = 0;
+    bool m_needs_collections = false;
     std::vector<nodes::ASTNode*> m_spliced;
     bool                         m_hoist_friends = false;
     bool                         m_nested_hoist = false;
@@ -276,6 +286,40 @@ private:
 private:
     nodes::FunctionParameter*     parse_function_parameter();
     nodes::FunctionParameters*    parse_function_parameters();
+    bool                          parse_receiver(nodes::FunctionParameters* params);
+    void                          apply_receiver(nodes::FunctionParameters* params, modifiers::FunctionQualifiers& quals, const tokenizing::Token& at);
+    void                          reject_receiver(nodes::FunctionParameters* params, const char* what);
+    void                          add_receiver_copy(nodes::FunctionParameters* params, nodes::ASTNode* body);
+    nodes::ASTNode*               parse_safety_region(bool declaration_level, bool list_level, bool injected_candidate, bool nested_hoist, nodes::TemplateDeclaration* owner_template);
+    void                          mark_safety(nodes::ASTNode* n, std::uint8_t inherited);
+    nodes::ASTNode*               make_library_call(std::initializer_list<std::string_view> path, std::vector<nodes::ASTNode*> args, std::uint32_t line);
+    bool                          comprehension_ahead();
+    nodes::ASTNode*               parse_comprehension();
+    std::string_view              intern(const std::string& text);
+    nodes::ASTNode*               wrap_propagation(nodes::ASTNode* body, const parser_types::TypeInfo& result, std::uint32_t line);
+    nodes::ASTNode*               make_in_test(nodes::ASTNode* value, nodes::ASTNode* container, bool negate, std::uint32_t line);
+    struct MatchPattern {
+        enum class Form : std::uint8_t { Wildcard, Value, Relation, In, Type, Bind, List };
+        Form form = Form::Wildcard;
+        nodes::ASTNode* value = nullptr;
+        tokenizing::Token::Kind relation = tokenizing::Token::Kind::LogicEqual;
+        bool negate = false;
+        parser_types::TypeInfo type;
+        std::string_view name;
+        std::vector<MatchPattern> items;
+        bool has_rest = false;
+        std::string_view rest_name;
+    };
+    struct ParamFrame {
+        Parser& parser;
+        ParamFrame(Parser& p, const nodes::FunctionParameters* params);
+        ~ParamFrame() { parser.m_param_frames.pop_back(); }
+    };
+    bool                          match_ahead();
+    nodes::ASTNode*               parse_match(bool as_expression);
+    MatchPattern                  parse_match_pattern(bool top, bool pack_subject);
+    bool                          typed_binding_ahead();
+    bool                          list_pattern_ahead();
     modifiers::FunctionQualifiers parse_function_qualifiers();
     nodes::ASTNode*               parse_operator_function(const modifiers::RawModifiers& mods, std::size_t line_number);
     nodes::ASTNode*               parse_operator_function_body(const modifiers::RawModifiers& mods, std::size_t line_number);

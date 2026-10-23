@@ -262,6 +262,7 @@ private:
     static nodes::FunctionParameter* variadic_param_of(Symbol* s);
 
     static Symbol* find_pack_ref(nodes::ASTNode* n);
+    static std::size_t pack_offset_of(nodes::ASTNode* n, const Symbol* pack);
 
     static void substitute_symbol(nodes::ASTNode* n, Symbol* from, Symbol* to);
 
@@ -355,6 +356,23 @@ private:
     Type* type_builtin_method(nodes::CallExpression* c, const std::vector<Type*>& args);
 
     static bool is_instance_field(const Symbol* s);
+    static bool is_object_member(const Symbol* s);
+    struct SelfRules {
+        bool explicit_self = false;
+        bool by_value = false;
+        const nodes::ASTNode* receiver_this = nullptr;
+    };
+    SelfRules enter_self_rules(nodes::ASTNode* fn, Symbol* sym, nodes::FunctionParameters* params, bool special);
+    void restore_self_rules(const SelfRules& saved);
+    void check_bare_member(nodes::Identifier* id);
+    void check_safe_expression(nodes::ASTNode* e);
+    void check_safe_statement(nodes::ASTNode* s);
+    bool apply_keyword_arguments(nodes::CallExpression* c);
+    static nodes::FunctionParameters* declared_params(nodes::ASTNode* d);
+    std::unordered_map<const nodes::ASTNode*, Type*> m_default_args;
+    void not_safe(nodes::ASTNode* at, const std::string& what);
+    void safety_error(const nodes::ASTNode* at, std::uint32_t line, const std::string& message);
+    static void mark_safe_subtree(nodes::ASTNode* n);
     static bool is_lazy_field(const Symbol* s);
     std::string lazy_write_problem(nodes::ASTNode* target);
     bool lazy_blocked(const Symbol* s, bool object_const);
@@ -365,7 +383,9 @@ private:
 
     bool is_member_function(const Symbol* fn) const;
     nodes::VariableDeclaration* pack_field_group(nodes::ASTNode* e);
-    void expand_pack_list(std::vector<nodes::ASTNode*>& items);
+    void expand_pack_list(std::vector<nodes::ASTNode*>& items, bool allow_runtime = false);
+    Type* runtime_spread_element(nodes::ASTNode* a);
+    std::unordered_set<const nodes::ASTNode*> m_runtime_spreads;
     nodes::VariableDeclaration* pack_field_group_of(Symbol* s);
 
     void check_const_call(Symbol* chosen, nodes::CallExpression* c);
@@ -428,6 +448,11 @@ private:
     nodes::ASTNode* m_statement_yield = nullptr;
     std::unordered_map<const Symbol*, Type*> m_array_types;
     bool m_in_const_method = false;
+    bool m_explicit_self = false;
+    std::unordered_set<std::string> m_safety_seen;
+    bool m_self_by_value = false;
+    const nodes::ASTNode* m_receiver_this = nullptr;
+
     int  m_typing_depth = 0;
     bool m_typing_depth_reported = false;
     bool m_allow_abstract = false;

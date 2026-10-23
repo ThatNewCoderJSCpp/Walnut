@@ -317,7 +317,9 @@ private:
     std::string special_code(semantics::SpecialKind k);
     std::string interpolated_text(nodes::CastExpression* c);
 
-    static const char* arith_helper(TK op);
+    const char* arith_helper(TK op) const;
+    static bool is_default_gap(const nodes::ASTNode* n);
+    bool m_checked_arith = false;
 
     static TK compound_base(TK op);
 

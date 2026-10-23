@@ -807,5 +807,53 @@ namespace std {
             }
             return SharedPtr<U>(p, q);
         } end function dynamic_pointer_cast
+
+        namespace detail {
+            extern "C++" from "<walnut_memory.hpp>" {
+                class Tracker as "walnut_rt::mem::tracker" {
+                public:
+                    static function gc_running() -> bool as "walnut_rt::mem::gc_running";
+                    static function tracking_allocations() -> bool as "walnut_rt::mem::tracking_allocations";
+                    static function collect_garbage() -> long int as "walnut_rt::mem::collect_garbage";
+                    static function live_objects() -> long int as "walnut_rt::mem::live_objects";
+                    static function live_bytes() -> long int as "walnut_rt::mem::live_bytes";
+                    static function peak_bytes() -> long int as "walnut_rt::mem::peak_bytes";
+                    static function allocations_made() -> long int as "walnut_rt::mem::allocations_made";
+                    static function allocation_report() -> string as "walnut_rt::mem::allocation_report";
+                } end class Tracker
+            } end extern
+        } end namespace detail
+
+        function gc_running() -> bool {
+            return detail::Tracker::gc_running();
+        } end function gc_running
+
+        function tracking_allocations() -> bool {
+            return detail::Tracker::tracking_allocations();
+        } end function tracking_allocations
+
+        function collect_garbage() -> long int {
+            return detail::Tracker::collect_garbage();
+        } end function collect_garbage
+
+        function live_objects() -> long int {
+            return detail::Tracker::live_objects();
+        } end function live_objects
+
+        function live_bytes() -> long int {
+            return detail::Tracker::live_bytes();
+        } end function live_bytes
+
+        function peak_bytes() -> long int {
+            return detail::Tracker::peak_bytes();
+        } end function peak_bytes
+
+        function allocations_made() -> long int {
+            return detail::Tracker::allocations_made();
+        } end function allocations_made
+
+        function allocation_report() -> string {
+            return detail::Tracker::allocation_report();
+        } end function allocation_report
     } end namespace memory
 } end namespace std

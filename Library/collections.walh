@@ -918,6 +918,30 @@ namespace std {
                     return out;
                 } end function slice
 
+                function sliced(long int: start, long int: stop, long int: step, bool: has_start, bool: has_stop) const -> Vector {
+                    if (step == 0) then {
+                        throw std::errors::collection_error("a slice's step can't be 0");
+                    }
+                    const long int: n = size();
+                    const long int: low = step > 0 ? 0 : -1;
+                    const long int: high = step > 0 ? n : n - 1;
+                    long int: first = step > 0 ? 0 : n - 1;
+                    long int: last = step > 0 ? n : -1;
+                    if (has_start) then {
+                        first = start < 0 ? start + n : start;
+                        first = first < low ? low : (first > high ? high : first);
+                    }
+                    if (has_stop) then {
+                        last = stop < 0 ? stop + n : stop;
+                        last = last < low ? low : (last > high ? high : last);
+                    }
+                    Vector: out;
+                    for (long int: i = first; step > 0 ? i < last : i > last; i += step) {
+                        out.push_back(data()[i]);
+                    }
+                    return out;
+                } end function sliced
+
                 function starts_with(const Vector&: prefix) const -> bool {
                     return std::algorithms::starts_with(data(), data() + size(), prefix.data(), prefix.data() + prefix.size());
                 } end function starts_with
@@ -1758,6 +1782,30 @@ namespace std {
                     return out;
                 } end function slice
 
+                function sliced(long int: start, long int: stop, long int: step, bool: has_start, bool: has_stop) const -> DynamicArray {
+                    if (step == 0) then {
+                        throw std::errors::collection_error("a slice's step can't be 0");
+                    }
+                    const long int: n = size();
+                    const long int: low = step > 0 ? 0 : -1;
+                    const long int: high = step > 0 ? n : n - 1;
+                    long int: first = step > 0 ? 0 : n - 1;
+                    long int: last = step > 0 ? n : -1;
+                    if (has_start) then {
+                        first = start < 0 ? start + n : start;
+                        first = first < low ? low : (first > high ? high : first);
+                    }
+                    if (has_stop) then {
+                        last = stop < 0 ? stop + n : stop;
+                        last = last < low ? low : (last > high ? high : last);
+                    }
+                    DynamicArray: out;
+                    for (long int: i = first; step > 0 ? i < last : i > last; i += step) {
+                        out.push_back(data()[i]);
+                    }
+                    return out;
+                } end function sliced
+
                 function starts_with(const DynamicArray&: prefix) const -> bool {
                     return std::algorithms::starts_with(data(), data() + size(), prefix.data(), prefix.data() + prefix.size());
                 } end function starts_with
@@ -2440,6 +2488,30 @@ namespace std {
                     }
                     return out;
                 } end function slice
+
+                function sliced(long int: start, long int: stop, long int: step, bool: has_start, bool: has_stop) const -> SmallVector {
+                    if (step == 0) then {
+                        throw std::errors::collection_error("a slice's step can't be 0");
+                    }
+                    const long int: n = size();
+                    const long int: low = step > 0 ? 0 : -1;
+                    const long int: high = step > 0 ? n : n - 1;
+                    long int: first = step > 0 ? 0 : n - 1;
+                    long int: last = step > 0 ? n : -1;
+                    if (has_start) then {
+                        first = start < 0 ? start + n : start;
+                        first = first < low ? low : (first > high ? high : first);
+                    }
+                    if (has_stop) then {
+                        last = stop < 0 ? stop + n : stop;
+                        last = last < low ? low : (last > high ? high : last);
+                    }
+                    SmallVector: out;
+                    for (long int: i = first; step > 0 ? i < last : i > last; i += step) {
+                        out.push_back(data()[i]);
+                    }
+                    return out;
+                } end function sliced
 
                 function starts_with(const SmallVector&: prefix) const -> bool {
                     return std::algorithms::starts_with(data(), data() + size(), prefix.data(), prefix.data() + prefix.size());
@@ -5464,5 +5536,652 @@ namespace std {
                 insert_values(value, 1);
             } end function insert_after
         } end class WhereQuery
+
+        namespace detail {
+            template <typename T>
+            function empty_list() -> Vector<std::traits::discard_cv<T>> {
+                return Vector<std::traits::discard_cv<T>>();
+            } end function empty_list
+        } end namespace detail
+
+        template <typename K, typename V>
+        class OrderedMap {
+            Vector<Pair<K, V>>: m_entries;
+            UnorderedMap<K, long int>: m_index;
+
+            function reindex_from(long int: start) -> void {
+                for (long int: i = start; i < m_entries.size(); i++) {
+                    m_index.set(m_entries[i].first, i);
+                }
+            } end function reindex_from
+
+            function missing(const K&: key) const -> void {
+                throw std::errors::collection_error("the key isn't in the map");
+            } end function missing
+
+        public:
+            using Iterator = Pair<K, V>*;
+            using ReverseIterator = std::iterators::Pointer<Pair<K, V>, true>;
+
+            constructor() { }
+
+            function size() const -> long int {
+                return m_entries.size();
+            } end function size
+
+            function empty() const -> bool {
+                return m_entries.empty();
+            } end function empty
+
+            function begin() -> Pair<K, V>* {
+                return m_entries.begin();
+            } end function begin
+
+            function end() -> Pair<K, V>* {
+                return m_entries.end();
+            } end function end
+
+            function begin() const -> const Pair<K, V>* {
+                return m_entries.begin();
+            } end function begin
+
+            function end() const -> const Pair<K, V>* {
+                return m_entries.end();
+            } end function end
+
+            function rbegin() -> std::iterators::Pointer<Pair<K, V>, true> {
+                return std::iterators::Pointer<Pair<K, V>, true>(m_entries.data(), m_entries.size() - 1);
+            } end function rbegin
+
+            function rend() -> std::iterators::Pointer<Pair<K, V>, true> {
+                return std::iterators::Pointer<Pair<K, V>, true>(m_entries.data(), -1);
+            } end function rend
+
+            function backwards() -> std::iterators::Range<std::iterators::Pointer<Pair<K, V>, true>> {
+                return std::iterators::Range<std::iterators::Pointer<Pair<K, V>, true>>(rbegin(), rend());
+            } end function backwards
+
+            function insert(const K&: key, const V&: value) -> bool {
+                if (m_index.contains(key)) then {
+                    return false;
+                }
+                m_index.set(key, m_entries.size());
+                m_entries.push_back(Pair<K, V>(key, value));
+                return true;
+            } end function insert
+
+            function set(const K&: key, const V&: value) -> void {
+                long int*: at = m_index.find(key);
+                if (at != nullptr) then {
+                    m_entries[*at].second = value;
+                    return;
+                }
+                m_index.set(key, m_entries.size());
+                m_entries.push_back(Pair<K, V>(key, value));
+            } end function set
+
+            operator([]) function(const K&: key) -> V& {
+                long int*: at = m_index.find(key);
+                if (at != nullptr) then {
+                    return m_entries[*at].second;
+                }
+                m_index.set(key, m_entries.size());
+                m_entries.push_back(Pair<K, V>(key, V()));
+                return m_entries[m_entries.size() - 1].second;
+            }
+
+            function at(const K&: key) -> V& {
+                long int*: where = m_index.find(key);
+                if (where == nullptr) then {
+                    missing(key);
+                }
+                return m_entries[*where].second;
+            } end function at
+
+            function at(const K&: key) const -> const V& {
+                const long int: where = m_index.get(key, -1);
+                if (where < 0) then {
+                    missing(key);
+                }
+                return m_entries[where].second;
+            } end function at
+
+            function find(const K&: key) -> V* {
+                long int*: where = m_index.find(key);
+                if (where == nullptr) then {
+                    return nullptr;
+                }
+                return &m_entries[*where].second;
+            } end function find
+
+            function get(const K&: key, const V&: fallback) const -> V {
+                const long int: where = m_index.get(key, -1);
+                if (where < 0) then {
+                    return fallback;
+                }
+                return m_entries[where].second;
+            } end function get
+
+            function contains(const K&: key) const -> bool {
+                return m_index.contains(key);
+            } end function contains
+
+            function index_of(const K&: key) const -> long int {
+                return m_index.get(key, -1);
+            } end function index_of
+
+            function entry(long int: i) -> Pair<K, V>& {
+                return m_entries[i];
+            } end function entry
+
+            function entry(long int: i) const -> const Pair<K, V>& {
+                return m_entries[i];
+            } end function entry
+
+            function remove(const K&: key) -> bool {
+                const long int: where = m_index.get(key, -1);
+                if (where < 0) then {
+                    return false;
+                }
+                m_index.remove(key);
+                m_entries.erase(where);
+                reindex_from(where);
+                return true;
+            } end function remove
+
+            function pop(const K&: key) -> V {
+                const long int: where = m_index.get(key, -1);
+                if (where < 0) then {
+                    missing(key);
+                }
+                V: value = m_entries[where].second;
+                remove(key);
+                return value;
+            } end function pop
+
+            function pop_last() -> Pair<K, V> {
+                if (m_entries.empty()) then {
+                    throw std::errors::collection_error("pop_last() on an empty map");
+                }
+                Pair<K, V>: last = m_entries.pop_back();
+                m_index.remove(last.first);
+                return last;
+            } end function pop_last
+
+            function pop_first() -> Pair<K, V> {
+                if (m_entries.empty()) then {
+                    throw std::errors::collection_error("pop_first() on an empty map");
+                }
+                Pair<K, V>: first = m_entries.erase(0);
+                m_index.remove(first.first);
+                reindex_from(0);
+                return first;
+            } end function pop_first
+
+            function move_to_end(const K&: key) -> void {
+                const long int: where = m_index.get(key, -1);
+                if (where < 0) then {
+                    missing(key);
+                }
+                Pair<K, V>: moved = m_entries.erase(where);
+                m_entries.push_back(moved);
+                reindex_from(where);
+            } end function move_to_end
+
+            function move_to_front(const K&: key) -> void {
+                const long int: where = m_index.get(key, -1);
+                if (where < 0) then {
+                    missing(key);
+                }
+                Pair<K, V>: moved = m_entries.erase(where);
+                m_entries.insert(0, moved);
+                reindex_from(0);
+            } end function move_to_front
+
+            function first() const -> const Pair<K, V>& {
+                if (m_entries.empty()) then {
+                    throw std::errors::collection_error("first() on an empty map");
+                }
+                return m_entries[0];
+            } end function first
+
+            function last() const -> const Pair<K, V>& {
+                if (m_entries.empty()) then {
+                    throw std::errors::collection_error("last() on an empty map");
+                }
+                return m_entries[m_entries.size() - 1];
+            } end function last
+
+            function clear() -> void {
+                m_entries.clear();
+                m_index.clear();
+            } end function clear
+
+            function keys() const -> Vector<K> {
+                Vector<K>: out;
+                out.reserve(m_entries.size());
+                for (const auto&: e in m_entries) {
+                    out.push_back(e.first);
+                }
+                return out;
+            } end function keys
+
+            function values() const -> Vector<V> {
+                Vector<V>: out;
+                out.reserve(m_entries.size());
+                for (const auto&: e in m_entries) {
+                    out.push_back(e.second);
+                }
+                return out;
+            } end function values
+
+            function items() const -> Vector<Pair<K, V>> {
+                return m_entries;
+            } end function items
+
+            function update(const OrderedMap&: other) -> void {
+                for (const auto&: e in other) {
+                    set(e.first, e.second);
+                }
+            } end function update
+
+            operator(==) function(const OrderedMap&: other) const -> bool {
+                return m_entries == other.m_entries;
+            }
+
+            operator(!=) function(const OrderedMap&: other) const -> bool {
+                return !(m_entries == other.m_entries);
+            }
+        } end class OrderedMap
+
+        template <typename T>
+        class OrderedSet {
+            Vector<T>: m_items;
+            UnorderedMap<T, long int>: m_index;
+
+            function reindex_from(long int: start) -> void {
+                for (long int: i = start; i < m_items.size(); i++) {
+                    m_index.set(m_items[i], i);
+                }
+            } end function reindex_from
+
+        public:
+            using Iterator = const T*;
+            using ReverseIterator = std::iterators::Pointer<const T, true>;
+
+            constructor() { }
+
+            constructor(T...: items) {
+                for (const T&: item in items) {
+                    insert(item);
+                }
+            }
+
+            function size() const -> long int {
+                return m_items.size();
+            } end function size
+
+            function empty() const -> bool {
+                return m_items.empty();
+            } end function empty
+
+            function begin() const -> const T* {
+                return m_items.begin();
+            } end function begin
+
+            function end() const -> const T* {
+                return m_items.end();
+            } end function end
+
+            function rbegin() const -> std::iterators::Pointer<const T, true> {
+                return std::iterators::Pointer<const T, true>(m_items.data(), m_items.size() - 1);
+            } end function rbegin
+
+            function rend() const -> std::iterators::Pointer<const T, true> {
+                return std::iterators::Pointer<const T, true>(m_items.data(), -1);
+            } end function rend
+
+            function backwards() const -> std::iterators::Range<std::iterators::Pointer<const T, true>> {
+                return std::iterators::Range<std::iterators::Pointer<const T, true>>(rbegin(), rend());
+            } end function backwards
+
+            function insert(const T&: value) -> bool {
+                if (m_index.contains(value)) then {
+                    return false;
+                }
+                m_index.set(value, m_items.size());
+                m_items.push_back(value);
+                return true;
+            } end function insert
+
+            function contains(const T&: value) const -> bool {
+                return m_index.contains(value);
+            } end function contains
+
+            function index_of(const T&: value) const -> long int {
+                return m_index.get(value, -1);
+            } end function index_of
+
+            operator([]) function(long int: i) const -> const T& {
+                return m_items[i];
+            }
+
+            function remove(const T&: value) -> bool {
+                const long int: where = m_index.get(value, -1);
+                if (where < 0) then {
+                    return false;
+                }
+                m_index.remove(value);
+                m_items.erase(where);
+                reindex_from(where);
+                return true;
+            } end function remove
+
+            function pop_last() -> T {
+                if (m_items.empty()) then {
+                    throw std::errors::collection_error("pop_last() on an empty set");
+                }
+                T: last = m_items.pop_back();
+                m_index.remove(last);
+                return last;
+            } end function pop_last
+
+            function clear() -> void {
+                m_items.clear();
+                m_index.clear();
+            } end function clear
+
+            function to_vector() const -> Vector<T> {
+                return m_items;
+            } end function to_vector
+
+            function union_with(const OrderedSet&: other) const -> OrderedSet {
+                OrderedSet: out = *this;
+                for (const T&: v in other) {
+                    out.insert(v);
+                }
+                return out;
+            } end function union_with
+
+            function intersect_with(const OrderedSet&: other) const -> OrderedSet {
+                OrderedSet: out;
+                for (const T&: v in m_items) {
+                    if (other.contains(v)) then {
+                        out.insert(v);
+                    }
+                }
+                return out;
+            } end function intersect_with
+
+            function except(const OrderedSet&: other) const -> OrderedSet {
+                OrderedSet: out;
+                for (const T&: v in m_items) {
+                    if (!other.contains(v)) then {
+                        out.insert(v);
+                    }
+                }
+                return out;
+            } end function except
+
+            function is_subset_of(const OrderedSet&: other) const -> bool {
+                for (const T&: v in m_items) {
+                    if (!other.contains(v)) then {
+                        return false;
+                    }
+                }
+                return true;
+            } end function is_subset_of
+
+            operator(==) function(const OrderedSet&: other) const -> bool {
+                return m_items.size() == other.m_items.size() && is_subset_of(other);
+            }
+
+            operator(!=) function(const OrderedSet&: other) const -> bool {
+                return !(*this == other);
+            }
+        } end class OrderedSet
+
+        template <typename T>
+        class Counter {
+            OrderedMap<T, long int>: m_counts;
+
+        public:
+            constructor() { }
+
+            constructor(T...: items) {
+                for (const T&: item in items) {
+                    add(item);
+                }
+            }
+
+            static function of(iterable<T>: items) -> Counter {
+                Counter: out;
+                for (const T&: item in items) {
+                    out.add(item);
+                }
+                return out;
+            } end function of
+
+            function size() const -> long int {
+                return m_counts.size();
+            } end function size
+
+            function empty() const -> bool {
+                return m_counts.empty();
+            } end function empty
+
+            function begin() const -> const Pair<T, long int>* {
+                return m_counts.begin();
+            } end function begin
+
+            function end() const -> const Pair<T, long int>* {
+                return m_counts.end();
+            } end function end
+
+            function add(const T&: item) -> long int {
+                long int&: n = m_counts[item];
+                n += 1;
+                return n;
+            } end function add
+
+            function add(const T&: item, long int: times) -> long int {
+                long int&: n = m_counts[item];
+                n += times;
+                return n;
+            } end function add
+
+            function add_all(iterable<T>: items) -> void {
+                for (const T&: item in items) {
+                    add(item);
+                }
+            } end function add_all
+
+            function subtract(const T&: item, long int: times = 1) -> long int {
+                long int&: n = m_counts[item];
+                n -= times;
+                return n;
+            } end function subtract
+
+            function set(const T&: item, long int: times) -> void {
+                m_counts.set(item, times);
+            } end function set
+
+            function count(const T&: item) const -> long int {
+                return m_counts.get(item, 0);
+            } end function count
+
+            operator([]) function(const T&: item) const -> long int {
+                return m_counts.get(item, 0);
+            }
+
+            function contains(const T&: item) const -> bool {
+                return m_counts.contains(item);
+            } end function contains
+
+            function remove(const T&: item) -> bool {
+                return m_counts.remove(item);
+            } end function remove
+
+            function clear() -> void {
+                m_counts.clear();
+            } end function clear
+
+            function total() const -> long int {
+                long int: sum = 0;
+                for (const auto&: e in m_counts) {
+                    sum += e.second;
+                }
+                return sum;
+            } end function total
+
+            function most_common() const -> Vector<Pair<T, long int>> {
+                Vector<Pair<T, long int>>: out = m_counts.items();
+                out.stable_sort([](const Pair<T, long int>&: a, const Pair<T, long int>&: b) -> bool { return a.second > b.second; });
+                return out;
+            } end function most_common
+
+            function most_common(long int: n) const -> Vector<Pair<T, long int>> {
+                Vector<Pair<T, long int>>: out = most_common();
+                if (n < out.size()) then {
+                    out.resize(n < 0 ? 0 : n);
+                }
+                return out;
+            } end function most_common
+
+            function least_common(long int: n) const -> Vector<Pair<T, long int>> {
+                Vector<Pair<T, long int>>: out = m_counts.items();
+                out.stable_sort([](const Pair<T, long int>&: a, const Pair<T, long int>&: b) -> bool { return a.second < b.second; });
+                if (n < out.size()) then {
+                    out.resize(n < 0 ? 0 : n);
+                }
+                return out;
+            } end function least_common
+
+            function elements() const -> Vector<T> {
+                Vector<T>: out;
+                for (const auto&: e in m_counts) {
+                    for (long int: i = 0; i < e.second; i++) {
+                        out.push_back(e.first);
+                    }
+                }
+                return out;
+            } end function elements
+
+            function keys() const -> Vector<T> {
+                return m_counts.keys();
+            } end function keys
+
+            function drop_zeros() -> long int {
+                Vector<T>: gone;
+                for (const auto&: e in m_counts) {
+                    if (e.second <= 0) then {
+                        gone.push_back(e.first);
+                    }
+                }
+                for (const T&: k in gone) {
+                    m_counts.remove(k);
+                }
+                return gone.size();
+            } end function drop_zeros
+
+            function merge(const Counter&: other) -> void {
+                for (const auto&: e in other) {
+                    add(e.first, e.second);
+                }
+            } end function merge
+
+            operator(==) function(const Counter&: other) const -> bool {
+                if (size() != other.size()) then {
+                    return false;
+                }
+                for (const auto&: e in m_counts) {
+                    if (other.count(e.first) != e.second || !other.contains(e.first)) then {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            operator(!=) function(const Counter&: other) const -> bool {
+                return !(*this == other);
+            }
+        } end class Counter
+
+        template <typename K, typename V>
+        class DefaultMap {
+            UnorderedMap<K, V>: m_map;
+            function() -> V: m_make;
+
+        public:
+            using Iterator = UnorderedMap<K, V>::Iterator;
+            using ReverseIterator = UnorderedMap<K, V>::ReverseIterator;
+
+            constructor() : m_make = []() -> V { return V(); } { }
+
+            constructor(function() -> V: make) : m_make = make { }
+
+            constructor(const V&: value) : m_make = [value]() -> V { return value; } { }
+
+            function size() const -> long int {
+                return m_map.size();
+            } end function size
+
+            function empty() const -> bool {
+                return m_map.empty();
+            } end function empty
+
+            function begin() const -> Iterator {
+                return m_map.begin();
+            } end function begin
+
+            function end() const -> Iterator {
+                return m_map.end();
+            } end function end
+
+            operator([]) function(const K&: key) -> V& {
+                V*: found = m_map.find(key);
+                if (found != nullptr) then {
+                    return *found;
+                }
+                m_map.set(key, m_make());
+                return *m_map.find(key);
+            }
+
+            function at(const K&: key) -> V& {
+                return m_map.at(key);
+            } end function at
+
+            function get(const K&: key, const V&: fallback) const -> V {
+                return m_map.get(key, fallback);
+            } end function get
+
+            function find(const K&: key) -> V* {
+                return m_map.find(key);
+            } end function find
+
+            function set(const K&: key, const V&: value) -> void {
+                m_map.set(key, value);
+            } end function set
+
+            function contains(const K&: key) const -> bool {
+                return m_map.contains(key);
+            } end function contains
+
+            function remove(const K&: key) -> bool {
+                return m_map.remove(key);
+            } end function remove
+
+            function clear() -> void {
+                m_map.clear();
+            } end function clear
+
+            function keys() const -> Vector<K> {
+                return m_map.keys();
+            } end function keys
+
+            function values() const -> Vector<V> {
+                return m_map.values();
+            } end function values
+        } end class DefaultMap
     } end namespace collections
 } end namespace std

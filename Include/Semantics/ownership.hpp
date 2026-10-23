@@ -22,7 +22,12 @@ class OwnershipChecker {
 public:
     OwnershipChecker(ErrorReporter& reporter, WarningReporter& warnings) noexcept : m_reporter(reporter), m_warnings(warnings) {}
 
-    void run(FileId file, nodes::ASTNode* root);
+    void run(FileId file, nodes::ASTNode* root, bool every_function = true);
+
+private:
+    bool wanted(const nodes::ASTNode* f) const;
+
+public:
 
     std::size_t errors_found() const noexcept { return m_errors; }
     std::size_t warnings_found() const noexcept { return m_warned; }
@@ -78,6 +83,8 @@ private:
     bool             m_returns_ref = false;
     bool             m_returns_ptr = false;
     bool             m_gave_up = false;
+    bool             m_every_function = true;
+    bool             m_strict = false;
     std::uint32_t    m_next_heap = 0;
     std::set<std::tuple<FileId, std::uint32_t, std::string>> m_seen;
     std::size_t      m_errors = 0;

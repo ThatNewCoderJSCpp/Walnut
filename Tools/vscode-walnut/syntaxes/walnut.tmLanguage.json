@@ -262,6 +262,30 @@
                     }
                 },
                 {
+                    "match": "\\b(match)\\b(?=\\s*\\((?:[^()]|\\([^()]*\\))*\\)\\s*\\{)",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(safe)\\b(?=\\s*(?:\\{|(?:class|struct|union|function|namespace|template|operator|static|inline|constexpr|hidden|local|global|hoist|virtual|friend)\\b))",
+                    "captures": {
+                        "1": {
+                            "name": "storage.modifier.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "(?<=\\bend\\s)(safe)\\b",
+                    "captures": {
+                        "1": {
+                            "name": "storage.modifier.walnut"
+                        }
+                    }
+                },
+                {
                     "match": "\\b(invalidate)\\b(?=\\s+[A-Za-z_])",
                     "captures": {
                         "1": {

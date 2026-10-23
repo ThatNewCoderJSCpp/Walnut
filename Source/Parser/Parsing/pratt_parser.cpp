@@ -1,4 +1,5 @@
 #include "Parser/Parsing/pratt_parser.hpp"
+#include <cstring>
 
 namespace walnut {
 namespace parsing {
@@ -34,6 +35,8 @@ Precedence get_infix_precedence(tokenizing::Token::Kind kind) {
             return Precedence::Assignment;
         
         case tokenizing::Token::Kind::QuestionMark: return Precedence::Ternary;
+        case tokenizing::Token::Kind::DoubleQuestion: return Precedence::Ternary;
+        case tokenizing::Token::Kind::QuestionDot: return Precedence::Postfix;
         case tokenizing::Token::Kind::LogicOr:      return Precedence::LogicOr;
         case tokenizing::Token::Kind::LogicAnd:     return Precedence::LogicAnd;
         case tokenizing::Token::Kind::Pipe:         return Precedence::BitwiseOr;
@@ -147,7 +150,12 @@ bool Parser::initializer_brace_ahead() {
 
 nodes::ASTNode* Parser::parse_call_argument() {
     const std::size_t line = current_token().line();
+    const bool named = current_token().kind() == tokenizing::Token::Kind::Identifier && lookahead(1).kind() == tokenizing::Token::Kind::Equal;
     nodes::ASTNode* arg = parse_expression_pratt(to_int(Precedence::None));
+    if (named && arg && arg->kind == nodes::ASTNode::Kind::BinaryExpression) {
+        auto* b = static_cast<nodes::BinaryExpression*>(arg);
+        if (b->op == tokenizing::Token::Kind::Equal && b->left && b->left->kind == nodes::ASTNode::Kind::Identifier) b->named_argument = true;
+    }
     if (match(tokenizing::Token::Kind::Ellipsis)) return make<nodes::UnaryExpression>(arg, tokenizing::Token::Kind::Ellipsis, false, line);
     return arg;
 }
@@ -190,10 +198,41 @@ nodes::ASTNode* Parser::parse_expression_pratt(int min_precedence) {
             if (!template_angle) break;
         }
 
+        if (op == tokenizing::Token::Kind::QuestionMark && lookahead(1).is_one_of(
+                tokenizing::Token::Kind::Semicolon, tokenizing::Token::Kind::DoubleSemicolon, tokenizing::Token::Kind::RightParen,
+                tokenizing::Token::Kind::RightSquare, tokenizing::Token::Kind::RightCurly, tokenizing::Token::Kind::Comma, tokenizing::Token::Kind::End)) {
+            if (m_propagation.empty()) throw ParserError::invalid_expression(reporter, current_token(), "'?' passes a missing value or an error on to the caller, so it can only be used inside a function");
+            const std::uint32_t at = static_cast<std::uint32_t>(current_token().line());
+            if (!m_propagation.back()) m_propagation.back() = m_cur_tok;
+            advance();
+            left = make_library_call({ "std", "optional", "detail", "unwrap" }, { left }, at);
+            continue;
+        }
+
+        if (to_int(Precedence::Comparison) >= min_precedence) {
+            std::size_t skip = 0;
+            bool negate = false;
+            if (op == tokenizing::Token::Kind::InKeyword) skip = 1;
+            else if (op == tokenizing::Token::Kind::Identifier && current_token().lexeme() == "not" && lookahead(1).kind() == tokenizing::Token::Kind::InKeyword) { skip = 2; negate = true; }
+            else if (op == tokenizing::Token::Kind::ExclamationMark && lookahead(1).kind() == tokenizing::Token::Kind::InKeyword) { skip = 2; negate = true; }
+
+            if (skip) {
+                const std::uint32_t at = static_cast<std::uint32_t>(current_token().line());
+                const char* op_at = current_token().data();
+                for (std::size_t i = 0; i < skip; ++i) advance();
+                nodes::ASTNode* container = parse_expression_pratt(to_int(Precedence::Comparison) + 1);
+                left = make_in_test(left, container, negate, at);
+                if (left && !left->at) left->at = op_at;
+                continue;
+            }
+        }
+
         if ((op == tokenizing::Token::Kind::IsKeyword || op == tokenizing::Token::Kind::AsKeyword) && to_int(Precedence::Comparison) >= min_precedence) {
             left = parse_type_test(left, op == tokenizing::Token::Kind::IsKeyword);
             continue;
         }
+
+        if (op == tokenizing::Token::Kind::DoubleColon && m_slice_depth > 0 && !lookahead(1).is_one_of(tokenizing::Token::Kind::Identifier, tokenizing::Token::Kind::LessThan) && !loose_keyword(lookahead(1).kind())) break;
 
         Precedence prec = (template_angle || brace_construct) ? Precedence::Postfix : get_infix_precedence(op);
         if (to_int(prec) < min_precedence || prec == Precedence::None) break;
@@ -204,6 +243,215 @@ nodes::ASTNode* Parser::parse_expression_pratt(int min_precedence) {
     }
 
     return left;
+}
+
+bool Parser::comprehension_ahead() {
+    using K = tokenizing::Token::Kind;
+    int depth = 0;
+    for (std::size_t i = 1; ; ++i) {
+        const tokenizing::Token& t = lookahead(i);
+        switch (t.kind()) {
+            case K::End: return false;
+            case K::LeftParen: case K::LeftSquare: case K::LeftCurly: ++depth; break;
+            case K::RightParen: case K::RightCurly: --depth; break;
+            case K::RightSquare:
+                if (depth == 0) return false;
+                --depth;
+                break;
+            case K::ForKeyword:
+                if (depth == 0) return i > 1;
+                break;
+            default: break;
+        }
+        if (depth < 0) return false;
+    }
+}
+
+nodes::ASTNode* Parser::parse_comprehension() {
+    using K = tokenizing::Token::Kind;
+    const std::uint32_t at = static_cast<std::uint32_t>(current_token().line());
+    const std::uint32_t first_order = m_node_order;
+    m_needs_collections = true;
+    expect(K::LeftSquare, "Expected '['");
+    nodes::ASTNode* element = parse_expression_pratt(to_int(Precedence::None));
+
+    struct Clause {
+        bool is_for = true;
+        parser_types::TypeInfo type;
+        modifiers::RawModifiers mods;
+        std::string_view name;
+        SmallVector<std::string_view, 4> bindings;
+        nodes::ASTNode* source = nullptr;
+        nodes::ASTNode* condition = nullptr;
+    };
+    std::vector<Clause> clauses;
+
+    while (current_token().is_one_of(K::ForKeyword, K::IfKeyword)) {
+        Clause c;
+        if (match(K::IfKeyword)) {
+            c.is_for = false;
+            expect(K::LeftParen, "Expected '(' after 'if' in a comprehension");
+            c.condition = parse_expression();
+            expect(K::RightParen, "Expected ')' after the condition");
+            clauses.push_back(c);
+            continue;
+        }
+        advance();
+        expect(K::LeftParen, "Expected '(' after 'for' in a comprehension, as in '[x * 2 for (int: x in values)]'");
+        c.mods = parse_raw_modifiers();
+        c.type = parse_type_info();
+        expect(K::Colon, "Expected ':' after the type in a comprehension's 'for'");
+        if (concrete_match(K::LeftSquare)) {
+            c.bindings = parse_binding_names();
+        } else {
+            if (current_token().kind() != K::Identifier) throw ParserError::unexpected_token(reporter, current_token(), {K::Identifier}, "Expected a name for the loop variable");
+            c.name = current_token().lexeme();
+            advance();
+        }
+        expect(K::InKeyword, "Expected 'in' in a comprehension's 'for'");
+        c.source = parse_expression();
+        expect(K::RightParen, "Expected ')' to close the comprehension's 'for'");
+        if (c.mods.has(modifiers::RawModifiers::Const)) c.type.modifiers.add(modifiers::RawModifiers::Const);
+        clauses.push_back(c);
+    }
+
+    if (!match(K::RightSquare)) throw ParserError::missing_token(reporter, current_token(), K::RightSquare, "Expected ']' to close the comprehension");
+    if (clauses.empty() || !clauses.front().is_for) throw ParserError::invalid_expression(reporter, current_token(), "A comprehension starts with a 'for' clause, as in '[x * 2 for (int: x in values)]'");
+
+    const std::string_view out_name = "walnut_comprehension";
+    auto* body = make<nodes::BlockStatement>();
+    auto early = [first_order](nodes::ASTNode* n) {
+        n->order = first_order;
+        if (n->kind == nodes::ASTNode::Kind::VariableDeclaration) static_cast<nodes::VariableDeclaration*>(n)->synthetic = true;
+        return n;
+    };
+    std::size_t dummy = 0;
+
+    for (const Clause& c : clauses) {
+        if (!c.is_for) continue;
+        auto element_of = [&]() {
+            parser_types::TypeInfo info;
+            nodes::ASTNode* call = make_library_call({ "std", "core", "element_of" }, { c.source->clone_into(arena) }, at);
+            info.type = make<parser_types::ComputedType>(parser_types::TypeOp::Typeof, call, std::vector<parser_types::TypeInfo>{});
+            return info;
+        };
+        const bool plain = c.bindings.empty() && c.type.type && !c.type.has_reference() && !c.type.has_pointer()
+                        && !(c.type.type->kind() == parser_types::Type::Kind::Primitive && static_cast<const parser_types::PrimitiveType*>(c.type.type)->is_auto());
+        if (!c.bindings.empty()) {
+            const std::string_view holder = intern("walnut_comprehension_item_" + std::to_string(dummy++));
+            body->add_statement(early(make<nodes::VariableDeclaration>(element_of(), holder, nullptr, at)));
+            parser_types::TypeInfo auto_info;
+            auto_info.type = parser_types::PrimitiveType::make_auto(arena);
+            body->add_statement(early(make<nodes::VariableDeclaration>(auto_info, c.bindings, early(make<nodes::Identifier>(holder, at)), at)));
+        } else if (plain) {
+            parser_types::TypeInfo info = c.type.clone_into(arena);
+            info.modifiers.clear();
+            body->add_statement(early(make<nodes::VariableDeclaration>(info, c.name, nullptr, at)));
+        } else {
+            body->add_statement(early(make<nodes::VariableDeclaration>(element_of(), c.name, nullptr, at)));
+        }
+    }
+
+    parser_types::TypeInfo element_type;
+    element_type.type = make<parser_types::ComputedType>(parser_types::TypeOp::Typeof, element->clone_into(arena), std::vector<parser_types::TypeInfo>{});
+    auto* targ = make<parser_types::TemplateArgument>();
+    targ->form = parser_types::TemplateArgument::Form::Type;
+    targ->type = element_type;
+    auto* make_list = static_cast<nodes::CallExpression*>(make_library_call({ "std", "collections", "detail", "empty_list" }, {}, at));
+    make_list->set_template_args({ targ });
+    make_list->has_angle_args = true;
+    parser_types::TypeInfo auto_info;
+    auto_info.type = parser_types::PrimitiveType::make_auto(arena);
+    body->add_statement(make<nodes::VariableDeclaration>(auto_info, out_name, make_list, at));
+
+    auto* push = make<nodes::MemberAccessExpression>(make<nodes::Identifier>(out_name, at), std::string_view("push_back"), nodes::MemberAccessExpression::Op::Dot, at);
+    auto* push_call = make<nodes::CallExpression>(push, at);
+    push_call->add_argument(element);
+    nodes::ASTNode* inner = make<nodes::ExpressionStatement>(push_call);
+
+    for (std::size_t i = clauses.size(); i-- > 0; ) {
+        const Clause& c = clauses[i];
+        auto* block = make<nodes::BlockStatement>();
+        block->add_statement(inner);
+        if (!c.is_for) {
+            auto* branch = make<nodes::IfBranch>(c.condition, block);
+            auto* test = make<nodes::IfStatement>();
+            test->branches.push_back(branch);
+            inner = test;
+        } else if (!c.bindings.empty()) {
+            inner = make<nodes::ForEachStatement>(c.type, c.mods, c.bindings, c.source, block, at);
+        } else {
+            inner = make<nodes::ForEachStatement>(c.type, c.mods, c.name, c.source, block, at);
+        }
+    }
+
+    body->add_statement(inner);
+    body->add_statement(make<nodes::ReturnStatement>(make<nodes::Identifier>(out_name, at), at));
+
+    auto* captures = make<nodes::LambdaCaptureList>();
+    captures->m_captures.push_back(nodes::LambdaCaptureItem(nodes::LambdaCaptureItem::Mode::AllByReference));
+    parser_types::TypeInfo return_type;
+    return_type.type = parser_types::PrimitiveType::make_auto(arena);
+    auto* lambda = make<nodes::LambdaExpression>(captures, make<nodes::FunctionParameters>(), return_type, modifiers::FunctionQualifiers{}, body, at);
+    return make<nodes::CallExpression>(lambda, at);
+}
+
+nodes::ASTNode* Parser::wrap_propagation(nodes::ASTNode* body, const parser_types::TypeInfo& result, std::uint32_t line) {
+    if (!body || body->kind != nodes::ASTNode::Kind::BlockStatement) return body;
+    const bool deduced = !result.type || (result.type->kind() == parser_types::Type::Kind::Primitive
+        && (static_cast<const parser_types::PrimitiveType*>(result.type)->is_auto() || static_cast<const parser_types::PrimitiveType*>(result.type)->base_kind() == parser_types::PrimitiveType::BaseKind::Dynamic));
+    const tokenizing::Token& used_at = m_propagation.empty() || !m_propagation.back() ? current_token() : *m_propagation.back();
+    if (deduced) {
+        throw ParserError::invalid_expression(reporter, used_at, "A function that uses '?' needs a written result type, an Optional or a Result, so the missing value or error has somewhere to go");
+    }
+    if (result.type && result.type->kind() == parser_types::Type::Kind::Primitive && !result.has_indirection()) {
+        throw ParserError::invalid_expression(reporter, used_at, "'?' passes a missing value or an error on by returning it, so the function that uses it has to return an Optional or a Result, not a built-in type");
+    }
+    auto* targ = make<parser_types::TemplateArgument>();
+    targ->form = parser_types::TemplateArgument::Form::Type;
+    targ->type = result.clone_into(arena);
+    const std::string_view caught = "walnut_propagated";
+    auto* pass_on = static_cast<nodes::CallExpression*>(make_library_call({ "std", "optional", "detail", "propagate" }, { make<nodes::Identifier>(caught, line) }, line));
+    pass_on->set_template_args({ targ });
+    pass_on->has_angle_args = true;
+    auto* handler = make<nodes::BlockStatement>();
+    handler->add_statement(make<nodes::ReturnStatement>(pass_on, line));
+    parser_types::TypeInfo catch_type;
+    catch_type.type = make<parser_types::UserDefinedType>(std::vector<std::string_view>{ "std", "optional", "detail", "Propagated" });
+    catch_type.modifiers.add(modifiers::RawModifiers::Const);
+    catch_type.add_reference();
+    auto* guarded = make<nodes::TryCatchStatement>(static_cast<nodes::BlockStatement*>(body), caught, catch_type, true, handler, line);
+    auto* outer = make<nodes::BlockStatement>();
+    outer->add_statement(guarded);
+    return outer;
+}
+
+std::string_view Parser::intern(const std::string& text) {
+    char* kept = static_cast<char*>(arena.alloc_raw(text.size() + 1, 1));
+    std::memcpy(kept, text.data(), text.size());
+    kept[text.size()] = '\0';
+    return std::string_view(kept, text.size());
+}
+
+nodes::ASTNode* Parser::make_library_call(std::initializer_list<std::string_view> path, std::vector<nodes::ASTNode*> args, std::uint32_t line) {
+    auto* name = make<nodes::QualifiedIdentifier>(line, false);
+    for (std::string_view part : path) name->add_part(part);
+    auto* call = make<nodes::CallExpression>(name, line);
+    for (nodes::ASTNode* a : args) call->add_argument(a);
+    return call;
+}
+
+nodes::ASTNode* Parser::make_in_test(nodes::ASTNode* value, nodes::ASTNode* container, bool negate, std::uint32_t line) {
+    nodes::ASTNode* call = nullptr;
+    if (container && container->kind == nodes::ASTNode::Kind::BraceInitializerList) {
+        std::vector<nodes::ASTNode*> args{ value };
+        for (nodes::ASTNode* option : static_cast<nodes::BraceInitializerList*>(container)->m_elements) args.push_back(option);
+        call = make_library_call({ "std", "core", "equals_any" }, std::move(args), line);
+    } else {
+        call = make_library_call({ "std", "core", "contains_in" }, { container, value }, line);
+    }
+    if (!negate) return call;
+    return make<nodes::UnaryExpression>(call, tokenizing::Token::Kind::ExclamationMark, true, line);
 }
 
 nodes::ASTNode* Parser::parse_prefix() {
@@ -281,7 +529,10 @@ nodes::ASTNode* Parser::parse_atom() {
         return parse_brace_initializer_list();
     }
 
+    if (match_ahead()) return parse_match(true);
+
     if (current_token().kind() == tokenizing::Token::Kind::LeftSquare) {
+        if (comprehension_ahead()) return parse_comprehension();
         advance(); 
         return parse_lambda_expression();
     }
@@ -512,7 +763,42 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
     if (op == tokenizing::Token::Kind::LeftSquare) {
         advance();
         AngleGuard _g(this, false);
-        nodes::ASTNode* index = parse_expression_pratt(to_int(Precedence::None));
+        using K = tokenizing::Token::Kind;
+        const bool bare_double = current_token().kind() == K::DoubleColon && lookahead(1).kind() != K::Identifier && !loose_keyword(lookahead(1).kind());
+        ++m_slice_depth;
+        nodes::ASTNode* index = (current_token().kind() == K::Colon || bare_double) ? nullptr : parse_expression_pratt(to_int(Precedence::None));
+        --m_slice_depth;
+
+        if (current_token().is_one_of(K::Colon, K::DoubleColon)) {
+            const bool both = current_token().kind() == K::DoubleColon;
+            advance();
+            nodes::ASTNode* stop = nullptr;
+            nodes::ASTNode* step = nullptr;
+            bool step_follows = both;
+            if (!both) {
+                if (!current_token().is_one_of(K::Colon, K::RightSquare)) {
+                    ++m_slice_depth;
+                    stop = parse_expression_pratt(to_int(Precedence::None));
+                    --m_slice_depth;
+                }
+                step_follows = match(K::Colon);
+            }
+            if (step_follows && current_token().kind() != K::RightSquare) step = parse_expression_pratt(to_int(Precedence::None));
+            if (!match(K::RightSquare)) throw ParserError::missing_token(reporter, current_token(), K::RightSquare, "Expected ']' after a slice such as 'v[1:3]'");
+            const std::uint32_t at = static_cast<std::uint32_t>(line);
+            auto number = [&](std::string_view text) { return make<nodes::Literal>(text, K::Integer, at); };
+            auto flag = [&](bool on) { return make<nodes::Literal>(std::string_view(on ? "true" : "false"), on ? K::True : K::False, at); };
+            auto* member = make<nodes::MemberAccessExpression>(left, std::string_view("sliced"), nodes::MemberAccessExpression::Op::Dot, at);
+            auto* call = make<nodes::CallExpression>(member, at);
+            call->add_argument(index ? index : number("0"));
+            call->add_argument(stop ? stop : number("0"));
+            call->add_argument(step ? step : number("1"));
+            call->add_argument(flag(index != nullptr));
+            call->add_argument(flag(stop != nullptr));
+            return call;
+        }
+
+        if (!index) throw ParserError::invalid_expression(reporter, current_token(), "Expected an index inside '[ ]'");
 
         if (!match(tokenizing::Token::Kind::RightSquare)) {
             throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::RightSquare, "Expected ']' after array subscript");
@@ -541,12 +827,54 @@ nodes::ASTNode* Parser::parse_infix(nodes::ASTNode* left, tokenizing::Token::Kin
         return call;
     }
     
+    if (op == tokenizing::Token::Kind::DoubleQuestion) {
+        const std::uint32_t at = static_cast<std::uint32_t>(line);
+        advance();
+        nodes::ASTNode* fallback = parse_expression_pratt(to_int(Precedence::Ternary));
+        auto* body = make<nodes::BlockStatement>();
+        body->add_statement(make<nodes::ReturnStatement>(fallback, at));
+        auto* captures = make<nodes::LambdaCaptureList>();
+        captures->m_captures.push_back(nodes::LambdaCaptureItem(nodes::LambdaCaptureItem::Mode::AllByReference));
+        parser_types::TypeInfo result;
+        result.type = parser_types::PrimitiveType::make_auto(arena);
+        auto* lambda = make<nodes::LambdaExpression>(captures, make<nodes::FunctionParameters>(), result, modifiers::FunctionQualifiers{}, body, at);
+        return make_library_call({ "std", "optional", "detail", "coalesce" }, { left, lambda }, at);
+    }
+
+    if (op == tokenizing::Token::Kind::QuestionDot) {
+        const std::uint32_t at = static_cast<std::uint32_t>(line);
+        const std::uint32_t first_order = m_node_order;
+        const std::string_view name = intern("walnut_value_" + std::to_string(m_node_order));
+        const_cast<tokenizing::Token*>(m_cur_tok)->kind(tokenizing::Token::Kind::Dot);
+        nodes::ASTNode* inner = parse_infix(make<nodes::Identifier>(name, at), tokenizing::Token::Kind::Dot, Precedence::Postfix);
+        while (current_token().is_one_of(tokenizing::Token::Kind::Dot, tokenizing::Token::Kind::LeftParen, tokenizing::Token::Kind::LeftSquare, tokenizing::Token::Kind::SingleRightArrow)) {
+            inner = parse_infix(inner, current_token().kind(), Precedence::Postfix);
+        }
+        parser_types::TypeInfo param_type;
+        param_type.type = parser_types::PrimitiveType::make_auto(arena);
+        param_type.modifiers.add(modifiers::RawModifiers::Const);
+        param_type.add_reference();
+        auto* param = make<nodes::FunctionParameter>(name, param_type);
+        param->order = first_order;
+        auto* params = make<nodes::FunctionParameters>();
+        params->add(param);
+        params->order = first_order;
+        auto* body = make<nodes::BlockStatement>();
+        body->add_statement(make<nodes::ReturnStatement>(inner, at));
+        auto* captures = make<nodes::LambdaCaptureList>();
+        captures->m_captures.push_back(nodes::LambdaCaptureItem(nodes::LambdaCaptureItem::Mode::AllByReference));
+        parser_types::TypeInfo result;
+        result.type = parser_types::PrimitiveType::make_auto(arena);
+        auto* lambda = make<nodes::LambdaExpression>(captures, params, result, modifiers::FunctionQualifiers{}, body, at);
+        return make_library_call({ "std", "optional", "detail", "chain" }, { left, lambda }, at);
+    }
+
     if (op == tokenizing::Token::Kind::QuestionMark) {
         advance();
         nodes::ASTNode* then_branch = parse_expression_pratt(to_int(Precedence::None));
 
         if (!match(tokenizing::Token::Kind::Colon)) {
-            throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::Colon, "Expected ':' in ternary conditional operator");
+            throw ParserError::missing_token(reporter, current_token(), tokenizing::Token::Kind::Colon, "Expected ':' in ternary conditional operator; if the '?' was meant to pass a missing value or an error on to the caller, put it in parentheses, as in '(value?) + 1'");
         }
 
         nodes::ASTNode* else_branch = parse_expression_pratt(to_int(Precedence::Ternary));
@@ -755,7 +1083,17 @@ nodes::ASTNode* Parser::parse_type_query_expression() {
     }
 
     AngleGuard _g(this, false);
-    parser_types::TemplateArgument* operand = parse_type_or_value_operand();
+    parser_types::TemplateArgument* operand = nullptr;
+    if (current_token().kind() == K::Identifier && lookahead(1).kind() == K::RightParen) {
+        for (auto it = m_pack_aliases.rbegin(); it != m_pack_aliases.rend(); ++it) {
+            if (it->name != current_token().lexeme()) continue;
+            operand = make<parser_types::TemplateArgument>();
+            operand->form = parser_types::TemplateArgument::Form::Value;
+            operand->value = parse_identifier_or_qualified();
+            break;
+        }
+    }
+    if (!operand) operand = parse_type_or_value_operand();
 
     if (!match(K::RightParen)) {
         throw ParserError::missing_token(reporter, current_token(), K::RightParen, "Expected ')' to close type-query operand");
@@ -877,6 +1215,7 @@ nodes::ASTNode* Parser::parse_requires_expression() {
     if (concrete_match(K::LeftParen)) {
         AngleGuard _g(this, false);   
         params = parse_function_parameters();
+        reject_receiver(params, "a requires-expression");
     }
 
     if (!match(K::LeftCurly)) {

@@ -14,6 +14,8 @@
 8. [enable_if](#enable_if)
 9. [std::initializer_list](#stdinitializer_list)
 10. [Function types and comparators](#function-types-and-comparators)
+11. [in, not in and match](#in-not-in-and-match)
+12. [Errors](#errors)
 
 ## std::core::move
 
@@ -675,3 +677,34 @@ function main() -> int {
 ```
 
 After the first `sort`, `people[0]` is `Al`; after the second, it is `Zoe`, and `even_seven` is `false`.
+
+## in, not in and match
+
+The [`in` and `not in` operators](../../documentation.md#in-and-not-in) and [`match`](../../documentation.md#match) are built on these functions in `std::core`. They can also be called directly:
+
+| Function | Gives |
+|---|---|
+| `contains_in(items, value)` | Whether `items` holds `value`: `items.contains(value)` when it has that method, otherwise a search with `==`. `x in items` calls this |
+| `equals_any(value, a, b, ...)` | Whether `value` equals any of the others. `x in {a, b}` calls this |
+| `element_of(items)` | The first element of `items`. Throws a `std::errors::empty_sequence` when there is none |
+
+```walnut
+function main() -> int {
+    array[3] int: xs = {4, 8, 15};
+    bool: has = std::core::contains_in(xs, 8);
+    bool: one_of = std::core::equals_any(3, 1, 2, 3);
+    int: first = std::core::element_of(xs);
+    return 0;
+} end function main
+```
+
+Here `has` and `one_of` are `true`, and `first` is `4`.
+
+## Errors
+
+Both of these have a `message` field and a `what()` method that gives it.
+
+| Class | Thrown by |
+|---|---|
+| `std::errors::empty_sequence` | `std::core::element_of` on something empty |
+| `std::errors::match_error` | A [`match`](../../documentation.md#match) used as an expression when no case fits and there is no `default`, or a type pattern whose value isn't of that type |

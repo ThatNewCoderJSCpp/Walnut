@@ -80,7 +80,7 @@ void UnusedVariableChecker::collect(nodes::ASTNode* n, bool in_record) {
         }
         case K::VariableDeclaration: {
             auto* v = static_cast<nodes::VariableDeclaration*>(n);
-            if (in_record) break;
+            if (in_record || v->synthetic) break;
             Declared d;
             d.line = v->line;
             if (v->is_structured_binding()) {

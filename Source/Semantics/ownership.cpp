@@ -16,9 +16,14 @@ std::string quoted(std::string_view name) { return "'" + std::string(name) + "'"
 
 } // namespace
 
-void OwnershipChecker::run(FileId file, nodes::ASTNode* root) {
+void OwnershipChecker::run(FileId file, nodes::ASTNode* root, bool every_function) {
     m_file = file;
+    m_every_function = every_function;
     find(root);
+}
+
+bool OwnershipChecker::wanted(const nodes::ASTNode* f) const {
+    return m_every_function || nodes::in_safe_code(f);
 }
 
 void OwnershipChecker::find(nodes::ASTNode* n) {
@@ -26,27 +31,27 @@ void OwnershipChecker::find(nodes::ASTNode* n) {
     switch (n->kind) {
         case K::FunctionDeclaration: {
             auto* f = static_cast<nodes::FunctionDeclaration*>(n);
-            if (f->m_body) check_function(f->m_parameters, f->m_body, &f->m_return_type);
+            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(f->m_parameters, f->m_body, &f->m_return_type); m_strict = false; }
             break;
         }
         case K::OperatorFunctionDeclaration: {
             auto* f = static_cast<nodes::OperatorFunctionDeclaration*>(n);
-            if (f->m_body) check_function(f->m_parameters, f->m_body, &f->m_return_type);
+            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(f->m_parameters, f->m_body, &f->m_return_type); m_strict = false; }
             break;
         }
         case K::ConstructorDeclaration: {
             auto* f = static_cast<nodes::ConstructorDeclaration*>(n);
-            if (f->m_body) check_function(f->m_parameters, f->m_body, nullptr);
+            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(f->m_parameters, f->m_body, nullptr); m_strict = false; }
             break;
         }
         case K::DestructorDeclaration: {
             auto* f = static_cast<nodes::DestructorDeclaration*>(n);
-            if (f->m_body) check_function(nullptr, f->m_body, nullptr);
+            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(nullptr, f->m_body, nullptr); m_strict = false; }
             break;
         }
         case K::LambdaExpression: {
             auto* f = static_cast<nodes::LambdaExpression*>(n);
-            if (f->m_body) check_function(f->m_parameters, f->m_body, &f->m_return_type);
+            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(f->m_parameters, f->m_body, &f->m_return_type); m_strict = false; }
             break;
         }
         default:
@@ -900,6 +905,10 @@ void OwnershipChecker::error(std::uint32_t line, std::string message) {
 
 void OwnershipChecker::warn(std::uint32_t line, std::string message) {
     if (m_gave_up) return;
+    if (m_strict) {
+        error(line, std::move(message) + " (this is an error in safe code)");
+        return;
+    }
     if (!m_seen.emplace(m_file, line, message).second) return;
     ++m_warned;
     m_warnings.report(ErrorPhase::Semantic, m_file, line, std::move(message));

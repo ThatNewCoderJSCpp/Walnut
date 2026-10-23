@@ -1,12 +1,12 @@
 # optional
 
-`optional` has `Optional<T>`: a value of type `T` that may or may not be there. Use it instead of a special value, a `bool` beside the result, or a pointer that might be `nullptr`, when "nothing" is a normal answer, such as a search that finds no match. It is C++'s `std::optional`, with the methods Walnut programmers expect.
+`optional` has `Optional<T>`: a value of type `T` that may or may not be there. Use it instead of a special value, a `bool` beside the result, or a pointer that might be `nullptr`, when "nothing" is a normal answer, such as a search that finds no match. It is C++'s `std::optional`, with the methods Walnut programmers expect. It also has [`Result<T, E>`](#result), which holds either a value or an error.
 
 ```walnut
 import module.optional
 ```
 
-Everything is in the namespace `std::optional`. `using std::optional::Optional;` brings in the class under its short name.
+Every program gets this library automatically, because the [`?`, `?.` and `??` operators](../../documentation.md#missing-values-and-errors) are built on it, so the `import` is optional. Everything is in the namespace `std::optional`. `using std::optional::Optional;` brings in the class under its short name.
 
 ## A first example
 
@@ -94,6 +94,59 @@ This prints `8 -1 1` and `80 none`.
 | `or_value(other)` | Itself when it has a value, otherwise `other` |
 | `filter(pred)` | Itself when it has a value that passes `pred`, otherwise an empty one |
 | `if_present(func)` | Calls `func(value)` when there is a value |
+
+## Result
+
+`Result<T, E>` holds either a value of type `T` or an error of type `E`. Return one from a function that can fail, so the caller gets the reason as well as the failure. Inside a function that returns a `Result`, [`?`](../../documentation.md#missing-values-and-errors) unwraps a `Result` and hands its error on to the caller.
+
+```walnut
+using std::optional::Result;
+
+function divide(int: a, int: b) -> Result<int, string> {
+    if (b == 0) then {
+        return std::optional::error("division by zero");
+    }
+    return std::optional::ok(a / b);
+} end function divide
+
+function average(int: total, int: count) -> Result<int, string> {
+    int: each = divide(total, count)?;
+    return std::optional::ok(each);
+} end function average
+
+function main() -> int {
+    Result<int, string>: good = average(10, 2);
+    Result<int, string>: bad = average(10, 0);
+    int: shown = bad.value_or(-1);
+    return 0;
+} end function main
+```
+
+Here `good` holds `5`, `bad` holds the error `"division by zero"`, and `shown` is `-1`.
+
+**Making one**
+
+| Written | Holds |
+|---|---|
+| `std::optional::ok(value)` | `value`. It converts to any `Result` whose value type is the type of `value`, so it can be returned directly |
+| `std::optional::error(e)` | The error `e`. It converts to any `Result` whose error type is the type of `e` |
+| `Result<T, E>::ok(value)`, `Result<T, E>::err(e)` | The same, with the types written out |
+| `Result<T, E>: r;` | Neither: `is_ok()` is `false` and `error()` throws until a value or an error is assigned |
+
+**Methods**
+
+| Method | Gives |
+|---|---|
+| `is_ok()`, `is_err()` | Whether it holds a value, or an error |
+| `static_cast<bool>(r)` | The same as `is_ok()` |
+| `value()` | The value. Throws a `std::errors::optional_error` when it holds an error |
+| `error()` | The error. Throws a `std::errors::optional_error` when it holds a value |
+| `value_or(fallback)` | The value, or `fallback` |
+| `ok_value()`, `err_value()` | The value or the error as an `Optional` |
+| `map(func)` | A `Result` holding `func(value)`, or the same error |
+| `map_error(func)` | A `Result` holding the same value, or `func(error)` |
+| `to_string()` | `"ok(...)"` or `"error(...)"` |
+| `r == other`, `r != other` | Equal when both hold equal values or equal errors |
 
 ## Errors
 

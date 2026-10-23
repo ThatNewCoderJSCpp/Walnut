@@ -102,7 +102,7 @@ void FunctionParameters::print(std::ostream& os, std::size_t indent) const {
     }
 }
 
-ASTNode* FunctionParameters::clone_into(Arena& a) const { auto* c = make_in<FunctionParameters>(a); copy_base_to(c); c->m_params = clone_typed_list(m_params, a); return c; }
+ASTNode* FunctionParameters::clone_into(Arena& a) const { auto* c = make_in<FunctionParameters>(a); copy_base_to(c); c->m_params = clone_typed_list(m_params, a); c->receiver = receiver; c->receiver_line = receiver_line; return c; }
 
 FunctionDeclaration::FunctionDeclaration(
         std::vector<std::string_view> name_parts,

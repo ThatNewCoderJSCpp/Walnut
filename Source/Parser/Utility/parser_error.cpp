@@ -25,7 +25,7 @@ std::string_view punctuation_of(tokenizing::Token::Kind k) {
         case K::SingleQuote: return "'";          case K::DoubleQuote: return "\"";
         case K::Pipe: return "|";                 case K::Backtick: return "`";
         case K::Tilde: return "~";                case K::ExclamationMark: return "!";
-        case K::QuestionMark: return "?";         case K::AtSymbol: return "@";
+        case K::QuestionMark: return "?"; case K::DoubleQuestion: return "??"; case K::QuestionDot: return "?.";         case K::AtSymbol: return "@";
         case K::Caret: return "^";                case K::Percent: return "%";
         case K::BackSlash: return "\\";           case K::MoneySymbol: return "$";
         case K::Ampersand: return "&";            case K::Underscore: return "_";

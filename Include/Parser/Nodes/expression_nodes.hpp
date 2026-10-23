@@ -25,6 +25,7 @@ struct Literal : ASTNode {
 struct Identifier : ASTNode {
     std::string_view name;
     semantics::Symbol* resolved = nullptr; 
+    std::uint32_t pack_offset = 0;
 
     Identifier(std::string_view n, std::uint32_t ln = 0) : ASTNode(Kind::Identifier, ln), name(n) {}
 
@@ -37,7 +38,7 @@ struct Identifier : ASTNode {
         os << "Identifier: " << name << "\n";
     }
 
-    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<Identifier>(a, name, line); copy_base_to(c); return c; }
+    ASTNode* clone_into(Arena& a) const override { auto* c = make_in<Identifier>(a, name, line); copy_base_to(c); c->pack_offset = pack_offset; return c; }
 };
 
 struct QualifiedIdentifier : ASTNode {
@@ -69,6 +70,7 @@ struct BinaryExpression : ASTNode {
     bool negate_result = false;
     bool swap_operands = false;
     semantics::Type* memberwise = nullptr;
+    bool named_argument = false;
 
     BinaryExpression(ASTNode* l, tokenizing::Token::Kind o, ASTNode* r, std::uint32_t ln) : ASTNode(Kind::BinaryExpression, ln), left(l), op(o), right(r) {}
 

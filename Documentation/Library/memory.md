@@ -16,7 +16,8 @@ Everything is in the namespace `std::memory`.
 4. [WeakPtr](#weakptr)
 5. [EnableSharedFromThis](#enablesharedfromthis)
 6. [Arenas](#arenas)
-7. [Errors](#errors)
+7. [Tracking memory](#tracking-memory)
+8. [Errors](#errors)
 
 ## Smart pointers
 
@@ -244,6 +245,55 @@ An `ArenaPtr<T>` points to one object in an arena. `p->field`, `*p` and `p.value
 | `generation()`, `use_count()` | The arena generation it belongs to, and how many pointers and arrays (plus the arena itself) share the arena's memory |
 
 An `ArenaArray<T>` is a fixed-size array in an arena. It has `size()`, `empty()`, `valid()`, `expired()`, `[]`, `at`, `front`, `back`, `element(i)` (an `ArenaPtr<T>` to one element), `data()` (a `T*`), `to_vector()`, and `begin()`/`end()`, so `for (T: x in array)` works. Indexes are checked: one out of range, or any use after a reset, throws an `arena_error`.
+
+## Tracking memory
+
+These functions let a program look at its own memory while it runs, the way Python's `gc` and `tracemalloc` modules do. They report on objects made with `new` (including the ones smart pointers own), and only have something to report when the program is built with a [safety option](../../documentation.md#safety-checks) that records allocations: `--leak-check`, `--check-bounds`, `--check-null`, `--safe` or `--gc`.
+
+```walnut
+import module.io
+import module.memory
+
+struct Node {
+    int: value;
+    Node*: next;
+} end struct Node
+
+function main() -> int {
+    Node*: a = new Node();
+    Node*: b = new Node();
+    std::io::println(std::memory::live_objects(), " objects, ", std::memory::live_bytes(), " bytes");
+    std::io::print(std::memory::allocation_report());
+    delete a;
+    delete b;
+    std::io::println(std::memory::live_objects(), " left, peak ", std::memory::peak_bytes(), " bytes");
+    return 0;
+} end function main
+```
+
+With `walnut run --leak-check nodes.wal` this prints:
+
+```
+2 objects, 64 bytes
+2 objects (64 bytes) made with new are alive
+  nodes.wal:10: new Node (32 bytes)
+  nodes.wal:11: new Node (32 bytes)
+0 left, peak 64 bytes
+```
+
+| Function | Gives |
+|---|---|
+| `tracking_allocations()` | Whether this build records allocations, so the functions below have answers |
+| `live_objects()`, `live_bytes()` | How many objects made with `new` are alive now, and their size |
+| `peak_bytes()` | The most memory from `new` alive at once so far |
+| `allocations_made()` | How many times `new` has run so far |
+| `allocation_report()` | A `string` listing the live objects grouped by the line that made them, the same as the leak report at the end of a `--leak-check` run; empty when nothing is recorded |
+| `gc_running()` | Whether the program was built with `--gc` |
+| `collect_garbage()` | Runs the garbage collector now and gives how many objects it freed; `0` without `--gc` |
+
+- When nothing is recorded, the numbers are `-1`.
+- With `--gc` alone, `live_objects()` and `live_bytes()` count every block the collector looks after, including ones the library made, and `peak_bytes()` and `allocations_made()` are `-1`; add `--leak-check` for the full picture.
+- Objects in an [`Arena`](#arenas) aren't made with `new`, so they aren't counted; the arena's own `bytes_used()` and `object_count()` report them.
 
 ## Errors
 

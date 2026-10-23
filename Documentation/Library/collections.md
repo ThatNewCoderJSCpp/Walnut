@@ -1,6 +1,6 @@
 # collections
 
-`collections` has the containers most programs need: growable arrays, linked lists, double-ended queues, stacks, queues, priority queues, hash maps and sets, sorted maps and sets, tries for prefix search, caches, pairs and tuples, and views over memory.
+`collections` has the containers most programs need: growable arrays, linked lists, double-ended queues, stacks, queues, priority queues, hash maps and sets, maps and sets that keep the order things were added in, counters, maps with default values, sorted maps and sets, tries for prefix search, caches, pairs and tuples, and views over memory.
 
 `Vector` is C++'s `std::vector`, and `DynamicArray`, `SmallVector`, `TrieMap` and `Trie` are Fizmo's containers of the same names, used from Walnut as [C++ classes](../../documentation.md#using-c-classes). The other containers are written in Walnut.
 
@@ -25,16 +25,19 @@ Everything in `collections` is in the namespace `std::collections`. `import modu
 11. [PriorityQueue](#priorityqueue)
 12. [UnorderedMap](#unorderedmap)
 13. [UnorderedSet](#unorderedset)
-14. [Map and Set](#map-and-set)
-15. [TrieMap and Trie](#triemap-and-trie)
-16. [Cache](#cache)
-17. [Pair](#pair)
-18. [Tuple](#tuple)
-19. [Searching, sorting and more](#searching-sorting-and-more)
-20. [WhereQuery](#wherequery)
-21. [Hashing](#hashing)
-22. [Errors](#errors)
-23. [What the element type needs](#what-the-element-type-needs)
+14. [OrderedMap and OrderedSet](#orderedmap-and-orderedset)
+15. [Counter](#counter)
+16. [DefaultMap](#defaultmap)
+17. [Map and Set](#map-and-set)
+18. [TrieMap and Trie](#triemap-and-trie)
+19. [Cache](#cache)
+20. [Pair](#pair)
+21. [Tuple](#tuple)
+22. [Searching, sorting and more](#searching-sorting-and-more)
+23. [WhereQuery](#wherequery)
+24. [Hashing](#hashing)
+25. [Errors](#errors)
+26. [What the element type needs](#what-the-element-type-needs)
 
 ## A first example
 
@@ -81,6 +84,10 @@ This prints `apple fig fig pear pear` and `pears: 2, kinds: 3`.
 | `PriorityQueue<T>` | A binary heap | Always taking the largest (or smallest) element next |
 | `UnorderedMap<K, V>` | A hash table | Looking up a value by key in constant time |
 | `UnorderedSet<T>` | A hash table of keys only | Fast membership tests |
+| `OrderedMap<K, V>` | A hash table that remembers the order keys were added in (like a Python `dict`) | Lookups by key, and loops in the order things arrived |
+| `OrderedSet<T>` | The same for keys only | Removing duplicates while keeping the first-seen order |
+| `Counter<T>` | An `OrderedMap` from values to how many times each was seen (like Python's `Counter`) | Tallies, histograms, "most common" lists |
+| `DefaultMap<K, V>` | A hash table that makes a value for a missing key (like Python's `defaultdict`) | Grouping things into lists or sums without checking for the key first |
 | `Map<K, V>` | A red-black tree of keys and values | Visiting keys in order; finding the nearest key |
 | `Set<T>` | A red-black tree of values | Visiting values in order; the `i`th smallest value |
 | `TrieMap<V>` | Fizmo's trie from strings to values | Autocomplete, prefix search, "did you mean" |
@@ -354,6 +361,140 @@ function main() -> int {
 
 Here `seen` holds `3`, `2` and `5`, `fresh` is `true` and `again` is `false`. It has `insert`, `contains`, `remove`, `clear` and `to_vector()`, and loops visit its values in no particular order.
 
+## OrderedMap and OrderedSet
+
+`OrderedMap<K, V>` is a hash table, like `UnorderedMap`, that also remembers the order keys were first added in, the way a Python `dict` does. Loops visit the entries in that order, and the keys only need `==` and [`hash_of`](#hashing), not `<`.
+
+```walnut
+import module.collections
+import module.io
+
+function main() -> int {
+    std::collections::OrderedMap<string, int>: stock;
+    stock["pears"] = 4;
+    stock.set("figs", 9);
+    stock["apples"] = 2;
+    stock["pears"] += 1;
+    stock.move_to_end("pears");
+    for (auto: [name, count] in stock) {
+        std::io::print(name, "=", count, " ");
+    }
+    std::io::println();
+    int: figs = stock.pop("figs");
+    std::io::println(figs, " ", stock.size(), " ", stock.first().first);
+    return 0;
+} end function main
+```
+
+This prints `figs=9 apples=2 pears=5` and then `9 2 apples`.
+
+| Method | Does |
+|---|---|
+| `m[key]`, `at(key)`, `get(key, fallback)`, `find(key)` | The same as on [`UnorderedMap`](#unorderedmap); `m[key]` adds a new key at the end |
+| `set(key, value)`, `insert(key, value)` | Add or replace, or add only if new; a key that is already there keeps its place |
+| `contains(key)`, `index_of(key)` | Whether the key is there, and its position (`-1` if it isn't) |
+| `entry(i)` | The `Pair<K, V>` at position `i` |
+| `first()`, `last()` | The oldest and newest entries |
+| `remove(key)`, `pop(key)` | Remove a key; `pop` gives its value back and throws if the key is missing |
+| `pop_first()`, `pop_last()` | Remove and give back the oldest or newest entry |
+| `move_to_end(key)`, `move_to_front(key)` | Change a key's place |
+| `keys()`, `values()`, `items()` | Everything, in order, as a `Vector` |
+| `update(other)` | `set` every entry of another `OrderedMap` |
+| `==`, `!=` | The same entries in the same order |
+
+- Finding, adding and changing a key take constant time. Removing a key, `pop_first` and the `move_to` methods shift the entries after it, so they take time proportional to the size.
+- `for (auto: [k, v] in m)` gives each entry as a `Pair<K, V>&`, so values can be changed in the loop. `m.backwards()` loops from the newest entry.
+- Adding a key can move the entries in memory, so a pointer from `find` or a reference from `m[key]` is only good until the next key is added.
+
+`OrderedSet<T>` keeps values in the order they were first added and ignores repeats:
+
+```walnut
+import module.collections
+
+function main() -> int {
+    std::collections::OrderedSet<int>: seen{5, 1, 5, 3, 1};
+    std::collections::OrderedSet<int>: other{3, 9};
+    bool: fresh = seen.insert(7);
+    auto: both = seen.intersect_with(other);
+    auto: all = seen.union_with(other);
+    return 0;
+} end function main
+```
+
+Here `seen` holds `5 1 3 7` in that order, `fresh` is `true`, `both` holds `3`, and `all` holds `5 1 3 7 9`. It has `insert`, `contains`, `index_of`, `s[i]` (the value at position `i`), `remove`, `pop_last`, `clear`, `to_vector`, `union_with`, `intersect_with`, `except`, `is_subset_of`, and `==` (the same values, in any order).
+
+## Counter
+
+`Counter<T>` counts how many times each value was seen, like Python's `collections.Counter`. It is an `OrderedMap<T, long int>` underneath, so ties in `most_common` keep the order the values were first seen in.
+
+```walnut
+import module.collections
+import module.io
+
+using std::collections::Counter;
+
+function main() -> int {
+    Counter<char>: letters = Counter<char>::of("mississippi");
+    for (auto: [c, n] in letters.most_common(2)) {
+        std::io::print(c, ":", n, " ");
+    }
+    std::io::println();
+    Counter<string>: votes("ann", "bob", "ann");
+    votes.add("cy", 5);
+    votes.subtract("ann");
+    std::io::println(votes.count("ann"), " ", votes["zed"], " ", votes.total(), " ", votes.most_common(1)[0].first);
+    return 0;
+} end function main
+```
+
+This prints `i:4 s:4` and then `1 0 7 cy`.
+
+| Method | Does |
+|---|---|
+| `Counter<T>: c;`, `Counter<T>: c(a, b, ...)`, `Counter<T>::of(items)` | An empty counter, one that counts the given values, or one that counts everything in an [`iterable`](../../documentation.md#iterable-parameters) such as a string, array or container |
+| `add(x)`, `add(x, n)`, `add_all(items)` | Count `x` once or `n` times, or everything in `items`; `add` gives the new count |
+| `subtract(x)`, `subtract(x, n)` | Take one or `n` away; counts can go to zero or below |
+| `set(x, n)` | Set a count |
+| `count(x)`, `c[x]` | The count, `0` for a value never seen; neither adds `x` |
+| `contains(x)`, `remove(x)`, `clear()` | Check for, forget, or forget every value |
+| `size()`, `total()` | How many different values, and the sum of all counts |
+| `most_common()`, `most_common(n)`, `least_common(n)` | `Vector<Pair<T, long int>>` sorted by count |
+| `elements()` | A `Vector<T>` with each value repeated as many times as its count |
+| `keys()` | The values seen, in first-seen order |
+| `drop_zeros()` | Remove values whose count is zero or less; gives how many were removed |
+| `merge(other)` | Add another counter's counts to this one |
+| `==`, `!=` | The same values with the same counts |
+
+Looping over a counter gives a `const Pair<T, long int>&` for each value, in first-seen order.
+
+## DefaultMap
+
+`DefaultMap<K, V>` is an `UnorderedMap` whose `m[key]` makes a value for a key that isn't there yet, like Python's `defaultdict`. By default the new value is `V()`; a function or a fixed value can be given instead:
+
+```walnut
+import module.collections
+import module.io
+
+using std::collections::DefaultMap;
+using std::collections::Vector;
+
+function main() -> int {
+    DefaultMap<string, Vector<int>>: groups;
+    for (int: n in {1, 2, 3, 4, 6}) {
+        groups[n % 2 == 0 ? "even" : "odd"].push_back(n);
+    }
+    DefaultMap<string, int>: scores(100);
+    scores["ann"] += 5;
+    DefaultMap<string, string>: labels([]() -> string { return "unnamed"; });
+    std::io::println(groups["even"].size(), " ", groups["odd"].size(), " ", scores["ann"], " ", scores["bob"], " ", labels["x"]);
+    return 0;
+} end function main
+```
+
+This prints `3 2 105 100 unnamed`.
+
+It has `m[key]`, `at(key)`, `get(key, fallback)`, `find(key)`, `set`, `contains`, `remove`, `clear`, `keys()` and `values()`. Only `m[key]` adds missing keys; `get`, `find`, `contains` and `at` never do. Loops visit the entries in no particular order, the same as [`UnorderedMap`](#unorderedmap).
+
 ## Map and Set
 
 `Map<K, V>` and `Set<T>` keep their keys sorted with `<`, like C++'s `std::map` and `std::set`, and loops visit them from smallest to largest. They are red-black trees: finding, adding and removing a key each take time proportional to the logarithm of the size, however large the map grows. Each key lives in its own node, so adding and removing keys never moves the others: a pointer from `find` or a reference from `m[key]` stays good until that key is removed.
@@ -619,6 +760,8 @@ Here `slot` is `3`, `big` is `3`, `dropped` is `2` (the `4` and the `8`), `repea
 | `filter(pred)` | A copy holding the elements that pass `pred` |
 | `map(func)` | A `Vector` of `func(x)` for each element |
 | `take(n)`, `skip(n)`, `slice(start, stop)` | A copy of the first `n`, all but the first `n`, or the elements from `start` up to `stop` |
+| `v[start:stop]`, `v[start:stop:step]` | `Vector`, `DynamicArray` and `SmallVector`: a copy of part of it, with Python's rules for negative positions, steps and leaving parts out. See [Slices](../../documentation.md#slices) |
+| `sliced(start, stop, step, has_start, has_stop)` | What a slice calls. `has_start` and `has_stop` say whether `start` and `stop` were written; a `step` of `0` throws a `collection_error` |
 | `sum()` | All the elements added with `+` (`T()` when empty) |
 | `accumulate(init, op)` | `op(op(init, a), b)` and so on |
 | `where(...)` | A [WhereQuery](#wherequery) over the matching elements |

@@ -283,6 +283,12 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
 
         case K::BinaryExpression: {
             auto* b = static_cast<nodes::BinaryExpression*>(e);
+            if (b->named_argument) {
+                auto* id = static_cast<nodes::Identifier*>(b->left);
+                if (Symbol* s = resolve_lexical_visible(m_current, id->name, id)) id->resolved = chase(s);
+                walk_expr(b->right);
+                break;
+            }
             walk_expr(b->left); walk_expr(b->right);
             break;
         }
