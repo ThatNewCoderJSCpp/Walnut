@@ -110,6 +110,78 @@ jobs:
           path: build/Walnut-*.tar.gz
           if-no-files-found: error
 
+  macos:
+    name: macOS ${{ matrix.arch }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest
+          - arch: x86_64
+            runner: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        if: matrix.arch == 'arm64'
+        run: |
+          brew update
+          brew install ninja pkg-config fontconfig freetype harfbuzz openssl@3 jpeg-turbo zlib vulkan-headers
+          echo "FIZMO_VULKAN_INC=$(brew --prefix vulkan-headers)/include" >> "$GITHUB_ENV"
+
+      - name: Install dependencies (Intel)
+        if: matrix.arch == 'x86_64'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_UPGRADE: 1
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: |
+          brew list --versions ninja pkgconf fontconfig freetype harfbuzz openssl@3 jpeg-turbo
+          git clone --depth 1 --branch v1.4.363 https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/vulkan-headers"
+          echo "FIZMO_VULKAN_INC=$RUNNER_TEMP/vulkan-headers/include" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: |
+          prefix=$(brew --prefix)
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWALNUT_PACKAGE=ON -DWALNUT_BUILD_DEBUG_DRIVER=OFF -DFIZMO_TUNE=OFF \
+            -DWALNUT_PACKAGE_PLATFORM=macos-${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" \
+            -DFIZMO_VULKAN_INCLUDE_DIR="$FIZMO_VULKAN_INC" \
+            -DCMAKE_PREFIX_PATH="$prefix;$(brew --prefix jpeg-turbo);$(brew --prefix zlib)"
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Check walnut only needs libraries that come with macOS
+        run: |
+          otool -L build/walnut
+          if otool -L build/walnut | tail -n +2 | grep -vE "^[[:space:]]+(/usr/lib/|/System/Library/)"; then
+            echo "::error::walnut links to a library users may not have"
+            exit 1
+          fi
+
+      - name: Package
+        working-directory: build
+        run: cpack
+
+      - name: Test the package
+        run: |
+          mkdir -p smoke
+          tar -xzf build/Walnut-*.tar.gz -C smoke
+          printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
+          smoke/Walnut-*/bin/walnut init --status
+          smoke/Walnut-*/bin/walnut run smoke/ok.wal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walnut-macos-${{ matrix.arch }}
+          path: build/Walnut-*.tar.gz
+          if-no-files-found: error
+
   linux-i686:
     name: Linux i686
     needs: version
@@ -318,7 +390,7 @@ jobs:
   publish:
     name: Attach Walnut to the release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, linux-i686, windows, windows-native]
+    needs: [linux, linux-i686, macos, windows, windows-native]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

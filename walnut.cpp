@@ -48,8 +48,10 @@
 #endif
 
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -60,6 +62,10 @@
 
 #ifndef _WIN32
 #include <sys/wait.h>
+#endif
+
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
 #endif
 
 #if defined(_WIN32)
@@ -189,6 +195,15 @@ fs::path executable_dir() {
     const unsigned long n = GetModuleFileNameW(nullptr, buf.data(), static_cast<unsigned long>(buf.size()));
     buf.resize(n);
     return fs::path(buf).parent_path();
+#elif defined(__APPLE__)
+    std::uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string buf(size, '\0');
+    if (_NSGetExecutablePath(buf.data(), &size) != 0) return {};
+    buf.resize(std::strlen(buf.c_str()));
+    std::error_code ec;
+    const fs::path real = fs::canonical(buf, ec);
+    return (ec ? fs::path(buf) : real).parent_path();
 #else
     std::error_code ec;
     return fs::read_symlink("/proc/self/exe", ec).parent_path();
@@ -643,6 +658,8 @@ void explain_missing_compiler(const std::string& cxx) {
 #ifdef _WIN32
     std::cerr << "walnut: Walnut for Windows is built with llvm-mingw, so programs need that compiler too:\n"
               << "walnut:     'walnut init' downloads it (about 190 MB), or use the Walnut download that ends in -with-compiler\n";
+#elif defined(__APPLE__)
+    std::cerr << "walnut: on macOS, install Apple's Command Line Tools with 'xcode-select --install'\n";
 #else
     std::cerr << "walnut: install one, for example 'sudo apt install g++' (Debian/Ubuntu), 'sudo dnf install gcc-c++' (Fedora) or 'sudo pacman -S gcc' (Arch)\n";
 #endif
@@ -667,6 +684,12 @@ std::vector<fs::path> library_dirs(const Options& o) {
         while (!list.empty() && (list.front() == ' ' || list.front() == '=')) list.erase(list.begin());
         for (const std::string& d : split_on(list, kPathListSeparator)) dirs.emplace_back(d);
     }
+
+#if defined(__APPLE__)
+    std::string sdk = capture_command("xcrun --show-sdk-path 2>/dev/null");
+    while (!sdk.empty() && (sdk.back() == '\n' || sdk.back() == '\r' || sdk.back() == ' ')) sdk.pop_back();
+    if (!sdk.empty()) dirs.emplace_back(fs::path(sdk) / "usr" / "lib");
+#endif
 
 
     return dirs;
@@ -776,11 +799,11 @@ bool compile_cpp(const Options& o, const fs::path& cpp_path, const fs::path& exe
             else left_out.push_back(lib);
         }
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
         if (!present.empty()) cmd += " -Wl,--as-needed";
 #endif
         for (const std::string& lib : present) cmd += " " + quote(lib);
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
         if (!present.empty()) cmd += " -Wl,--no-as-needed";
 #endif
     }
@@ -963,14 +986,14 @@ LinkLibs link_libraries(const Options& o) {
         else out.left_out.push_back(lib);
     }
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
     if (!present.empty()) out.args += " -Wl,--as-needed";
 #endif
     for (const std::string& lib : present) {
         out.args += " " + quote(lib);
         if (fs::path(lib).is_absolute() && fs::exists(lib, ec)) out.files.emplace_back(lib);
     }
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
     if (!present.empty()) out.args += " -Wl,--no-as-needed";
 #endif
     return out;
