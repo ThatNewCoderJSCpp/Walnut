@@ -84,6 +84,159 @@ A `Request` has `method()`, `target()` (the path and query, as sent), `path()`, 
 
 A `Response` for a server is made with `Response::plain(body, status = 200)`, `Response::html(body, status)`, `Response::json(body, status)`, `Response::redirect(location, status = 302)`, `Response::not_found()` or `Response::make(status, body, content_type)`, and changed with `set_status`, `set_body`, `set_header` and `add_header`. A handler that throws sends a 500 response.
 
+A `Request` on a server that uses a `Guard` also has `request_id()`, `client_ip()`, `tls_fingerprint()` (the JA4 hash on HTTPS), `risk()` (`"trusted"`, `"low"`, `"medium"`, `"high"` or `"blocked"`), `risk_score()`, `encrypted()`, `user()` and `guarded()`.
+
+## Server safety
+
+`std::networking::guard::Guard` adds safety checks to an `HttpServer`. Pass it to `use_guard` before `listen`:
+
+```walnut
+using std::networking::guard::Guard;
+
+Guard: shield;
+shield.rate_limit(5.0, 30.0);
+shield.route_limit("POST", "/login", 5.0, 5.0);
+
+std::networking::HttpServer: server;
+server.use_guard(shield);
+server.handle([shield](Request: req) -> Response {
+    if (req.path() == "/login") then {
+        const auto: check = shield.check_login(req, "ann");
+        if (!check.allowed()) then {
+            return Response::json("{\"error\":\"locked\"}", check.status());
+        }
+        return Response::json("{\"csrf\":\"" + shield.login_user(req, "ann") + "\"}");
+    }
+    if (!shield.authenticated(req)) then {
+        return Response::json("{\"error\":\"login\"}", 401);
+    }
+    return Response::plain("hello " + shield.user(req));
+});
+server.listen("0.0.0.0", 8080);
+shield.start_maintenance();
+server.serve();
+```
+
+For every request, the guard:
+
+- gives it a request ID (sent back as `X-Request-Id`)
+- finds the client's IP, trusting `X-Forwarded-For` only from proxies named with `trusted_proxy`
+- adds security headers (`nosniff`, frame denial, a referrer policy, CSP, HSTS on HTTPS, `Cache-Control: no-store`)
+- checks the TLS fingerprint against the `User-Agent`, to spot scripts that claim to be browsers
+- rate limits each IP, and each route given to `route_limit`, answering 429 with `Retry-After`
+- locks out IPs that fail too often, for longer each time
+- turns a thrown error into a 500 that shows only the request ID, and groups the error for `errors_json()`
+- writes one access-log line when the response is sent, with passwords, tokens and cookies hidden
+
+| Setting | Does |
+|---|---|
+| `rate_limit(per_second, burst)` | tokens come back at `per_second`; a client starts with, and can save up, `burst` |
+| `no_rate_limit()` | turns the per-IP limit off |
+| `route_limit(method, path_prefix, per_minute, burst)` | a stricter limit for one route, such as `/login` |
+| `trust_proxy(on)`, `trusted_proxy(ip)` | |
+| `block_bots(on)` | refuses requests whose fingerprint looks like a script |
+| `block_fingerprint(ja4, label)`, `trust_fingerprint(ja4, label)` | |
+| `track_failures(on)`, `access_log(on)`, `security_headers(on)`, `no_store(on)` | each is on by default |
+| `content_security_policy(policy)`, `hsts(value)`, `allowed_origin(origin)`, `max_body(bytes)` | |
+| `session_timeouts(idle_minutes, absolute_hours)`, `cookie_same_site(mode)`, `secure_cookies(on)` | |
+| `use_logger(log)` | sends the guard's logs to a `Logger` |
+
+### Logging in and out
+
+| Method | Does |
+|---|---|
+| `check_login(req, account)` | before checking a password: a `LoginCheck` with `allowed()`, `status()`, `retry_after_ms()`, `delay_ms()` and `reason()` |
+| `login_failed(req, account)` | records a wrong password |
+| `login(req, user, roles)`, `login_user(req, user)` | ends any old session, starts a new one, sets the session and device cookies, and returns the CSRF token |
+| `authenticated(req)`, `user(req)`, `has_role(req, role)`, `session_id(req)` | |
+| `csrf_token(req)`, `csrf_ok(req)`, `same_origin(req)` | `csrf_ok` checks the `X-CSRF-Token` header |
+| `new_device(req)`, `trust_device(req, label)` | whether this login came from a device the user hasn't used before |
+| `logout(req, everywhere, keep_device)` | ends the session on the server, expires its cookie, and sends `Clear-Site-Data` so the browser clears cookies, local storage and session storage |
+| `revoke_sessions(user)`, `session_count(user)` | |
+
+### Other protections
+
+`register_owner(type, lookup)` tells the guard who owns each object of a type: `lookup` takes an ID and returns its owner's user ID, or `""` when there isn't one. `can(req, type, id, action)` is then true only for the owner (or a role given to `admin_role`), so a user can't reach someone else's data by changing an ID in the URL. Answer 404 when it's false, so the IDs of other people's objects stay hidden.
+
+`idempotent(req, body)` runs `body` once for each `Idempotency-Key` header: a retry with the same key gets the first response back, the same key with a different body gets 422, and a retry while the first is still running gets 409. Requests without the header just run.
+
+`set_budget(metric, limit, period_seconds, warn_ratio, hard_stop)`, `budget_level(metric)` and `on_budget_alert(callback)` raise spend alerts; `on_new_error(callback)` is called the first time each kind of error is seen. `start_maintenance()` clears out old sessions and limits in the background.
+
+### The pieces on their own
+
+The rest of `std::networking::guard` works without a server:
+
+| Class | Does |
+|---|---|
+| `RateLimiter(per_second, burst, start_tokens)`, `RateLimiter::per_minute(n, burst)` | token buckets per key; `start_tokens` defaults to `burst`: `consume(key, cost)` gives a `RateDecision`, `allow(key)` a `bool`; also `refund`, `reset` |
+| `WindowLimiter(max_hits, window_seconds)` | at most `max_hits` per window: `hit(key)` |
+| `FailureTracker(max_failures, window_seconds, lockout_seconds)` | `record_failure(key)` and `record_success(key)` give a `FailureStatus` with `failure_ratio()`, `locked()` and `lock_remaining_ms()` |
+| `Logger` | `to_stderr()`, `to_file(path, max_bytes, files)`, `as_text()`, `set_level`, `redact(key)`, `info_with(message, fields)` with `LogFields` |
+| `JobQueue(workers)` | background jobs that are checked before they're queued; see [Background jobs](#background-jobs) |
+| `BudgetMonitor` | `set_budget`, `add(metric, amount)` (returns the level), `consume` (refuses past a hard stop), gauges and `on_alert` |
+| `Debouncer(callback, wait_ms, leading, trailing, max_wait_ms)`, `Throttler(callback, interval_ms)` | `call()` as often as you like; `callback` runs once things go quiet, or at most once per interval |
+| `KeyedLock` | `with(key, body)` runs `body` while no other thread holds the same key, so two requests can't change one record at once |
+| `SqlStatement(sql)` | a parameterized query: `?` placeholders, `bind_int`, `bind_text` and the others; it refuses SQL with values pasted into it or with more than one statement |
+| `hash_secret(secret)` | a SHA-256 hash, for storing API keys and tokens |
+
+### Background jobs
+
+A `JobQueue` runs jobs on worker threads, and checks each job before it goes into the queue:
+
+```walnut
+using std::networking::guard::JobQueue;
+using std::networking::guard::JobSchema;
+using std::networking::guard::FieldRule;
+using std::networking::guard::Job;
+
+JobSchema: file;
+file.add("name", FieldRule::text_field().non_empty());
+file.add("bytes", FieldRule::int_field().between(1, 1000000));
+
+JobSchema: email;
+email.add("to", FieldRule::text_field().format("email"));
+email.add("subject", FieldRule::text_field().length(1, 200));
+email.add("files", FieldRule::list_of(std::networking::guard::object_of(file)).max_items(3).optional());
+
+JobQueue: jobs(2);
+jobs.on_checked("email", email, [](Job: j) -> bool {
+    return send(j.payload());
+});
+jobs.start();
+
+auto: r = jobs.try_enqueue("email", "{\"to\":\"ann@\",\"subject\":\"Hi\"}", 3);
+if (!r.ok()) then {
+    std::io::println(r.message());
+}
+```
+
+This prints `$.to: must be a valid email address`. `enqueue` makes the same checks and throws on a bad job. `try_enqueue` returns an `EnqueueResult` with `ok()`, `id()`, `duplicate()`, `problems()` and `message()`. `check(...)` reports the problems without queueing anything.
+
+A job is refused when:
+
+- no handler is registered for its name
+- `max_attempts` isn't from 1 to 100, or is above `limit_attempts(n)`, so no job retries forever
+- its delay is too long or its unique key is too long
+- its payload is over 64 KB (`limit_payload`) or doesn't match its schema
+- the queue is full (`limit_queue`)
+
+`require_schemas(true)` also refuses jobs that have no schema.
+
+| Rule | Checks |
+|---|---|
+| `FieldRule::text_field()`, `int_field()`, `float_field()`, `bool_field()`, `any_field()` | the type |
+| `FieldRule::list_of(rule)`, `object_of(schema)` | each item, and nested fields |
+| `min`, `max`, `between`, `positive` | number ranges |
+| `min_length`, `max_length`, `length`, `non_empty` | text length in characters |
+| `min_items`, `max_items`, `unique_items` | list sizes |
+| `one_of(values)` | allowed values |
+| `format(name)` | `"email"`, `"uuid"`, `"url"`, `"date"`, `"datetime"`, `"identifier"`, `"hex"`, `"base64"` or `"digits"` |
+| `optional()`, `nullable()`, `allow_control_chars()` | relaxations |
+
+Fields are required unless they're `optional()`. Fields the schema doesn't list are refused unless it has `allow_extra_fields()`. A schema also has `at_least_one_of`, `only_one_of` and `all_or_none_of` for groups of fields, and limits on `max_bytes`, `max_depth`, `max_string_length` and `max_array_items`. `JobSchema::text_payload(max_bytes)` is for plain-text payloads and `JobSchema::no_payload()` for jobs that take none. `validate(payload)` lists the problems on its own.
+
+A handler that returns `false` or throws is retried with growing delays (`set_retry_delay(initial_ms, max_ms)`). After its last attempt, `Job` has `attempt()`, `max_attempts()` and `last_attempt()`, and the job moves to the dead-letter queue. That queue is separate, so the workers carry on with other jobs. `dead()`, `dead_ids()`, `errors_of(id)` (one per attempt) and `attempts_of(id)` show what failed. `retry_dead(id)` and `retry_all_dead()` check the payload again and requeue the job. `discard_dead(id)` and `clear_dead()` remove dead jobs. The dead-letter queue keeps 10,000 jobs (`limit_dead_letters`); past that, the oldest are dropped and counted by `dead_dropped()`. `wait_idle(ms)` waits until nothing is running or waiting to retry.
+
 ## TCP
 
 ```walnut

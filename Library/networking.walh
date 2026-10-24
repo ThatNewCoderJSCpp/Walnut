@@ -145,6 +145,14 @@ namespace std {
                 function header(const string&: name) const -> string;
                 function has_header(const string&: name) const -> bool;
                 function header_names() const -> std::collections::Vector<string>;
+                function request_id() const -> string;
+                function client_ip() const -> string;
+                function tls_fingerprint() const -> string;
+                function risk() const -> string;
+                function risk_score() const -> long int;
+                function encrypted() const -> bool;
+                function user() const -> string;
+                function guarded() const -> bool;
             } end class Request
 
             class Response as "walnut_rt::net::response" {
@@ -188,17 +196,6 @@ namespace std {
                     return r;
                 } end function redirect
             } end class Response
-
-            class HttpServer as "walnut_rt::net::http_server" {
-            public:
-                constructor();
-                function handle(function(Request) -> Response: handler) -> void;
-                function listen(const string&: host, long int: port) -> void;
-                function serve() -> void;
-                function serve_for(long int: milliseconds) -> void;
-                function close() -> void;
-                function is_listening() const -> bool;
-            } end class HttpServer
 
             class Message as "walnut_rt::net::message" {
             public:
@@ -267,6 +264,368 @@ namespace std {
                 static function url_encode(const string&: input) -> string as "walnut_rt::net::url_encode";
                 static function url_decode(const string&: input) -> string as "walnut_rt::net::url_decode";
             } end class Native
+        } end extern
+
+        namespace guard {
+            extern "C++" from "<walnut_net.hpp>" {
+                class LoginCheck as "walnut_rt::net::login_check" {
+                public:
+                    constructor();
+                    function allowed() const -> bool;
+                    function status() const -> long int;
+                    function retry_after_ms() const -> long int;
+                    function delay_ms() const -> long int;
+                    function reason() const -> string;
+                } end class LoginCheck
+
+                class LogFields as "walnut_rt::guard::log_fields" {
+                public:
+                    constructor();
+                    function add(const string&: key, const string&: value) -> LogFields&;
+                    function add_int(const string&: key, long int: value) -> LogFields&;
+                    function add_float(const string&: key, short float: value) -> LogFields&;
+                    function add_bool(const string&: key, bool: value) -> LogFields&;
+                    function size() const -> long int;
+                } end class LogFields
+
+                class Logger as "walnut_rt::guard::logger" {
+                public:
+                    constructor();
+                    constructor(const string&: level);
+                    function to_stderr() -> void;
+                    function to_stdout() -> void;
+                    function to_file(const string&: path, long int: max_bytes = 10485760, long int: files = 5) -> void;
+                    function as_text(bool: enabled = true) -> void;
+                    function set_level(const string&: level) -> void;
+                    function redact(const string&: key) -> void;
+                    function trace(const string&: message) -> void;
+                    function debug(const string&: message) -> void;
+                    function info(const string&: message) -> void;
+                    function warn(const string&: message) -> void;
+                    function error(const string&: message) -> void;
+                    function info_with(const string&: message, const LogFields&: fields) -> void;
+                    function warn_with(const string&: message, const LogFields&: fields) -> void;
+                    function error_with(const string&: message, const LogFields&: fields) -> void;
+                    function flush() -> void;
+                    static function new_request_id() -> string as "walnut_rt::guard::logger::new_request_id";
+                } end class Logger
+
+
+                class Guard as "walnut_rt::net::guard" {
+                public:
+                    constructor();
+                    function rate_limit(short float: per_second, short float: burst) -> void;
+                    function no_rate_limit() -> void;
+                    function route_limit(const string&: method, const string&: path_prefix, short float: per_minute, short float: burst) -> void;
+                    function trust_proxy(bool: on) -> void;
+                    function trusted_proxy(const string&: ip) -> void;
+                    function block_bots(bool: on) -> void;
+                    function track_failures(bool: on) -> void;
+                    function access_log(bool: on) -> void;
+                    function security_headers(bool: on) -> void;
+                    function content_security_policy(const string&: policy) -> void;
+                    function hsts(const string&: value) -> void;
+                    function no_store(bool: on) -> void;
+                    function allowed_origin(const string&: origin) -> void;
+                    function max_body(long int: bytes) -> void;
+                    function session_timeouts(long int: idle_minutes, long int: absolute_hours) -> void;
+                    function cookie_same_site(const string&: mode) -> void;
+                    function secure_cookies(bool: on) -> void;
+                    function use_logger(const Logger&: log) -> void;
+                    function block_fingerprint(const string&: ja4, const string&: label = "") -> void;
+                    function trust_fingerprint(const string&: ja4, const string&: label = "") -> void;
+
+                    function authenticated(const Request&: req) const -> bool;
+                    function user(const Request&: req) const -> string;
+                    function has_role(const Request&: req, const string&: role) const -> bool;
+                    function session_id(const Request&: req) const -> string;
+                    function csrf_token(const Request&: req) const -> string;
+                    function csrf_ok(const Request&: req) const -> bool;
+                    function same_origin(const Request&: req) const -> bool;
+                    function check_login(const Request&: req, const string&: account) const -> LoginCheck;
+                    function login_failed(const Request&: req, const string&: account) const -> void;
+                    function login(const Request&: req, const string&: user_id, const std::collections::Vector<string>&: roles) const -> string;
+                    function login_user(const Request&: req, const string&: user_id) const -> string;
+                    function new_device(const Request&: req) const -> bool;
+                    function trust_device(const Request&: req, const string&: label = "") const -> bool;
+                    function logout(const Request&: req, bool: everywhere = false, bool: keep_device = false) const -> void;
+                    function revoke_sessions(const string&: user_id) const -> long int;
+                    function session_count(const string&: user_id) const -> long int;
+                    function register_owner(const string&: type, function(string) -> string: lookup) -> void;
+                    function admin_role(const string&: role) -> void;
+                    function can(const Request&: req, const string&: type, const string&: id, const string&: action = "read") const -> bool;
+                    function idempotent(const Request&: req, function() -> Response: body) const -> Response;
+                    function set_budget(const string&: metric, short float: limit, long int: period_seconds = 86400, short float: warn_ratio = 0.8, bool: hard_stop = false) -> void;
+                    function budget_level(const string&: metric) const -> string;
+                    function on_budget_alert(function(string, string, short float, short float) -> void: callback) -> void;
+                    function on_new_error(function(string, string, string, long int) -> void: callback) -> void;
+                    function error_groups() const -> long int;
+                    function errors_json() const -> string;
+                    function start_maintenance() -> void;
+                    function stop_maintenance() -> void;
+                    function sweep() -> void;
+                } end class Guard
+
+                class RateDecision as "walnut_rt::guard::rate_decision" {
+                public:
+                    constructor();
+                    function allowed() const -> bool;
+                    function remaining() const -> short float;
+                    function limit() const -> short float;
+                    function retry_after_ms() const -> long int;
+                    function reset_after_ms() const -> long int;
+                } end class RateDecision
+
+                class RateLimiter as "walnut_rt::guard::rate_limiter" {
+                public:
+                    constructor();
+                    constructor(short float: per_second, short float: burst, short float: start_tokens = -1.0);
+                    constructor(float: per_second, float: burst) as "walnut_rt::guard::rate_limiter::from_wide";
+                    constructor(float: per_second, float: burst, float: start_tokens) as "walnut_rt::guard::rate_limiter::from_wide_start";
+                    static function per_minute(short float: per_minute, short float: burst) -> RateLimiter as "walnut_rt::guard::rate_limiter::per_minute";
+                    static function per_hour(short float: per_hour, short float: burst) -> RateLimiter as "walnut_rt::guard::rate_limiter::per_hour";
+                    function consume(const string&: key, short float: cost = 1.0) -> RateDecision;
+                    function peek(const string&: key, short float: cost = 1.0) const -> RateDecision;
+                    function allow(const string&: key) -> bool;
+                    function refund(const string&: key, short float: amount = 1.0) -> void;
+                    function reset(const string&: key) -> void;
+                    function size() const -> long int;
+                    function sweep() -> long int;
+                } end class RateLimiter
+
+                class WindowLimiter as "walnut_rt::guard::window_limiter" {
+                public:
+                    constructor();
+                    constructor(long int: limit, long int: window_seconds);
+                    function hit(const string&: key) -> RateDecision;
+                    function peek(const string&: key) const -> RateDecision;
+                    function count(const string&: key) const -> long int;
+                    function reset(const string&: key) -> void;
+                } end class WindowLimiter
+
+                class FailureStatus as "walnut_rt::guard::failure_status" {
+                public:
+                    constructor();
+                    function failures() const -> long int;
+                    function successes() const -> long int;
+                    function failure_ratio() const -> short float;
+                    function locked() const -> bool;
+                    function strikes() const -> long int;
+                    function lock_remaining_ms() const -> long int;
+                    function delay_ms() const -> long int;
+                } end class FailureStatus
+
+                class FailureTracker as "walnut_rt::guard::failure_tracker" {
+                public:
+                    constructor();
+                    constructor(long int: max_failures, long int: window_seconds, long int: lockout_seconds);
+                    function record_failure(const string&: key) -> FailureStatus;
+                    function record_success(const string&: key, bool: forgive = false) -> FailureStatus;
+                    function status(const string&: key) const -> FailureStatus;
+                    function is_locked(const string&: key) const -> bool;
+                    function unlock(const string&: key) -> void;
+                    function reset(const string&: key) -> void;
+                } end class FailureTracker
+
+                class Job as "walnut_rt::guard::job" {
+                public:
+                    constructor();
+                    function id() const -> string;
+                    function name() const -> string;
+                    function payload() const -> string;
+                    function attempt() const -> long int;
+                    function max_attempts() const -> long int;
+                    function last_attempt() const -> bool;
+                    function last_error() const -> string;
+                    function should_stop() const -> bool;
+                } end class Job
+
+                class FieldRule as "walnut_rt::guard::field_rule" {
+                public:
+                    constructor();
+                    static function text_field() -> FieldRule as "walnut_rt::guard::field_rule::text_field";
+                    static function int_field() -> FieldRule as "walnut_rt::guard::field_rule::int_field";
+                    static function float_field() -> FieldRule as "walnut_rt::guard::field_rule::float_field";
+                    static function bool_field() -> FieldRule as "walnut_rt::guard::field_rule::bool_field";
+                    static function any_field() -> FieldRule as "walnut_rt::guard::field_rule::any_field";
+                    static function list_of(const FieldRule&: items) -> FieldRule as "walnut_rt::guard::field_rule::list_of";
+                    function optional() -> FieldRule&;
+                    function required() -> FieldRule&;
+                    function nullable() -> FieldRule&;
+                    function min(short float: value) -> FieldRule&;
+                    function max(short float: value) -> FieldRule&;
+                    function between(short float: low, short float: high) -> FieldRule&;
+                    function positive() -> FieldRule&;
+                    function min_length(long int: n) -> FieldRule&;
+                    function max_length(long int: n) -> FieldRule&;
+                    function length(long int: low, long int: high) -> FieldRule&;
+                    function non_empty() -> FieldRule&;
+                    function min_items(long int: n) -> FieldRule&;
+                    function max_items(long int: n) -> FieldRule&;
+                    function unique_items() -> FieldRule&;
+                    function allow_control_chars() -> FieldRule&;
+                    function format(const string&: name) -> FieldRule&;
+                    function one_of(const std::collections::Vector<string>&: values) -> FieldRule&;
+                } end class FieldRule
+
+                class JobSchema as "walnut_rt::guard::job_schema" {
+                public:
+                    constructor();
+                    static function text_payload(long int: max_bytes = 65536) -> JobSchema as "walnut_rt::guard::job_schema::text_payload";
+                    static function no_payload() -> JobSchema as "walnut_rt::guard::job_schema::no_payload";
+                    function add(const string&: name, const FieldRule&: rule) -> JobSchema&;
+                    function allow_extra_fields() -> JobSchema&;
+                    function max_bytes(long int: n) -> JobSchema&;
+                    function max_depth(long int: n) -> JobSchema&;
+                    function max_string_length(long int: n) -> JobSchema&;
+                    function max_array_items(long int: n) -> JobSchema&;
+                    function at_least_one_of(const std::collections::Vector<string>&: names) -> JobSchema&;
+                    function only_one_of(const std::collections::Vector<string>&: names) -> JobSchema&;
+                    function all_or_none_of(const std::collections::Vector<string>&: names) -> JobSchema&;
+                    function validate(const string&: payload) const -> std::collections::Vector<string>;
+                    function accepts(const string&: payload) const -> bool;
+                    function as_field() const -> FieldRule;
+                } end class JobSchema
+
+                class EnqueueResult as "walnut_rt::guard::enqueue_result" {
+                public:
+                    constructor();
+                    function ok() const -> bool;
+                    function duplicate() const -> bool;
+                    function id() const -> string;
+                    function problems() const -> std::collections::Vector<string>;
+                    function message() const -> string;
+                } end class EnqueueResult
+
+                class JobQueue as "walnut_rt::guard::job_queue" {
+                public:
+                    constructor();
+                    constructor(long int: workers);
+                    function on(const string&: name, function(Job) -> bool: handler) -> void;
+                    function on_checked(const string&: name, const JobSchema&: schema, function(Job) -> bool: handler) -> void;
+                    function enqueue(const string&: name, const string&: payload = "", long int: max_attempts = 5, long int: delay_ms = 0, const string&: unique_key = "") -> string;
+                    function try_enqueue(const string&: name, const string&: payload = "", long int: max_attempts = 5, long int: delay_ms = 0, const string&: unique_key = "") -> EnqueueResult;
+                    function check(const string&: name, const string&: payload = "", long int: max_attempts = 5, long int: delay_ms = 0, const string&: unique_key = "") const -> std::collections::Vector<string>;
+                    function set_schema(const string&: name, const JobSchema&: schema) -> void;
+                    function remove_schema(const string&: name) -> bool;
+                    function has_schema(const string&: name) const -> bool;
+                    function limit_attempts(long int: n) -> void;
+                    function limit_queue(long int: n) -> void;
+                    function limit_dead_letters(long int: n) -> void;
+                    function limit_payload(long int: bytes) -> void;
+                    function limit_delay(long int: ms) -> void;
+                    function require_handlers(bool: on) -> void;
+                    function require_schemas(bool: on) -> void;
+                    function attempt_limit() const -> long int;
+                    function set_retry_delay(long int: initial_ms, long int: max_ms) -> void;
+                    function start() -> void;
+                    function stop(bool: drain = false) -> void;
+                    function running() const -> bool;
+                    function wait_idle(long int: timeout_ms) -> bool;
+                    function cancel(const string&: id) -> bool;
+                    function retry_dead(const string&: id) -> bool;
+                    function retry_all_dead() -> long int;
+                    function discard_dead(const string&: id) -> bool;
+                    function clear_dead() -> long int;
+                    function queued() const -> long int;
+                    function dead() const -> long int;
+                    function succeeded() const -> long int;
+                    function rejected() const -> long int;
+                    function dead_dropped() const -> long int;
+                    function errors_of(const string&: id) const -> std::collections::Vector<string>;
+                    function attempts_of(const string&: id) const -> long int;
+                    function dead_ids() const -> std::collections::Vector<string>;
+                    function state_of(const string&: id) const -> string;
+                } end class JobQueue
+
+                class BudgetMonitor as "walnut_rt::guard::budget_monitor" {
+                public:
+                    constructor();
+                    function set_budget(const string&: metric, short float: limit, long int: period_seconds = 86400, short float: warn_ratio = 0.8, bool: hard_stop = false, const string&: unit = "") -> void;
+                    function add(const string&: metric, short float: amount = 1.0) -> string;
+                    function allows(const string&: metric, short float: amount = 1.0) const -> bool;
+                    function consume(const string&: metric, short float: amount = 1.0) -> bool;
+                    function used(const string&: metric) const -> short float;
+                    function level(const string&: metric) const -> string;
+                    function reset(const string&: metric) -> void;
+                    function set_gauge_threshold(const string&: metric, short float: warn, short float: critical) -> void;
+                    function set_gauge(const string&: metric, short float: value) -> string;
+                    function on_alert(function(string, string, short float, short float) -> void: callback) -> void;
+                } end class BudgetMonitor
+
+                class Debouncer as "walnut_rt::guard::debouncer" {
+                public:
+                    constructor();
+                    constructor(function() -> void: callback, long int: wait_ms, bool: leading = false, bool: trailing = true, long int: max_wait_ms = 0);
+                    function call() -> void;
+                    function cancel() -> void;
+                    function flush() -> void;
+                    function pending() const -> bool;
+                } end class Debouncer
+
+                class Throttler as "walnut_rt::guard::throttler" {
+                public:
+                    constructor();
+                    constructor(function() -> void: callback, long int: interval_ms, bool: trailing = true);
+                    function call() -> void;
+                    function cancel() -> void;
+                    function pending() const -> bool;
+                } end class Throttler
+
+                class KeyedLock as "walnut_rt::guard::keyed_lock" {
+                public:
+                    constructor();
+                    function with(const string&: key, function() -> void: body) -> void;
+                    function locked(const string&: key) const -> bool;
+                } end class KeyedLock
+
+                class SqlStatement as "walnut_rt::guard::sql_statement" {
+                public:
+                    constructor();
+                    constructor(const string&: sql);
+                    function bind_int(long int: value) -> SqlStatement&;
+                    function bind_float(short float: value) -> SqlStatement&;
+                    function bind_text(const string&: value) -> SqlStatement&;
+                    function bind_bool(bool: value) -> SqlStatement&;
+                    function bind_null() -> SqlStatement&;
+                    function append(const string&: fragment) -> SqlStatement&;
+                    function sql() const -> string;
+                    function placeholders() const -> long int;
+                    function bound() const -> long int;
+                    function complete() const -> bool;
+                    function shape() const -> string;
+                    function debug_string() const -> string;
+                    static function identifier(const string&: name) -> string as "walnut_rt::guard::sql_statement::identifier";
+                    static function placeholders_for(long int: count) -> string as "walnut_rt::guard::sql_statement::placeholders_for";
+                } end class SqlStatement
+
+                class Native as "walnut_rt::guard::api" {
+                public:
+                    static function hash_secret(const string&: secret) -> string as "walnut_rt::guard::hash_secret";
+                } end class Native
+            } end extern
+
+            function object_of(const JobSchema&: fields) -> FieldRule {
+                return fields.as_field();
+            } end function object_of
+
+            function hash_secret(const string&: secret) -> string {
+                return Native::hash_secret(secret);
+            } end function hash_secret
+        } end namespace guard
+
+        extern "C++" from "<walnut_net.hpp>" {
+            class HttpServer as "walnut_rt::net::http_server" {
+            public:
+                constructor();
+                function handle(function(Request) -> Response: handler) -> void;
+                function listen(const string&: host, long int: port) -> void;
+                function serve() -> void;
+                function serve_for(long int: milliseconds) -> void;
+                function close() -> void;
+                function is_listening() const -> bool;
+                function use_guard(const guard::Guard&: shield) -> void;
+            } end class HttpServer
         } end extern
 
         function resolve(const string&: host) -> std::collections::Vector<string> {

@@ -1,0 +1,348 @@
+import module.collections
+
+namespace std {
+    namespace database {
+        extern "C++" from "<walnut_database.hpp>" {
+            class Value as "walnut_rt::db::value" {
+            public:
+                constructor();
+                constructor(int: v) as "walnut_rt::db::value::from_int";
+                constructor(long int: v);
+                constructor(short float: v);
+                constructor(float: v) as "walnut_rt::db::value::from_wide";
+                constructor(const string&: v);
+                constructor(bool: v);
+
+                static function null() -> Value as "walnut_rt::db::value::null";
+                static function from_int(long int: v) -> Value as "walnut_rt::db::value::from_int";
+                static function from_float(short float: v) -> Value as "walnut_rt::db::value::from_float";
+                static function from_text(const string&: v) -> Value as "walnut_rt::db::value::from_text";
+                static function from_bool(bool: v) -> Value as "walnut_rt::db::value::from_bool";
+                static function from_blob(const string&: bytes) -> Value as "walnut_rt::db::value::from_blob";
+
+                function type() const -> string;
+                function is_null() const -> bool;
+                function is_int() const -> bool;
+                function is_float() const -> bool;
+                function is_number() const -> bool;
+                function is_text() const -> bool;
+                function is_bool() const -> bool;
+                function is_blob() const -> bool;
+                function as_int() const -> long int;
+                function as_float() const -> short float;
+                function as_bool() const -> bool;
+                function as_text() const -> string;
+                function as_blob() const -> string;
+                function int_or(long int: fallback) const -> long int;
+                function float_or(short float: fallback) const -> short float;
+                function text_or(const string&: fallback) const -> string;
+                function to_string() const -> string;
+                function to_json() const -> string;
+                function compare(const Value&: other) const -> long int;
+                operator(==) function(const Value&: other) const -> bool;
+                operator(!=) function(const Value&: other) const -> bool;
+                operator(<) function(const Value&: other) const -> bool;
+            } end class Value
+
+            class Expr as "walnut_rt::db::expr" {
+            public:
+                constructor();
+                static function column(const string&: name) -> Expr as "walnut_rt::db::expr::column";
+                static function literal(const Value&: v) -> Expr as "walnut_rt::db::expr::literal";
+                static function param(long int: index) -> Expr as "walnut_rt::db::expr::param";
+
+                function eq(const Value&: v) const -> Expr;
+                function ne(const Value&: v) const -> Expr;
+                function lt(const Value&: v) const -> Expr;
+                function le(const Value&: v) const -> Expr;
+                function gt(const Value&: v) const -> Expr;
+                function ge(const Value&: v) const -> Expr;
+                function eq_expr(const Expr&: other) const -> Expr;
+                function ne_expr(const Expr&: other) const -> Expr;
+                function lt_expr(const Expr&: other) const -> Expr;
+                function le_expr(const Expr&: other) const -> Expr;
+                function gt_expr(const Expr&: other) const -> Expr;
+                function ge_expr(const Expr&: other) const -> Expr;
+                function between(const Value&: low, const Value&: high) const -> Expr;
+                function is_in(const std::collections::Vector<Value>&: values) const -> Expr;
+                function not_in(const std::collections::Vector<Value>&: values) const -> Expr;
+                function is_null() const -> Expr;
+                function is_not_null() const -> Expr;
+                function like(const string&: pattern) const -> Expr;
+                function ilike(const string&: pattern) const -> Expr;
+                function starts_with(const string&: prefix) const -> Expr;
+                function both(const Expr&: other) const -> Expr;
+                function either(const Expr&: other) const -> Expr;
+                function negate() const -> Expr;
+                function plus(const Expr&: other) const -> Expr;
+                function minus(const Expr&: other) const -> Expr;
+                function times(const Expr&: other) const -> Expr;
+                function divided_by(const Expr&: other) const -> Expr;
+                function modulo(const Expr&: other) const -> Expr;
+                function lower() const -> Expr;
+                function upper() const -> Expr;
+                function length() const -> Expr;
+                function absolute() const -> Expr;
+                function coalesce(const Value&: fallback) const -> Expr;
+                function empty() const -> bool;
+                function to_string() const -> string;
+            } end class Expr
+
+            class Record as "walnut_rt::db::record" {
+            public:
+                constructor();
+                function set(const string&: column, const Value&: v) -> Record&;
+                function set_null(const string&: column) -> Record&;
+                function has(const string&: column) const -> bool;
+                function get(const string&: column) const -> Value;
+                function size() const -> long int;
+                function columns() const -> std::collections::Vector<string>;
+                function clear() -> void;
+            } end class Record
+
+            class Schema as "walnut_rt::db::schema" {
+            public:
+                constructor();
+                function add_integer(const string&: name) -> Schema&;
+                function add_float(const string&: name) -> Schema&;
+                function add_text(const string&: name) -> Schema&;
+                function add_blob(const string&: name) -> Schema&;
+                function add_bool(const string&: name) -> Schema&;
+                function primary_key() -> Schema&;
+                function auto_increment() -> Schema&;
+                function not_null() -> Schema&;
+                function unique() -> Schema&;
+                function nullable() -> Schema&;
+                function default_value(const Value&: v) -> Schema&;
+                function size() const -> long int;
+                function column_names() const -> std::collections::Vector<string>;
+            } end class Schema
+
+            class Query as "walnut_rt::db::query" {
+            public:
+                constructor();
+                constructor(const string&: table);
+                function alias(const string&: name) -> Query&;
+                function where(const Expr&: condition) -> Query&;
+                function join(const string&: table, const string&: left_column, const string&: right_column) -> Query&;
+                function join_as(const string&: table, const string&: alias, const string&: left_column, const string&: right_column) -> Query&;
+                function left_join(const string&: table, const string&: left_column, const string&: right_column) -> Query&;
+                function select(const std::collections::Vector<string>&: columns) -> Query&;
+                function select_column(const string&: column) -> Query&;
+                function select_as(const Expr&: expression, const string&: name) -> Query&;
+                function count(const string&: name = "count") -> Query&;
+                function count_column(const string&: column, const string&: name) -> Query&;
+                function count_distinct(const string&: column, const string&: name) -> Query&;
+                function sum(const string&: column, const string&: name) -> Query&;
+                function avg(const string&: column, const string&: name) -> Query&;
+                function min(const string&: column, const string&: name) -> Query&;
+                function max(const string&: column, const string&: name) -> Query&;
+                function group_by(const string&: column) -> Query&;
+                function having(const Expr&: condition) -> Query&;
+                function order_by(const string&: column, bool: descending = false) -> Query&;
+                function order_by_expr(const Expr&: expression, bool: descending = false) -> Query&;
+                function limit(long int: count) -> Query&;
+                function offset(long int: count) -> Query&;
+                function distinct() -> Query&;
+                function no_cache() -> Query&;
+                function table() const -> string;
+            } end class Query
+
+            class Result as "walnut_rt::db::result" {
+                function row_into(long int: index, std::collections::Vector<Value>&: out) const -> void;
+                function column_into(const string&: name, std::collections::Vector<Value>&: out) const -> void;
+
+            public:
+                constructor();
+                function size() const -> long int;
+                function empty() const -> bool;
+                function column_count() const -> long int;
+                function columns() const -> std::collections::Vector<string>;
+                function get(long int: row, const string&: column) const -> Value;
+                function at(long int: row, long int: column) const -> Value;
+                function scalar() const -> Value;
+                function to_json() const -> string;
+                function to_text() const -> string;
+                function plan() const -> string;
+                function used_index() const -> bool;
+                function cache_hit() const -> bool;
+                function rows_examined() const -> long int;
+                function elapsed_us() const -> long int;
+
+                function row(long int: index) const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    row_into(index, out);
+                    return out;
+                } end function row
+
+                function column(const string&: name) const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    column_into(name, out);
+                    return out;
+                } end function column
+            } end class Result
+
+            class Graph as "walnut_rt::db::graph" {
+                function neighbors_into(const Value&: node, std::collections::Vector<Value>&: out) const -> void;
+                function incoming_into(const Value&: node, std::collections::Vector<Value>&: out) const -> void;
+                function bfs_into(const Value&: start, long int: max_depth, std::collections::Vector<Value>&: out) const -> void;
+                function dfs_into(const Value&: start, long int: max_depth, std::collections::Vector<Value>&: out) const -> void;
+                function bfs_depths_into(const Value&: start, long int: max_depth, std::collections::Vector<long int>&: out) const -> void;
+                function shortest_path_into(const Value&: source, const Value&: target, std::collections::Vector<Value>&: out) const -> void;
+                function component_into(long int: index, std::collections::Vector<Value>&: out) const -> void;
+                function topological_into(std::collections::Vector<Value>&: out) const -> void;
+
+            public:
+                constructor();
+                function node_count() const -> long int;
+                function edge_count() const -> long int;
+                function contains(const Value&: node) const -> bool;
+                function path_cost(const Value&: source, const Value&: target) const -> short float;
+                function reachable(const Value&: source, const Value&: target) const -> bool;
+                function component_count() const -> long int;
+                function has_cycle() const -> bool;
+
+                function neighbors(const Value&: node) const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    neighbors_into(node, out);
+                    return out;
+                } end function neighbors
+
+                function incoming(const Value&: node) const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    incoming_into(node, out);
+                    return out;
+                } end function incoming
+
+                function bfs(const Value&: start, long int: max_depth = -1) const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    bfs_into(start, max_depth, out);
+                    return out;
+                } end function bfs
+
+                function dfs(const Value&: start, long int: max_depth = -1) const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    dfs_into(start, max_depth, out);
+                    return out;
+                } end function dfs
+
+                function bfs_depths(const Value&: start, long int: max_depth = -1) const -> std::collections::Vector<long int> {
+                    std::collections::Vector<long int>: out;
+                    bfs_depths_into(start, max_depth, out);
+                    return out;
+                } end function bfs_depths
+
+                function shortest_path(const Value&: source, const Value&: target) const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    shortest_path_into(source, target, out);
+                    return out;
+                } end function shortest_path
+
+                function component(long int: index) const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    component_into(index, out);
+                    return out;
+                } end function component
+
+                function topological_order() const -> std::collections::Vector<Value> {
+                    std::collections::Vector<Value>: out;
+                    topological_into(out);
+                    return out;
+                } end function topological_order
+            } end class Graph
+
+            class Transaction as "walnut_rt::db::transaction" {
+            public:
+                constructor();
+                function create_table(const string&: name, const Schema&: schema) -> void;
+                function drop_table(const string&: name) -> bool;
+                function create_index(const string&: table, const std::collections::Vector<string>&: columns, const string&: kind = "ordered", bool: unique = false) -> void;
+                function insert(const string&: table, const Record&: row) -> long int;
+                function update(const string&: table, const Expr&: where, const Record&: changes) -> long int;
+                function remove(const string&: table, const Expr&: where) -> long int;
+                function clear(const string&: table) -> long int;
+                function run(const Query&: q) const -> Result;
+                function run_with(const Query&: q, const std::collections::Vector<Value>&: params) const -> Result;
+                function commit() -> void;
+                function rollback() -> void;
+                function active() const -> bool;
+            } end class Transaction
+
+            class Statement as "walnut_rt::db::statement" {
+            public:
+                constructor();
+                function run(const std::collections::Vector<Value>&: params) const -> Result;
+            } end class Statement
+
+            class Database as "walnut_rt::db::database" {
+            public:
+                constructor();
+                static function open(const string&: path) -> Database as "walnut_rt::db::database::open";
+                static function open_durable(const string&: path) -> Database as "walnut_rt::db::database::open_durable";
+
+                function create_table(const string&: name, const Schema&: schema) -> void;
+                function drop_table(const string&: name) -> bool;
+                function has_table(const string&: name) const -> bool;
+                function tables() const -> std::collections::Vector<string>;
+                function create_index(const string&: table, const std::collections::Vector<string>&: columns, const string&: kind = "ordered", bool: unique = false) -> void;
+                function drop_index(const string&: table, const string&: name) -> bool;
+
+                function insert(const string&: table, const Record&: row) -> long int;
+                function insert_many(const string&: table, const std::collections::Vector<Record>&: rows) -> long int;
+                function update(const string&: table, const Expr&: where, const Record&: changes) -> long int;
+                function remove(const string&: table, const Expr&: where) -> long int;
+
+                function run(const Query&: q) const -> Result;
+                function run_with(const Query&: q, const std::collections::Vector<Value>&: params) const -> Result;
+                function find(const string&: table, const Expr&: where) const -> Result;
+                function all(const string&: table) const -> Result;
+                function count(const string&: table) const -> long int;
+                function count_where(const string&: table, const Expr&: where) const -> long int;
+                function get(const string&: table, const Value&: key) const -> Result;
+                function explain(const Query&: q) const -> string;
+                function prepare(const Query&: q) -> Statement;
+                function begin() -> Transaction;
+                function run_transaction(function(Transaction) -> bool: body) -> bool;
+                function graph_of(const string&: table, const string&: from_column, const string&: to_column, const string&: weight_column = "", bool: directed = true) const -> Graph;
+
+                function checkpoint() -> void;
+                function maintain() -> void;
+                function set_cache(long int: entries, long int: rows) -> void;
+                function clear_cache() -> void;
+                function row_count() const -> long int;
+                function cache_hits() const -> long int;
+                function cache_misses() const -> long int;
+                function stats_json() const -> string;
+            } end class Database
+
+            class Native as "walnut_rt::db::api" {
+            public:
+                static function like_match(const string&: subject, const string&: pattern) -> bool as "walnut_rt::db::like_match";
+            } end class Native
+        } end extern
+
+        function column(const string&: name) -> Expr {
+            return Expr::column(name);
+        } end function column
+
+        function param(long int: index) -> Expr {
+            return Expr::param(index);
+        } end function param
+
+        function literal(const Value&: v) -> Expr {
+            return Expr::literal(v);
+        } end function literal
+
+        function all_of(const Expr&: a, const Expr&: b) -> Expr {
+            return a.both(b);
+        } end function all_of
+
+        function any_of(const Expr&: a, const Expr&: b) -> Expr {
+            return a.either(b);
+        } end function any_of
+
+        function like_match(const string&: subject, const string&: pattern) -> bool {
+            return Native::like_match(subject, pattern);
+        } end function like_match
+    } end namespace database
+} end namespace std
