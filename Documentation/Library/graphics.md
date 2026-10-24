@@ -47,7 +47,7 @@ This prints `320x240 rgb(255, 99, 71) rgb(255, 215, 0)`: the tomato rectangle an
 
 | Written | Does |
 |---|---|
-| `Renderer::make(window)`, `Renderer::make(window, backend, vsync = true)` | Starts drawing into a window. `Backend` is `best` (the default), `gpu`, `software`, `vulkan` or `opengl`. Throws a [`graphics_error`](#errors) when the window isn't open |
+| `Renderer::make(window)`, `Renderer::make(window, backend, vsync = false)` | Starts drawing into a window. `Backend` is `best` (the default), `gpu`, `software`, `vulkan` or `opengl`. Throws a [`graphics_error`](#errors) when the window isn't open |
 | `begin_frame()`, `present()` | Start and finish a frame; `present()` shows it |
 | `clear(color = black)` | Fills the frame with one color |
 | `capture()` | The last frame shown by `present()`, as an `Image`. The software backend can't read frames back, so there it gives an empty image |

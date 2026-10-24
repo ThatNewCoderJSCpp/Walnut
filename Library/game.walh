@@ -261,7 +261,7 @@ namespace std {
             } end function finish_frame
 
         public:
-            constructor(const string&: title, long int: width, long int: height, Backend: backend = Backend::best, bool: vsync = true) : window = Window::open(title, width, height), renderer = Renderer::make(window, backend, vsync) { }
+            constructor(const string&: title, long int: width, long int: height, Backend: backend = Backend::best, bool: vsync = false) : window = Window::open(title, width, height), renderer = Renderer::make(window, backend, vsync) { }
 
             function quit() -> void {
                 running = false;

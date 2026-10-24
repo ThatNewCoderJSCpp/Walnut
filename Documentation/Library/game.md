@@ -44,7 +44,7 @@ This prints `ran 30 frames`. Without the frame limit it would keep going until E
 
 | Written | Does |
 |---|---|
-| `Game(title, width, height)`, `Game(title, width, height, backend, vsync = true)` | Opens the window and starts the renderer. Throws a [`window_error`](windows.md#errors) or a [`graphics_error`](graphics.md#errors) when it can't |
+| `Game(title, width, height)`, `Game(title, width, height, backend, vsync = false)` | Opens the window and starts the renderer. Throws a [`window_error`](windows.md#errors) or a [`graphics_error`](graphics.md#errors) when it can't |
 | `run(update, draw)` | Runs the loop until the window closes or `quit()` is called. `update` takes the seconds since the last frame (a `float`); `draw` takes the `Renderer&` |
 | `run(update, draw, on_event)` | The same, also calling `on_event` with each `WindowEvent` before the update |
 | `quit()` | Ends the loop. Called from `update`, it stops before that frame is drawn |
@@ -54,7 +54,7 @@ The window and renderer are the fields `window` and `renderer`, so input is read
 
 - `clear_color`, which the screen is cleared to each frame (black by default).
 - `auto_clear`, which can be set to `false` to skip the clearing.
-- `max_fps`, which caps the frame rate. It's 0 by default, meaning no cap beyond waiting for the display.
+- `max_fps`, which caps the frame rate. It's 0 by default, meaning no cap: with vsync off (the default) the game draws as many frames as it can, and with vsync on it waits for the display.
 
 ## Timing
 

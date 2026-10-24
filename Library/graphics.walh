@@ -1000,7 +1000,7 @@ namespace std {
                 constructor();
                 constructor(const Window&: window, long int: backend, bool: vsync);
 
-                static function make(const Window&: window, Backend: backend = Backend::best, bool: vsync = true) -> Renderer {
+                static function make(const Window&: window, Backend: backend = Backend::best, bool: vsync = false) -> Renderer {
                     Renderer: r = Renderer(window, static_cast<long int>(backend), vsync);
                     if (!r.valid()) then {
                         throw std::errors::graphics_error("can't start a renderer for this window; is it open?");
