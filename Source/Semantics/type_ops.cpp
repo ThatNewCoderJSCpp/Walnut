@@ -233,7 +233,12 @@ Type* apply_type_op(TypeContext& ctx, Op op, const std::vector<Type*>& args, std
             Type* v = unref(t);
             BuiltinType* b = as_builtin(v);
             if (!is_numeric(b)) { error = name + " needs an integer or float type, not '" + text(v) + "'"; return nullptr; }
-            return ctx.builtin_ranked(b->base(), b->width(), op == Op::MakeUnsigned, v->cv());
+            if (b->is_hardware() && b->base() == BK::Float) {
+                if (op == Op::MakeSigned) return v;
+                error = "'" + text(ctx.strip_cv(v)) + "' is C++'s own float type, which has no unsigned version";
+                return nullptr;
+            }
+            return ctx.builtin_ranked(b->base(), b->width(), op == Op::MakeUnsigned, v->cv(), b->is_hardware());
         }
 
         case Op::Promote:
@@ -244,29 +249,43 @@ Type* apply_type_op(TypeContext& ctx, Op op, const std::vector<Type*>& args, std
 
             const bool is_int = b->base() == BK::Int;
             const int  w      = b->width() + (op == Op::Promote ? 1 : -1);
-            const int  lo     = is_int ? kMinIntWidth : kMinFloatWidth;
-            const int  hi     = is_int ? kMaxIntWidth : kMaxFloatWidth;
+            const bool hw     = b->is_hardware();
+            const int  lo     = hw ? (is_int ? kHardwareMinIntWidth : kHardwareFloatWidth) : is_int ? kMinIntWidth : kMinFloatWidth;
+            const int  hi     = hw ? (is_int ? kHardwareMaxIntWidth : kHardwareDoubleWidth) : is_int ? kMaxIntWidth : kMaxFloatWidth;
 
             if (w < lo || w > hi) {
-                error = "'" + text(ctx.strip_cv(v)) + "' is already the " + (op == Op::Promote ? "widest " : "narrowest ") + (is_int ? "integer" : "float") + " type, so it cannot be " + (op == Op::Promote ? "promoted" : "demoted");
+                error = "'" + text(ctx.strip_cv(v)) + "' is already the " + (op == Op::Promote ? "widest " : "narrowest ") + (hw ? "hardware " : "") + (is_int ? "integer" : "float") + " type, so it cannot be " + (op == Op::Promote ? "promoted" : "demoted");
                 return nullptr;
             }
 
-            return ctx.builtin_ranked(b->base(), w, b->is_unsigned(), v->cv());
+            return ctx.builtin_ranked(b->base(), w, b->is_unsigned(), v->cv(), hw);
         }
 
         case Op::IntFromFloat: {
             Type* v = unref(t);
             BuiltinType* b = as_builtin(v);
             if (!b || b->base() != BK::Float) { error = "int_from_float needs a float type, not '" + text(v) + "'"; return nullptr; }
-            return ctx.builtin_ranked(BK::Int, b->width(), b->is_unsigned(), v->cv());
+            return ctx.builtin_ranked(BK::Int, b->width(), b->is_unsigned(), v->cv(), b->is_hardware());
         }
 
         case Op::FloatFromInt: {
             Type* v = unref(t);
             BuiltinType* b = as_builtin(v);
             if (!b || b->base() != BK::Int) { error = "float_from_int needs an integer type, not '" + text(v) + "'"; return nullptr; }
+            if (b->is_hardware()) return ctx.hardware_float(std::max(b->width(), kHardwareFloatWidth), v->cv());
             return ctx.builtin_ranked(BK::Float, std::max(b->width(), kMinFloatWidth), b->is_unsigned(), v->cv());
+        }
+
+        case Op::Hardware: {
+            Type* v = unref(t);
+            BuiltinType* b = as_builtin(v);
+            if (b && b->is_hardware()) return v;
+            if (b && b->base() == BK::Int && b->width() >= kHardwareMinIntWidth && b->width() <= kHardwareMaxIntWidth) return ctx.hardware_int(b->width(), b->is_unsigned(), v->cv());
+            if (!b || b->base() != BK::Float || b->is_unsigned() || (b->width() != kHardwareFloatWidth && b->width() != kHardwareDoubleWidth)) {
+                error = "hardware needs an integer from 'short short int' to 'long int' (signed or unsigned, for C++'s int8_t to int64_t), 'short short float' (for C++'s float) or 'short float' (for C++'s double), not '" + text(v) + "'";
+                return nullptr;
+            }
+            return ctx.hardware_float(b->width(), v->cv());
         }
 
         case Op::ElementType: {
@@ -454,8 +473,11 @@ std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const
             const std::int64_t exp = float_exponent_bits_for(bits);
             if (trait == Trait::FloatBits) return bits;
             if (trait == Trait::FloatExponentBits) return exp;
+            if (b->is_hardware()) return bits - exp - 1;
             return bits - exp;
         }
+
+        case Trait::IsHardware:    return b && b->is_hardware() ? 1 : 0;
 
         default:
             break;

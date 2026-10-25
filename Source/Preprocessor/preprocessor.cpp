@@ -23,6 +23,7 @@ tokenizing::TokenStream Preprocessor::preprocess(FileId main) {
     m_cur_file = main;
     run_file(main, 0);
     m_out.push_back(Token(Kind::End, m_out.empty() ? 0u : m_out.back().line()));
+    m_out.back().file_id(static_cast<std::uint32_t>(main));
     const std::size_t n = m_out.size();
     Token* buf = m_arena.alloc_array_uninit<Token>(n);
     for (std::size_t i = 0; i < n; ++i) ::new (static_cast<void*>(buf + i)) Token(m_out[i]);

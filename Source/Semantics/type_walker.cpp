@@ -745,7 +745,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
 
             for (nodes::SwitchCase* c : s->get_cases()) {
                 walk_expr(c->value);
-                if (c->value && ct && !is_dynamic_t(ct)) { if (Type* lv = type_of(c->value); lv && !(operand_class(lv) == OperandClass::String && operand_class(ct) == OperandClass::String)) check_convertible(lv, ct, c); }
+                if (c->value && ct && !is_dynamic_t(ct)) { if (Type* lv = type_of(c->value); lv && !(operand_class(lv) == OperandClass::String && operand_class(ct) == OperandClass::String) && !constant_fits(c->value, lv, m_types.strip_cv(ct->is_reference() ? static_cast<ReferenceType*>(ct)->referent() : ct))) check_convertible(lv, ct, c); }
                 build_list(c->body);
             }
 
@@ -1132,6 +1132,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                 if (!type_of(a)) reject_type_as_value(a);
                 args.push_back(type_of(a));
             }
+            adapt_contains_literal(c, args);
             VC vc = VC::RValue;
             Type* t = type_call(c, args, vc);            
             assign_typed(e, t, vc);
@@ -1198,7 +1199,10 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             }
 
             if (record_symbol_of(arr)) {
+                const std::vector<nodes::ASTNode*> index_operand{ s->m_index };
+                m_operator_args = &index_operand;
                 OpResult res = resolve_operator(nodes::OverloadableOperator::Subscript, { arr, type_of(s->m_index) });
+                m_operator_args = nullptr;
                 if (res.status == SelectStatus::Ok)             { s->resolved = res.chosen; keep_overloads(s, res.chosen); el = decay_ref(res.type, vc); ensure_member_body(res.chosen); }
                 else if (res.status == SelectStatus::Ambiguous) SemanticError::ambiguous_call(m_reporter, file_of(s), s->line, "[]");
                 else                                            SemanticError::no_matching_overload(m_reporter, file_of(s), s->line, "[]");
@@ -1774,6 +1778,8 @@ void TypeWalker::collect_member_ops(
     std::vector<CandidateMatch>& matches,
     std::vector<Symbol*>& cands, std::vector<bool>& member
 ) {
+    const std::vector<nodes::ASTNode*>* op_args = m_operator_args;
+    m_operator_args = nullptr;
     Scope* ms = member_scope_of(recv);
     if (!ms) return;
     std::unordered_set<const Scope*> visited;
@@ -1789,7 +1795,7 @@ void TypeWalker::collect_member_ops(
             if (static_cast<nodes::OperatorFunctionDeclaration*>(o->decl)->get_overload() != want) continue;
             declared_here = true;
             EnvGuard g(m_types, env_of_symbol(o));
-            CandidateMatch m = match_arguments(shapes_of(o), explicit_args, m_types);
+            CandidateMatch m = op_args ? match_with_constants(op_args, shapes_of(o), explicit_args) : match_arguments(shapes_of(o), explicit_args, m_types);
             if (!m.viable) continue;
             m.ranks.insert(m.ranks.begin(), is_const_method(o) == recv_const ? ConversionRank::Exact : ConversionRank::Promotion);
             matches.push_back(std::move(m)); cands.push_back(o); member.push_back(true);
@@ -2740,7 +2746,10 @@ Type* TypeWalker::type_binary(nodes::BinaryExpression* b, Symbol*& resolved_op) 
     if (record_symbol_of(l) || record_symbol_of(r)) {
         const nodes::OverloadableOperator want = nodes::classify_single_operator(op);
         m_operator_site = b;
+        const std::vector<nodes::ASTNode*> right_operand{ b->right };
+        if (record_symbol_of(l) && !record_symbol_of(r)) m_operator_args = &right_operand;
         OpResult res = resolve_operator(want, { l, r });
+        m_operator_args = nullptr;
         m_operator_site = nullptr;
         b->negate_result = false;
         b->swap_operands = false;
@@ -4630,6 +4639,12 @@ void TypeWalker::check_convertible(Type* from, Type* to, nodes::ASTNode* site) {
     using BK = parser_types::PrimitiveType::BaseKind;
     auto numeric = [](Type* x) { return x && x->is_builtin() && (static_cast<BuiltinType*>(x)->base() == BK::Int || static_cast<BuiltinType*>(x)->base() == BK::Float); };
 
+    if (f && f->is_special_value() && t && t->is_builtin() && static_cast<BuiltinType*>(t)->is_hardware() && static_cast<BuiltinType*>(t)->base() == BK::Int) {
+        SemanticError::emit(m_reporter, file_of(site), site->line, "Type",
+            "'" + type_str(t) + "' is C++'s own integer type, which can't hold inf, nan, undefined or indeterminate; use a Walnut integer type such as 'int' to keep special values");
+        return;
+    }
+
     if (f && f->is_special_value() && t) {
         SemanticError::emit(m_reporter, file_of(site), site->line, "Type",
             "a special value (inf, nan, undefined or indeterminate) can only go into a number type or a special(T); declare this as 'special(" + type_str(t) + ")' to allow it");
@@ -5119,23 +5134,56 @@ void TypeWalker::touch_record(Type* t, nodes::ASTNode* site) {
     if (rt->is_instantiation()) m_inst->for_record(rt, site);
 }
 
+void TypeWalker::adapt_contains_literal(nodes::CallExpression* c, std::vector<Type*>& args) {
+    if (!c || c->m_arguments.size() != 2 || args.size() != 2 || !args[0] || !args[1] || !is_plain_literal(c->m_arguments[1])) return;
+    if (!c->m_callee || c->m_callee->kind != K::QualifiedIdentifier) return;
+    const auto& parts = static_cast<nodes::QualifiedIdentifier*>(c->m_callee)->parts();
+    if (parts.size() != 3 || parts[0] != "std" || parts[1] != "core" || parts[2] != "contains_in") return;
+    Scope* ms = member_scope_of(args[0]);
+    if (!ms) return;
+
+    for (Symbol* o = ms->find_member("contains"); o; o = o->next_overload) {
+        EnvGuard g(m_types, env_of_symbol(o));
+        const std::vector<ParamShape> shapes = shapes_of(o);
+        if (shapes.size() != 1 || shapes[0].is_pack || !shapes[0].element) continue;
+        Type* want = shapes[0].element;
+        if (want->is_reference()) want = static_cast<ReferenceType*>(want)->referent();
+        want = m_types.strip_cv(want);
+        if (!want || want->is_dependent() || want == m_types.strip_cv(args[1])) return;
+        if (!constant_fits(c->m_arguments[1], args[1], want)) continue;
+        args[1] = want;
+        c->m_arguments[1]->expr_type.type = want;
+        return;
+    }
+}
+
 CandidateMatch TypeWalker::match_with_constants(nodes::CallExpression* c, const std::vector<ParamShape>& shapes, const std::vector<Type*>& args) {
+    return match_with_constants(c ? &c->m_arguments : nullptr, shapes, args);
+}
+
+CandidateMatch TypeWalker::match_with_constants(const std::vector<nodes::ASTNode*>* nodes, const std::vector<ParamShape>& shapes, const std::vector<Type*>& args) {
     CandidateMatch m = match_arguments(shapes, args, m_types);
-    if (m.viable) return m;
+    if (m.viable || !nodes || nodes->size() != args.size()) return m;
     std::vector<Type*> adjusted = args;
     std::vector<bool>  changed(args.size(), false);
     bool any = false;
 
-    for (std::size_t i = 0; i < shapes.size() && i < args.size(); ++i) {
-        if (shapes[i].is_pack) break;
-        if (!args[i] || !shapes[i].element) continue;
-        Type* want = shapes[i].element;
+    auto adjust = [&](std::size_t i, Type* want) {
+        if (!args[i] || !want || !(*nodes)[i]) return;
         if (want->is_reference()) {
             auto* rt = static_cast<ReferenceType*>(want);
-            if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const) continue;
+            if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const) return;
             want = rt->referent();
         }
-        if (constant_fits(c->m_arguments[i], args[i], want)) { adjusted[i] = m_types.strip_cv(want); changed[i] = true; any = true; }
+        if (constant_fits((*nodes)[i], args[i], want)) { adjusted[i] = m_types.strip_cv(want); changed[i] = true; any = true; }
+    };
+
+    for (std::size_t i = 0; i < shapes.size() && i < args.size(); ++i) {
+        if (shapes[i].is_pack) {
+            if (i + 1 == shapes.size()) for (std::size_t j = i; j < args.size(); ++j) adjust(j, shapes[i].element);
+            break;
+        }
+        adjust(i, shapes[i].element);
     }
 
     if (!any) return m;
@@ -6477,7 +6525,7 @@ Symbol* TypeWalker::resolve_constructor(Symbol* rec, const std::vector<Type*>& a
             if (!m_inst) continue;
             auto* I = m_inst->instantiate_for_call(o, {}, args, site, lvalues.size() == args.size() ? &lvalues : nullptr);
             if (!I || !I->sym) continue;
-            matches.push_back(match_arguments(I->fn_shapes, args, m_types));
+            matches.push_back(match_with_constants(arg_nodes, I->fn_shapes, args));
             cands.push_back(I->sym);
             cand_inst.push_back(I);
             ctor_origins.push_back(o);
@@ -6486,7 +6534,7 @@ Symbol* TypeWalker::resolve_constructor(Symbol* rec, const std::vector<Type*>& a
         if (!o->decl || o->decl->kind != K::ConstructorDeclaration) continue;
         auto* cd = static_cast<nodes::ConstructorDeclaration*>(o->decl);
         if (cd->is_deleted() && self_ref_kind(cd->get_parameters(), self) == 2) continue;
-        matches.push_back(match_arguments(shapes_of(o), args, m_types));
+        matches.push_back(match_with_constants(arg_nodes, shapes_of(o), args));
         cands.push_back(o);
         cand_inst.push_back(nullptr);
         ctor_origins.push_back(o);

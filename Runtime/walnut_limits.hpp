@@ -3,6 +3,8 @@
 
 #include "walnut_runtime.hpp"
 
+#include <limits>
+
 namespace walnut_rt {
 
 namespace num {
@@ -10,13 +12,13 @@ namespace num {
 template <typename... T>
 struct tag {};
 
-template <typename T> inline T epsilon() { return T::epsilon(); }
-template <typename T> inline T smallest() { return T::min(); }
-template <typename T> inline T largest() { return T::max(); }
-template <typename T> inline T lowest() { return T::lowest(); }
-template <typename T> inline T subnormal_min() { return T::subnormal_min(); }
-template <typename T> inline T infinity_of() { return T::positive_infinity(); }
-template <typename T> inline T nan_of() { return T::nan(); }
+template <typename T> inline T epsilon() { if constexpr (is_hardware_float_v<T>) return std::numeric_limits<T>::epsilon(); else return T::epsilon(); }
+template <typename T> inline T smallest() { if constexpr (is_hardware_float_v<T>) return std::numeric_limits<T>::min(); else return T::min(); }
+template <typename T> inline T largest() { if constexpr (is_hardware_float_v<T>) return std::numeric_limits<T>::max(); else return T::max(); }
+template <typename T> inline T lowest() { if constexpr (is_hardware_float_v<T>) return std::numeric_limits<T>::lowest(); else return T::lowest(); }
+template <typename T> inline T subnormal_min() { if constexpr (is_hardware_float_v<T>) return std::numeric_limits<T>::denorm_min(); else return T::subnormal_min(); }
+template <typename T> inline T infinity_of() { if constexpr (is_hardware_float_v<T>) return std::numeric_limits<T>::infinity(); else return T::positive_infinity(); }
+template <typename T> inline T nan_of() { if constexpr (is_hardware_float_v<T>) return std::numeric_limits<T>::quiet_NaN(); else return T::nan(); }
 
 } // namespace num
 

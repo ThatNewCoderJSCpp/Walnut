@@ -33,13 +33,21 @@ void RecordType::write_to(std::ostream& os) const {
 
 Type* TypeContext::builtin_ranked(
   parser_types::PrimitiveType::BaseKind base,
-  int w, bool is_unsigned, CV cv
+  int w, bool is_unsigned, CV cv, bool hardware
 ) {
-    BuiltinKey key{ std::uint8_t(base), std::uint8_t(std::int8_t(w)), std::uint8_t(is_unsigned), cv.bits() };
+    BuiltinKey key{ std::uint8_t(base), std::uint8_t(std::int8_t(w)), std::uint8_t(is_unsigned), cv.bits(), std::uint8_t(hardware) };
     if (auto it = m_builtins.find(key); it != m_builtins.end()) return it->second;
-    Type* t = make_in<BuiltinType>(m_arena, base, w, is_unsigned, cv);
+    Type* t = make_in<BuiltinType>(m_arena, base, w, is_unsigned, cv, hardware);
     m_builtins.emplace(key, t);
     return t;
+}
+
+Type* TypeContext::hardware_float(int width, CV cv) {
+    return builtin_ranked(parser_types::PrimitiveType::BaseKind::Float, width, false, cv, true);
+}
+
+Type* TypeContext::hardware_int(int width, bool is_unsigned, CV cv) {
+    return builtin_ranked(parser_types::PrimitiveType::BaseKind::Int, width, is_unsigned, cv, true);
 }
 
 Type* TypeContext::pointer(Type* pointee, CV cv) {
@@ -224,7 +232,7 @@ Type* TypeContext::with_cv(Type* base, CV cv) {
     switch (base->kind()) {
         case TypeKind::Builtin: {
             auto* b = static_cast<BuiltinType*>(base);
-            return builtin_ranked(b->base(), b->width(), b->is_unsigned(), cv);
+            return builtin_ranked(b->base(), b->width(), b->is_unsigned(), cv, b->is_hardware());
         }
 
         case TypeKind::Pointer: return pointer(static_cast<PointerType*>(base)->pointee(), cv);

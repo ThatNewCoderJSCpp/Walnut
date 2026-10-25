@@ -309,6 +309,22 @@ namespace std {
                     return data()[index];
                 }
 
+                function hardware_size() const -> std::hardware_int64 as "walnut_rt::coll::hardware_size";
+
+                operator([]) function(std::hardware_int64: index) -> T& {
+                    if (index < 0 || index >= hardware_size()) then {
+                        check(static_cast<long int>(index));
+                    }
+                    return data()[index];
+                }
+
+                operator([]) function(std::hardware_int64: index) const -> const T& {
+                    if (index < 0 || index >= hardware_size()) then {
+                        check(static_cast<long int>(index));
+                    }
+                    return data()[index];
+                }
+
                 function at(long int: index) -> T& {
                     check(index);
                     return data()[index];
@@ -1176,6 +1192,22 @@ namespace std {
                     return data()[index];
                 }
 
+                function hardware_size() const -> std::hardware_int64 as "walnut_rt::coll::hardware_size";
+
+                operator([]) function(std::hardware_int64: index) -> T& {
+                    if (index < 0 || index >= hardware_size()) then {
+                        check(static_cast<long int>(index));
+                    }
+                    return data()[index];
+                }
+
+                operator([]) function(std::hardware_int64: index) const -> const T& {
+                    if (index < 0 || index >= hardware_size()) then {
+                        check(static_cast<long int>(index));
+                    }
+                    return data()[index];
+                }
+
                 function at(long int: index) -> T& {
                     check(index);
                     return data()[index];
@@ -1904,6 +1936,22 @@ namespace std {
 
                 operator([]) function(long int: index) const -> const T& {
                     check(index);
+                    return data()[index];
+                }
+
+                function hardware_size() const -> std::hardware_int64 as "walnut_rt::coll::hardware_size";
+
+                operator([]) function(std::hardware_int64: index) -> T& {
+                    if (index < 0 || index >= hardware_size()) then {
+                        check(static_cast<long int>(index));
+                    }
+                    return data()[index];
+                }
+
+                operator([]) function(std::hardware_int64: index) const -> const T& {
+                    if (index < 0 || index >= hardware_size()) then {
+                        check(static_cast<long int>(index));
+                    }
                     return data()[index];
                 }
 

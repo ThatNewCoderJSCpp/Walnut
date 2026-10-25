@@ -55,7 +55,15 @@ Each function works on:
 - `Complex<T>` and `BigComplex`, giving a complex number back (except the real-only functions below);
 - every integer type, which is turned into a `float` first, so `sqrt(16)` and `sin(1)` give a `float`.
 
-When a function takes several numbers, they all have the same type: `pow(2.0, 3.0)` and `pow(2.0lf, 3.0lf)` work, but `pow(2.0, 3.0lf)` needs a `static_cast` first.
+- the [hardware floats](../../documentation.md#hardware-numbers) `std::hardware_float` and `std::hardware_double`, giving the same type back: the common functions call C's own, and the rest are worked out as `short float` and converted back.
+
+`pow`, `atan2`, `log(x, base)`, `nth_root`, `fmod` and `remainder` take two numbers, and the two can be different types:
+
+- when the first is a float, the result has its type and the second is converted to it, so `pow(x, 2.0)` and `pow(x, 2)` give a `short short float` for a `short short float` `x`, and a `std::hardware_float` for a `std::hardware_float` `x`;
+- when the first is an integer and the second a float, the result has the float's type: `pow(2, x)`;
+- when both are integers, they're turned into `float` as for the other functions.
+
+The other functions that take several numbers need them all to be the same type.
 
 These functions take only real numbers (floats, `BigFloat` or integers), not complex ones: `atan2` and `atan(y, x)`, `expm1`, `log1p`, `fmod`, `remainder`, `mod_floor`, `mod_euclid`, `hypot`, `radians`, `degrees`, `sign`, the inverse beta functions, the inverse regularized gamma functions, and the generalized Gaussian integral and moment.
 
@@ -79,7 +87,7 @@ These functions take only real numbers (floats, `BigFloat` or integers), not com
 |---|---|
 | `sqrt(x)`, `cbrt(x)` | The square and cube root |
 | `nth_root(x, n)` | The `n`th root; `n` is a `long int` or the same type as `x` |
-| `pow(x, y)` | `x` to the power `y`; `y` is a `long int` or the same type as `x` |
+| `pow(x, y)` | `x` to the power `y`; `y` is a `long int`, the same type as `x`, or another number type (see [above](#which-types-the-functions-take)) |
 | `pow2(x)`, `pow10(x)` | 2 or 10 to the power `x` |
 | `exp(x)`, `expm1(x)` | e to the power `x`, and that minus 1 (accurate for `x` near 0) |
 | `ln(x)` or `log(x)` | The natural logarithm |

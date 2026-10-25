@@ -13,22 +13,32 @@ std::optional<NumericProfile> numeric_profile(const BuiltinType* b) {
     using BK = parser_types::PrimitiveType::BaseKind;
 
     switch (b->base()) {
-        case BK::Int:   return NumericProfile{ NumericProfile::Family::Int,   b->is_unsigned(), b->width() };
-        case BK::Float: return NumericProfile{ NumericProfile::Family::Float, b->is_unsigned(), b->width() };
+        case BK::Int:   return NumericProfile{ NumericProfile::Family::Int,   b->is_unsigned(), b->width(), b->is_hardware() };
+        case BK::Float: return NumericProfile{ NumericProfile::Family::Float, b->is_unsigned(), b->width(), b->is_hardware() };
         default:        return std::nullopt;   
     }
 }
 
+ConversionRank rank_numeric_within(const NumericProfile& s, const NumericProfile& d);
+
 ConversionRank rank_numeric(const NumericProfile& s, const NumericProfile& d) {
+    const ConversionRank r = rank_numeric_within(s, d);
+    if (r == ConversionRank::Promotion && s.hardware != d.hardware) return ConversionRank::Conversion;
+    return r;
+}
+
+ConversionRank rank_numeric_within(const NumericProfile& s, const NumericProfile& d) {
     using F = NumericProfile::Family;
 
     if (s.family == F::Int && d.family == F::Int) {
         if (s.is_unsigned != d.is_unsigned) return ConversionRank::None;
+        if (d.hardware && !s.hardware) return d.width > s.width ? ConversionRank::Promotion : ConversionRank::None;
         return d.width >= s.width ? ConversionRank::Promotion : ConversionRank::None;
     }
 
     if (s.family == F::Float && d.family == F::Float) {
         if (!s.is_unsigned && d.is_unsigned) return ConversionRank::None;
+        if (d.hardware && !s.hardware) return d.width > s.width ? ConversionRank::Promotion : ConversionRank::None;
         return d.width >= s.width ? ConversionRank::Promotion : ConversionRank::None;
     }
 
@@ -36,7 +46,8 @@ ConversionRank rank_numeric(const NumericProfile& s, const NumericProfile& d) {
         if (!s.is_unsigned && d.is_unsigned) return ConversionRank::None;
         const unsigned src_bits = bit_width_of_rank(s.width);
         const unsigned need     = s.is_unsigned ? src_bits : src_bits - 1;
-        return float_digits_of_bits(bit_width_of_rank(d.width)) >= need ? ConversionRank::Conversion : ConversionRank::None;
+        const unsigned digits = d.hardware ? (bit_width_of_rank(d.width) == 32 ? 24u : 53u) : float_digits_of_bits(bit_width_of_rank(d.width));
+        return digits >= need ? ConversionRank::Conversion : ConversionRank::None;
     }
 
     return ConversionRank::None;
@@ -254,7 +265,9 @@ ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx) {
     if (src->is_null() && dst->is_pointer()) return ConversionRank::Conversion;  
 
     if (ctx.strip_cv(src)->is_special_value() && ctx.strip_cv(dst)->is_builtin()) {
-        if (auto p = numeric_profile(static_cast<BuiltinType*>(ctx.strip_cv(dst))); p) return ConversionRank::Conversion;
+        auto* db = static_cast<BuiltinType*>(ctx.strip_cv(dst));
+        if (db->is_hardware() && db->base() == parser_types::PrimitiveType::BaseKind::Int) return ConversionRank::None;
+        if (auto p = numeric_profile(db); p) return ConversionRank::Conversion;
     }
 
     if (dst->is_builtin() && static_cast<BuiltinType*>(dst)->is_dynamic()) {

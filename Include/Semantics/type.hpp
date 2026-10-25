@@ -118,21 +118,33 @@ const char* length_prefix(parser_types::LengthModifier length);
 
 std::string canonical_spelling(parser_types::PrimitiveType::BaseKind base, int w);
 
+std::string hardware_spelling(int w);
+
+std::string hardware_spelling(parser_types::PrimitiveType::BaseKind base, int w, bool is_unsigned);
+
+constexpr int kHardwareMinIntWidth = -2;
+constexpr int kHardwareMaxIntWidth = 1;
+
+constexpr int kHardwareFloatWidth  = 0;
+constexpr int kHardwareDoubleWidth = 1;
+
 class BuiltinType : public Type {
 public:
     using BaseKind = parser_types::PrimitiveType::BaseKind;
 
-    BuiltinType(BaseKind base, int width, bool is_unsigned, CV cv);
+    BuiltinType(BaseKind base, int width, bool is_unsigned, CV cv, bool hardware = false);
 
     BaseKind base()        const { return m_base; }
     int      width()       const { return m_width; }
     bool     is_unsigned() const { return m_unsigned; }
+    bool     is_hardware() const { return m_hardware; }
     bool     is_void()     const { return m_base == BaseKind::Void; }
     bool     is_dynamic()  const { return m_base == BaseKind::Dynamic; }
     bool     is_bool()     const { return m_base == BaseKind::Bool; }
 
     void write_to(std::ostream& os) const override {
         write_cv(os);
+        if (m_hardware) { os << hardware_spelling(m_base, m_width, m_unsigned); return; }
         if (m_unsigned) os << "unsigned ";
         os << canonical_spelling(m_base, m_width);
     }
@@ -141,6 +153,7 @@ private:
     BaseKind    m_base;
     std::int8_t m_width;
     bool        m_unsigned;
+    bool        m_hardware = false;
 };
 
 class PointerType : public Type {
@@ -399,8 +412,11 @@ public:
 
     Type* builtin_ranked(
         parser_types::PrimitiveType::BaseKind base,
-        int width, bool is_unsigned = false, CV cv = CV{}
+        int width, bool is_unsigned = false, CV cv = CV{}, bool hardware = false
     );
+
+    Type* hardware_float(int width, CV cv = CV{});
+    Type* hardware_int(int width, bool is_unsigned, CV cv = CV{});
 
     Type* void_()   { return builtin(parser_types::PrimitiveType::BaseKind::Void); }
     Type* dynamic_(){ return builtin(parser_types::PrimitiveType::BaseKind::Dynamic); }
@@ -491,10 +507,10 @@ private:
     bool computed_cache_key(const parser_types::TypeInfo& info, std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>>& key) const;
 
     struct BuiltinKey {
-        std::uint8_t base, length, is_unsigned, cv;
+        std::uint8_t base, length, is_unsigned, cv, hardware = 0;
 
         bool operator==(const BuiltinKey& o) const {
-            return base == o.base && length == o.length && is_unsigned == o.is_unsigned && cv == o.cv;
+            return base == o.base && length == o.length && is_unsigned == o.is_unsigned && cv == o.cv && hardware == o.hardware;
         }
     };
 
@@ -527,7 +543,7 @@ private:
 
     struct H {
         static std::size_t mix(std::size_t h, std::size_t v) { return h * 1000003u ^ (v + 0x9e3779b9u + (h << 6) + (h >> 2)); }
-        std::size_t operator()(const BuiltinKey& k) const { return mix(mix(mix(k.base, k.length), k.is_unsigned), k.cv); }
+        std::size_t operator()(const BuiltinKey& k) const { return mix(mix(mix(mix(k.base, k.length), k.is_unsigned), k.cv), k.hardware); }
         
         std::size_t operator()(const UnaryKey& k) const;
 

@@ -48,8 +48,42 @@ inline constexpr bool any_bigfloat = (std::is_same_v<std::decay_t<A>, mp::BigFlo
 
 inline const mp::BigFloatContext& context() { return mp::BigFloatContext::current(); }
 
-#define WALNUT_MATH_FN(NAME, TARGET)                                                                                   \
+template <typename A>
+inline auto hardware_widen(const A& a) {
+    if constexpr (is_hardware_float_v<A>) return f64(static_cast<double>(a));
+    else return a;
+}
+
+template <typename W, typename R>
+inline auto hardware_back(const R& r) {
+    if constexpr (is_float_v<R>) return static_cast<W>(float_to_double(r));
+    else return r;
+}
+
+template <typename W, typename... Ws>
+inline constexpr bool any_hardware = is_hardware_float_v<W> || (is_hardware_float_v<Ws> || ...);
+
+#define WALNUT_MATH_HW_FALLBACK(NAME)                                                                                  \
+    template <typename W, typename... Ws>                                                                              \
+    inline auto hw(rank<0>, const W& w, const Ws&... ws) {                                                             \
+        using H = std::conditional_t<is_hardware_float_v<W>, W, double>;                                               \
+        return hardware_back<H>(::walnut_rt::math::NAME(hardware_widen(w), hardware_widen(ws)...));                    \
+    }
+
+#define WALNUT_MATH_FN_STD(NAME, TARGET, STD)                                                                          \
     namespace fn_##NAME {                                                                                              \
+        template <typename W, typename... Ws>                                                                          \
+        auto hw(rank<1>, const W& w, const Ws&... ws) -> decltype(static_cast<W>(STD(w, static_cast<W>(ws)...))) {     \
+            return static_cast<W>(STD(w, static_cast<W>(ws)...));                                                      \
+        }                                                                                                              \
+    }                                                                                                                  \
+    WALNUT_MATH_FN(NAME, TARGET)
+
+#define WALNUT_MATH_FN(NAME, TARGET)                                                                                   \
+    template <typename W, typename... Ws>                                                                              \
+    inline auto NAME(const W& w, const Ws&... ws);                                                                     \
+    namespace fn_##NAME {                                                                                              \
+        WALNUT_MATH_HW_FALLBACK(NAME)                                                                                  \
         template <typename... A>                                                                                       \
         auto go(rank<1>, const A&... a) -> decltype(::fizmo::math::TARGET(a..., std::declval<const mp::BigFloatContext&>())) { \
             return ::fizmo::math::TARGET(a..., context());                                                             \
@@ -61,7 +95,9 @@ inline const mp::BigFloatContext& context() { return mp::BigFloatContext::curren
     }                                                                                                                  \
     template <typename W, typename... Ws>                                                                              \
     inline auto NAME(const W& w, const Ws&... ws) {                                                                    \
-        if constexpr (any_bigfloat<decltype(unwrap(w)), decltype(unwrap(ws))...>) {                                    \
+        if constexpr (any_hardware<W, Ws...>) {                                                                        \
+            return fn_##NAME::hw(rank<1>{}, w, ws...);                                                                 \
+        } else if constexpr (any_bigfloat<decltype(unwrap(w)), decltype(unwrap(ws))...>) {                             \
             return rewrap<W>(fn_##NAME::go(rank<1>{}, unwrap(w), unwrap(ws)...));                                      \
         } else {                                                                                                       \
             return rewrap<W>(fn_##NAME::go(rank<0>{}, unwrap(w), unwrap(ws)...));                                      \
@@ -88,53 +124,53 @@ inline const mp::BigFloatContext& context() { return mp::BigFloatContext::curren
         else return mp::constants::NAME<W>(k);                                                                         \
     }
 
-WALNUT_MATH_FN(sin, sin)
-WALNUT_MATH_FN(cos, cos)
-WALNUT_MATH_FN(tan, tan)
+WALNUT_MATH_FN_STD(sin, sin, std::sin)
+WALNUT_MATH_FN_STD(cos, cos, std::cos)
+WALNUT_MATH_FN_STD(tan, tan, std::tan)
 WALNUT_MATH_FN(csc, csc)
 WALNUT_MATH_FN(sec, sec)
 WALNUT_MATH_FN(cot, cot)
-WALNUT_MATH_FN(sinh, sinh)
-WALNUT_MATH_FN(cosh, cosh)
-WALNUT_MATH_FN(tanh, tanh)
+WALNUT_MATH_FN_STD(sinh, sinh, std::sinh)
+WALNUT_MATH_FN_STD(cosh, cosh, std::cosh)
+WALNUT_MATH_FN_STD(tanh, tanh, std::tanh)
 WALNUT_MATH_FN(csch, csch)
 WALNUT_MATH_FN(sech, sech)
 WALNUT_MATH_FN(coth, coth)
-WALNUT_MATH_FN(arcsin, arcsin)
-WALNUT_MATH_FN(arccos, arccos)
-WALNUT_MATH_FN(arctan, arctan)
+WALNUT_MATH_FN_STD(arcsin, arcsin, std::asin)
+WALNUT_MATH_FN_STD(arccos, arccos, std::acos)
+WALNUT_MATH_FN_STD(arctan, arctan, std::atan)
 WALNUT_MATH_FN(arccot, arccot)
 WALNUT_MATH_FN(arcsec, arcsec)
 WALNUT_MATH_FN(arccsc, arccsc)
-WALNUT_MATH_FN(arcsinh, arcsinh)
-WALNUT_MATH_FN(arccosh, arccosh)
-WALNUT_MATH_FN(arctanh, arctanh)
+WALNUT_MATH_FN_STD(arcsinh, arcsinh, std::asinh)
+WALNUT_MATH_FN_STD(arccosh, arccosh, std::acosh)
+WALNUT_MATH_FN_STD(arctanh, arctanh, std::atanh)
 WALNUT_MATH_FN(arccoth, arccoth)
 WALNUT_MATH_FN(arcsech, arcsech)
 WALNUT_MATH_FN(arccsch, arccsch)
-WALNUT_MATH_FN(exp, exp)
-WALNUT_MATH_FN(ln, ln)
-WALNUT_MATH_FN(log2, log2)
-WALNUT_MATH_FN(log10, log10)
-WALNUT_MATH_FN(sqrt, sqrt)
-WALNUT_MATH_FN(cbrt, cbrt)
+WALNUT_MATH_FN_STD(exp, exp, std::exp)
+WALNUT_MATH_FN_STD(ln, ln, std::log)
+WALNUT_MATH_FN_STD(log2, log2, std::log2)
+WALNUT_MATH_FN_STD(log10, log10, std::log10)
+WALNUT_MATH_FN_STD(sqrt, sqrt, std::sqrt)
+WALNUT_MATH_FN_STD(cbrt, cbrt, std::cbrt)
 WALNUT_MATH_FN(pow2, pow2)
 WALNUT_MATH_FN(pow10, pow10)
-WALNUT_MATH_FN(log1p, log1p)
-WALNUT_MATH_FN(expm1, expm1)
+WALNUT_MATH_FN_STD(log1p, log1p, std::log1p)
+WALNUT_MATH_FN_STD(expm1, expm1, std::expm1)
 WALNUT_MATH_FN(sinc, sinc)
 WALNUT_MATH_FN(normalized_sinc, normalized_sinc)
 WALNUT_MATH_FN(gudermannian, gudermannian)
 WALNUT_MATH_FN(inv_gudermannian, inv_gudermannian)
-WALNUT_MATH_FN(erf, erf)
-WALNUT_MATH_FN(erfc, erfc)
+WALNUT_MATH_FN_STD(erf, erf, std::erf)
+WALNUT_MATH_FN_STD(erfc, erfc, std::erfc)
 WALNUT_MATH_FN(erfi, erfi)
 WALNUT_MATH_FN(inv_erf, inv_erf)
 WALNUT_MATH_FN(inv_erfc, inv_erfc)
 WALNUT_MATH_FN(inv_erfi, inv_erfi)
-WALNUT_MATH_FN(gamma, gamma)
+WALNUT_MATH_FN_STD(gamma, gamma, std::tgamma)
 WALNUT_MATH_FN(log_gamma, log_gamma)
-WALNUT_MATH_FN(log_abs_gamma, log_abs_gamma)
+WALNUT_MATH_FN_STD(log_abs_gamma, log_abs_gamma, std::lgamma)
 WALNUT_MATH_FN(factorial, factorial)
 WALNUT_MATH_FN(digamma, digamma)
 WALNUT_MATH_FN(trigamma, trigamma)
@@ -169,17 +205,17 @@ WALNUT_MATH_FN(cosh_integral, cosh_integral)
 WALNUT_MATH_FN(exp_integral, exp_integral)
 WALNUT_MATH_FN(log_integral, log_integral)
 WALNUT_MATH_FN(clausen_integral, clausen_integral)
-WALNUT_MATH_FN(floor, floor)
-WALNUT_MATH_FN(ceiling, ceiling)
-WALNUT_MATH_FN(round, round)
-WALNUT_MATH_FN(trunc, trunc)
+WALNUT_MATH_FN_STD(floor, floor, std::floor)
+WALNUT_MATH_FN_STD(ceiling, ceiling, std::ceil)
+WALNUT_MATH_FN_STD(round, round, std::round)
+WALNUT_MATH_FN_STD(trunc, trunc, std::trunc)
 WALNUT_MATH_FN(fractional_part, fractional_part)
-WALNUT_MATH_FN(atan2, atan2)
-WALNUT_MATH_FN(pow, pow)
+WALNUT_MATH_FN_STD(atan2, atan2, std::atan2)
+WALNUT_MATH_FN_STD(pow, pow, std::pow)
 WALNUT_MATH_FN(log, log)
 WALNUT_MATH_FN(nth_root, nth_root)
-WALNUT_MATH_FN(fmod, fmod)
-WALNUT_MATH_FN(remainder, remainder)
+WALNUT_MATH_FN_STD(fmod, fmod, std::fmod)
+WALNUT_MATH_FN_STD(remainder, remainder, std::remainder)
 WALNUT_MATH_FN(mod_floor, mod_floor)
 WALNUT_MATH_FN(mod_euclid, mod_euclid)
 WALNUT_MATH_FN(generalized_erf, generalized_erf)
@@ -246,7 +282,7 @@ WALNUT_MATH_FN(inverse_regularized_beta, inverse_regularized_beta)
 WALNUT_MATH_FN(inverse_regularized_beta_complement, inverse_regularized_beta_complement)
 WALNUT_MATH_FN(carlson_rj, carlson_rj)
 WALNUT_MATH_FN(log_base, log)
-WALNUT_MATH_FN(abs, abs)
+WALNUT_MATH_FN_STD(abs, abs, std::fabs)
 WALNUT_MATH_CONST(sqrt2)
 WALNUT_MATH_CONST(inv_sqrt2)
 WALNUT_MATH_CONST(sqrt3)

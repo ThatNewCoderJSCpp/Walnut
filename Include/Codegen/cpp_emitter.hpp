@@ -273,7 +273,22 @@ private:
     std::string int_literal(const WideInt& v, Type* t, const nodes::ASTNode* at);
 
     std::string float_literal(const std::string& text, Type* t, const nodes::ASTNode* at) {
+        if (const auto* b = hardware_of(t); b && b->base() == parser_types::PrimitiveType::BaseKind::Float) return hardware_literal(text, bit_width_of_rank(b->width()) == 32);
         return pool_constant(cpp_type(t, at), text);
+    }
+
+    bool exact_hardware_literal(nodes::ASTNode* n, Type* other);
+
+    const semantics::BuiltinType* hardware_of(Type* t) const {
+        if (t && t->is_reference()) t = static_cast<semantics::ReferenceType*>(t)->referent();
+        if (!t || !t->is_builtin()) return nullptr;
+        const auto* b = static_cast<const semantics::BuiltinType*>(t);
+        return b->is_hardware() ? b : nullptr;
+    }
+
+    static std::string hardware_literal(std::string text, bool single) {
+        if (text.find_first_of(".eEpP") == std::string::npos) text += ".0";
+        return std::string(single ? "static_cast<float>(" : "static_cast<double>(") + text + "L)";
     }
 
     std::string constant_value_code(const semantics::ConstValue& v, Type* t, const nodes::ASTNode* at);

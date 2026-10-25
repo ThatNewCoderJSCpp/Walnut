@@ -31,7 +31,8 @@ enum class TypeOp : std::uint8_t {
     Promote,
     Demote,
     IntFromFloat,
-    FloatFromInt
+    FloatFromInt,
+    Hardware
 };
 
 enum class OverloadPolicy : std::uint8_t {
@@ -70,6 +71,7 @@ inline constexpr TypeOpInfo kTypeOps[] = {
     { "demote",           TypeOp::Demote,          1, 1, OverloadPolicy::Allowed },
     { "int_from_float",   TypeOp::IntFromFloat,    1, 1, OverloadPolicy::Allowed },
     { "float_from_int",   TypeOp::FloatFromInt,    1, 1, OverloadPolicy::Allowed },
+    { "hardware",         TypeOp::Hardware,        1, 1 },
 };
 
 inline const TypeOpInfo* find_type_op(std::string_view name) {
@@ -146,7 +148,8 @@ enum class TypeTrait : std::uint8_t {
     IsNothrowAssignable,
     IsConstexprAssignable,
     IsDestructible,
-    IsNothrowDestructible
+    IsNothrowDestructible,
+    IsHardware
 };
 
 struct TypeTraitInfo {
@@ -211,6 +214,7 @@ inline constexpr TypeTraitInfo kTypeTraits[] = {
     { "is_constexpr_assignable",    TypeTrait::IsConstexprAssignable,    2 },
     { "is_destructible",            TypeTrait::IsDestructible,           1 },
     { "is_nothrow_destructible",    TypeTrait::IsNothrowDestructible,    1 },
+    { "is_hardware",                TypeTrait::IsHardware,               1, false, OverloadPolicy::Allowed },
 };
 
 inline bool is_lifecycle_trait(TypeTrait trait) {

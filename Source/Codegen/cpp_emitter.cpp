@@ -5,6 +5,8 @@
 #include "Common/source_manager.hpp"
 
 #include <cstring>
+#include <cmath>
+#include <cstdlib>
 
 namespace walnut {
 namespace codegen {
@@ -731,6 +733,8 @@ auto CppEmitter::value_type(Type* t) -> Type* {
 
 std::string CppEmitter::builtin_cpp(semantics::BuiltinType* b, const nodes::ASTNode* at) {
     const unsigned bits = bit_width_of_rank(b->width());
+    if (b->is_hardware() && b->base() == BK::Int) return std::string(b->is_unsigned() ? "std::uint" : "std::int") + std::to_string(bits) + "_t";
+    if (b->is_hardware()) return bits == 32 ? "float" : "double";
 
     switch (b->base()) {
         case BK::Int:     return std::string("walnut_rt::") + (b->is_unsigned() ? "u" : "i") + std::to_string(bits);
@@ -955,6 +959,18 @@ std::string CppEmitter::conv(nodes::ASTNode* n, Type* to, const nodes::ASTNode* 
     Type* t = value_type(to);
     auto* tb = as_builtin(t);
 
+    if (n && tb && tb->is_hardware() && tb->base() == BK::Int) {
+        nodes::ASTNode* core = n;
+        if (core->kind == K::UnaryExpression && static_cast<nodes::UnaryExpression*>(core)->op == TK::Minus && !static_cast<nodes::UnaryExpression*>(core)->resolved) core = static_cast<nodes::UnaryExpression*>(core)->operand;
+        if (core && core->kind == K::Literal && static_cast<nodes::Literal*>(core)->get_kind() == TK::Integer) {
+            semantics::ConstValue v = m_eval.eval(n);
+            if (v.ok() && v.is_int()) {
+                semantics::ConstValue fitted = m_eval.coerce(v, t);
+                if (fitted.ok() && fitted.is_int() && *fitted.i == *v.i) return int_literal(*v.i, t, at);
+            }
+        }
+    }
+
     if (n && tb && tb->base() == BK::Float) {
         bool negative = false;
         nodes::ASTNode* core = n;
@@ -997,6 +1013,10 @@ std::string CppEmitter::cpp_string_literal(const std::string& bytes) {
 std::string CppEmitter::int_literal(const WideInt& v, Type* t, const nodes::ASTNode* at) {
     const std::string type = cpp_type(t, at);
     const std::string digits = v.to_string();
+    if (hardware_of(value_type(t))) {
+        if (digits.empty() || digits[0] != '-') return "static_cast<" + type + ">(" + digits + "ULL)";
+        return "static_cast<" + type + ">(static_cast<std::int64_t>(0ULL - " + digits.substr(1) + "ULL))";
+    }
     const bool fits = digits.size() < 18;
     if (fits) return type + "(" + digits + "LL)";
     return pool_constant(type, digits);
@@ -1728,8 +1748,18 @@ std::string CppEmitter::binary(nodes::BinaryExpression* b) {
             case TK::GreaterEqual: op = ">="; break;
             default: break;
         }
-        std::string l = expr(b->left), r = expr(b->right);
-        if (lt && !lt->is_pointer() && !lt->is_null() && rt && !rt->is_pointer() && !rt->is_null()) { l = convert(l, lt, c, b); r = convert(r, rt, c, b); }
+        std::string l, r;
+        if (exact_hardware_literal(b->right, lt)) {
+            l = expr(b->left);
+            r = conv(b->right, lt, b);
+        } else if (exact_hardware_literal(b->left, rt)) {
+            l = conv(b->left, rt, b);
+            r = expr(b->right);
+        } else {
+            l = expr(b->left);
+            r = expr(b->right);
+            if (lt && !lt->is_pointer() && !lt->is_null() && rt && !rt->is_pointer() && !rt->is_null()) { l = convert(l, lt, c, b); r = convert(r, rt, c, b); }
+        }
         const int lc = effect_class(b->left), rc = effect_class(b->right);
         if ((lc == 2 || rc == 2) && lc >= 1 && rc >= 1) {
             const std::string x = "walnut_a" + std::to_string(m_temp++), y = "walnut_a" + std::to_string(m_temp++);
@@ -1739,6 +1769,38 @@ std::string CppEmitter::binary(nodes::BinaryExpression* b) {
     }
 
     return arith(b->op, b->left, b->right, result, b);
+}
+
+bool CppEmitter::exact_hardware_literal(nodes::ASTNode* n, Type* other) {
+    const semantics::BuiltinType* h = hardware_of(value_type(other));
+    if (!h || !n) return false;
+    if (h->base() == BK::Int) {
+        Type* nt = value_type(type_of(n));
+        if (!nt || !nt->is_builtin() || static_cast<semantics::BuiltinType*>(nt)->base() != BK::Int) return false;
+        nodes::ASTNode* core = n;
+        if (core->kind == K::UnaryExpression && static_cast<nodes::UnaryExpression*>(core)->op == TK::Minus && !static_cast<nodes::UnaryExpression*>(core)->resolved) core = static_cast<nodes::UnaryExpression*>(core)->operand;
+        if (!core || core->kind != K::Literal || static_cast<nodes::Literal*>(core)->get_kind() != TK::Integer) return false;
+        semantics::ConstValue v = m_eval.eval(n);
+        if (!v.ok() || !v.is_int()) return false;
+        semantics::ConstValue fitted = m_eval.coerce(v, value_type(other));
+        return fitted.ok() && fitted.is_int() && *fitted.i == *v.i;
+    }
+    nodes::ASTNode* core = n;
+    if (core->kind == K::UnaryExpression && static_cast<nodes::UnaryExpression*>(core)->op == TK::Minus && !static_cast<nodes::UnaryExpression*>(core)->resolved) {
+        core = static_cast<nodes::UnaryExpression*>(core)->operand;
+    }
+    if (!core || core->kind != K::Literal) return false;
+    auto* lit = static_cast<nodes::Literal*>(core);
+    if (lit->get_kind() != TK::Float && lit->get_kind() != TK::Integer) return false;
+    const tokenizing::NumericLiteral num = tokenizing::parse_numeric_literal(lit->value);
+    if (num.has_suffix || num.base != 10 || !num.error.empty()) return false;
+    std::string digits;
+    for (char ch : num.body) if (ch != '_' && ch != '\'') digits += ch;
+    char* end = nullptr;
+    const long double v = std::strtold(digits.c_str(), &end);
+    if (!end || *end != '\0' || !std::isfinite(v)) return false;
+    const long double back = bit_width_of_rank(h->width()) == 32 ? static_cast<long double>(static_cast<float>(v)) : static_cast<long double>(static_cast<double>(v));
+    return back == v;
 }
 
 std::string CppEmitter::unary(nodes::UnaryExpression* u) {
@@ -2557,7 +2619,8 @@ void CppEmitter::switch_statement(std::ostream& os, nodes::SwitchStatement* s) {
         if (!c->value) { default_index = static_cast<int>(i); continue; }
         Type* vt = value_type(type_of(c->value));
         Type* common = common_type(ct, vt);
-        os << pad() << (first ? "if (" : "else if (") << convert(sv, ct, common, c) << " == " << convert(expr(c->value), vt, common, c) << ") " << ci << " = " << i << ";\n";
+        if (exact_hardware_literal(c->value, ct)) os << pad() << (first ? "if (" : "else if (") << sv << " == " << conv(c->value, ct, c) << ") " << ci << " = " << i << ";\n";
+        else os << pad() << (first ? "if (" : "else if (") << convert(sv, ct, common, c) << " == " << convert(expr(c->value), vt, common, c) << ") " << ci << " = " << i << ";\n";
         first = false;
     }
 

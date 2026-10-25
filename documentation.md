@@ -175,6 +175,71 @@ Here `change` ends up as `0`.
 
 **Infinity and other special values.** Every integer and float type can also hold `inf`, `-inf`, `nan`, `undefined` and `indeterminate`; see [Special values](#special-values).
 
+### Hardware numbers
+
+Walnut's own numbers are Fizmo's exact multiprecision numbers: every width is the same on every platform, and integers can hold `inf`, `nan`, `undefined` and `indeterminate`. That exactness costs time. The hardware types are the processor's own numbers instead: they become C++'s `float`, `double`, `int32_t`, `uint8_t` and so on in the generated code, so arithmetic on them runs at full hardware speed. Use them for code that does a lot of number crunching and doesn't need Walnut's exact formats or special values: games, graphics, physics, noise, pixel and voxel data. They come with `core`, so they need no `import`.
+
+| Type | C++ type | Bits | Same width as |
+|---|---|---|---|
+| `std::hardware_float` | `float` | 32 | `short short float` |
+| `std::hardware_double` | `double` | 64 | `short float` |
+| `std::hardware_int8`, `std::hardware_uint8` | `int8_t`, `uint8_t` | 8 | `short short int` |
+| `std::hardware_int16`, `std::hardware_uint16` | `int16_t`, `uint16_t` | 16 | `short int` |
+| `std::hardware_int32`, `std::hardware_uint32` | `int32_t`, `uint32_t` | 32 | `int` |
+| `std::hardware_int64`, `std::hardware_uint64` | `int64_t`, `uint64_t` | 64 | `long int` |
+| `std::hardware_int`, `std::hardware_uint` | `int32_t`, `uint32_t` | 32 | other names for `std::hardware_int32` and `std::hardware_uint32` |
+
+```walnut
+function lerp(std::hardware_float: a, std::hardware_float: b, std::hardware_float: t) -> std::hardware_float {
+    return a + (b - a) * t;
+} end function lerp
+
+function main() -> int {
+    std::hardware_float: half = lerp(0.0, 1.0, 0.5);
+    std::hardware_double: area = 3.25 * 2.0;
+    short float: exact = area;
+    std::hardware_float: back = static_cast<std::hardware_float>(exact);
+    std::hardware_int: total = 0;
+    for (std::hardware_int: i = 0; i < 10; i++) {
+        total += i * 2;
+    }
+    std::hardware_uint8: level = 250;
+    level += 10;
+    bool: fast = std::traits::is_hardware<std::hardware_float>;
+    return 0;
+} end function main
+```
+
+Here `half` is `0.5`, `area` is `6.5`, `exact` is the same value as a `short float`, `total` is `90`, `level` wrapped around to `4`, and `fast` is `true`.
+
+**What they share**
+- **Literals** take the hardware type, as they do for any number type: `std::hardware_float: x = 1.5;` and `std::hardware_int: n = 10;`, and in `x * 0.5` or `n + 1` the literal takes the hardware type too, so the whole expression stays in hardware. A constant that doesn't fit is an error, as for the other number types. In a comparison such as `x < 4.0` or `i < 512`, a literal the hardware type holds exactly is compared as that type; a float literal it can't hold exactly, such as `0.1`, is compared at full precision so the answer stays exact.
+- **Implicit conversions** only go where nothing is lost:
+  - a hardware type to a wider or equal hardware type of the same kind and signedness (`std::hardware_int16` to `std::hardware_int64`, `std::hardware_float` to `std::hardware_double`);
+  - a hardware type to a Walnut type at least as wide (`std::hardware_int32` to `int` or `long int`, `std::hardware_float` to `short short float` and wider);
+  - a Walnut type to a strictly wider hardware type (`int` to `std::hardware_int64`, `short short float` to `std::hardware_double`). The same width needs a cast, because the Walnut value might be a special value or, for floats, has one more bit;
+  - integers to floats whose values all fit (up to 24 bits for `std::hardware_float` and 53 for `std::hardware_double`).
+
+  Everything else, such as signed to unsigned, `int` to `std::hardware_int32`, or a float to an integer, needs `static_cast`.
+- **Mixing** a hardware type with a Walnut type of the same width gives the Walnut type, since that one can hold both. Mixing two hardware types gives the wider.
+- **Overloads.** A conversion that stays among hardware types, or among Walnut types, is a better match than one that crosses between them. So a function with both a `long int` and a `std::hardware_int64` overload gets the `long int` one for an `int` argument and the `std::hardware_int64` one for a `std::hardware_int32` argument. The containers in `collections` use this for fast indexing with hardware integers.
+- **C and C++** see them as their C++ types, so they pass to `extern "C"` and `extern "C++"` functions without any conversion.
+- Printing, `${}` interpolation and `.to_string()` work as for the other numbers, and so do `var`, the containers and the `std::traits` traits.
+- `std::traits::is_hardware<T>` is `true` for all of them. They are type aliases for `__hardware(T)`, a built-in type operation that takes a Walnut type of the same width (`__hardware(short short float)`, `__hardware(unsigned int)` and so on).
+
+**Hardware floats**
+- **Special values** follow IEEE 754, like C++: `inf` and `-inf` work, and `nan`, `undefined` and `indeterminate` all become NaN. Dividing by zero gives `inf` (or NaN for `0.0 / 0.0`) instead of `undefined`. `x is nan` and `x is inf` work; `x is undefined` and `x is indeterminate` are `false`.
+- **They are always signed.** There is no `unsigned std::hardware_float`, and `std::traits::make_unsigned` on one is an error.
+- **`std::math`** functions take them and give them back: the common ones (`sin`, `cos`, `sqrt`, `exp`, `ln`, `pow`, `floor`, `atan2`, ...) call C's own functions, and the rest are worked out with `short float` and converted back.
+- Printing writes the shortest text that reads back as the same value. `std::traits::float_bits` gives 32 or 64 and `float_mantissa_bits` gives C's 23 or 52 stored bits.
+
+**Hardware integers**
+- **Overflow wraps around** in two's complement, the same as Walnut's own integers: `std::hardware_int8: x = 127; x++;` makes `x` `-128`. This is defined behavior, not C++'s undefined signed overflow, and it costs nothing. In [safe code](#safe-code) overflow stops the program instead, as it does for Walnut integers.
+- **No special values.** A hardware integer can't hold `inf`, `nan`, `undefined` or `indeterminate`: putting one in is a compile error, converting a Walnut integer that holds one stops the program with a runtime error, and `x is nan` is always `false`. Dividing or taking `%` by zero stops the program with a runtime error, since there's no `undefined` to give back. `std::traits::integer_traits<T>::has_special_values` is `false` for them.
+- A shift by a negative amount or by at least the type's width stops the program, the same as for Walnut integers, and `>>` keeps the sign of signed values.
+- Converting a float to a hardware integer cuts off the fraction, as `static_cast` does for Walnut integers; `nan`, infinity or a value outside the type's range stops the program.
+- `std::traits::make_signed` and `make_unsigned` go between the signed and unsigned hardware types of the same width, `promote` and `demote` move between hardware widths (8 to 64 bits), `float_from_int` gives `std::hardware_float` (or `std::hardware_double` for 64 bits), and `int_from_float` gives the hardware integer of the same width.
+
 ### Number literals
 
 | Form | Example |
@@ -1069,7 +1134,7 @@ Walnut converts implicitly only when nothing can be lost:
 - a narrower integer to a wider one, or a narrower float to a wider one
 - an integer to a float that can hold all of its values
 - an unsigned float to a signed float
-- a constant that fits, such as `short int: s = 3;`
+- a constant that fits, such as `short int: s = 3;`. This also goes for arguments to functions, constructors and variadic parameters, so `Vector<short short float>: v = {1.5, 2.5};` and `Box(1.5)` for a `Box(short short float)` constructor work without casts
 - a value into a `variant` that has a matching alternative
 - a value into a `var`
 

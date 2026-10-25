@@ -132,6 +132,20 @@ namespace std {
     template <typename T>
     using Supplier = function() -> T;
 
+    using hardware_float = __hardware(short short float);
+    using hardware_double = __hardware(short float);
+
+    using hardware_int8 = __hardware(short short int);
+    using hardware_int16 = __hardware(short int);
+    using hardware_int32 = __hardware(int);
+    using hardware_int64 = __hardware(long int);
+    using hardware_uint8 = __hardware(unsigned short short int);
+    using hardware_uint16 = __hardware(unsigned short int);
+    using hardware_uint32 = __hardware(unsigned int);
+    using hardware_uint64 = __hardware(unsigned long int);
+    using hardware_int = hardware_int32;
+    using hardware_uint = hardware_uint32;
+
     template <typename T>
     function less_than(const T&: a, const T&: b) -> bool {
         return a < b;
@@ -824,6 +838,9 @@ namespace std {
         constexpr int: float_exponent_bits = __float_exponent_bits(T);
 
         template <typename T>
+        constexpr bool: is_hardware = __is_hardware(T);
+
+        template <typename T>
         constexpr int: array_extent = __array_extent(T);
 
 
@@ -918,7 +935,8 @@ namespace std {
             static constexpr int: digits = __is_signed(T) ? __integer_bits(T) - 1 : __integer_bits(T);
             static constexpr int: digits10 = digits * 30103 / 100000;
             static constexpr int: radix = 2;
-            static constexpr bool: has_special_values = true;
+            static constexpr bool: has_special_values = !__is_hardware(T);
+            static constexpr bool: is_hardware = __is_hardware(T);
             static constexpr T: max = __is_signed(T) ? static_cast<T>(~static_cast<std::traits::make_unsigned<T>>(0) >> 1) : static_cast<T>(~static_cast<std::traits::make_unsigned<T>>(0));
             static constexpr T: min = __is_signed(T) ? -max - 1 : static_cast<T>(0);
             static constexpr T: lowest = min;
@@ -1007,10 +1025,10 @@ namespace std {
             static constexpr int: max_exponent = 0;
             static constexpr int: min_exponent10 = 0;
             static constexpr int: max_exponent10 = 0;
-            static constexpr bool: has_infinity = true;
-            static constexpr bool: has_nan = true;
+            static constexpr bool: has_infinity = !__is_hardware(T);
+            static constexpr bool: has_nan = !__is_hardware(T);
             static constexpr bool: has_subnormals = false;
-            static constexpr bool: has_special_values = true;
+            static constexpr bool: has_special_values = !__is_hardware(T);
 
             static constexpr function max() -> T {
                 return integer_traits<T>::max;

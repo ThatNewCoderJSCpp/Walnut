@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <exception>
 #include <optional>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <cmath>
@@ -151,24 +152,49 @@ inline special_value op_neg(special_value v) {
 
 inline special_value op_pos(special_value v) { return v; }
 
+template <typename T> inline constexpr bool is_hardware_float_v = std::is_floating_point_v<std::decay_t<T>>;
+
+template <typename T> inline constexpr bool is_hardware_int_v =
+    std::is_integral_v<std::decay_t<T>> && !std::is_same_v<std::decay_t<T>, bool> && !std::is_same_v<std::decay_t<T>, char32_t> && !std::is_same_v<std::decay_t<T>, char>;
+
+template <typename T> inline constexpr bool is_hardware_number_v = is_hardware_float_v<T> || is_hardware_int_v<T>;
+
+template <typename T>
+using hardware_wide_t = std::conditional_t<std::is_signed_v<T>, long long, unsigned long long>;
+
 template <typename F>
 inline special_kind float_kind(const F& f) {
-    if (f.is_nan())           return special_kind::nan;
-    if (f.is_undefined())     return special_kind::undefined;
-    if (f.is_indeterminate()) return special_kind::indeterminate;
-    if (f.is_infinite())      return inf_kind(f.is_negative());
-    return special_kind::none;
+    if constexpr (is_hardware_float_v<F>) {
+        if (std::isnan(f)) return special_kind::nan;
+        if (std::isinf(f)) return inf_kind(std::signbit(f));
+        return special_kind::none;
+    } else {
+        if (f.is_nan())           return special_kind::nan;
+        if (f.is_undefined())     return special_kind::undefined;
+        if (f.is_indeterminate()) return special_kind::indeterminate;
+        if (f.is_infinite())      return inf_kind(f.is_negative());
+        return special_kind::none;
+    }
 }
 
 template <typename F>
 inline F float_special(special_kind k) {
-    switch (k) {
-        case special_kind::pos_inf:       return F::infinity();
-        case special_kind::neg_inf:       { const F r = F::infinity(true); return r.is_negative() ? r : F::zero(); }
-        case special_kind::nan:           return F::nan();
-        case special_kind::undefined:     return F::undefined();
-        case special_kind::indeterminate: return F::indeterminate();
-        default:                          return F();
+    if constexpr (is_hardware_float_v<F>) {
+        switch (k) {
+            case special_kind::pos_inf: return std::numeric_limits<F>::infinity();
+            case special_kind::neg_inf: return -std::numeric_limits<F>::infinity();
+            case special_kind::none:    return F(0);
+            default:                    return std::numeric_limits<F>::quiet_NaN();
+        }
+    } else {
+        switch (k) {
+            case special_kind::pos_inf:       return F::infinity();
+            case special_kind::neg_inf:       { const F r = F::infinity(true); return r.is_negative() ? r : F::zero(); }
+            case special_kind::nan:           return F::nan();
+            case special_kind::undefined:     return F::undefined();
+            case special_kind::indeterminate: return F::indeterminate();
+            default:                          return F();
+        }
     }
 }
 
@@ -431,10 +457,14 @@ inline const mp::int4096& power_of_two_modulus() {
 
 template <typename T>
 inline long long to_ll_exact(const T& v) {
-    if constexpr (is_int_v<T>) { if (v.is_special()) fail_special(v.kind(), "as a C or C++ integer"); }
-    const unsigned long long u = static_cast<unsigned long long>(v.get_lowest_bits());
-    if (v.is_negative()) return u == (1ULL << 63) ? std::numeric_limits<long long>::min() : -static_cast<long long>(u);
-    return static_cast<long long>(u);
+    if constexpr (std::is_arithmetic_v<T>) {
+        return static_cast<long long>(v);
+    } else {
+        if constexpr (is_int_v<T>) { if (v.is_special()) fail_special(v.kind(), "as a C or C++ integer"); }
+        const unsigned long long u = static_cast<unsigned long long>(v.get_lowest_bits());
+        if (v.is_negative()) return u == (1ULL << 63) ? std::numeric_limits<long long>::min() : -static_cast<long long>(u);
+        return static_cast<long long>(u);
+    }
 }
 
 template <typename To, typename From>
@@ -508,10 +538,92 @@ inline To float_to_int(const F& f) {
 }
 
 template <typename To, typename From>
+inline To cast(const From& v);
+
+template <typename F>
+inline double float_to_double(const F& v);
+
+template <typename To, typename F>
+inline To hardware_int_from_float(F d) {
+    if (!std::isfinite(d)) fail(std::string("a float holding ") + (std::isnan(d) ? "nan" : "infinity") + " can't be converted to a hardware integer");
+    const long double t = std::trunc(static_cast<long double>(d));
+    if constexpr (std::is_signed_v<To>) {
+        if (t < -9223372036854775808.0L || t >= 9223372036854775808.0L) fail("this float is too large for a hardware integer");
+        return static_cast<To>(static_cast<unsigned long long>(static_cast<long long>(t)));
+    } else {
+        if (t <= -1.0L || t >= 18446744073709551616.0L) fail("this float doesn't fit in an unsigned hardware integer");
+        return static_cast<To>(static_cast<unsigned long long>(t));
+    }
+}
+
+template <typename To, typename From>
+inline To hardware_cast(const From& v) {
+    using T = std::decay_t<From>;
+    if constexpr (is_hardware_int_v<To>) {
+        if constexpr (is_hardware_int_v<T> || std::is_same_v<T, bool> || std::is_same_v<T, char32_t>) {
+            return static_cast<To>(static_cast<hardware_wide_t<To>>(v));
+        } else if constexpr (is_hardware_float_v<T>) {
+            return hardware_int_from_float<To>(v);
+        } else if constexpr (std::is_same_v<T, special_value>) {
+            fail_special(v.kind, "as a hardware integer");
+        } else if constexpr (is_int_v<T>) {
+            if (v.is_special()) fail_special(v.kind(), "as a hardware integer");
+            if constexpr (std::is_signed_v<To>) return static_cast<To>(static_cast<unsigned long long>(to_ll_exact(int_to_int<i64>(v))));
+            else return static_cast<To>(static_cast<unsigned long long>(int_to_int<u64>(v).get_lowest_bits()));
+        } else if constexpr (is_float_v<T>) {
+            return hardware_int_from_float<To>(static_cast<long double>(float_to_double(v)));
+        } else {
+            return static_cast<To>(v);
+        }
+    } else if constexpr (is_hardware_int_v<T>) {
+        if constexpr (std::is_same_v<To, bool>) return v != T(0);
+        else if constexpr (std::is_same_v<To, char32_t> || is_hardware_float_v<To>) return static_cast<To>(v);
+        else if constexpr (is_int_v<To> && std::is_signed_v<T>) return int_to_int<To>(i64(static_cast<long long>(v)));
+        else if constexpr (is_int_v<To>) return int_to_int<To>(u64(static_cast<unsigned long long>(v)));
+        else if constexpr (is_float_v<To> && std::is_signed_v<T>) return cast<To>(i64(static_cast<long long>(v)));
+        else if constexpr (is_float_v<To>) return cast<To>(u64(static_cast<unsigned long long>(v)));
+        else return static_cast<To>(v);
+    } else if constexpr (is_hardware_float_v<To>) {
+        if constexpr (is_hardware_float_v<T> || std::is_integral_v<T> || std::is_same_v<T, char32_t>) {
+            return static_cast<To>(v);
+        } else if constexpr (std::is_same_v<T, special_value>) {
+            return float_special<To>(v.kind);
+        } else if constexpr (is_int_v<T>) {
+            if (v.is_special()) return float_special<To>(v.kind());
+            if constexpr (int_info<T>::bits <= 64) {
+                if constexpr (int_info<T>::is_signed) return static_cast<To>(to_ll_exact(v));
+                else return static_cast<To>(static_cast<unsigned long long>(v.get_lowest_bits()));
+            } else {
+                return static_cast<To>(float_to_double(cast<f2048>(v)));
+            }
+        } else if constexpr (is_float_v<T>) {
+            return static_cast<To>(float_to_double(v));
+        } else {
+            return static_cast<To>(v);
+        }
+    } else {
+        const special_kind k = float_kind(v);
+        if constexpr (std::is_same_v<To, bool>) {
+            return v != T(0);
+        } else if constexpr (is_float_v<To>) {
+            if (k != special_kind::none) return float_special<To>(k);
+            return To(static_cast<double>(v));
+        } else if constexpr (is_int_v<To>) {
+            if (k != special_kind::none) return To::from_kind(k);
+            return float_to_int<To>(f64(static_cast<double>(v)));
+        } else {
+            return static_cast<To>(v);
+        }
+    }
+}
+
+template <typename To, typename From>
 inline To cast(const From& v) {
     using T = std::decay_t<From>;
     if constexpr (std::is_same_v<To, T>) {
         return v;
+    } else if constexpr (is_hardware_number_v<To> || is_hardware_number_v<T>) {
+        return hardware_cast<To>(v);
     } else if constexpr (std::is_same_v<T, special_value>) {
         if constexpr (is_int_v<To>) return To::from_kind(v.kind);
         else if constexpr (is_float_v<To>) return float_special<To>(v.kind);
@@ -569,6 +681,8 @@ inline Native to_native(const W& v) {
         return v.c_str();
     } else if constexpr (std::is_same_v<Native, W>) {
         return v;
+    } else if constexpr (is_hardware_number_v<W>) {
+        return static_cast<Native>(v);
     } else if constexpr (std::is_floating_point_v<Native>) {
         return static_cast<Native>(float_to_double(v));
     } else if constexpr (std::is_signed_v<Native>) {
@@ -597,6 +711,7 @@ inline W from_native(const Native& n) {
 template <typename T>
 inline bool truthy(const T& v) {
     if constexpr (std::is_same_v<T, bool>) return v;
+    else if constexpr (is_hardware_number_v<T>) return v != T(0);
     else if constexpr (is_int_v<T> || is_float_v<T>) return !v.is_zero();
     else if constexpr (std::is_same_v<T, special_value>) return true;
     else if constexpr (std::is_pointer_v<T> || std::is_null_pointer_v<T>) return v != nullptr;
@@ -663,23 +778,31 @@ inline R checked_norm(const R& v, const char* op) {
 #endif
 }
 
+template <typename T>
+inline T hw_wrap(unsigned long long v) { return static_cast<T>(static_cast<std::make_unsigned_t<T>>(v)); }
+
 template <typename T> inline T op_add(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_add(a, b); return T(checked_norm<T>(a.raw() + b.raw(), "+")); }
+    if constexpr (is_hardware_int_v<T>) return hw_wrap<T>(static_cast<unsigned long long>(a) + static_cast<unsigned long long>(b));
+    else if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_add(a, b); return T(checked_norm<T>(a.raw() + b.raw(), "+")); }
     else return a + b;
 }
 
 template <typename T> inline T op_sub(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_sub(a, b); return T(checked_norm<T>(a.raw() - b.raw(), "-")); }
+    if constexpr (is_hardware_int_v<T>) return hw_wrap<T>(static_cast<unsigned long long>(a) - static_cast<unsigned long long>(b));
+    else if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_sub(a, b); return T(checked_norm<T>(a.raw() - b.raw(), "-")); }
     else return a - b;
 }
 
 template <typename T> inline T op_mul(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_mul(a, b); return T(checked_norm<T>(a.raw() * b.raw(), "*")); }
+    if constexpr (is_hardware_int_v<T>) return hw_wrap<T>(static_cast<unsigned long long>(a) * static_cast<unsigned long long>(b));
+    else if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_mul(a, b); return T(checked_norm<T>(a.raw() * b.raw(), "*")); }
     else return a * b;
 }
 
 template <typename T> inline T op_neg(const T& a) {
-    if constexpr (is_int_v<T>) {
+    if constexpr (is_hardware_int_v<T>) {
+        return hw_wrap<T>(0ULL - static_cast<unsigned long long>(a));
+    } else if constexpr (is_int_v<T>) {
         if (a.is_unordered()) return a;
         if (a.is_infinite()) return T::from_kind(inf_kind(a.kind() == special_kind::pos_inf));
         return T(checked_norm<T>(typename int_info<T>::raw_type() - a.raw(), "negating"));
@@ -704,7 +827,11 @@ inline std::string op_add(char32_t c, const std::string& b) { std::string r; app
 
 template <typename T>
 inline T op_div(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) {
+    if constexpr (is_hardware_int_v<T>) {
+        if (b == T(0)) fail("hardware integer division by zero");
+        if constexpr (std::is_signed_v<T>) { if (b == T(-1)) return op_neg(a); }
+        return static_cast<T>(a / b);
+    } else if constexpr (is_int_v<T>) {
         if (a.is_special() || b.is_special() || b.is_zero()) return special_div(a, b);
         return T(raw_norm(a.raw() / b.raw()));
     } else {
@@ -714,8 +841,14 @@ inline T op_div(const T& a, const T& b) {
 
 template <typename T>
 inline T op_mod(const T& a, const T& b) {
-    if (a.is_special() || b.is_special() || b.is_zero()) return special_mod(a, b);
-    return T(a.raw() % b.raw());
+    if constexpr (is_hardware_int_v<T>) {
+        if (b == T(0)) fail("hardware integer remainder by zero");
+        if constexpr (std::is_signed_v<T>) { if (b == T(-1)) return T(0); }
+        return static_cast<T>(a % b);
+    } else {
+        if (a.is_special() || b.is_special() || b.is_zero()) return special_mod(a, b);
+        return T(a.raw() % b.raw());
+    }
 }
 
 template <typename T>
@@ -738,7 +871,22 @@ inline T special_pow(const T& a, const T& b) {
 
 template <typename T>
 inline T op_pow(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) {
+    if constexpr (is_hardware_int_v<T>) {
+        if constexpr (std::is_signed_v<T>) {
+            if (b < T(0)) {
+                if (a == T(1)) return T(1);
+                if (a == T(-1)) return (static_cast<long long>(b) & 1) ? T(-1) : T(1);
+                fail("integer raised to a negative power");
+            }
+        }
+        unsigned long long base = static_cast<unsigned long long>(a), r = 1ULL, e = static_cast<unsigned long long>(b);
+        while (e) {
+            if (e & 1ULL) r *= base;
+            base *= base;
+            e >>= 1;
+        }
+        return hw_wrap<T>(r);
+    } else if constexpr (is_int_v<T>) {
         if (a.is_special() || b.is_special() || b.is_zero()) return special_pow(a, b);
         if (a.is_zero() && b.is_negative()) return T::undefined();
         using R = typename int_info<T>::raw_type;
@@ -772,18 +920,29 @@ inline T op_pow(const T& a, const T& b) {
             }
             return T(r);
         }
+    } else if constexpr (is_hardware_float_v<T>) {
+        return static_cast<T>(std::pow(a, b));
     } else {
         return T(mp::math::pow(a, b));
     }
 }
 
-template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
+template <typename T, std::enable_if_t<is_hardware_int_v<T>, int> = 0>
+inline T op_bitand(T a, T b) { return static_cast<T>(a & b); }
+template <typename T, std::enable_if_t<is_hardware_int_v<T>, int> = 0>
+inline T op_bitor(T a, T b)  { return static_cast<T>(a | b); }
+template <typename T, std::enable_if_t<is_hardware_int_v<T>, int> = 0>
+inline T op_bitxor(T a, T b) { return static_cast<T>(a ^ b); }
+template <typename T, std::enable_if_t<is_hardware_int_v<T>, int> = 0>
+inline T op_bitnot(T a)      { return static_cast<T>(~a); }
+
+template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T>, int> = 0>
 inline T op_bitand(const T& a, const T& b) { if (a.is_special() || b.is_special()) return special_bits(a, b); return from_twos<T>(unsigned_of<T>(to_twos(a).raw() & to_twos(b).raw())); }
-template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
+template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T>, int> = 0>
 inline T op_bitor(const T& a, const T& b)  { if (a.is_special() || b.is_special()) return special_bits(a, b); return from_twos<T>(unsigned_of<T>(to_twos(a).raw() | to_twos(b).raw())); }
-template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
+template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T>, int> = 0>
 inline T op_bitxor(const T& a, const T& b) { if (a.is_special() || b.is_special()) return special_bits(a, b); return from_twos<T>(unsigned_of<T>(to_twos(a).raw() ^ to_twos(b).raw())); }
-template <typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
+template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T>, int> = 0>
 inline T op_bitnot(const T& a)             { if (a.is_special()) return special_bits(a, a); return from_twos<T>(unsigned_of<T>(~to_twos(a).raw())); }
 
 template <typename E, std::enable_if_t<std::is_enum_v<E>, int> = 0>
@@ -807,8 +966,22 @@ inline std::size_t shift_count(const S& s) {
 }
 
 template <typename T, typename S>
-inline T op_shl(const T& a, const S& s) {
+inline std::size_t hardware_shift_count(const S& s) {
     if constexpr (std::is_same_v<S, special_value>) {
+        fail_special(s.kind, "as a shift count");
+    } else {
+        if constexpr (is_int_v<S>) { if (s.is_special()) fail_special(s.kind(), "as a shift count"); }
+        const long long n = to_ll(s);
+        if (n < 0 || n >= static_cast<long long>(sizeof(T) * 8)) fail("shift count out of range");
+        return static_cast<std::size_t>(n);
+    }
+}
+
+template <typename T, typename S>
+inline T op_shl(const T& a, const S& s) {
+    if constexpr (is_hardware_int_v<T>) {
+        return hw_wrap<T>(static_cast<unsigned long long>(a) << hardware_shift_count<T>(s));
+    } else if constexpr (std::is_same_v<S, special_value>) {
         return a.is_unordered() ? a : T::undefined();
     } else {
         if constexpr (is_int_v<S>) { if (s.is_special()) return a.is_unordered() ? a : T::undefined(); }
@@ -820,7 +993,9 @@ inline T op_shl(const T& a, const S& s) {
 
 template <typename T, typename S>
 inline T op_shr(const T& a, const S& s) {
-    if constexpr (std::is_same_v<S, special_value>) {
+    if constexpr (is_hardware_int_v<T>) {
+        return static_cast<T>(a >> hardware_shift_count<T>(s));
+    } else if constexpr (std::is_same_v<S, special_value>) {
         return a.is_unordered() ? a : T::undefined();
     } else {
         if constexpr (is_int_v<S>) { if (s.is_special()) return a.is_unordered() ? a : T::undefined(); }
@@ -845,7 +1020,7 @@ inline T op_shr(const T& a, const S& s) {
 template <typename T>
 inline bool is_special(const T& v, special_test t) {
     if constexpr (is_int_v<T>) return special_matches(v.kind(), t);
-    else if constexpr (is_float_v<T>) return special_matches(float_kind(v), t);
+    else if constexpr (is_float_v<T> || is_hardware_float_v<T>) return special_matches(float_kind(v), t);
     else if constexpr (std::is_same_v<T, special_value>) return special_matches(v.kind, t);
     else return false;
 }
@@ -906,23 +1081,35 @@ inline R norm(const R& v, const char* op) {
     return n;
 }
 
+template <typename T>
+inline T hardware_overflow(const char* op) {
+    fail(std::string("integer overflow in safe code: the result of ") + op + " doesn't fit in " + (std::is_signed_v<T> ? "a signed " : "an unsigned ") + std::to_string(sizeof(T) * 8) + "-bit hardware integer");
+}
+
 template <typename T> inline T op_add(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_add(a, b); return T(norm<T>(a.raw() + b.raw(), "+")); }
+    if constexpr (is_hardware_int_v<T>) { T r; if (__builtin_add_overflow(a, b, &r)) return hardware_overflow<T>("+"); return r; }
+    else if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_add(a, b); return T(norm<T>(a.raw() + b.raw(), "+")); }
     else return walnut_rt::op_add(a, b);
 }
 
 template <typename T> inline T op_sub(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_sub(a, b); return T(norm<T>(a.raw() - b.raw(), "-")); }
+    if constexpr (is_hardware_int_v<T>) { T r; if (__builtin_sub_overflow(a, b, &r)) return hardware_overflow<T>("-"); return r; }
+    else if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_sub(a, b); return T(norm<T>(a.raw() - b.raw(), "-")); }
     else return walnut_rt::op_sub(a, b);
 }
 
 template <typename T> inline T op_mul(const T& a, const T& b) {
-    if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_mul(a, b); return T(norm<T>(a.raw() * b.raw(), "*")); }
+    if constexpr (is_hardware_int_v<T>) { T r; if (__builtin_mul_overflow(a, b, &r)) return hardware_overflow<T>("*"); return r; }
+    else if constexpr (is_int_v<T>) { if (a.is_special() || b.is_special()) return special_mul(a, b); return T(norm<T>(a.raw() * b.raw(), "*")); }
     else return walnut_rt::op_mul(a, b);
 }
 
 template <typename T> inline T op_neg(const T& a) {
-    if constexpr (is_int_v<T>) {
+    if constexpr (is_hardware_int_v<T>) {
+        T r;
+        if (__builtin_sub_overflow(T(0), a, &r)) return hardware_overflow<T>("negating");
+        return r;
+    } else if constexpr (is_int_v<T>) {
         if (a.is_unordered() || a.is_infinite()) return walnut_rt::op_neg(a);
         return T(norm<T>(typename int_info<T>::raw_type() - a.raw(), "negating"));
     } else {
@@ -931,22 +1118,22 @@ template <typename T> inline T op_neg(const T& a) {
 }
 
 template <typename T> inline decltype(auto) pre_inc(T& x) {
-    if constexpr (is_int_v<T>) { x = checked::op_add(x, T(1)); return (x); }
+    if constexpr (is_int_v<T> || is_hardware_int_v<T>) { x = checked::op_add(x, T(1)); return (x); }
     else return walnut_rt::pre_inc(x);
 }
 
 template <typename T> inline decltype(auto) pre_dec(T& x) {
-    if constexpr (is_int_v<T>) { x = checked::op_sub(x, T(1)); return (x); }
+    if constexpr (is_int_v<T> || is_hardware_int_v<T>) { x = checked::op_sub(x, T(1)); return (x); }
     else return walnut_rt::pre_dec(x);
 }
 
 template <typename T> inline decltype(auto) post_inc(T& x) {
-    if constexpr (is_int_v<T>) { T old = x; x = checked::op_add(x, T(1)); return old; }
+    if constexpr (is_int_v<T> || is_hardware_int_v<T>) { T old = x; x = checked::op_add(x, T(1)); return old; }
     else return walnut_rt::post_inc(x);
 }
 
 template <typename T> inline decltype(auto) post_dec(T& x) {
-    if constexpr (is_int_v<T>) { T old = x; x = checked::op_sub(x, T(1)); return old; }
+    if constexpr (is_int_v<T> || is_hardware_int_v<T>) { T old = x; x = checked::op_sub(x, T(1)); return old; }
     else return walnut_rt::post_dec(x);
 }
 
@@ -1108,6 +1295,29 @@ inline std::string float_display(const F& f, std::int64_t precision = 0) {
     return neg ? "-" + out : out;
 }
 
+template <typename F>
+inline std::string hardware_display(F v) {
+    if (std::isnan(v)) return "nan";
+    if (std::isinf(v)) return v < 0 ? "-\u221e" : "\u221e";
+    if (v == F(0)) return std::signbit(v) ? "-0" : "0";
+    char buf[64];
+    for (int digits = 1; digits <= std::numeric_limits<F>::max_digits10; ++digits) {
+        std::snprintf(buf, sizeof buf, "%.*g", digits, static_cast<double>(v));
+        if (static_cast<F>(std::strtod(buf, nullptr)) == v) break;
+    }
+    std::string out = buf;
+    const std::size_t e = out.find('e');
+    if (e != std::string::npos) {
+        std::string mant = out.substr(0, e);
+        std::string exp = out.substr(e + 1);
+        const bool neg = !exp.empty() && exp[0] == '-';
+        if (!exp.empty() && (exp[0] == '+' || exp[0] == '-')) exp.erase(0, 1);
+        while (exp.size() > 1 && exp[0] == '0') exp.erase(0, 1);
+        out = mant + "e" + (neg ? "-" : "+") + exp;
+    }
+    return out;
+}
+
 template <typename T>
 inline std::string to_display(const T& v) {
     if constexpr (std::is_same_v<T, bool>) return v ? "true" : "false";
@@ -1118,6 +1328,8 @@ inline std::string to_display(const T& v) {
     else if constexpr (std::is_pointer_v<T>) { std::ostringstream os; os << static_cast<const void*>(v); return os.str(); }
     else if constexpr (is_int_v<T>) return v.to_string();
     else if constexpr (is_float_v<T>) return float_display(v);
+    else if constexpr (is_hardware_float_v<T>) return hardware_display(v);
+    else if constexpr (is_hardware_int_v<T>) return std::to_string(static_cast<hardware_wide_t<T>>(v));
     else if constexpr (std::is_enum_v<T>) return std::to_string(static_cast<long long>(v));
     else { std::ostringstream os; os << v; return os.str(); }
 }
@@ -1147,6 +1359,12 @@ public:
 
     template <typename T, typename = std::enable_if_t<is_float_v<T>>, typename = void>
     dynamic(const T& v) : m_v(cast<f2048>(v)) {}
+
+    template <typename T, typename = std::enable_if_t<is_hardware_float_v<T>>, typename = void, typename = void>
+    dynamic(const T& v) : m_v(cast<f2048>(v)) {}
+
+    template <typename T, typename = std::enable_if_t<is_hardware_int_v<T>>, typename = void, typename = void, typename = void>
+    dynamic(const T& v) : m_v(cast<i2048>(v)) {}
 
     bool is_none()   const { return std::holds_alternative<std::monostate>(m_v); }
     bool is_bool()   const { return std::holds_alternative<bool>(m_v); }
@@ -1213,11 +1431,11 @@ public:
     T as() const {
         if constexpr (std::is_same_v<T, dynamic>) {
             return *this;
-        } else if constexpr (is_int_v<T>) {
+        } else if constexpr (is_int_v<T> || is_hardware_int_v<T>) {
             if (is_int())  return cast<T>(std::get<i2048>(m_v));
             if (is_char()) return cast<T>(std::get<char32_t>(m_v));
             fail("cannot convert dynamic value of type '" + type_name() + "' to an integer");
-        } else if constexpr (is_float_v<T>) {
+        } else if constexpr (is_float_v<T> || is_hardware_float_v<T>) {
             return cast<T>(as_float());
         } else if constexpr (std::is_same_v<T, bool>) {
             if (is_bool()) return std::get<bool>(m_v);

@@ -104,6 +104,7 @@ This prints `apple fig fig pear pear` and `pears: 2, kinds: 3`.
 - `for (T: x in c.backwards())` visits them from the last to the first, without copying. `rbegin()` and `rend()` give the iterators it uses, and each container names its iterator types `Iterator` and `ReverseIterator`; they come from [iterators](iterators.md#going-backwards).
 - Containers that own their elements copy deeply: `Vector<int>: b = a;` makes an independent copy. Moving one with `std::core::move` takes over its memory and leaves the source empty.
 - Indexes are `long int`, start at `0`, and are checked: an index out of range throws a [`std::errors::collection_error`](#errors), and so does taking an element from an empty container.
+- `Vector`, `DynamicArray` and `SmallVector` also take a [hardware integer](../../documentation.md#hardware-numbers) in `[]`, such as `std::hardware_int`, and check it with plain machine arithmetic, so `v[i]` in a tight loop costs about what it does in C++. It is checked the same way and throws the same error. Indexing with a Walnut integer uses the `long int` version.
 - `find(value)` gives the index of the first match, or `undefined` when there is none (check with `i is undefined`). `contains(value)` gives a `bool`.
 
 ## Vector

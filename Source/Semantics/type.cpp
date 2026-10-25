@@ -87,7 +87,16 @@ std::string canonical_spelling(parser_types::PrimitiveType::BaseKind base, int w
     return "<unknown>";
 }
 
-BuiltinType::BuiltinType(BaseKind base, int width, bool is_unsigned, CV cv) : Type(TypeKind::Builtin, cv), m_base(base), m_width(std::int8_t(width)), m_unsigned(is_unsigned) {}
+std::string hardware_spelling(int w) {
+    return w == kHardwareFloatWidth ? "std::hardware_float" : "std::hardware_double";
+}
+
+std::string hardware_spelling(parser_types::PrimitiveType::BaseKind base, int w, bool is_unsigned) {
+    if (base != parser_types::PrimitiveType::BaseKind::Int) return hardware_spelling(w);
+    return std::string(is_unsigned ? "std::hardware_uint" : "std::hardware_int") + std::to_string(bit_width_of_rank(w));
+}
+
+BuiltinType::BuiltinType(BaseKind base, int width, bool is_unsigned, CV cv, bool hardware) : Type(TypeKind::Builtin, cv), m_base(base), m_width(std::int8_t(width)), m_unsigned(is_unsigned), m_hardware(hardware) {}
 
 ArrayType::ArrayType(Type* element, std::optional<std::size_t> extent, CV cv, Symbol* extent_param) : Type(TypeKind::Array, cv), m_element(element), m_extent(extent), m_extent_param(extent_param) {}
 

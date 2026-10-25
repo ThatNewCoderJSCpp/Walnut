@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -37,6 +38,9 @@ inline auto data(C& c) {
     if constexpr (std::is_const_v<C>) return reinterpret_cast<const E*>(c.data());
     else return reinterpret_cast<E*>(c.data());
 }
+
+template <typename C>
+inline std::int64_t hardware_size(const C& c) { return static_cast<std::int64_t>(c.size()); }
 
 template <typename C>
 inline auto begin(C& c) { return coll::data(c); }

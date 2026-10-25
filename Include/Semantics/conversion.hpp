@@ -39,6 +39,7 @@ struct NumericProfile {
     enum class Family : std::uint8_t { Int = 0, Float } family;
     bool is_unsigned;
     int  width;
+    bool hardware = false;
 };
 
 std::optional<NumericProfile> numeric_profile(const BuiltinType* b);

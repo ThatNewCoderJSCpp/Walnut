@@ -878,7 +878,11 @@ namespace std {
                 } else if (digits < 0) then {
                     digits = 6;
                 }
-                emit_field(walnut_rt::io_native::format_float(wide, sizeof(T) * 8, digits, mode, (f & ios_base::uppercase) != 0, (f & ios_base::showpos) != 0, (f & ios_base::showpoint) != 0));
+                long int: bits = sizeof(T) * 8;
+                if constexpr (std::traits::is_hardware<T>) then {
+                    bits = -bits;
+                }
+                emit_field(walnut_rt::io_native::format_float(wide, bits, digits, mode, (f & ios_base::uppercase) != 0, (f & ios_base::showpos) != 0, (f & ios_base::showpoint) != 0));
                 return *this;
             }
 

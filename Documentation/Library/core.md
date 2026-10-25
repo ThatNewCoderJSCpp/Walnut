@@ -14,8 +14,9 @@
 8. [enable_if](#enable_if)
 9. [std::initializer_list](#stdinitializer_list)
 10. [Function types and comparators](#function-types-and-comparators)
-11. [in, not in and match](#in-not-in-and-match)
-12. [Errors](#errors)
+11. [Hardware numbers](#hardware-numbers)
+12. [in, not in and match](#in-not-in-and-match)
+13. [Errors](#errors)
 
 ## std::core::move
 
@@ -229,6 +230,7 @@ Every `bool` trait comes in two parts: the value `std::traits::is_integer<T>` th
 | `is_signed_integer<T>`, `is_unsigned_integer<T>` | A signed or an unsigned integer type |
 | `is_float<T>` (`is_floating<T>`) | A float type: `float`, `short float`, `unsigned long float` and the rest |
 | `is_signed_float<T>`, `is_unsigned_float<T>` | A signed or an unsigned float type |
+| `is_hardware<T>` | One of the [hardware numbers](#hardware-numbers), such as `std::hardware_float` or `std::hardware_int32`, which are C++'s own `float`, `int32_t` and so on |
 | `is_number<T>` (`is_arithmetic<T>`) | An integer or float type |
 | `is_signed<T>`, `is_unsigned<T>` | A signed or an unsigned number type |
 | `is_bool<T>` (`is_boolean<T>`) | `bool` |
@@ -677,6 +679,32 @@ function main() -> int {
 ```
 
 After the first `sort`, `people[0]` is `Al`; after the second, it is `Zoe`, and `even_seven` is `false`.
+
+## Hardware numbers
+
+| Name | Is |
+|---|---|
+| `std::hardware_float` | C++'s `float`: 32 bits, done by the processor |
+| `std::hardware_double` | C++'s `double`: 64 bits, done by the processor |
+| `std::hardware_int8`, `std::hardware_int16`, `std::hardware_int32`, `std::hardware_int64` | C++'s `int8_t` to `int64_t` |
+| `std::hardware_uint8`, `std::hardware_uint16`, `std::hardware_uint32`, `std::hardware_uint64` | C++'s `uint8_t` to `uint64_t` |
+| `std::hardware_int`, `std::hardware_uint` | `std::hardware_int32` and `std::hardware_uint32` |
+
+They are much faster than Walnut's own numbers (which are Fizmo's exact multiprecision numbers), and work the way C++'s do: the floats follow IEEE 754, and the integers wrap around and can't hold special values. They count as float or integer types for every trait (`is_float<T>`, `is_integer<T>`, `is_signed<T>`, `integer_bits<T>`, `integer_traits<T>`, `float_traits<T>`, `make_unsigned<T>`, `promote<T>` and the rest), and `is_hardware<T>` picks them out. Conversions, special values and how they mix with the other number types are in [Hardware numbers](../../documentation.md#hardware-numbers).
+
+```walnut
+import module.math
+
+function length(std::hardware_float: x, std::hardware_float: y) -> std::hardware_float {
+    return std::math::sqrt(x * x + y * y);
+} end function length
+
+function checksum(std::hardware_uint32: seed, std::hardware_uint8: byte) -> std::hardware_uint32 {
+    return (seed << 5) + seed + byte;
+} end function checksum
+```
+
+`integer_traits<T>` has `is_hardware`, and its `has_special_values` (like `numeric_traits<T>`'s `has_infinity` and `has_nan`) is `false` for the hardware integers.
 
 ## in, not in and match
 

@@ -129,6 +129,12 @@ namespace std {
             template <typename T>
             concept MathValue = RealValue<T> || ComplexValue<T>
 
+            template <typename T, typename U>
+            concept MixedFloatArgument = std::traits::is_builtin_float<T> && (std::traits::is_builtin_float<U> || std::traits::is_builtin_integer<U>) && !std::traits::is_same<T, U> && !std::traits::is_same<U, long int>
+
+            template <typename T, typename U>
+            concept IntegerThenFloat = std::traits::is_builtin_integer<T> && std::traits::is_builtin_float<U>
+
             extern "C++" from "<walnut_math.hpp>" {
                 template <typename T>
                 class Fn as "walnut_rt::math::tag" {
@@ -1499,6 +1505,18 @@ namespace std {
             return detail::Fn<T>::atan2(x, y);
         } end function atan2
 
+        template <typename T, typename U>
+        requires detail::MixedFloatArgument<T, U>
+        function atan2(const T&: x, const U&: y) -> T {
+            return detail::Fn<T>::atan2(x, static_cast<T>(y));
+        } end function atan2
+
+        template <typename T, typename U>
+        requires detail::IntegerThenFloat<T, U>
+        function atan2(const T&: x, const U&: y) -> U {
+            return detail::Fn<U>::atan2(static_cast<U>(x), y);
+        } end function atan2
+
         template <typename T>
         requires std::traits::is_builtin_integer<T>
         function pow(const T&: x, const T&: y) -> float {
@@ -1509,6 +1527,18 @@ namespace std {
         requires detail::MathValue<T>
         function pow(const T&: x, const T&: y) -> T {
             return detail::Fn<T>::pow(x, y);
+        } end function pow
+
+        template <typename T, typename U>
+        requires detail::MixedFloatArgument<T, U>
+        function pow(const T&: x, const U&: y) -> T {
+            return detail::Fn<T>::pow(x, static_cast<T>(y));
+        } end function pow
+
+        template <typename T, typename U>
+        requires detail::IntegerThenFloat<T, U>
+        function pow(const T&: x, const U&: y) -> U {
+            return detail::Fn<U>::pow(static_cast<U>(x), y);
         } end function pow
 
         template <typename T>
@@ -1523,6 +1553,18 @@ namespace std {
             return detail::Fn<T>::log(x, y);
         } end function log
 
+        template <typename T, typename U>
+        requires detail::MixedFloatArgument<T, U>
+        function log(const T&: x, const U&: y) -> T {
+            return detail::Fn<T>::log(x, static_cast<T>(y));
+        } end function log
+
+        template <typename T, typename U>
+        requires detail::IntegerThenFloat<T, U>
+        function log(const T&: x, const U&: y) -> U {
+            return detail::Fn<U>::log(static_cast<U>(x), y);
+        } end function log
+
         template <typename T>
         requires std::traits::is_builtin_integer<T>
         function nth_root(const T&: x, const T&: y) -> float {
@@ -1533,6 +1575,18 @@ namespace std {
         requires detail::RealValue<T>
         function nth_root(const T&: x, const T&: y) -> T {
             return detail::Fn<T>::nth_root(x, y);
+        } end function nth_root
+
+        template <typename T, typename U>
+        requires detail::MixedFloatArgument<T, U>
+        function nth_root(const T&: x, const U&: y) -> T {
+            return detail::Fn<T>::nth_root(x, static_cast<T>(y));
+        } end function nth_root
+
+        template <typename T, typename U>
+        requires detail::IntegerThenFloat<T, U>
+        function nth_root(const T&: x, const U&: y) -> U {
+            return detail::Fn<U>::nth_root(static_cast<U>(x), y);
         } end function nth_root
 
         template <typename T>
@@ -1547,6 +1601,18 @@ namespace std {
             return detail::Fn<T>::fmod(x, y);
         } end function fmod
 
+        template <typename T, typename U>
+        requires detail::MixedFloatArgument<T, U>
+        function fmod(const T&: x, const U&: y) -> T {
+            return detail::Fn<T>::fmod(x, static_cast<T>(y));
+        } end function fmod
+
+        template <typename T, typename U>
+        requires detail::IntegerThenFloat<T, U>
+        function fmod(const T&: x, const U&: y) -> U {
+            return detail::Fn<U>::fmod(static_cast<U>(x), y);
+        } end function fmod
+
         template <typename T>
         requires std::traits::is_builtin_integer<T>
         function remainder(const T&: x, const T&: y) -> float {
@@ -1557,6 +1623,18 @@ namespace std {
         requires detail::RealValue<T>
         function remainder(const T&: x, const T&: y) -> T {
             return detail::Fn<T>::remainder(x, y);
+        } end function remainder
+
+        template <typename T, typename U>
+        requires detail::MixedFloatArgument<T, U>
+        function remainder(const T&: x, const U&: y) -> T {
+            return detail::Fn<T>::remainder(x, static_cast<T>(y));
+        } end function remainder
+
+        template <typename T, typename U>
+        requires detail::IntegerThenFloat<T, U>
+        function remainder(const T&: x, const U&: y) -> U {
+            return detail::Fn<U>::remainder(static_cast<U>(x), y);
         } end function remainder
 
         template <typename T>

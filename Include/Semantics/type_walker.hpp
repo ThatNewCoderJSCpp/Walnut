@@ -466,6 +466,8 @@ private:
 
 
     CandidateMatch match_with_constants(nodes::CallExpression* c, const std::vector<ParamShape>& shapes, const std::vector<Type*>& args);
+    void adapt_contains_literal(nodes::CallExpression* c, std::vector<Type*>& args);
+    CandidateMatch match_with_constants(const std::vector<nodes::ASTNode*>* nodes, const std::vector<ParamShape>& shapes, const std::vector<Type*>& args);
 
     void check_arg_bindings(nodes::CallExpression* c, const std::vector<ParamShape>& shapes);
 
@@ -507,6 +509,7 @@ private:
     bool text_displayable(Type* t);
     void check_member_ambiguity(Scope* members, std::string_view name, nodes::ASTNode* site);
     nodes::ASTNode* m_operator_site = nullptr;
+    const std::vector<nodes::ASTNode*>* m_operator_args = nullptr;
     void check_member_initialization(nodes::ConstructorDeclaration* ct, const std::vector<const Symbol*>& initialized);
     bool report_if_deleted(Symbol* fn);
 

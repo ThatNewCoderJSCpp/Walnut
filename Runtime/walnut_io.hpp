@@ -2,6 +2,7 @@
 #define WALNUT_IO_HPP
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstdint>
 #include <cstdio>
@@ -426,8 +427,29 @@ inline std::string widen_exponent(const std::string& s) {
     return s.substr(0, e + 1) + sign + "0" + s.substr(d);
 }
 
+template <typename H>
+inline std::string hardware_text(H h, std::int64_t precision, std::int64_t style) {
+    if (!std::isfinite(h) || (style == 0 && precision <= 0)) return walnut_rt::hardware_display(h);
+    char buf[512];
+    const int digits = static_cast<int>(std::min<std::int64_t>(precision < 0 ? 6 : precision, 300));
+    if (style == 1) std::snprintf(buf, sizeof buf, "%.*f", digits, static_cast<double>(h));
+    else if (style == 2) std::snprintf(buf, sizeof buf, "%.*e", digits, static_cast<double>(h));
+    else std::snprintf(buf, sizeof buf, "%.*g", digits, static_cast<double>(h));
+    return buf;
+}
+
 inline std::string format_float(walnut_rt::f2048 v, std::int64_t bits, std::int64_t precision, std::int64_t style, bool upper, bool showpos, bool showpoint) {
     std::string out;
+
+    if (bits < 0) {
+        const double d = walnut_rt::cast<double>(v);
+        out = bits == -32 ? hardware_text(static_cast<float>(d), precision, style) : hardware_text(d, precision, style);
+        if (std::isfinite(d)) out = widen_exponent(out);
+        if (showpoint && std::isfinite(d) && out.find_first_of(".e") == std::string::npos) out += ".";
+        if (upper) out = upper_ascii(out);
+        if (showpos && std::isfinite(d) && !std::signbit(d)) out = "+" + out;
+        return out;
+    }
 
     switch (bits) {
         case 32:   out = float_text(walnut_rt::f32(v), precision, style);   break;
