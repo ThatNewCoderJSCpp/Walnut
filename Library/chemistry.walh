@@ -1,0 +1,458 @@
+namespace std {
+    namespace chemistry {
+        extern "C++" from "<walnut_chemistry.hpp>" {
+            class Element as "walnut_rt::chemistry::element" {
+            public:
+                constructor();
+                constructor(long int: atomic_number);
+                constructor(const string&: symbol_or_name);
+                function atomic_number() const -> long int;
+                function symbol() const -> string;
+                function name() const -> string;
+                function group() const -> long int;
+                function period() const -> long int;
+                function block() const -> string;
+                function category() const -> string;
+                function classification() const -> string;
+                function is_metal() const -> bool;
+                function is_metalloid() const -> bool;
+                function is_nonmetal() const -> bool;
+                function is_stable() const -> bool;
+                function is_noble_gas() const -> bool;
+                function molar_mass() const -> short float;
+                function molar_mass_uncertainty() const -> short float;
+                function mass_number() const -> long int;
+                function neutrons() const -> long int;
+                function electronegativity() const -> short float;
+                function electron_affinity() const -> short float;
+                function ionization_energy(long int: n) const -> short float;
+                function ionization_energy_count() const -> long int;
+                function covalent_radius() const -> short float;
+                function atomic_radius() const -> short float;
+                function van_der_waals_radius() const -> short float;
+                function metallic_radius() const -> short float;
+                function ionic_radius(long int: charge, long int: coordination) const -> short float;
+                function melting_point() const -> short float;
+                function boiling_point() const -> short float;
+                function density() const -> short float;
+                function atomization_enthalpy() const -> short float;
+                function standard_state() const -> string;
+                function electron_configuration() const -> string;
+                function full_electron_configuration() const -> string;
+                function valence_electrons() const -> long int;
+                function unpaired_electrons() const -> long int;
+                function most_common_oxidation_state() const -> long int;
+                function oxidation_states() const -> string;
+                function crystal_structure() const -> string;
+                function isotope_count() const -> long int;
+                function isotope_mass_number(long int: i) const -> long int;
+                function isotope_mass(long int: i) const -> short float;
+                function isotope_abundance(long int: i) const -> short float;
+                function isotope_half_life(long int: i) const -> short float;
+                function isotope_is_stable(long int: i) const -> bool;
+                function to_string() const -> string;
+            } end class Element
+
+            class Formula as "walnut_rt::chemistry::formula" {
+            public:
+                constructor();
+                constructor(const string&: formula_text);
+                function molar_mass() const -> short float;
+                function charge() const -> long int;
+                function atom_count() const -> short float;
+                function element_count() const -> long int;
+                function count(const string&: symbol) const -> short float;
+                function mass_percent(const string&: symbol) const -> short float;
+                function electrons() const -> short float;
+                function degree_of_unsaturation() const -> short float;
+                function is_ion() const -> bool;
+                function is_organic() const -> bool;
+                function phase() const -> string;
+                function to_string() const -> string;
+                function unicode() const -> string;
+                function hill() const -> string;
+                function flat() const -> string;
+                function empirical() const -> Formula;
+                function name() const -> string;
+                function moles(short float: grams) const -> short float;
+                function grams(short float: moles) const -> short float;
+            } end class Formula
+
+            class Reaction as "walnut_rt::chemistry::reaction" {
+            public:
+                constructor();
+                constructor(const string&: equation);
+                function balance() -> void;
+                function is_balanced() const -> bool;
+                function is_reversible() const -> bool;
+                function is_redox() const -> bool;
+                function type() const -> string;
+                function reactant_count() const -> long int;
+                function product_count() const -> long int;
+                function reactant_coefficient(long int: i) const -> short float;
+                function product_coefficient(long int: i) const -> short float;
+                function reactant(long int: i) const -> string;
+                function product(long int: i) const -> string;
+                function has_thermo_data() const -> bool;
+                function delta_h(short float: temperature) const -> short float;
+                function delta_s(short float: temperature) const -> short float;
+                function delta_g(short float: temperature) const -> short float;
+                function equilibrium_constant(short float: temperature) const -> short float;
+                function electrons_transferred() const -> short float;
+                function net_ionic() const -> string;
+                function complete_ionic() const -> string;
+                function to_string() const -> string;
+                function unicode() const -> string;
+            } end class Reaction
+
+            class Prediction as "walnut_rt::chemistry::prediction" {
+            public:
+                constructor();
+                constructor(const string&: reactants);
+                function ok() const -> bool;
+                function no_reaction() const -> bool;
+                function equation() const -> string;
+                function unicode() const -> string;
+                function kind() const -> string;
+                function explanation() const -> string;
+                function net_ionic() const -> string;
+                function complete_ionic() const -> string;
+                function spectators() const -> string;
+                function notes() const -> string;
+            } end class Prediction
+
+            class Molecule as "walnut_rt::chemistry::molecule" {
+            public:
+                constructor();
+                static function from_smiles(const string&: smiles) -> Molecule as "walnut_rt::chemistry::molecule::from_smiles";
+                function add_atom(const string&: symbol) -> long int;
+                function add_bond(long int: a, long int: b, long int: order) -> long int;
+                function set_formal_charge(long int: atom, long int: charge) -> void;
+                function set_position(long int: atom, short float: x, short float: y, short float: z) -> void;
+                function add_hydrogens() -> long int;
+                function atom_count() const -> long int;
+                function bond_count() const -> long int;
+                function atom_symbol(long int: i) const -> string;
+                function formal_charge(long int: i) const -> long int;
+                function x(long int: i) const -> short float;
+                function y(long int: i) const -> short float;
+                function z(long int: i) const -> short float;
+                function bond_atom_a(long int: i) const -> long int;
+                function bond_atom_b(long int: i) const -> long int;
+                function bond_order(long int: i) const -> short float;
+                function bond_length(long int: i) const -> short float;
+                function bond_energy(long int: i) const -> short float;
+                function lone_pairs(long int: i) const -> long int;
+                function geometry_at(long int: i) const -> string;
+                function hybridization_at(long int: i) const -> string;
+                function charge() const -> long int;
+                function formula() const -> string;
+                function molar_mass() const -> short float;
+                function ring_count() const -> long int;
+                function is_valid() const -> bool;
+                function total_bond_energy() const -> short float;
+                function estimated_enthalpy_of_formation() const -> short float;
+                function fix_lewis_structure(long int: total_charge) -> void;
+                function resonance_count(long int: total_charge) const -> long int;
+                function layout_2d() -> void;
+                function layout_3d() -> void;
+                function dipole_moment() const -> short float;
+                function is_polar() const -> bool;
+                function name() const -> string;
+            } end class Molecule
+
+            class IonicCrystal as "walnut_rt::chemistry::ionic_crystal" {
+            public:
+                constructor();
+                constructor(const string&: cation, const string&: anion);
+                function formula() const -> string;
+                function name() const -> string;
+                function structure() const -> string;
+                function structure_reason() const -> string;
+                function lattice_energy() const -> short float;
+                function born_lande() const -> short float;
+                function born_mayer() const -> short float;
+                function kapustinskii() const -> short float;
+                function born_haber() const -> short float;
+                function lattice_constant() const -> short float;
+                function density() const -> short float;
+                function radius_ratio() const -> short float;
+                function cation_coordination() const -> long int;
+                function anion_coordination() const -> long int;
+                function percent_ionic() const -> short float;
+                function solubility() const -> string;
+                function steps() const -> string;
+            } end class IonicCrystal
+
+            class Metal as "walnut_rt::chemistry::metal" {
+            public:
+                constructor();
+                constructor(const string&: composition);
+                function name() const -> string;
+                function formula() const -> string;
+                function structure() const -> string;
+                function type() const -> string;
+                function lattice_constant() const -> short float;
+                function density() const -> short float;
+                function packing_fraction() const -> short float;
+                function coordination() const -> long int;
+                function fermi_energy() const -> short float;
+                function melting_point() const -> short float;
+                function valence_electrons_per_atom() const -> short float;
+                function notes() const -> string;
+            } end class Metal
+
+            class PhaseDiagram as "walnut_rt::chemistry::phase_diagram" {
+            public:
+                constructor();
+                constructor(const string&: substance);
+                function ok() const -> bool;
+                function name() const -> string;
+                function phase_at(short float: temperature, short float: pressure) const -> string;
+                function describe(short float: temperature, short float: pressure) const -> string;
+                function vapor_pressure(short float: temperature) const -> short float;
+                function sublimation_pressure(short float: temperature) const -> short float;
+                function melting_pressure(short float: temperature) const -> short float;
+                function boiling_temperature(short float: pressure) const -> short float;
+                function melting_temperature(short float: pressure) const -> short float;
+                function triple_temperature() const -> short float;
+                function triple_pressure() const -> short float;
+                function critical_temperature() const -> short float;
+                function critical_pressure() const -> short float;
+                function notes() const -> string;
+            } end class PhaseDiagram
+
+            class Gas as "walnut_rt::chemistry::gas" {
+            public:
+                constructor();
+                constructor(const string&: model, const string&: substance);
+                function name() const -> string;
+                function pressure(short float: temperature, short float: molar_volume) const -> short float;
+                function molar_volume(short float: temperature, short float: pressure) const -> short float;
+                function compressibility(short float: temperature, short float: pressure) const -> short float;
+                function fugacity_coefficient(short float: temperature, short float: pressure) const -> short float;
+                function saturation_pressure(short float: temperature) const -> short float;
+                function phase(short float: temperature, short float: pressure) const -> string;
+            } end class Gas
+
+            class Native as "walnut_rt::chemistry::api" {
+            public:
+                static function element_count() -> long int as "walnut_rt::chemistry::element_count";
+                static function name_of(const string&: formula) -> string as "walnut_rt::chemistry::name_of";
+                static function kind_of(const string&: formula) -> string as "walnut_rt::chemistry::kind_of";
+                static function formula_of(const string&: name) -> string as "walnut_rt::chemistry::formula_of";
+                static function balance(const string&: equation) -> string as "walnut_rt::chemistry::balance";
+                static function predict(const string&: reactants) -> string as "walnut_rt::chemistry::predict";
+                static function polyatomic_ion_count() -> long int as "walnut_rt::chemistry::polyatomic_ion_count";
+                static function polyatomic_ion_name(long int: i) -> string as "walnut_rt::chemistry::polyatomic_ion_name";
+                static function polyatomic_ion_formula(long int: i) -> string as "walnut_rt::chemistry::polyatomic_ion_formula";
+                static function polyatomic_ion_charge(long int: i) -> long int as "walnut_rt::chemistry::polyatomic_ion_charge";
+                static function polyatomic_ion_category(long int: i) -> string as "walnut_rt::chemistry::polyatomic_ion_category";
+                static function polyatomic_ion_structure(long int: i) -> string as "walnut_rt::chemistry::polyatomic_ion_structure";
+                static function polyatomic_ion_acid(long int: i) -> string as "walnut_rt::chemistry::polyatomic_ion_acid";
+                static function find_polyatomic_ion(const string&: formula_text) -> long int as "walnut_rt::chemistry::find_polyatomic_ion";
+                static function ion_name(const string&: formula_text) -> string as "walnut_rt::chemistry::ion_name";
+                static function ion_charge(const string&: formula_text) -> long int as "walnut_rt::chemistry::ion_charge";
+                static function ionic_formula(const string&: cation, const string&: anion) -> string as "walnut_rt::chemistry::ionic_formula";
+                static function solubility(const string&: formula) -> string as "walnut_rt::chemistry::solubility";
+                static function bond_energy(const string&: a, const string&: b, long int: order) -> short float as "walnut_rt::chemistry::bond_energy";
+                static function bond_length(const string&: a, const string&: b, long int: order) -> short float as "walnut_rt::chemistry::bond_length";
+                static function ionic_character(const string&: a, const string&: b) -> short float as "walnut_rt::chemistry::ionic_character";
+                static function vsepr_shape(long int: bonded, long int: lone_pairs) -> string as "walnut_rt::chemistry::vsepr_shape";
+                static function convert(short float: value, const string&: from_unit, const string&: to_unit) -> short float as "walnut_rt::chemistry::convert";
+                static function units_for(const string&: dimension) -> string as "walnut_rt::chemistry::units_for";
+                static function radial_probability(long int: n, long int: l, short float: z_eff, short float: r_pm) -> short float as "walnut_rt::chemistry::radial_probability";
+                static function effective_nuclear_charge(const string&: element, long int: n, long int: l) -> short float as "walnut_rt::chemistry::effective_nuclear_charge";
+                static function orbital_name(long int: n, long int: l, long int: m) -> string as "walnut_rt::chemistry::orbital_name";
+                static function most_probable_radius(long int: n, long int: l, short float: z_eff) -> short float as "walnut_rt::chemistry::most_probable_radius";
+                static function solve(const string&: equation, const string&: knowns, const string&: unknown, const string&: unit) -> short float as "walnut_rt::chemistry::solve";
+                static function equation_ids() -> string as "walnut_rt::chemistry::equation_ids";
+                static function theoretical_yield(const string&: equation, const string&: knowns, const string&: target, const string&: unit) -> short float as "walnut_rt::chemistry::theoretical_yield";
+                static function limiting_reactant(const string&: equation, const string&: knowns) -> string as "walnut_rt::chemistry::limiting_reactant";
+                static function strong_acid_ph(short float: concentration) -> short float as "walnut_rt::chemistry::strong_acid_ph";
+                static function weak_acid_ph(short float: concentration, short float: ka) -> short float as "walnut_rt::chemistry::weak_acid_ph";
+                static function strong_base_ph(short float: concentration) -> short float as "walnut_rt::chemistry::strong_base_ph";
+                static function weak_base_ph(short float: concentration, short float: kb) -> short float as "walnut_rt::chemistry::weak_base_ph";
+                static function buffer_ph(short float: pka, short float: base, short float: acid) -> short float as "walnut_rt::chemistry::buffer_ph";
+                static function bond_dissociation_gibbs(const string&: a, const string&: b, long int: order, short float: temperature, short float: pressure) -> short float as "walnut_rt::chemistry::bond_dissociation_gibbs";
+                static function bond_fraction_broken(const string&: a, const string&: b, long int: order, short float: temperature, short float: pressure) -> short float as "walnut_rt::chemistry::bond_fraction_broken";
+            } end class Native
+        } end extern
+
+        function element_count() -> long int {
+            return Native::element_count();
+        } end function element_count
+
+        function element(const string&: symbol_or_name) -> Element {
+            return Element(symbol_or_name);
+        } end function element
+
+        function element(long int: atomic_number) -> Element {
+            return Element(atomic_number);
+        } end function element
+
+        function molar_mass(const string&: formula) -> short float {
+            return Formula(formula).molar_mass();
+        } end function molar_mass
+
+        function name_of(const string&: formula) -> string {
+            return Native::name_of(formula);
+        } end function name_of
+
+        function kind_of(const string&: formula) -> string {
+            return Native::kind_of(formula);
+        } end function kind_of
+
+        function formula_of(const string&: name) -> string {
+            return Native::formula_of(name);
+        } end function formula_of
+
+        function balance(const string&: equation) -> string {
+            return Native::balance(equation);
+        } end function balance
+
+        function predict(const string&: reactants) -> string {
+            return Native::predict(reactants);
+        } end function predict
+
+        function polyatomic_ion_count() -> long int {
+            return Native::polyatomic_ion_count();
+        } end function polyatomic_ion_count
+
+        function polyatomic_ion_name(long int: i) -> string {
+            return Native::polyatomic_ion_name(i);
+        } end function polyatomic_ion_name
+
+        function polyatomic_ion_formula(long int: i) -> string {
+            return Native::polyatomic_ion_formula(i);
+        } end function polyatomic_ion_formula
+
+        function polyatomic_ion_charge(long int: i) -> long int {
+            return Native::polyatomic_ion_charge(i);
+        } end function polyatomic_ion_charge
+
+        function polyatomic_ion_category(long int: i) -> string {
+            return Native::polyatomic_ion_category(i);
+        } end function polyatomic_ion_category
+
+        function polyatomic_ion_structure(long int: i) -> string {
+            return Native::polyatomic_ion_structure(i);
+        } end function polyatomic_ion_structure
+
+        function polyatomic_ion_acid(long int: i) -> string {
+            return Native::polyatomic_ion_acid(i);
+        } end function polyatomic_ion_acid
+
+        function find_polyatomic_ion(const string&: name_or_formula) -> long int {
+            return Native::find_polyatomic_ion(name_or_formula);
+        } end function find_polyatomic_ion
+
+        function ion_name(const string&: ion) -> string {
+            return Native::ion_name(ion);
+        } end function ion_name
+
+        function ion_charge(const string&: ion) -> long int {
+            return Native::ion_charge(ion);
+        } end function ion_charge
+
+        function ionic_formula(const string&: cation, const string&: anion) -> string {
+            return Native::ionic_formula(cation, anion);
+        } end function ionic_formula
+
+        function solubility(const string&: formula) -> string {
+            return Native::solubility(formula);
+        } end function solubility
+
+        function bond_energy(const string&: a, const string&: b, long int: order) -> short float {
+            return Native::bond_energy(a, b, order);
+        } end function bond_energy
+
+        function bond_energy(const string&: a, const string&: b) -> short float {
+            return Native::bond_energy(a, b, 1l);
+        } end function bond_energy
+
+        function bond_length(const string&: a, const string&: b, long int: order) -> short float {
+            return Native::bond_length(a, b, order);
+        } end function bond_length
+
+        function bond_length(const string&: a, const string&: b) -> short float {
+            return Native::bond_length(a, b, 1l);
+        } end function bond_length
+
+        function ionic_character(const string&: a, const string&: b) -> short float {
+            return Native::ionic_character(a, b);
+        } end function ionic_character
+
+        function vsepr_shape(long int: bonded, long int: lone_pairs) -> string {
+            return Native::vsepr_shape(bonded, lone_pairs);
+        } end function vsepr_shape
+
+        function convert(short float: value, const string&: from_unit, const string&: to_unit) -> short float {
+            return Native::convert(value, from_unit, to_unit);
+        } end function convert
+
+        function units_for(const string&: dimension) -> string {
+            return Native::units_for(dimension);
+        } end function units_for
+
+        function radial_probability(long int: n, long int: l, short float: z_eff, short float: r_pm) -> short float {
+            return Native::radial_probability(n, l, z_eff, r_pm);
+        } end function radial_probability
+
+        function effective_nuclear_charge(const string&: element, long int: n, long int: l) -> short float {
+            return Native::effective_nuclear_charge(element, n, l);
+        } end function effective_nuclear_charge
+
+        function orbital_name(long int: n, long int: l, long int: m) -> string {
+            return Native::orbital_name(n, l, m);
+        } end function orbital_name
+
+        function most_probable_radius(long int: n, long int: l, short float: z_eff) -> short float {
+            return Native::most_probable_radius(n, l, z_eff);
+        } end function most_probable_radius
+
+        function solve(const string&: equation, const string&: knowns, const string&: unknown, const string&: unit) -> short float {
+            return Native::solve(equation, knowns, unknown, unit);
+        } end function solve
+
+        function equation_ids() -> string {
+            return Native::equation_ids();
+        } end function equation_ids
+
+        function theoretical_yield(const string&: equation, const string&: knowns, const string&: target, const string&: unit) -> short float {
+            return Native::theoretical_yield(equation, knowns, target, unit);
+        } end function theoretical_yield
+
+        function limiting_reactant(const string&: equation, const string&: knowns) -> string {
+            return Native::limiting_reactant(equation, knowns);
+        } end function limiting_reactant
+
+        function strong_acid_ph(short float: concentration) -> short float {
+            return Native::strong_acid_ph(concentration);
+        } end function strong_acid_ph
+
+        function weak_acid_ph(short float: concentration, short float: ka) -> short float {
+            return Native::weak_acid_ph(concentration, ka);
+        } end function weak_acid_ph
+
+        function strong_base_ph(short float: concentration) -> short float {
+            return Native::strong_base_ph(concentration);
+        } end function strong_base_ph
+
+        function weak_base_ph(short float: concentration, short float: kb) -> short float {
+            return Native::weak_base_ph(concentration, kb);
+        } end function weak_base_ph
+
+        function buffer_ph(short float: pka, short float: base_concentration, short float: acid_concentration) -> short float {
+            return Native::buffer_ph(pka, base_concentration, acid_concentration);
+        } end function buffer_ph
+
+        function bond_dissociation_gibbs(const string&: a, const string&: b, long int: order, short float: temperature, short float: pressure) -> short float {
+            return Native::bond_dissociation_gibbs(a, b, order, temperature, pressure);
+        } end function bond_dissociation_gibbs
+
+        function bond_fraction_broken(const string&: a, const string&: b, long int: order, short float: temperature, short float: pressure) -> short float {
+            return Native::bond_fraction_broken(a, b, order, temperature, pressure);
+        } end function bond_fraction_broken
+    } end namespace chemistry
+} end namespace std
