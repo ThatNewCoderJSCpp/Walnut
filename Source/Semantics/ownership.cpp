@@ -3,6 +3,7 @@
 #include "Parser/Nodes/node_children.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <utility>
 
 namespace walnut {
@@ -23,41 +24,72 @@ void OwnershipChecker::run(FileId file, nodes::ASTNode* root, bool every_functio
 }
 
 bool OwnershipChecker::wanted(const nodes::ASTNode* f) const {
-    return m_every_function || nodes::in_safe_code(f);
+    return m_every_function || contains_safe(f);
+}
+
+bool OwnershipChecker::contains_safe(const nodes::ASTNode* n) {
+    if (!n) return false;
+    if (nodes::in_safe_code(n)) return true;
+    bool found = false;
+    nodes::for_each_child(const_cast<nodes::ASTNode*>(n), [&found](nodes::ASTNode* c) { if (!found) found = contains_safe(c); });
+    return found;
 }
 
 void OwnershipChecker::find(nodes::ASTNode* n) {
     if (!n) return;
+    bool function_like = true;
     switch (n->kind) {
         case K::FunctionDeclaration: {
             auto* f = static_cast<nodes::FunctionDeclaration*>(n);
-            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(f->m_parameters, f->m_body, &f->m_return_type); m_strict = false; }
+            if (f->m_body && wanted(f)) check_function(f, f->m_parameters, f->m_body, &f->m_return_type);
             break;
         }
         case K::OperatorFunctionDeclaration: {
             auto* f = static_cast<nodes::OperatorFunctionDeclaration*>(n);
-            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(f->m_parameters, f->m_body, &f->m_return_type); m_strict = false; }
+            if (f->m_body && wanted(f)) check_function(f, f->m_parameters, f->m_body, &f->m_return_type);
             break;
         }
         case K::ConstructorDeclaration: {
             auto* f = static_cast<nodes::ConstructorDeclaration*>(n);
-            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(f->m_parameters, f->m_body, nullptr); m_strict = false; }
+            if (f->m_body && wanted(f)) check_function(f, f->m_parameters, f->m_body, nullptr);
             break;
         }
         case K::DestructorDeclaration: {
             auto* f = static_cast<nodes::DestructorDeclaration*>(n);
-            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(nullptr, f->m_body, nullptr); m_strict = false; }
+            if (f->m_body && wanted(f)) check_function(f, nullptr, f->m_body, nullptr);
             break;
         }
         case K::LambdaExpression: {
             auto* f = static_cast<nodes::LambdaExpression*>(n);
-            if (f->m_body && wanted(f)) { m_strict = nodes::in_safe_code(f); check_function(f->m_parameters, f->m_body, &f->m_return_type); m_strict = false; }
+            if (f->m_body && wanted(f)) check_function(f, f->m_parameters, f->m_body, &f->m_return_type);
             break;
         }
+        case K::NewExpression:
+            function_like = false;
+            if (m_function_depth == 0 && m_record_depth == 0 && nodes::in_safe_code(n)) {
+                m_gave_up = false;
+                m_here_safe = true;
+                error(n->line, "in safe code 'new' only works inside a function, where the compiler can follow the memory until it is deleted; use std::memory::make_unique or make_shared here, or make the variable in a function that isn't marked 'safe'");
+                m_here_safe = false;
+            }
+            break;
         default:
+            function_like = false;
             break;
     }
+    const bool record = n->kind == K::RecordDeclaration;
+    if (function_like) ++m_function_depth;
+    if (record) ++m_record_depth;
     nodes::for_each_child(n, [this](nodes::ASTNode* c) { find(c); });
+    if (function_like) --m_function_depth;
+    if (record) --m_record_depth;
+}
+
+void OwnershipChecker::check_function(const nodes::ASTNode* fn, nodes::FunctionParameters* params, nodes::ASTNode* body, const parser_types::TypeInfo* ret) {
+    const bool saved = m_here_safe;
+    m_here_safe = nodes::in_safe_code(fn);
+    check_function(params, body, ret);
+    m_here_safe = saved;
 }
 
 void OwnershipChecker::check_function(nodes::FunctionParameters* params, nodes::ASTNode* body, const parser_types::TypeInfo* ret) {
@@ -79,9 +111,15 @@ void OwnershipChecker::check_function(nodes::FunctionParameters* params, nodes::
     }
 
     if (body->kind == K::BlockStatement) {
+        const bool saved = m_here_safe;
+        m_here_safe = m_here_safe || nodes::in_safe_code(body);
         for (nodes::ASTNode* s : static_cast<nodes::BlockStatement*>(body)->statements) statement(s);
+        m_here_safe = saved;
     } else {
+        const bool saved = m_here_safe;
+        m_here_safe = m_here_safe || nodes::in_safe_code(body);
         expr(body, Use::Escape);
+        m_here_safe = saved;
     }
 
     if (m_flow.live) leaks_at_exit(nullptr);
@@ -97,6 +135,7 @@ void OwnershipChecker::declare(Symbol* sym, bool stack, bool array, std::uint32_
     v.decl_line = line;
     v.at = line;
     m_flow.vars[sym] = v;
+    forget_fields_of(sym);
     if (m_blocks.empty()) m_blocks.emplace_back();
     m_blocks.back().push_back(sym);
 }
@@ -112,10 +151,9 @@ void OwnershipChecker::close_block() {
         auto it = m_flow.vars.find(sym);
         if (it == m_flow.vars.end()) continue;
         const Var v = it->second;
-        if (m_flow.live && v.owns_new && v.life == Life::Live) {
-            warn(v.new_line, quoted(sym->name) + " holds memory from 'new' that is never deleted before its block ends");
-        }
+        if (m_flow.live) leak_check(sym, v, false);
         m_flow.vars.erase(it);
+        forget_fields_of(sym);
         if (!v.stack) continue;
         for (auto& [other, ov] : m_flow.vars) {
             if (ov.points_to == sym && ov.life != Life::Moved && ov.life != Life::Deleted) {
@@ -141,6 +179,13 @@ void OwnershipChecker::block(nodes::BlockStatement* b) {
 
 void OwnershipChecker::statement(nodes::ASTNode* s) {
     if (!s || !m_flow.live) return;
+    const bool saved = m_here_safe;
+    m_here_safe = m_here_safe || nodes::in_safe_code(s);
+    statement_in_place(s);
+    m_here_safe = saved;
+}
+
+void OwnershipChecker::statement_in_place(nodes::ASTNode* s) {
     switch (s->kind) {
         case K::BlockStatement:
             block(static_cast<nodes::BlockStatement*>(s));
@@ -414,8 +459,22 @@ void OwnershipChecker::return_statement(nodes::ReturnStatement* r) {
 
 void OwnershipChecker::leaks_at_exit(Symbol* keep) {
     for (auto& [sym, v] : m_flow.vars) {
-        if (sym == keep || !v.owns_new || v.life != Life::Live) continue;
-        warn(v.new_line, quoted(sym->name) + " holds memory from 'new' that is never deleted or handed off");
+        if (sym == keep) continue;
+        leak_check(sym, v, true);
+    }
+}
+
+void OwnershipChecker::leak_check(Symbol* sym, const Var& v, bool at_exit) {
+    if (v.owns_new && v.life == Life::Live) {
+        if (at_exit) warn(v.new_line, quoted(sym->name) + " holds memory from 'new' that is never deleted or handed off", v.new_safe);
+        else warn(v.new_line, quoted(sym->name) + " holds memory from 'new' that is never deleted before its block ends", v.new_safe);
+        return;
+    }
+    if (v.life != Life::Unknown || !v.maybe_leak) return;
+    if (v.maybe_deleted) {
+        warn(v.maybe_leak, quoted(sym->name) + " holds memory from 'new' that is deleted on only some paths (on line " + std::to_string(v.maybe_deleted) + "), so on the others it leaks; delete it on every path", v.new_safe || v.maybe_safe);
+    } else if (v.maybe_moved) {
+        warn(v.maybe_leak, quoted(sym->name) + " holds memory from 'new' that is moved away on only some paths (on line " + std::to_string(v.maybe_moved) + "), so on the others it leaks; delete it on the paths that keep it", v.new_safe || v.maybe_safe);
     }
 }
 
@@ -424,18 +483,34 @@ void OwnershipChecker::expr(nodes::ASTNode* e, Use use) {
     const Use passed = (use == Use::Escape || use == Use::Deref) ? use : Use::Read;
     switch (e->kind) {
         case K::Identifier: {
-            touch(static_cast<nodes::Identifier*>(e)->resolved, use, e->line);
+            Symbol* sym = static_cast<nodes::Identifier*>(e)->resolved;
+            if (var(sym)) touch(sym, use, e->line);
+            else field_use(e, use);
             return;
         }
-        case K::DereferenceExpression:
-            check_held(static_cast<nodes::DereferenceExpression*>(e)->operand, e->line);
-            expr(static_cast<nodes::DereferenceExpression*>(e)->operand, Use::Deref);
+        case K::DereferenceExpression: {
+            nodes::ASTNode* operand = static_cast<nodes::DereferenceExpression*>(e)->operand;
+            if (is_this(operand)) return;
+            check_held(operand, e->line);
+            expr(operand, Use::Deref);
+            safe_deref(operand, e->line);
             return;
+        }
+        case K::UnaryExpression: {
+            auto* u = static_cast<nodes::UnaryExpression*>(e);
+            if (u->op != tokenizing::Token::Kind::Asterisk || u->resolved || is_this(u->operand)) break;
+            expr(u->operand, Use::Deref);
+            safe_deref(u->operand, e->line);
+            return;
+        }
         case K::MemberAccessExpression: {
             auto* m = static_cast<nodes::MemberAccessExpression*>(e);
             if (m->m_op == nodes::MemberAccessExpression::Op::Scope) return;
-            if (m->m_op == nodes::MemberAccessExpression::Op::Arrow) check_held(m->m_object, e->line);
-            expr(m->m_object, m->m_op == nodes::MemberAccessExpression::Op::Arrow ? Use::Deref : Use::Read);
+            const bool arrow = m->m_op == nodes::MemberAccessExpression::Op::Arrow;
+            field_use(e, use);
+            if (arrow) check_held(m->m_object, e->line);
+            expr(m->m_object, arrow ? Use::Deref : Use::Read);
+            if (arrow && !is_this(m->m_object)) safe_deref(m->m_object, e->line);
             return;
         }
         case K::SubscriptExpression: {
@@ -451,21 +526,15 @@ void OwnershipChecker::expr(nodes::ASTNode* e, Use use) {
         case K::CallExpression: {
             auto* c = static_cast<nodes::CallExpression*>(e);
             if (is_move(c) && c->m_arguments.size() == 1) {
-                nodes::ASTNode* arg = c->m_arguments[0];
-                expr(arg, Use::Read);
-                if (Var* v = var(symbol_of(arg))) {
-                    v->life = Life::Moved;
-                    v->reported = false;
-                    v->at = e->line;
-                    v->owns_new = false;
-                    v->points_to = nullptr;
-                }
+                move_expression(c);
                 return;
             }
+            bool stores = false;
             if (c->m_callee && c->m_callee->kind == K::MemberAccessExpression) {
                 auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
                 if (m->m_op != nodes::MemberAccessExpression::Op::Scope) {
                     if (stores_argument(m->m_member)) {
+                        stores = true;
                         for (nodes::ASTNode* a : c->m_arguments) {
                             if (stored_target(a)) store(m->m_object, a, true, e->line);
                         }
@@ -475,7 +544,8 @@ void OwnershipChecker::expr(nodes::ASTNode* e, Use use) {
                 }
             }
             expr(c->m_callee, Use::Read);
-            for (nodes::ASTNode* a : c->m_arguments) expr(a, Use::Escape);
+            const Use argument_use = m_here_safe && !stores ? Use::Borrow : Use::Escape;
+            for (nodes::ASTNode* a : c->m_arguments) expr(a, argument_use);
             return;
         }
         case K::BinaryExpression: {
@@ -509,20 +579,28 @@ void OwnershipChecker::expr(nodes::ASTNode* e, Use use) {
 void OwnershipChecker::touch(Symbol* sym, Use use, std::uint32_t line) {
     Var* v = var(sym);
     if (!v || use == Use::Address) return;
+    const bool strict_delete = m_here_safe || v->at_safe;
     if (v->reported) {
     } else if (v->life == Life::Moved) {
-        error(line, quoted(sym->name) + " is used after it was moved on line " + std::to_string(v->at));
+        error(line, quoted(sym->name) + " is used after it was moved on line " + std::to_string(v->at), v->at_safe);
         v->reported = true;
-    } else if (v->life == Life::Deleted && (use == Use::Deref || v->reference)) {
-        if (v->reference) error(line, quoted(sym->name) + " refers to memory that was deleted on line " + std::to_string(v->at) + (v->deleted_via ? " through " + quoted(v->deleted_via->name) : std::string()));
-        else if (v->deleted_via) error(line, quoted(sym->name) + " is used after the memory it points to was deleted through " + quoted(v->deleted_via->name) + " on line " + std::to_string(v->at));
-        else error(line, quoted(sym->name) + " is used after it was deleted on line " + std::to_string(v->at));
+    } else if (v->life == Life::Deleted && (use == Use::Deref || v->reference || strict_delete)) {
+        if (v->reference) error(line, quoted(sym->name) + " refers to memory that was deleted on line " + std::to_string(v->at) + (v->deleted_via ? " through " + quoted(v->deleted_via->name) : std::string()), v->at_safe);
+        else if (v->deleted_via) error(line, quoted(sym->name) + " is used after the memory it points to was deleted through " + quoted(v->deleted_via->name) + " on line " + std::to_string(v->at), v->at_safe);
+        else error(line, quoted(sym->name) + " is used after it was deleted on line " + std::to_string(v->at) + (use == Use::Deref ? std::string() : "; give it a new value before using it again"), v->at_safe);
         v->reported = true;
     } else if (v->life == Life::Dangling && use == Use::Deref) {
         const std::string target = v->points_to ? quoted(v->points_to->name) : std::string("a local");
         error(line, quoted(sym->name) + " points to " + target + " (declared on line " + std::to_string(v->at) + "), which no longer exists after its block ended");
         v->reported = true;
+    } else if (v->life == Life::Unknown && v->maybe_moved) {
+        warn(line, quoted(sym->name) + " may be used after it was moved: it is moved on line " + std::to_string(v->maybe_moved) + " on some of the paths that lead here", v->maybe_safe);
+        v->reported = true;
+    } else if (v->life == Life::Unknown && v->maybe_deleted && (use == Use::Deref || v->reference || m_here_safe || v->maybe_safe)) {
+        warn(line, quoted(sym->name) + " may be used after it was deleted: it is deleted on line " + std::to_string(v->maybe_deleted) + " on some of the paths that lead here", v->maybe_safe);
+        v->reported = true;
     }
+    if (use == Use::Escape || use == Use::Borrow) partly_moved(sym, line);
     if (use == Use::Escape) v->owns_new = false;
 }
 
@@ -534,16 +612,43 @@ void OwnershipChecker::assign(nodes::ASTNode* left, nodes::ASTNode* right, std::
     }
     if (stored_target(right)) store(left, right, false, line);
     else forget_stored(left, false);
-    expr(left, Use::Read);
     expr(right, Use::Escape);
+    const std::string key = place_key(left);
+    if (!key.empty()) forget_field(key);
+    if (left && left->kind == K::MemberAccessExpression) {
+        auto* m = static_cast<nodes::MemberAccessExpression*>(left);
+        const bool arrow = m->m_op == nodes::MemberAccessExpression::Op::Arrow;
+        if (arrow) check_held(m->m_object, line);
+        expr(m->m_object, arrow ? Use::Deref : Use::Read);
+        if (arrow && !is_this(m->m_object)) safe_deref(m->m_object, line);
+    } else if (!(left && left->kind == K::Identifier)) {
+        expr(left, Use::Read);
+    }
 }
 
 void OwnershipChecker::initialize(Symbol* sym, nodes::ASTNode* right, std::uint32_t line, bool reassign) {
     bool from_new = false;
+    bool new_array = false;
     Symbol* points_to = nullptr;
+    Var given;
+    bool has_given = false;
+    bool copied = false;
+    if (nodes::ASTNode* moved = move_argument(right)) {
+        if (Var* mv = var(symbol_of(moved)); mv && mv->life == Life::Live) {
+            given = *mv;
+            has_given = true;
+        }
+    } else if (right && right->kind == K::Identifier && m_here_safe) {
+        if (Var* cv = var(symbol_of(right)); cv && cv->pointer && cv->life == Life::Live && cv->owns_new) {
+            given = *cv;
+            has_given = true;
+            copied = true;
+        }
+    }
     if (right && right->kind == K::NewExpression) {
         expr(right, Use::Read);
         from_new = true;
+        new_array = static_cast<nodes::NewExpression*>(right)->is_array;
     } else if (right && right->kind == K::ReferenceExpression) {
         nodes::ASTNode* operand = static_cast<nodes::ReferenceExpression*>(right)->operand;
         Symbol* t = symbol_of(operand);
@@ -563,17 +668,40 @@ void OwnershipChecker::initialize(Symbol* sym, nodes::ASTNode* right, std::uint3
 
     Var* v = var(sym);
     if (!v) return;
+    const Var* source_var = source && source != sym ? var(source) : nullptr;
     v->heap = heap;
     v->deleted_via = nullptr;
     if (reassign && m_flow.live && v->owns_new && v->life == Life::Live) {
-        warn(line, quoted(sym->name) + " is reassigned while it still holds memory from 'new' on line " + std::to_string(v->new_line) + ", so that memory leaks");
+        warn(line, quoted(sym->name) + " is reassigned while it still holds memory from 'new' on line " + std::to_string(v->new_line) + ", so that memory leaks", v->new_safe);
     }
     v->life = Life::Live;
     v->reported = false;
     v->at = line;
+    v->at_safe = false;
     v->owns_new = from_new;
     v->new_line = from_new ? line : 0;
+    v->new_safe = from_new && m_here_safe;
+    v->from_new = from_new || (source_var && source_var->from_new && source_var->life == Life::Live);
+    v->new_array = from_new ? new_array : (source_var && source_var->from_new ? source_var->new_array : false);
     v->points_to = points_to;
+    v->null_value = is_null(right) || (source_var && source_var->null_value && source_var->life == Life::Live);
+    v->maybe_moved = 0;
+    v->maybe_deleted = 0;
+    v->maybe_leak = 0;
+    v->maybe_safe = false;
+    forget_fields_of(sym);
+    if (has_given && v->pointer) {
+        v->owns_new = given.owns_new;
+        v->new_line = given.new_line;
+        v->new_safe = given.new_safe;
+        v->from_new = given.from_new;
+        v->new_array = given.new_array;
+        if (!v->heap) v->heap = given.heap;
+        if (!v->points_to) v->points_to = given.points_to;
+        if (copied) {
+            if (Var* cv = var(symbol_of(right))) cv->owns_new = false;
+        }
+    }
 }
 
 void OwnershipChecker::delete_expression(nodes::DeleteExpression* d) {
@@ -588,32 +716,63 @@ void OwnershipChecker::delete_expression(nodes::DeleteExpression* d) {
     Symbol* sym = symbol_of(operand);
     Var* v = var(sym);
     if (!v) {
+        if (field_delete(operand, d->line)) return;
+        if (m_here_safe) {
+            error(d->line, "in safe code 'delete' works on a local pointer that holds memory from 'new', or on a field of this object ('delete self.field;'); the compiler can't follow what '" + place_text(operand) + "' points to, so delete it in a function that isn't marked 'safe'");
+        }
         expr(operand, Use::Read);
         return;
     }
+    bool reported = false;
     if (v->life == Life::Deleted) {
-        if (v->deleted_via) error(d->line, "deletes " + quoted(sym->name) + ", but the memory it points to was already deleted through " + quoted(v->deleted_via->name) + " on line " + std::to_string(v->at));
-        else error(d->line, quoted(sym->name) + " is deleted twice (it was already deleted on line " + std::to_string(v->at) + ")");
+        if (v->deleted_via) error(d->line, "deletes " + quoted(sym->name) + ", but the memory it points to was already deleted through " + quoted(v->deleted_via->name) + " on line " + std::to_string(v->at), v->at_safe);
+        else error(d->line, quoted(sym->name) + " is deleted twice (it was already deleted on line " + std::to_string(v->at) + ")", v->at_safe);
+        reported = true;
     } else if (v->life == Life::Moved) {
         touch(sym, Use::Read, d->line);
+        reported = true;
+    } else if (v->life == Life::Unknown && v->maybe_deleted) {
+        warn(d->line, quoted(sym->name) + " may be deleted twice: it is already deleted on line " + std::to_string(v->maybe_deleted) + " on some of the paths that lead here", v->maybe_safe);
+        reported = true;
+    } else if (v->life == Life::Unknown && v->maybe_moved) {
+        touch(sym, Use::Read, d->line);
+        reported = true;
     } else if (v->array && v->stack) {
         error(d->line, "deletes local array " + quoted(sym->name) + ", which was not made with 'new'");
+        reported = true;
     } else if (v->points_to && v->life == Life::Live && !v->owns_new) {
         error(d->line, "deletes " + quoted(sym->name) + ", which points to local " + quoted(v->points_to->name) + " that was not made with 'new'");
+        reported = true;
+    } else if (v->life == Life::Live && v->from_new && v->new_array != d->is_array) {
+        if (v->new_array) error(d->line, quoted(sym->name) + " holds an array made with 'new[]', so delete it with 'delete[] " + std::string(sym->name) + ";'", v->new_safe);
+        else error(d->line, quoted(sym->name) + " holds a single object made with 'new', so delete it with 'delete " + std::string(sym->name) + ";', not 'delete[]'", v->new_safe);
+        reported = true;
+    }
+    if (!reported && m_here_safe && v->pointer && !(v->life == Life::Live && (v->from_new || v->null_value))) {
+        error(d->line, "in safe code 'delete' only works on memory the compiler saw come from 'new' in this function; it can't tell where " + quoted(sym->name) + " came from" + (sym->kind == SymbolKind::Parameter ? " because it's a parameter" : std::string()) + ", so delete it in a function that isn't marked 'safe'");
     }
     v->life = Life::Deleted;
     v->reported = false;
     v->at = d->line;
+    v->at_safe = m_here_safe;
     v->owns_new = false;
+    v->from_new = false;
+    v->null_value = false;
     v->points_to = nullptr;
     v->deleted_via = nullptr;
+    v->maybe_moved = 0;
+    v->maybe_deleted = 0;
+    v->maybe_leak = 0;
+    v->maybe_safe = false;
     if (const std::uint32_t id = v->heap) {
         for (auto& [other, ov] : m_flow.vars) {
-            if (other == sym || ov.heap != id) continue;
+            if (other == sym || ov.heap != id || ov.life == Life::Moved) continue;
             ov.life = Life::Deleted;
             ov.reported = false;
             ov.at = d->line;
+            ov.at_safe = m_here_safe;
             ov.owns_new = false;
+            ov.from_new = false;
             ov.points_to = nullptr;
             ov.deleted_via = sym;
         }
@@ -627,6 +786,203 @@ void OwnershipChecker::escape_all(nodes::ASTNode* n) {
         return;
     }
     nodes::for_each_child(n, [this](nodes::ASTNode* c) { escape_all(c); });
+}
+
+void OwnershipChecker::move_expression(nodes::CallExpression* c) {
+    nodes::ASTNode* arg = c->m_arguments[0];
+    const std::uint32_t line = c->line;
+    Symbol* sym = symbol_of(arg);
+    if (Var* v = var(sym)) {
+        if (!v->reported && v->life == Life::Moved) {
+            if (v->at == line) error(line, quoted(sym->name) + " is moved again the next time through the loop, after this line already moved it; give it a new value in the loop before moving it, or declare it inside the loop", v->at_safe);
+            else error(line, quoted(sym->name) + " is moved again, but it was already moved on line " + std::to_string(v->at) + "; give it a new value before moving it again", v->at_safe);
+            v->reported = true;
+        } else if (!v->reported && v->life == Life::Unknown && v->maybe_moved) {
+            warn(line, quoted(sym->name) + " may be moved twice: it is already moved on line " + std::to_string(v->maybe_moved) + " on some of the paths that lead here", v->maybe_safe);
+            v->reported = true;
+        }
+        partly_moved(sym, line);
+        expr(arg, Use::Read);
+        if (Var* after = var(sym)) {
+            after->life = Life::Moved;
+            after->reported = false;
+            after->at = line;
+            after->at_safe = m_here_safe;
+            after->owns_new = false;
+            after->from_new = false;
+            after->null_value = false;
+            after->points_to = nullptr;
+            after->maybe_moved = 0;
+            after->maybe_deleted = 0;
+            after->maybe_leak = 0;
+            after->maybe_safe = false;
+        }
+        forget_fields_of(sym);
+        return;
+    }
+    field_move(arg, line);
+    expr(arg, Use::Read);
+    const std::string key = place_key(arg);
+    if (key.empty()) return;
+    forget_field(key);
+    Field f;
+    f.life = Life::Moved;
+    f.at = line;
+    f.safe = m_here_safe;
+    f.text = place_text(arg);
+    m_flow.fields[key] = f;
+}
+
+void OwnershipChecker::field_move(nodes::ASTNode* e, std::uint32_t line) {
+    const std::string key = place_key(e);
+    if (key.empty()) return;
+    for (auto& [moved, f] : m_flow.fields) {
+        if (f.reported || f.life != Life::Moved) continue;
+        if (!(key == moved || (key.size() > moved.size() && key.compare(0, moved.size(), moved) == 0 && key[moved.size()] == '.'))) continue;
+        if (f.maybe) warn(line, "'" + f.text + "' may be moved twice: it is already moved on line " + std::to_string(f.at) + " on some of the paths that lead here", f.safe);
+        else if (f.at == line) error(line, "'" + f.text + "' is moved again the next time through the loop, after this line already moved it; give it a new value in the loop before moving it again", f.safe);
+        else error(line, "'" + f.text + "' is moved again, but it was already moved on line " + std::to_string(f.at) + "; give it a new value before moving it again", f.safe);
+        f.reported = true;
+        return;
+    }
+}
+
+bool OwnershipChecker::field_delete(nodes::ASTNode* e, std::uint32_t line) {
+    const std::string key = place_key(e);
+    if (key.empty() || key == "this") return false;
+    for (auto& [gone, f] : m_flow.fields) {
+        if (f.reported) continue;
+        if (!(key == gone || (key.size() > gone.size() && key.compare(0, gone.size(), gone) == 0 && key[gone.size()] == '.'))) continue;
+        if (f.life == Life::Deleted) {
+            if (f.maybe) warn(line, "'" + f.text + "' may be deleted twice: it is already deleted on line " + std::to_string(f.at) + " on some of the paths that lead here", f.safe);
+            else error(line, "'" + f.text + "' is deleted twice (it was already deleted on line " + std::to_string(f.at) + ")", f.safe);
+        } else {
+            if (f.maybe) warn(line, "'" + f.text + "' may be used after it was moved: it is moved on line " + std::to_string(f.at) + " on some of the paths that lead here", f.safe);
+            else error(line, "'" + f.text + "' is used after it was moved on line " + std::to_string(f.at), f.safe);
+        }
+        f.reported = true;
+        break;
+    }
+    expr(e, Use::Read);
+    forget_field(key);
+    Field f;
+    f.life = Life::Deleted;
+    f.at = line;
+    f.safe = m_here_safe;
+    f.text = place_text(e);
+    m_flow.fields[key] = f;
+    return true;
+}
+
+void OwnershipChecker::field_use(nodes::ASTNode* e, Use use) {
+    if (use == Use::Address || m_flow.fields.empty()) return;
+    const std::string key = place_key(e);
+    if (key.empty()) return;
+    for (auto& [gone, f] : m_flow.fields) {
+        if (f.reported) continue;
+        if (!(key == gone || (key.size() > gone.size() && key.compare(0, gone.size(), gone) == 0 && key[gone.size()] == '.'))) continue;
+        if (f.life == Life::Moved) {
+            if (f.maybe) warn(e->line, "'" + f.text + "' may be used after it was moved: it is moved on line " + std::to_string(f.at) + " on some of the paths that lead here", f.safe);
+            else error(e->line, "'" + f.text + "' is used after it was moved on line " + std::to_string(f.at) + "; give it a new value before using it again", f.safe);
+            f.reported = true;
+        } else if (f.life == Life::Deleted && (use == Use::Deref || m_here_safe || f.safe)) {
+            if (f.maybe) warn(e->line, "'" + f.text + "' may be used after it was deleted: it is deleted on line " + std::to_string(f.at) + " on some of the paths that lead here", f.safe);
+            else error(e->line, "'" + f.text + "' is used after it was deleted on line " + std::to_string(f.at) + "; give it a new value before using it again", f.safe);
+            f.reported = true;
+        }
+        return;
+    }
+}
+
+void OwnershipChecker::partly_moved(Symbol* sym, std::uint32_t line) {
+    if (!sym || m_flow.fields.empty()) return;
+    const std::string root = root_key(sym) + ".";
+    for (auto& [gone, f] : m_flow.fields) {
+        if (f.reported || f.life != Life::Moved || gone.compare(0, root.size(), root) != 0) continue;
+        if (f.maybe) warn(line, quoted(sym->name) + " is used as a whole, but its part '" + f.text + "' may have been moved out on line " + std::to_string(f.at), f.safe);
+        else error(line, quoted(sym->name) + " is used as a whole, but its part '" + f.text + "' was moved out on line " + std::to_string(f.at) + "; give '" + f.text + "' a new value first", f.safe);
+        f.reported = true;
+        return;
+    }
+}
+
+void OwnershipChecker::forget_field(const std::string& key) {
+    for (auto it = m_flow.fields.begin(); it != m_flow.fields.end();) {
+        const std::string& k = it->first;
+        const bool inside = k == key || (k.size() > key.size() && k.compare(0, key.size(), key) == 0 && k[key.size()] == '.');
+        if (inside) it = m_flow.fields.erase(it);
+        else ++it;
+    }
+}
+
+void OwnershipChecker::forget_fields_of(Symbol* sym) {
+    if (!sym || m_flow.fields.empty()) return;
+    forget_field(root_key(sym));
+}
+
+void OwnershipChecker::safe_deref(nodes::ASTNode* operand, std::uint32_t line) {
+    if (!m_here_safe || !operand || operand->kind != K::Identifier) return;
+    Symbol* sym = symbol_of(operand);
+    if (!sym || !sym->type || sym->type->has_reference() || !sym->type->has_pointer()) return;
+    Var* v = var(sym);
+    if (!v) {
+        error(line, "in safe code '*' and '->' only work on a local pointer the compiler can follow; " + quoted(sym->name) + " isn't a local variable of this function, so use a reference, std::memory::UniquePtr or SharedPtr, or do this in a function that isn't marked 'safe'");
+        return;
+    }
+    if (v->reported) return;
+    if (v->life == Life::Moved || v->life == Life::Deleted || v->life == Life::Dangling) return;
+    if (v->life == Life::Unknown && (v->maybe_moved || v->maybe_deleted)) return;
+    if (v->life == Life::Live && v->from_new) return;
+    if (v->life == Life::Live && v->points_to && var(v->points_to)) return;
+    std::string why;
+    if (v->life == Life::Live && v->null_value) why = "it is null here";
+    else if (sym->kind == SymbolKind::Parameter) why = "it's a parameter, so it could point anywhere";
+    else if (v->life == Life::Unknown || (v->life == Life::Live && !v->heap && !v->points_to)) why = "it isn't known what it points to here";
+    else why = "it isn't known what it points to here";
+    error(line, "in safe code '*' and '->' only work on a pointer known to hold memory from 'new' made in this function (and not deleted yet), or the address of a local that still exists; " + quoted(sym->name) + " can't be used this way because " + why + ". Use a reference, std::memory::UniquePtr or SharedPtr, or do this in a function that isn't marked 'safe'");
+    v->reported = true;
+}
+
+std::string OwnershipChecker::place_key(nodes::ASTNode* e) {
+    if (!e) return {};
+    switch (e->kind) {
+        case K::Identifier: {
+            Symbol* s = symbol_of(e);
+            if (!s || (s->kind != SymbolKind::Variable && s->kind != SymbolKind::Parameter)) return {};
+            if (s->owner && s->owner->kind == Scope::Kind::Record && !var(s)) return "this." + std::string(s->name);
+            return root_key(s);
+        }
+        case K::DereferenceExpression:
+            return is_this(static_cast<nodes::DereferenceExpression*>(e)->operand) ? std::string("this") : std::string();
+        case K::MemberAccessExpression: {
+            auto* m = static_cast<nodes::MemberAccessExpression*>(e);
+            if (m->m_op == nodes::MemberAccessExpression::Op::Scope) return {};
+            if (m->m_op == nodes::MemberAccessExpression::Op::Arrow) return is_this(m->m_object) ? "this." + std::string(m->m_member) : std::string();
+            const std::string base = place_key(m->m_object);
+            return base.empty() ? base : base + "." + std::string(m->m_member);
+        }
+        default:
+            return {};
+    }
+}
+
+std::string OwnershipChecker::root_key(const Symbol* sym) {
+    return "@" + std::to_string(reinterpret_cast<std::uintptr_t>(sym));
+}
+
+bool OwnershipChecker::is_this(const nodes::ASTNode* e) {
+    return e && e->kind == K::Literal && static_cast<const nodes::Literal*>(e)->token_kind == tokenizing::Token::Kind::ThisKeyword;
+}
+
+bool OwnershipChecker::is_null(const nodes::ASTNode* e) {
+    return e && e->kind == K::Literal && static_cast<const nodes::Literal*>(e)->token_kind == tokenizing::Token::Kind::NullptrKeyword;
+}
+
+nodes::ASTNode* OwnershipChecker::move_argument(nodes::ASTNode* e) {
+    if (!e || e->kind != K::CallExpression) return nullptr;
+    auto* c = static_cast<nodes::CallExpression*>(e);
+    if (!is_move(c) || c->m_arguments.size() != 1) return nullptr;
+    return c->m_arguments[0];
 }
 
 OwnershipChecker::Var* OwnershipChecker::var(Symbol* sym) {
@@ -655,8 +1011,14 @@ std::string OwnershipChecker::place_text(nodes::ASTNode* e) {
         }
         case K::SubscriptExpression:
             return place_text(static_cast<nodes::SubscriptExpression*>(e)->m_array) + "[...]";
-        case K::DereferenceExpression:
-            return "*" + place_text(static_cast<nodes::DereferenceExpression*>(e)->operand);
+        case K::DereferenceExpression: {
+            nodes::ASTNode* operand = static_cast<nodes::DereferenceExpression*>(e)->operand;
+            if (is_this(operand)) return "self";
+            return "*" + place_text(operand);
+        }
+        case K::Literal:
+            if (is_this(e)) return "this";
+            return "something";
         default:
             return "something";
     }
@@ -874,9 +1236,41 @@ OwnershipChecker::Flow OwnershipChecker::join(const std::vector<Flow>& flows) {
             auto it = f.vars.find(sym);
             if (it == f.vars.end()) continue;
             const Var& o = it->second;
+            const Var a = v;
             if (o.life != v.life || o.points_to != v.points_to) {
+                Var& target = v;
+                const auto note = [&target](const Var& x, const Var& y) {
+                    if (x.life == Life::Moved && y.life != Life::Moved) {
+                        target.maybe_moved = x.at;
+                        target.maybe_safe = target.maybe_safe || x.at_safe;
+                    }
+                    if (x.life == Life::Deleted && y.life != Life::Deleted) {
+                        target.maybe_deleted = x.at;
+                        target.maybe_safe = target.maybe_safe || x.at_safe;
+                    }
+                    if ((x.life == Life::Moved || x.life == Life::Deleted) && y.life == Life::Live && y.owns_new) {
+                        target.maybe_leak = y.new_line;
+                        target.new_safe = target.new_safe || y.new_safe;
+                    }
+                };
+                note(a, o);
+                note(o, a);
                 v.life = Life::Unknown;
                 v.points_to = nullptr;
+            }
+            if (!v.maybe_moved) v.maybe_moved = o.maybe_moved;
+            if (!v.maybe_deleted) v.maybe_deleted = o.maybe_deleted;
+            if (!v.maybe_leak) v.maybe_leak = o.maybe_leak;
+            v.maybe_safe = v.maybe_safe || o.maybe_safe;
+            v.at_safe = v.at_safe || o.at_safe;
+            if (v.life != Life::Unknown) {
+                v.from_new = (a.from_new || a.null_value) && (o.from_new || o.null_value) && (a.from_new || o.from_new);
+                v.null_value = a.null_value && o.null_value;
+                if (a.new_array != o.new_array && a.from_new && o.from_new) v.from_new = false;
+                v.new_array = a.from_new ? a.new_array : o.new_array;
+            } else {
+                v.from_new = false;
+                v.null_value = false;
             }
             if (o.heap != v.heap) v.heap = 0;
             std::vector<Held> kept;
@@ -890,25 +1284,60 @@ OwnershipChecker::Flow OwnershipChecker::join(const std::vector<Flow>& flows) {
                 }
             }
             v.held = std::move(kept);
-            v.owns_new = v.owns_new && o.owns_new;
+            if (v.life == Life::Live && (a.owns_new || o.owns_new) && (a.owns_new || a.null_value) && (o.owns_new || o.null_value)) {
+                v.owns_new = true;
+                v.new_line = a.owns_new ? a.new_line : o.new_line;
+                v.new_safe = a.owns_new ? a.new_safe : o.new_safe;
+            } else {
+                v.owns_new = a.owns_new && o.owns_new;
+            }
         }
+        std::map<std::string, Field> merged;
+        for (const auto& [key, field] : out.fields) {
+            auto it = f.fields.find(key);
+            Field both = field;
+            if (it == f.fields.end()) both.maybe = true;
+            else {
+                if (it->second.life != field.life) both.maybe = true;
+                both.maybe = both.maybe || it->second.maybe;
+                both.safe = both.safe || it->second.safe;
+            }
+            merged[key] = both;
+        }
+        for (const auto& [key, field] : f.fields) {
+            if (merged.count(key)) continue;
+            Field one = field;
+            one.maybe = true;
+            merged[key] = one;
+        }
+        out.fields = std::move(merged);
     }
     return out;
 }
 
 void OwnershipChecker::error(std::uint32_t line, std::string message) {
+    error(line, std::move(message), false);
+}
+
+void OwnershipChecker::warn(std::uint32_t line, std::string message) {
+    warn(line, std::move(message), false);
+}
+
+void OwnershipChecker::error(std::uint32_t line, std::string message, bool safe_cause) {
     if (m_gave_up) return;
+    if (!m_every_function && !m_here_safe && !safe_cause) return;
     if (!m_seen.emplace(m_file, line, message).second) return;
     ++m_errors;
     m_reporter.report(ErrorPhase::Semantic, m_file, line, std::move(message));
 }
 
-void OwnershipChecker::warn(std::uint32_t line, std::string message) {
+void OwnershipChecker::warn(std::uint32_t line, std::string message, bool safe_cause) {
     if (m_gave_up) return;
-    if (m_strict) {
-        error(line, std::move(message) + " (this is an error in safe code)");
+    if (m_here_safe || safe_cause) {
+        error(line, std::move(message) + " (this is an error in safe code)", true);
         return;
     }
+    if (!m_every_function) return;
     if (!m_seen.emplace(m_file, line, message).second) return;
     ++m_warned;
     m_warnings.report(ErrorPhase::Semantic, m_file, line, std::move(message));

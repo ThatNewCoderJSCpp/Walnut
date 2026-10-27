@@ -4075,7 +4075,7 @@ Here `myvalue` is `16`, `spelled` is `"a + b"`, and `build` is `"release"` (or `
 
 ## Safe code
 
-`safe` marks code that follows stricter rules, in the spirit of Rust: no raw pointer tricks, objects named explicitly, integer overflow caught, and the [ownership checks](#safety-checks) always on. Code that isn't marked works exactly as before, so a program can be made safe one function or class at a time.
+`safe` marks code that follows stricter rules, in the spirit of Rust: no raw pointer tricks, memory from `new` and moved values tracked while compiling, objects named explicitly, integer overflow caught, and the [ownership checks](#safety-checks) always on. Code that isn't marked works exactly as before, so a program can be made safe one function or class at a time.
 
 ```walnut
 import module.io
@@ -4122,10 +4122,20 @@ Code that isn't marked `safe` can already do anything, so there is no `unsafe` k
 **The rules.** Breaking one is a compile error that says what to do instead.
 
 - **Methods name their object.** Every method that isn't `static` takes a [receiver](#receivers), and fields and methods are reached through `self` or `this->`.
-- **No raw pointer operations.** `new`, `delete`, reading through a pointer with `*p`, `p->x` or `p[i]`, pointer arithmetic, and `++`/`--` on a pointer are errors. `this->x` and `self` are fine, and so are references, `std::memory::UniquePtr` and `SharedPtr` (`make_unique`, `make_shared`), `std::optional::Optional`, and the containers in `std::collections`. Taking an address with `&x` is allowed, and the pointer can be passed on, but only code that isn't marked `safe` can use it.
+- **Raw pointers only where the compiler can follow them.** `*p` and `p->x` work when `p` is a local pointer variable that holds memory from `new` made in the same function and not deleted yet, or the address of a local variable that still exists. On any other pointer (a parameter, a global, a field, the result of a call) they are errors, and so are `p[i]`, pointer arithmetic, and `++`/`--` on a pointer. `this->x` and `self` are fine, and so are references, `std::memory::UniquePtr` and `SharedPtr` (`make_unique`, `make_shared`), `std::optional::Optional`, and the containers in `std::collections`. Taking an address with `&x` is allowed, and the pointer can be passed on.
+- **`new` and `delete` are tracked.** Memory from `new` has to end up in exactly one place on every path through the function: deleted once, returned, moved away with `std::core::move`, or stored in a field or container (`self.p = q;`, `list.push_back(q)`). Passing the pointer to a function only lends it, so the memory still has to be deleted afterwards. These are errors:
+  - memory from `new` that is never deleted, or deleted on only some paths (`if (c) then { delete p; }`)
+  - deleting twice, including through a copy (`int*: q = p; delete q; delete p;`), and deleting on some paths before deleting again
+  - using a pointer after its memory was deleted, even just to read or pass the pointer, until it's given a new value
+  - `delete` on memory made with `new[]`, or `delete[]` on memory made with `new`
+  - `delete` on a pointer the compiler didn't see come from `new` (a parameter, the result of a call, `&x`); deleting a pointer that is `nullptr` on some paths is fine
+  - `new` outside a function, such as a global `int*: p = new int(1);` (a field's default value is fine)
+
+  Fields can be deleted too, as in a destructor's `delete this->p;`. Within one function, deleting the same field twice, or using it after deleting it, is an error until it's given a new value (`self.p = nullptr;`).
+- **Moves are tracked.** After `std::core::move(data)`, using `data` or moving it again is an error until it's given a new value. This covers fields (`std::core::move(self.items)`), moving inside a loop (the second time through moves it again), moving on only some paths (`if (c) then { take(std::core::move(data)); } take(data);`), and using a whole object after one of its fields was moved out.
 - **No escape hatches.** `reinterpret_cast`, `const_cast`, reading or writing a field of a `union`, `goto`, and `extern "C"` or `extern "C++"` code blocks are errors.
 - **Integer overflow stops the program.** `+`, `-`, `*`, negation, `++`, `--` and the compound assignments (`+=` and so on) on integers are checked while the program runs, and a result that doesn't fit stops it with `walnut runtime error: integer overflow in safe code: ...` and exit code 70. Outside safe code they wrap around, unless the program is built with `--check-overflow`.
-- **Ownership is checked.** The compile-time checks of [`--ownership`](#safety-checks) (use after move, use after `delete`, references and pointers to locals that are gone) run on every safe function without the flag, and what would be warnings there are errors.
+- **Ownership is checked.** The compile-time checks of [`--ownership`](#safety-checks) (use after move, use after `delete`, references and pointers to locals that are gone) run on all safe code without the flag, and what would be warnings there are errors.
 - **`switch` is exhaustive.** A case can't fall through to the next one unless it ends with `fallthrough;`, and a `switch` on an enum must handle every value or have a `default:`.
 
 ```walnut
@@ -4146,7 +4156,40 @@ function main() -> int {
 
 Here `got` is `9`. Writing `*(&both[0] + 1)` inside `second` would be two errors, one for the arithmetic and one for reading through the pointer; `read_second` isn't marked `safe`, so it may do both.
 
-- A `safe { }` block inside an ordinary function gets the operation, overflow and `switch` rules. The ownership checks only run on functions that are safe as a whole.
+```walnut
+import module.io as io
+
+function show(string: s) -> void {
+    io::println(s);
+} end function show
+
+function main() -> int {
+    safe {
+        string: data = "hello";
+        show(std::core::move(data));
+        show(std::core::move(data));
+
+        int*: p = new int(5);
+        io::println(*p);
+        delete p;
+        delete p;
+
+        int*: kept = new int(7);
+        show("kept is never deleted");
+    }
+    return 0;
+} end function main
+```
+
+`walnut check` reports:
+
+```
+[Semantic] tracked.wal:11: 'data' is moved again, but it was already moved on line 10; give it a new value before moving it again
+[Semantic] tracked.wal:16: 'p' is deleted twice (it was already deleted on line 15)
+[Semantic] tracked.wal:18: 'kept' holds memory from 'new' that is never deleted before its block ends (this is an error in safe code)
+```
+
+- A `safe { }` block inside an ordinary function follows all the rules, including the tracking of `new`, `delete` and moves. The compiler follows the whole function, so it reports a problem when either part of it is in the block: memory from `new` made in the block that is never deleted, a value moved or deleted in the block and used later, or a use in the block of something moved or deleted before it.
 - The `--safe` command-line option is a different thing: it turns on the runtime checks for the whole program (see [Safety checks](#safety-checks)). The two work well together.
 - The library's own files are never checked as safe code, so safe code can use any module.
 
@@ -4251,11 +4294,12 @@ walnut leak warning: 3 objects (72 bytes) made with new were never deleted
 
 **Ownership checks.** `--ownership` looks at each function while compiling and reports:
 
-- Using a variable after `std::core::move` gave its value away. Assigning it a new value makes it usable again.
+- Using a variable after `std::core::move` gave its value away, and moving it a second time (`'data' is moved again, but it was already moved on line 5`). Assigning it a new value makes it usable again. Fields count too: after `std::core::move(self.items)` (or `this->items`, `box.items`, or `items` inside a method), using or moving that field again is an error until it gets a new value, and so is copying or passing the whole object while one of its fields is moved out.
 - Using a pointer through `*`, `->` or `[]` after it was deleted, and deleting it a second time. This follows copies: after `int*: alias = p;` or `int&: r = *p;` (or `p->field`, `p[i]`), `delete p;` makes `*alias`, `r` and `delete alias;` errors too.
 - Returning a reference to a local variable or by-value parameter, or a pointer to one (`return &value;`, or a pointer that was set to `&value`), including a field or element of one (`return local.field;` from a function returning a reference, `return &numbers[1];` for a local array).
 - Using a pointer to a variable, or to one of its fields or elements, after the block that variable was declared in has ended.
-- `delete` of something that wasn't made with `new`, such as `delete &value;` or a local array.
+- `delete` of something that wasn't made with `new`, such as `delete &value;` or a local array, and `delete` on memory from `new[]` (or `delete[]` on memory from `new`).
+- Deleting the same field twice in one function (`delete self.p;` twice with no new value in between).
 - As warnings: memory from `new` that a function never deletes, returns, stores or passes to another function, and a pointer that is given a new value while still holding memory from `new`.
 
 ```walnut
@@ -4291,7 +4335,7 @@ Pointers kept in a struct or class, including one pointing to the same type (`No
 
 What the compile-time checks can't see (a pointer passed through several functions, kept in a container that's copied, or a pointer into a `Vector` that has since grown) is left to the runtime checks: `--check-null` catches memory from `new` used after it was deleted, through any pointer to it, and `--check-dangling` catches a pointer to a local variable used after its function returned. `--check-dangling` compares the pointer with the part of the stack still in use, so it catches the pointer when it's used in the function that called the one that returned, or anywhere above that, but not after a deeper call has reused that part of the stack.
 
-The checks follow `if`, loops, `switch`, `break`, `continue`, `return` and `try`. When a variable is moved or deleted on only some of the paths, it isn't reported. A pointer passed to a function or stored somewhere else counts as handed off, so it's never reported as leaked. Functions that use `goto` stop being checked at the `goto`. The library's own files aren't checked.
+The checks follow `if`, loops, `switch`, `break`, `continue`, `return` and `try`. When a variable is moved or deleted on only some of the paths, using it afterwards is a warning (`'s' may be used after it was moved: it is moved on line 20 on some of the paths that lead here`), and so is moving or deleting it again, and memory from `new` that is deleted on only some paths. A pointer passed to a function or stored somewhere else counts as handed off, so it's never reported as leaked; in [safe code](#safe-code) passing it to a function only lends it. Functions that use `goto` stop being checked at the `goto`. The library's own files aren't checked.
 
 **Reading errors.** Each error names the file and line, says what is wrong and, where it can, how to fix it, then shows the line itself. A `^` marks the exact spot when Walnut knows it, so a forgotten `;` points at the end of the line that is missing it rather than at the next line:
 

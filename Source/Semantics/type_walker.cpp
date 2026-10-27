@@ -4105,28 +4105,27 @@ void TypeWalker::check_safe_expression(nodes::ASTNode* e) {
         return n && n->kind == K::Literal && static_cast<const nodes::Literal*>(n)->token_kind == tokenizing::Token::Kind::ThisKeyword;
     };
 
+    auto followed = [](const nodes::ASTNode* n) {
+        return n && n->kind == K::Identifier;
+    };
+
     switch (e->kind) {
-        case K::NewExpression:
-            not_safe(e, "'new' makes memory that has to be deleted by hand, so it");
-            break;
-        case K::DeleteExpression:
-            not_safe(e, "'delete'");
-            break;
         case K::DereferenceExpression: {
             auto* d = static_cast<nodes::DereferenceExpression*>(e);
-            if (!d->resolved && !is_this(d->operand) && raw_pointer(d->operand)) not_safe(e, "Reading through a raw pointer with '*'");
+            if (!d->resolved && !is_this(d->operand) && !followed(d->operand) && raw_pointer(d->operand)) not_safe(e, "Reading through a raw pointer with '*' (other than a local pointer variable)");
             break;
         }
         case K::UnaryExpression: {
             auto* u = static_cast<nodes::UnaryExpression*>(e);
             if (u->resolved || !raw_pointer(u->operand)) break;
-            if (u->op == tokenizing::Token::Kind::Asterisk) not_safe(e, "Reading through a raw pointer with '*'");
-            else if (u->op == tokenizing::Token::Kind::DoublePlus || u->op == tokenizing::Token::Kind::DoubleMinus) not_safe(e, "Moving a raw pointer with '++' or '--'");
+            if (u->op == tokenizing::Token::Kind::Asterisk) {
+                if (!followed(u->operand)) not_safe(e, "Reading through a raw pointer with '*' (other than a local pointer variable)");
+            } else if (u->op == tokenizing::Token::Kind::DoublePlus || u->op == tokenizing::Token::Kind::DoubleMinus) not_safe(e, "Moving a raw pointer with '++' or '--'");
             break;
         }
         case K::MemberAccessExpression: {
             auto* m = static_cast<nodes::MemberAccessExpression*>(e);
-            if (m->is_arrow() && m->arrow_ops.empty() && !is_this(m->m_object) && raw_pointer(m->m_object)) not_safe(e, "Using a raw pointer with '->'");
+            if (m->is_arrow() && m->arrow_ops.empty() && !is_this(m->m_object) && !followed(m->m_object) && raw_pointer(m->m_object)) not_safe(e, "Using a raw pointer with '->' (other than a local pointer variable)");
             if (!m->is_scope() && m->resolved && m->resolved->owner && m->resolved->owner->node && m->resolved->owner->node->kind == K::RecordDeclaration
                 && static_cast<nodes::RecordDeclaration*>(m->resolved->owner->node)->is_union()) not_safe(e, "Reading or writing a field of a union");
             break;

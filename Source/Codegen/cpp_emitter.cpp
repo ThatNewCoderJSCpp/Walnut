@@ -1262,7 +1262,8 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
 
             const std::string shown = "\"" + new_type_text(n, tc) + "\"";
             if (n->is_array) return "walnut_rt::safety::new_array<" + tc + ">(walnut_rt::to_ll(" + expr(n->array_size) + "), " + shown + ", __FILE__, __LINE__)";
-            return "walnut_rt::safety::track_new(new " + tc + "(" + call_args(n->ctor, n->args, e) + "), " + shown + ", __FILE__, __LINE__)";
+            const std::string args = !n->ctor && n->args.size() == 1 ? conv(n->args[0], allocated, e) : call_args(n->ctor, n->args, e);
+            return "walnut_rt::safety::track_new(new " + tc + "(" + args + "), " + shown + ", __FILE__, __LINE__)";
         }
 
         case K::DeleteExpression: {
