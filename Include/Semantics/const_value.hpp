@@ -24,6 +24,8 @@ public:
     }
 
     static bool fits(const WideInt& v, unsigned int bit_width, bool is_signed);
+    static bool fits_twos(const WideInt& v, unsigned int bit_width, bool is_signed);
+    static bool fits(const WideInt& v, unsigned int bit_width, bool is_signed, bool is_hardware);
 
 private:
     struct Hash {

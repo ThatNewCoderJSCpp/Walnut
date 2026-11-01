@@ -227,7 +227,7 @@ Here `before` is `6`, `swapped` is `true` and `now` is `100`.
 
 - `compare_exchange`, `compare_exchange_weak` and `wait` compare with `==`, so `T` must have one; for a struct, the automatic `==` compares the fields.
 - Using an operation the type doesn't support, such as `fetch_add` on an `Atomic<string>`, is a compile error that names it.
-- Integers of up to 64 bits wrap around on overflow, as in C++, instead of becoming `inf`.
+- Walnut integers keep their full range and their special values, and `+=`, `fetch_add` and the rest work exactly as they do outside an `Atomic` (overflow becomes `inf`). Integers up to `int` are lock-free; `long int` and wider use a lock, since a 64-bit magnitude plus its sign and special value doesn't fit in one 64-bit word. Hardware integers are C++'s own atomics and wrap around.
 - An `Atomic` can't be copied.
 
 **Memory orders.** Every method that reads or writes takes an optional last argument, a `MemoryOrder`: `relaxed`, `acquire`, `release`, `acq_rel` or `seq_cst`. It is `seq_cst` when left out, which is the safe choice. A weaker order can be faster when you know which ordering the program needs, such as `count.fetch_add(1, MemoryOrder::relaxed)` for a counter that is only read at the end. An order that doesn't apply to an operation, such as `release` on a `load`, is treated as `seq_cst`. The operators always use `seq_cst`.

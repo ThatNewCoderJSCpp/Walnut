@@ -1242,6 +1242,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             const bool lref = dst && dst->is_reference() && static_cast<ReferenceType*>(dst)->ref_qual() == RefQual::LValue;
             const bool rref = dst && dst->is_reference() && static_cast<ReferenceType*>(dst)->ref_qual() == RefQual::RValue;
             assign_typed(c, (lref || rref) ? static_cast<ReferenceType*>(dst)->referent() : dst, lref ? VC::LValue : VC::RValue);
+            if (!lref && !rref) check_clamped_cast(c, dst);
             break;
         }
 
@@ -2603,8 +2604,7 @@ Type* TypeWalker::type_of_literal(nodes::Literal* lit) {
                     WideFloat r;
                     if (wf_round_to_width(wf_from_int(*raw), bit_width_of_rank(n.rank), r) && r.is_infinite()) SemanticError::emit(m_reporter, file_of(lit), lit->line, "Literal", "'" + std::string(lit->value) + "' is too large for '" + type_str(t) + "', which can't represent it");
                 } else if (raw && !ConstTable::fits(*raw, bit_width_of_rank(n.rank), !n.is_unsigned)) {
-                    ConstValue v = m_eval.eval(lit);
-                    SemanticWarning::emit(m_warnings, file_of(lit), lit->line, "Overflow", "'" + std::string(lit->value) + "' doesn't fit in '" + type_str(t) + "', so it wraps around" + (v.is_int() ? " to " + v.i->to_string() : std::string()));
+                    report_overflow(lit, "'" + std::string(lit->value) + "' doesn't fit in '" + type_str(t) + "', so it becomes inf");
                 }
                 return t;
             }
@@ -2853,6 +2853,7 @@ Type* TypeWalker::type_binary(nodes::BinaryExpression* b, Symbol*& resolved_op) 
         if (plain(l)->is_special_value() && plain(r)->is_special_value()) return m_types.builtin(parser_types::PrimitiveType::BaseKind::Float);
         if (rank_conversion(r, l, m_types) != ConversionRank::None) return l;
         if (rank_conversion(l, r, m_types) != ConversionRank::None) return r;
+        if (Type* common = numeric_common_type(m_types, l, r)) return common;
     }
 
     return l ? l : r;
@@ -2922,6 +2923,7 @@ Type* TypeWalker::common_type(Type* a, Type* b, nodes::ASTNode* site) {
     if (is_dynamic_t(a) || is_dynamic_t(b)) return m_types.dynamic_();
     if (rank_conversion(b, a, m_types) != ConversionRank::None) return a;
     if (rank_conversion(a, b, m_types) != ConversionRank::None) return b;
+    if (Type* n = numeric_common_type(m_types, a, b)) return n;
     SemanticError::no_common_type(m_reporter, file_of(site), site->line, type_str(a), type_str(b));
     return a;
 }
@@ -6944,6 +6946,20 @@ bool TypeWalker::operator_arity_ok(nodes::OverloadableOperator op, bool is_membe
     }
 }
 
+void TypeWalker::report_overflow(nodes::ASTNode* at, const std::string& detail) {
+    if (m_types.overflow_errors) SemanticError::emit(m_reporter, file_of(at), at->line, "Overflow", detail + " (an error because of --check-overflow)");
+    else SemanticWarning::emit(m_warnings, file_of(at), at->line, "Overflow", detail);
+}
+
+void TypeWalker::check_clamped_cast(nodes::CastExpression* c, Type* dst) {
+    if (!c || !dst || dst->is_dependent()) return;
+    Type* t = m_types.strip_cv(dst);
+    if (!t || !t->is_builtin()) return;
+    const ConstValue v = m_eval.eval(c);
+    if (!v.ok() || v.fail != ConstValue::Fail::Clamped || !v.is_int()) return;
+    report_overflow(c, "this cast's value doesn't fit in '" + type_str(t) + "', so it is clamped to " + v.i->to_string());
+}
+
 ConstValue TypeWalker::eval_checked(nodes::ASTNode* e, bool required) {
     ConstValue v = m_eval.eval(e);
     if (!e) return v;
@@ -6961,7 +6977,7 @@ ConstValue TypeWalker::eval_checked(nodes::ASTNode* e, bool required) {
             break;
 
         case ConstValue::Fail::Wrapped:
-            SemanticWarning::emit(m_warnings, file_of(e), e->line, "Constant", "constant expression wrapped around its type: " + std::string(fail_message(v.fail)));
+            report_overflow(e, "constant expression went below zero: " + std::string(fail_message(v.fail)));
             break;
 
         case ConstValue::Fail::Undefined:

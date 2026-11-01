@@ -36,7 +36,8 @@ struct ConstValue {
         BadCall,
 
         Precision,         
-        Wrapped          
+        Wrapped,
+        Clamped
     } fail = Fail::NotConstant;
 
     const WideInt*   i = nullptr;
@@ -129,6 +130,7 @@ public:
     struct IntShape {
         unsigned bits = 0;
         bool     is_signed = true;
+        bool     is_hardware = false;
         bool     known() const { return bits != 0; }
     };
 
@@ -288,8 +290,10 @@ private:
     ConstValue finite_result(const WideFloat& r, const WideFloat& a, const WideFloat& b);
 
     ConstValue convert_to(const ConstValue& v, BuiltinType* dst);
+    ConstValue convert_to(const ConstValue& v, BuiltinType* dst, bool saturate);
 
     ConstValue bitnot_at_width(const WideInt& v, unsigned width, bool is_signed);
+    ConstValue bitnot_at_width(const WideInt& v, unsigned width, bool is_signed, bool is_hardware);
 };
 
 } // namespace semantics

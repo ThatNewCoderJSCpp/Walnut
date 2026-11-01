@@ -15,7 +15,8 @@ const char* fail_message(ConstValue::Fail f) {
         case ConstValue::Fail::Domain:        return "argument outside the real domain";
         case ConstValue::Fail::ShiftWidth:    return "shift count out of range";
         case ConstValue::Fail::Precision:     return "result is subnormal; precision lost";
-        case ConstValue::Fail::Wrapped:       return "unsigned arithmetic wrapped";
+        case ConstValue::Fail::Wrapped:       return "an unsigned result went below zero, so it became 0";
+        case ConstValue::Fail::Clamped:       return "the value doesn't fit in the type it's cast to, so it was clamped";
                 case ConstValue::Fail::Threw: return "constant evaluation threw an exception";
         case ConstValue::Fail::StepLimit:     return "constant evaluation exceeded its step limit (possible infinite loop or recursion)";
         case ConstValue::Fail::NoReturn:      return "constexpr function finished without returning a value";
@@ -367,7 +368,17 @@ ConstValue ConstEvaluator::narrow(ConstValue v, nodes::ASTNode* site) {
 
     if (v.is_int() && (b->base() == BK::Int || b->base() == BK::Char)) {
         if (!b->is_unsigned()) {
-            if (!ConstTable::fits(*v.i, w, true)) return ConstValue::error(ConstValue::Fail::Overflow);
+            if (!ConstTable::fits(*v.i, w, true, b->is_hardware())) return ConstValue::error(ConstValue::Fail::Overflow);
+            return v;
+        }
+
+        if (!b->is_hardware()) {
+            if (v.i->is_negative()) {
+                ConstValue out = make_int(WideInt());
+                if (out.ok()) out.fail = ConstValue::Fail::Wrapped;
+                return out;
+            }
+            if (!ConstTable::fits(*v.i, w, false)) return ConstValue::error(ConstValue::Fail::Overflow);
             return v;
         }
 
@@ -397,8 +408,9 @@ auto ConstEvaluator::shape_of(nodes::ASTNode* site) const -> IntShape {
     if (!t || !t->is_builtin()) return s;
     auto* b = static_cast<BuiltinType*>(t);
     if (b->base() != BK::Int && b->base() != BK::Char) return s;
-    s.bits      = bit_width_of_rank(b->width());
-    s.is_signed = !b->is_unsigned();
+    s.bits        = bit_width_of_rank(b->width());
+    s.is_signed   = !b->is_unsigned();
+    s.is_hardware = b->is_hardware();
     return s;
 }
 
@@ -521,7 +533,12 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
                 case TK::Minus:
                     if (v.is_int()) {
                         const IntShape sh = shape_of(u);
-                        if (sh.bits && !sh.is_signed) return make_int(from_twos(to_twos(-*v.i, sh.bits), sh.bits, false));
+                        if (sh.bits && !sh.is_signed && sh.is_hardware) return make_int(from_twos(to_twos(-*v.i, sh.bits), sh.bits, false));
+                        if (sh.bits && !sh.is_signed) {
+                            ConstValue out = make_int(WideInt());
+                            if (out.ok() && !v.i->is_zero()) out.fail = ConstValue::Fail::Wrapped;
+                            return out;
+                        }
                         return make_int(-*v.i);
                     }
                     if (v.is_float()) return make_float(-*v.f);
@@ -549,7 +566,7 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
             if (!t || !t->is_builtin()) return {};
             auto* b = static_cast<BuiltinType*>(t);
             if (b->base() != parser_types::PrimitiveType::BaseKind::Int) return {};
-            return bitnot_at_width(*v.i, bit_width_of_rank(b->width()), !b->is_unsigned());
+            return bitnot_at_width(*v.i, bit_width_of_rank(b->width()), !b->is_unsigned(), b->is_hardware());
         }
 
         case K::BinaryExpression: return eval_binary(static_cast<nodes::BinaryExpression*>(e));
@@ -581,7 +598,7 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
             if (Type* target = m_types.canonicalize(c->get_target()); target && target->is_reference()) return v;
             Type* dst = m_types.strip_cv(m_types.canonicalize(c->get_target()));
             if (!dst || !dst->is_builtin()) return {};
-            return convert_to(v, static_cast<BuiltinType*>(dst));
+            return convert_to(v, static_cast<BuiltinType*>(dst), true);
         }
 
         case K::ThrowExpression: return ConstValue::error(ConstValue::Fail::Threw);
@@ -611,7 +628,8 @@ auto ConstEvaluator::eval_literal(nodes::Literal* lit) -> ConstValue {
                 return wf_round_to_width(f, w, r) ? make_float(r) : make_float(f);
             }
 
-            return make_int(from_twos(to_twos(*v, w), w, !n.is_unsigned));
+            if (!ConstTable::fits(*v, w, !n.is_unsigned)) return make_special(SpecialKind::PosInf);
+            return make_int(v);
         }
 
         case TK::Float: {
@@ -1119,6 +1137,16 @@ ConstValue ConstEvaluator::eval_int_op(TK op, const WideInt& a, const WideInt& b
         case TK::Pipe:
         case TK::Caret: {
             if (!sh.known()) return {};
+            if (!sh.is_hardware) {
+                const WideUInt ma(a.magnitude()), mb(b.magnitude());
+                const WideUInt m = (op == TK::Ampersand) ? (ma & mb)
+                                 : (op == TK::Pipe)      ? (ma | mb)
+                                                         : (ma ^ mb);
+                const bool na = a.is_negative(), nb = b.is_negative();
+                const bool neg = sh.is_signed && ((op == TK::Ampersand) ? (na && nb) : (op == TK::Pipe) ? (na || nb) : (na != nb));
+                const WideInt r(m);
+                return make_int(neg && !m.is_zero() ? -r : r);
+            }
             const WideUInt ua = to_twos(a, sh.bits), ub = to_twos(b, sh.bits);
             const WideUInt r = (op == TK::Ampersand) ? (ua & ub)
                              : (op == TK::Pipe)      ? (ua | ub)
@@ -1133,7 +1161,7 @@ ConstValue ConstEvaluator::eval_int_op(TK op, const WideInt& a, const WideInt& b
             if (b >= WideInt(std::uint64_t(sh.bits))) return ConstValue::error(ConstValue::Fail::ShiftWidth);
             const std::size_t n  = std::size_t(b.get_lowest_bits());
             const WideInt     p2 = WideInt(WideUInt(std::uint64_t(1)) << n);
-            if (op == TK::DoubleGreaterThan) return make_int(a.floor_div(p2));  
+            if (op == TK::DoubleGreaterThan) return make_int(sh.is_hardware ? a.floor_div(p2) : a / p2);
             const WideInt r = a * p2;
             if (mul_wrapped(a, p2, r)) return ConstValue::error(ConstValue::Fail::Overflow);
             return make_int(r);                                                 
@@ -1210,6 +1238,10 @@ ConstValue ConstEvaluator::finite_result(const WideFloat& r, const WideFloat& a,
 }
 
 ConstValue ConstEvaluator::convert_to(const ConstValue& v, BuiltinType* dst) {
+    return convert_to(v, dst, false);
+}
+
+ConstValue ConstEvaluator::convert_to(const ConstValue& v, BuiltinType* dst, bool saturate) {
     using BK = parser_types::PrimitiveType::BaseKind;
 
     if (v.is_special()) {
@@ -1233,7 +1265,14 @@ ConstValue ConstEvaluator::convert_to(const ConstValue& v, BuiltinType* dst) {
             else return {};
                 
             if (dst->base() == BK::Char) return char_fits(w) ? make_int(w) : ConstValue{};
-            if (!ConstTable::fits(w, bit_width_of_rank(dst->width()), !dst->is_unsigned())) return {};
+            const unsigned dw = bit_width_of_rank(dst->width());
+            if (!ConstTable::fits(w, dw, !dst->is_unsigned(), dst->is_hardware())) {
+                if (!saturate || dst->is_hardware()) return {};
+                const WideInt mx(width_mask(dw));
+                ConstValue out = make_int((w.is_negative() && dst->is_unsigned()) ? WideInt() : (w.is_negative() ? -mx : mx));
+                if (out.ok()) out.fail = ConstValue::Fail::Clamped;
+                return out;
+            }
             return make_int(w);
         }
 
@@ -1255,9 +1294,18 @@ ConstValue ConstEvaluator::convert_to(const ConstValue& v, BuiltinType* dst) {
     }
 }
 
-ConstValue ConstEvaluator::bitnot_at_width(const WideInt& v, unsigned width, bool is_signed) {
+ConstValue ConstEvaluator::bitnot_at_width(const WideInt& v, unsigned width, bool is_signed, bool is_hardware) {
+    if (is_hardware) return bitnot_at_width(v, width, is_signed);
     if (v.is_undefined() || width == 0) return {};
     if (!ConstTable::fits(v, width, is_signed)) return {};
+    const WideUInt m = (~WideUInt(v.magnitude())) & width_mask(width);
+    const WideInt r(m);
+    return make_int(is_signed && v.is_negative() && !m.is_zero() ? -r : r);
+}
+
+ConstValue ConstEvaluator::bitnot_at_width(const WideInt& v, unsigned width, bool is_signed) {
+    if (v.is_undefined() || width == 0) return {};
+    if (!ConstTable::fits_twos(v, width, is_signed)) return {};
     WideUInt bits(v);
     WideUInt mask = width >= unsigned(WideInt::bits) ? ~WideUInt() : (WideUInt(std::uint64_t(1)) << width) - WideUInt(std::uint64_t(1));
     WideUInt flipped = (~bits) & mask;

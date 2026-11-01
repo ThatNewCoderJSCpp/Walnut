@@ -799,7 +799,7 @@ TypeQueryOverloadResult Instantiator::type_query_overload(RecordType* rt, std::s
 
         if (v.kind == ConstValue::Kind::Bool) {
             out.value = v.b ? 1 : 0;
-        } else if (v.kind == ConstValue::Kind::Int && v.i && ConstTable::fits(*v.i, 64, true)) {
+        } else if (v.kind == ConstValue::Kind::Int && v.i && ConstTable::fits_twos(*v.i, 64, true)) {
             const WideInt& x = *v.i;
             out.value = x.is_negative() ? -static_cast<std::int64_t>(WideInt(-x).get_lowest_bits()) : static_cast<std::int64_t>(x.get_lowest_bits());
         } else {
@@ -903,7 +903,7 @@ auto Instantiator::coerce_value_arg(nodes::TemplateParameter* p, Arg& a) -> Coer
     if (a.fvalue) return CoerceResult::fail(ArgCoerce::WrongForm);
     if (!a.value) return CoerceResult::fail(ArgCoerce::NotConstant);
 
-    return ConstTable::fits(*a.value, bit_width_of_rank(b->width()), !b->is_unsigned())
+    return ConstTable::fits(*a.value, bit_width_of_rank(b->width()), !b->is_unsigned(), b->is_hardware())
          ? CoerceResult{}
          : CoerceResult::fail(ArgCoerce::Overflow);
 }

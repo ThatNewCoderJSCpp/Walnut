@@ -231,6 +231,8 @@ Every `bool` trait comes in two parts: the value `std::traits::is_integer<T>` th
 | `is_float<T>` (`is_floating<T>`) | A float type: `float`, `short float`, `unsigned long float` and the rest |
 | `is_signed_float<T>`, `is_unsigned_float<T>` | A signed or an unsigned float type |
 | `is_hardware<T>` | One of the [hardware numbers](#hardware-numbers), such as `std::hardware_float` or `std::hardware_int32`, which are C++'s own `float`, `int32_t` and so on |
+| `is_hardware_int<T>` | One of the hardware integers, `std::hardware_int8` to `std::hardware_uint64` |
+| `is_hardware_float<T>` | `std::hardware_float` or `std::hardware_double` |
 | `is_number<T>` (`is_arithmetic<T>`) | An integer or float type |
 | `is_signed<T>`, `is_unsigned<T>` | A signed or an unsigned number type |
 | `is_bool<T>` (`is_boolean<T>`) | `bool` |
@@ -361,7 +363,7 @@ function main() -> int {
 } end function main
 ```
 
-Here `biggest` is `2147483647`, `smallest` is `-9223372036854775808`, `bits` is `64`, `precise` is `15` and `eps` is about `1.1e-16` (Walnut floats keep one more mantissa bit than IEEE `double`).
+Here `biggest` is `4294967295`, `smallest` is `-18446744073709551615`, `bits` is `64`, `precise` is `15` and `eps` is about `1.1e-16` (Walnut floats keep one more mantissa bit than IEEE `double`).
 
 **`integer_traits<T>`**, all `static constexpr`:
 
@@ -409,7 +411,7 @@ function show_range() -> void {
 } end function show_range
 
 function main() -> int {
-    static_assert(numeric_traits<int>::max() == 2147483647, "int max");
+    static_assert(numeric_traits<int>::max() == 4294967295, "int max");
     show_range<short int>();
     show_range<short float>();
     return 0;

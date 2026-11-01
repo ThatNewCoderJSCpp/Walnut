@@ -199,6 +199,8 @@ private:
     void walk_expr(nodes::ASTNode* e);
 
     void check_cast(nodes::CastExpression* c, Type* src, Type* dst);
+    void report_overflow(nodes::ASTNode* at, const std::string& detail);
+    void check_clamped_cast(nodes::CastExpression* c, Type* dst);
 
     Scope* member_scope_of(Type* t);
     Type* record_iteration(nodes::ForEachStatement* s, Type* container);

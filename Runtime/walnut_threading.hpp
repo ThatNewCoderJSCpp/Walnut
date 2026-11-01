@@ -213,10 +213,8 @@ struct atomic_storage {
 
 template <std::size_t B, mp::sign S>
 struct atomic_storage<wint<B, S>> {
-    static_assert(B <= 64, "Atomic only holds integers of up to 64 bits");
-    using type = std::conditional_t<S == mp::sign::is_signed,
-        std::conditional_t<(B <= 8), std::int8_t, std::conditional_t<(B <= 16), std::int16_t, std::conditional_t<(B <= 32), std::int32_t, std::int64_t>>>,
-        std::conditional_t<(B <= 8), std::uint8_t, std::conditional_t<(B <= 16), std::uint16_t, std::conditional_t<(B <= 32), std::uint32_t, std::uint64_t>>>>;
+    static_assert(B <= 32, "a lock-free Atomic holds Walnut integers of up to 32 bits; wider ones use a lock");
+    using type = std::uint64_t;
 };
 
 inline std::memory_order order_of(long long o) noexcept {
@@ -316,6 +314,7 @@ template <typename W>
 class atomic {
 public:
     using native_type = typename atomic_storage<W>::type;
+    static constexpr bool packed = is_int_v<W>;
 
     atomic() : m_value(native_type{}) {}
     explicit atomic(const W& v) : m_value(to(v)) {}
@@ -331,16 +330,16 @@ public:
         return ok;
     }
 
-    W fetch_add(const W& v) { return from(m_value.fetch_add(to(v))); }
-    W fetch_sub(const W& v) { return from(m_value.fetch_sub(to(v))); }
-    W fetch_and(const W& v) { return from(m_value.fetch_and(to(v))); }
-    W fetch_or(const W& v) { return from(m_value.fetch_or(to(v))); }
-    W fetch_xor(const W& v) { return from(m_value.fetch_xor(to(v))); }
+    W fetch_add(const W& v) { if constexpr (packed) return update([&](const W& x) { return op_add(x, v); }).first; else return from(m_value.fetch_add(to(v))); }
+    W fetch_sub(const W& v) { if constexpr (packed) return update([&](const W& x) { return op_sub(x, v); }).first; else return from(m_value.fetch_sub(to(v))); }
+    W fetch_and(const W& v) { if constexpr (packed) return update([&](const W& x) { return op_bitand(x, v); }).first; else return from(m_value.fetch_and(to(v))); }
+    W fetch_or(const W& v) { if constexpr (packed) return update([&](const W& x) { return op_bitor(x, v); }).first; else return from(m_value.fetch_or(to(v))); }
+    W fetch_xor(const W& v) { if constexpr (packed) return update([&](const W& x) { return op_bitxor(x, v); }).first; else return from(m_value.fetch_xor(to(v))); }
 
-    W increment() { return from(static_cast<native_type>(m_value.fetch_add(native_type(1)) + native_type(1))); }
-    W decrement() { return from(static_cast<native_type>(m_value.fetch_sub(native_type(1)) - native_type(1))); }
-    W add(const W& v) { return from(static_cast<native_type>(m_value.fetch_add(to(v)) + to(v))); }
-    W sub(const W& v) { return from(static_cast<native_type>(m_value.fetch_sub(to(v)) - to(v))); }
+    W increment() { if constexpr (packed) return update([&](const W& x) { return op_add(x, W(1)); }).second; else return from(static_cast<native_type>(m_value.fetch_add(native_type(1)) + native_type(1))); }
+    W decrement() { if constexpr (packed) return update([&](const W& x) { return op_sub(x, W(1)); }).second; else return from(static_cast<native_type>(m_value.fetch_sub(native_type(1)) - native_type(1))); }
+    W add(const W& v) { if constexpr (packed) return update([&](const W& x) { return op_add(x, v); }).second; else return from(static_cast<native_type>(m_value.fetch_add(to(v)) + to(v))); }
+    W sub(const W& v) { if constexpr (packed) return update([&](const W& x) { return op_sub(x, v); }).second; else return from(static_cast<native_type>(m_value.fetch_sub(to(v)) - to(v))); }
 
     W load_with(long long o) const { return from(m_value.load(load_order(o))); }
     void store_with(const W& v, long long o) { m_value.store(to(v), store_order(o)); }
@@ -358,36 +357,41 @@ public:
     template <typename D>
     W fetch_add_with(const D& v, long long o) {
         if constexpr (std::is_pointer_v<native_type>) return from(m_value.fetch_add(delta_of(v), order_of(o)));
+        else if constexpr (packed) return update([&](const W& x) { return op_add(x, W(v)); }, o).first;
         else return from(m_value.fetch_add(to(v), order_of(o)));
     }
 
     template <typename D>
     W fetch_sub_with(const D& v, long long o) {
         if constexpr (std::is_pointer_v<native_type>) return from(m_value.fetch_sub(delta_of(v), order_of(o)));
+        else if constexpr (packed) return update([&](const W& x) { return op_sub(x, W(v)); }, o).first;
         else return from(m_value.fetch_sub(to(v), order_of(o)));
     }
 
     template <typename D>
     W add_with(const D& v, long long o) {
         if constexpr (std::is_pointer_v<native_type>) { const std::ptrdiff_t d = delta_of(v); return from(m_value.fetch_add(d, order_of(o)) + d); }
+        else if constexpr (packed) return update([&](const W& x) { return op_add(x, W(v)); }, o).second;
         else return from(static_cast<native_type>(m_value.fetch_add(to(v), order_of(o)) + to(v)));
     }
 
     template <typename D>
     W sub_with(const D& v, long long o) {
         if constexpr (std::is_pointer_v<native_type>) { const std::ptrdiff_t d = delta_of(v); return from(m_value.fetch_sub(d, order_of(o)) - d); }
+        else if constexpr (packed) return update([&](const W& x) { return op_sub(x, W(v)); }, o).second;
         else return from(static_cast<native_type>(m_value.fetch_sub(to(v), order_of(o)) - to(v)));
     }
 
-    W and_with(const W& v, long long o) { return from(static_cast<native_type>(m_value.fetch_and(to(v), order_of(o)) & to(v))); }
-    W or_with(const W& v, long long o) { return from(static_cast<native_type>(m_value.fetch_or(to(v), order_of(o)) | to(v))); }
-    W xor_with(const W& v, long long o) { return from(static_cast<native_type>(m_value.fetch_xor(to(v), order_of(o)) ^ to(v))); }
+    W and_with(const W& v, long long o) { if constexpr (packed) return update([&](const W& x) { return op_bitand(x, v); }, o).second; else return from(static_cast<native_type>(m_value.fetch_and(to(v), order_of(o)) & to(v))); }
+    W or_with(const W& v, long long o) { if constexpr (packed) return update([&](const W& x) { return op_bitor(x, v); }, o).second; else return from(static_cast<native_type>(m_value.fetch_or(to(v), order_of(o)) | to(v))); }
+    W xor_with(const W& v, long long o) { if constexpr (packed) return update([&](const W& x) { return op_bitxor(x, v); }, o).second; else return from(static_cast<native_type>(m_value.fetch_xor(to(v), order_of(o)) ^ to(v))); }
 
-    W fetch_and_with(const W& v, long long o) { return from(m_value.fetch_and(to(v), order_of(o))); }
-    W fetch_or_with(const W& v, long long o) { return from(m_value.fetch_or(to(v), order_of(o))); }
-    W fetch_xor_with(const W& v, long long o) { return from(m_value.fetch_xor(to(v), order_of(o))); }
+    W fetch_and_with(const W& v, long long o) { if constexpr (packed) return update([&](const W& x) { return op_bitand(x, v); }, o).first; else return from(m_value.fetch_and(to(v), order_of(o))); }
+    W fetch_or_with(const W& v, long long o) { if constexpr (packed) return update([&](const W& x) { return op_bitor(x, v); }, o).first; else return from(m_value.fetch_or(to(v), order_of(o))); }
+    W fetch_xor_with(const W& v, long long o) { if constexpr (packed) return update([&](const W& x) { return op_bitxor(x, v); }, o).first; else return from(m_value.fetch_xor(to(v), order_of(o))); }
 
     W fetch_min_with(const W& v, long long o) {
+        if constexpr (packed) return update([&](const W& x) { return v < x ? v : x; }, o).first;
         const native_type want = to(v);
         native_type cur = m_value.load(std::memory_order_relaxed);
         while (want < cur && !m_value.compare_exchange_weak(cur, want, order_of(o), std::memory_order_relaxed)) {}
@@ -395,6 +399,7 @@ public:
     }
 
     W fetch_max_with(const W& v, long long o) {
+        if constexpr (packed) return update([&](const W& x) { return x < v ? v : x; }, o).first;
         const native_type want = to(v);
         native_type cur = m_value.load(std::memory_order_relaxed);
         while (cur < want && !m_value.compare_exchange_weak(cur, want, order_of(o), std::memory_order_relaxed)) {}
@@ -417,13 +422,29 @@ private:
         else return static_cast<std::ptrdiff_t>(to_native<long long>(v));
     }
 
+    template <typename F>
+    std::pair<W, W> update(F f, long long o = 4) {
+        native_type cur = m_value.load(std::memory_order_relaxed);
+        for (;;) {
+            const W old = from(cur);
+            const W now = f(old);
+            if (m_value.compare_exchange_weak(cur, to(now), order_of(o), std::memory_order_relaxed)) return { old, now };
+        }
+    }
+
     static native_type to(const W& v) {
         if constexpr (std::is_same_v<native_type, W>) return v;
+        else if constexpr (packed) return v.get_lowest_bits() | (static_cast<std::uint64_t>(v.is_negative() && v.is_finite()) << 32) | (static_cast<std::uint64_t>(v.kind()) << 33);
         else return to_native<native_type>(v);
     }
 
     static W from(native_type v) {
         if constexpr (std::is_same_v<native_type, W>) return v;
+        else if constexpr (packed) {
+            const special_kind k = static_cast<special_kind>((v >> 33) & 0x7u);
+            if (k != special_kind::none) return W::from_kind(k);
+            return W::from_magnitude(typename W::mag_type(v & 0xFFFFFFFFull), ((v >> 32) & 1u) != 0);
+        }
         else return from_native<W>(v);
     }
 

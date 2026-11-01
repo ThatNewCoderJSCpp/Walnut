@@ -122,6 +122,7 @@ struct Options {
     bool                                             verbose = false;
     bool                                             ownership = false;
     bool                                             warn_unused = false;
+    bool                                             overflow_errors = false;
     std::vector<std::string>                         safety;
 };
 
@@ -174,7 +175,8 @@ void print_usage(std::ostream& os) {
           "safety (all off unless asked, since each one makes the program slower or bigger):\n"
           "  --check-bounds     stop with the .wal line when an index is outside memory made with new[]\n"
           "  --check-null       stop with the .wal line when a null or deleted pointer is used\n"
-          "  --check-overflow   stop with the .wal line when integer +, -, * or negation overflows\n"
+          "  --check-overflow   stop with the .wal line when integer +, -, * or negation overflows or a cast clamps;\n"
+          "                     constants that overflow or clamp become compile errors instead of warnings\n"
           "  --check-dangling   stop with the .wal line when a pointer to a local variable is used after its function returned\n"
           "  --checks           all four checks above\n"
           "  --leak-check[=warn|error]  list memory from new that was never deleted when the program ends;\n"
@@ -338,16 +340,16 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         else if (a == "--time")        o.report_timing = true;
         else if (a == "--check-bounds")   o.safety.push_back("-DWALNUT_CHECK_BOUNDS");
         else if (a == "--check-null")     o.safety.push_back("-DWALNUT_CHECK_NULL");
-        else if (a == "--check-overflow") o.safety.push_back("-DWALNUT_CHECK_OVERFLOW");
+        else if (a == "--check-overflow") { o.safety.push_back("-DWALNUT_CHECK_OVERFLOW"); o.overflow_errors = true; }
         else if (a == "--check-dangling") o.safety.push_back("-DWALNUT_CHECK_DANGLING");
-        else if (a == "--checks")      { for (const char* d : { "-DWALNUT_CHECK_BOUNDS", "-DWALNUT_CHECK_NULL", "-DWALNUT_CHECK_OVERFLOW", "-DWALNUT_CHECK_DANGLING" }) o.safety.push_back(d); }
+        else if (a == "--checks")      { for (const char* d : { "-DWALNUT_CHECK_BOUNDS", "-DWALNUT_CHECK_NULL", "-DWALNUT_CHECK_OVERFLOW", "-DWALNUT_CHECK_DANGLING" }) o.safety.push_back(d); o.overflow_errors = true; }
         else if (a == "--leak-check" || a == "--leak-check=warn") o.safety.push_back("-DWALNUT_LEAK_CHECK");
         else if (a == "--leak-check=error") { o.safety.push_back("-DWALNUT_LEAK_CHECK"); o.safety.push_back("-DWALNUT_LEAK_ERROR"); }
         else if (a.rfind("--leak-check=", 0) == 0) { std::cerr << "walnut: --leak-check takes warn or error, not '" << a.substr(13) << "'\n"; exit_code = 2; return false; }
         else if (a == "--gc")          o.safety.push_back("-DWALNUT_GC");
         else if (a == "--ownership")   o.ownership = true;
         else if (a == "--warn-unused") o.warn_unused = true;
-        else if (a == "--safe")        { for (const char* d : { "-DWALNUT_CHECK_BOUNDS", "-DWALNUT_CHECK_NULL", "-DWALNUT_CHECK_OVERFLOW", "-DWALNUT_CHECK_DANGLING", "-DWALNUT_LEAK_CHECK" }) o.safety.push_back(d); o.ownership = true; }
+        else if (a == "--safe")        { for (const char* d : { "-DWALNUT_CHECK_BOUNDS", "-DWALNUT_CHECK_NULL", "-DWALNUT_CHECK_OVERFLOW", "-DWALNUT_CHECK_DANGLING", "-DWALNUT_LEAK_CHECK" }) o.safety.push_back(d); o.ownership = true; o.overflow_errors = true; }
         else if (a == "-v" || a == "--verbose") o.verbose = true;
         else if (a == "-h" || a == "--help") { print_usage(std::cout); return false; }
         else if (a == "-L" || a == "-l") { const char* v = need(i, a); if (!v) return false; o.native_link.push_back(a + v); }
@@ -552,6 +554,7 @@ bool generate(const Options& o, std::string& cpp, walnut::codegen::SplitProgram*
     if (o.report_timing) compiler.report_timing();
     if (o.ownership) compiler.enable_ownership_checks();
     if (o.warn_unused) compiler.enable_unused_warnings();
+    if (o.overflow_errors) compiler.enable_overflow_errors();
     compiler.set_native_header_args([&o](bool cpp) { return native_header_args(o, cpp); });
     if (!route_messages(compiler.error_reporter(), o.errors_to, "--errors")) return false;
     if (!route_messages(compiler.warning_reporter(), o.warnings_to, "--warnings")) return false;
@@ -1250,6 +1253,7 @@ int highlight(const Options& o) {
     compiler.warn_silent();
     if (o.ownership) compiler.enable_ownership_checks();
     if (o.warn_unused) compiler.enable_unused_warnings();
+    if (o.overflow_errors) compiler.enable_overflow_errors();
     for (const auto& d : o.include_dirs) compiler.add_include_dir(d);
     for (const auto& d : o.module_dirs) compiler.add_module_dir(d);
     for (const auto& d : o.module_env_dirs) compiler.add_module_dir(d);

@@ -827,7 +827,7 @@ std::string CppEmitter::convert(const std::string& code, Type* from, Type* to, c
     auto* fb = as_builtin(f);
     auto* tb = as_builtin(t);
 
-    if (f->is_special_value() && tb) return "walnut_rt::cast<" + cpp_type(t, at) + ">(" + code + ")";
+    if (f->is_special_value() && tb) return "walnut_rt::cast<" + cpp_type(t, at) + ">(" + special_constant_of(code) + ")";
 
     if (fb && tb) {
         if ((fb->base() == BK::String || fb->base() == BK::Text) && (tb->base() == BK::String || tb->base() == BK::Text)) return code;
@@ -1039,7 +1039,7 @@ std::string CppEmitter::constant_value_code(const semantics::ConstValue& v, Type
         return float_literal(os.str(), vt, at);
     }
     if (v.is_special()) {
-        if (vt && vt->is_builtin()) return "walnut_rt::cast<" + cpp_type(vt, at) + ">(" + special_code(v.sp) + ")";
+        if (vt && vt->is_builtin()) return "walnut_rt::cast<" + cpp_type(vt, at) + ">(" + special_constant_code(v.sp) + ")";
         return special_code(v.sp);
     }
     if (v.is_string()) {
@@ -1047,6 +1047,30 @@ std::string CppEmitter::constant_value_code(const semantics::ConstValue& v, Type
         return cpp_string_literal(*v.s);
     }
     return "0";
+}
+
+std::string CppEmitter::special_constant_code(semantics::SpecialKind k) {
+    switch (k) {
+        case semantics::SpecialKind::PosInf:        return "walnut_rt::infinity_v";
+        case semantics::SpecialKind::NegInf:        return "walnut_rt::neg_infinity_v";
+        case semantics::SpecialKind::Nan:           return "walnut_rt::nan_v";
+        case semantics::SpecialKind::Undefined:     return "walnut_rt::undefined_v";
+        case semantics::SpecialKind::Indeterminate: return "walnut_rt::indeterminate_v";
+    }
+    return special_code(k);
+}
+
+std::string CppEmitter::special_constant_of(const std::string& code) {
+    static constexpr semantics::SpecialKind kinds[] = {
+        semantics::SpecialKind::PosInf, semantics::SpecialKind::NegInf, semantics::SpecialKind::Nan,
+        semantics::SpecialKind::Undefined, semantics::SpecialKind::Indeterminate,
+    };
+    for (semantics::SpecialKind k : kinds) {
+        if (code == special_code(k)) return special_constant_code(k);
+    }
+    if (code == "walnut_rt::op_neg(" + special_code(semantics::SpecialKind::PosInf) + ")") return special_constant_code(semantics::SpecialKind::NegInf);
+    if (code == "walnut_rt::op_neg(" + special_code(semantics::SpecialKind::NegInf) + ")") return special_constant_code(semantics::SpecialKind::PosInf);
+    return code;
 }
 
 std::string CppEmitter::special_code(semantics::SpecialKind k) {
@@ -1066,7 +1090,7 @@ std::string CppEmitter::literal(nodes::Literal* lit) {
     switch (lit->get_kind()) {
         case TK::Integer: {
             semantics::ConstValue v = m_eval.eval(lit);
-            if (v.is_float()) return constant_value_code(v, t, lit);
+            if (v.is_float() || v.is_special()) return constant_value_code(v, t, lit);
             if (!v.is_int()) { fail_at(lit, "integer literal could not be evaluated"); return "0"; }
             return int_literal(*v.i, t, lit);
         }

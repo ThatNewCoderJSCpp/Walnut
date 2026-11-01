@@ -114,6 +114,7 @@ public:
     CompilerPipeline& enable_ownership_checks(bool on = true) { m_ownership = on; return *this; }
     bool ownership_checks() const noexcept { return m_ownership; }
     CompilerPipeline& enable_unused_warnings(bool on = true) { m_warn_unused = on; return *this; }
+    CompilerPipeline& enable_overflow_errors(bool on = true) { types.overflow_errors = on; return *this; }
     bool unused_warnings() const noexcept { return m_warn_unused; }
 
     CompilerPipeline& enable_token_output() {

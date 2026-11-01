@@ -168,7 +168,7 @@ namespace std {
 
             template <typename T>
             struct SmallInteger<T, true> {
-                static constexpr bool: value = sizeof(T) <= 8;
+                static constexpr bool: value = std::traits::is_hardware<T> ? sizeof(T) <= 8 : std::traits::integer_bits<T> <= 32;
             } end struct SmallInteger
 
             template <typename T>

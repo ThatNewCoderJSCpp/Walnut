@@ -14,6 +14,8 @@ namespace semantics {
 
 Type* apply_type_op(TypeContext& ctx, parser_types::TypeOp op, const std::vector<Type*>& args, std::string& error);
 
+Type* numeric_common_type(TypeContext& ctx, Type* a, Type* b);
+
 std::optional<std::size_t> enumerator_count(Type* t);
 
 std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, parser_types::TypeTrait trait, const std::vector<Type*>& args, std::string& error);

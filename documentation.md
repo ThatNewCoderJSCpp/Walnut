@@ -177,7 +177,7 @@ Here `change` ends up as `0`.
 
 ### Hardware numbers
 
-Walnut's own numbers are Fizmo's exact multiprecision numbers: every width is the same on every platform, and integers can hold `inf`, `nan`, `undefined` and `indeterminate`. That exactness costs time. The hardware types are the processor's own numbers instead: they become C++'s `float`, `double`, `int32_t`, `uint8_t` and so on in the generated code, so arithmetic on them runs at full hardware speed. Use them for code that does a lot of number crunching and doesn't need Walnut's exact formats or special values: games, graphics, physics, noise, pixel and voxel data. They come with `core`, so they need no `import`.
+Walnut's own numbers are Fizmo's exact multiprecision numbers: every width is the same on every platform, and integers can hold `inf`, `nan`, `undefined` and `indeterminate`. Integers use Fizmo's full width: the bits all hold the magnitude and the sign is kept separately, so an `int` goes from -4294967295 to 4294967295 and a `long int` from -18446744073709551615 to 18446744073709551615. That exactness costs some time. The hardware types are the processor's own numbers instead: they become C++'s `float`, `double`, `int32_t`, `uint8_t` and so on in the generated code, so arithmetic on them runs at full hardware speed. Use them for code that does a lot of number crunching and doesn't need Walnut's exact formats or special values: games, graphics, physics, noise, pixel and voxel data. They come with `core`, so they need no `import`.
 
 | Type | C++ type | Bits | Same width as |
 |---|---|---|---|
@@ -221,11 +221,11 @@ Here `half` is `0.5`, `area` is `6.5`, `exact` is the same value as a `short flo
   - integers to floats whose values all fit (up to 24 bits for `std::hardware_float` and 53 for `std::hardware_double`).
 
   Everything else, such as signed to unsigned, `int` to `std::hardware_int32`, or a float to an integer, needs `static_cast`.
-- **Mixing** a hardware type with a Walnut type of the same width gives the Walnut type, since that one can hold both. Mixing two hardware types gives the wider.
+- **Mixing** a hardware type with a Walnut type gives a Walnut type wide enough for both (a float if either one is a float). Mixing two hardware types gives the wider; at the same width, signed and unsigned give the unsigned one, as in C++, and an integer with a float gives the float. `std::traits::common_type` follows the same rules.
 - **Overloads.** A conversion that stays among hardware types, or among Walnut types, is a better match than one that crosses between them. So a function with both a `long int` and a `std::hardware_int64` overload gets the `long int` one for an `int` argument and the `std::hardware_int64` one for a `std::hardware_int32` argument. The containers in `collections` use this for fast indexing with hardware integers.
 - **C and C++** see them as their C++ types, so they pass to `extern "C"` and `extern "C++"` functions without any conversion.
 - Printing, `${}` interpolation and `.to_string()` work as for the other numbers, and so do `var`, the containers and the `std::traits` traits.
-- `std::traits::is_hardware<T>` is `true` for all of them. They are type aliases for `__hardware(T)`, a built-in type operation that takes a Walnut type of the same width (`__hardware(short short float)`, `__hardware(unsigned int)` and so on).
+- `std::traits::is_hardware<T>` is `true` for all of them; `is_hardware_int<T>` and `is_hardware_float<T>` pick out the integers and the floats. `integer_rank`, `float_rank`, `integer_bits`, `float_bits` and `common_type` all work on them. They are type aliases for `__hardware(T)`, a built-in type operation that takes a Walnut type of the same width (`__hardware(short short float)`, `__hardware(unsigned int)` and so on).
 
 **Hardware floats**
 - **Special values** follow IEEE 754, like C++: `inf` and `-inf` work, and `nan`, `undefined` and `indeterminate` all become NaN. Dividing by zero gives `inf` (or NaN for `0.0 / 0.0`) instead of `undefined`. `x is nan` and `x is inf` work; `x is undefined` and `x is indeterminate` are `false`.
@@ -234,9 +234,10 @@ Here `half` is `0.5`, `area` is `6.5`, `exact` is the same value as a `short flo
 - Printing writes the shortest text that reads back as the same value. `std::traits::float_bits` gives 32 or 64 and `float_mantissa_bits` gives C's 23 or 52 stored bits.
 
 **Hardware integers**
-- **Overflow wraps around** in two's complement, the same as Walnut's own integers: `std::hardware_int8: x = 127; x++;` makes `x` `-128`. This is defined behavior, not C++'s undefined signed overflow, and it costs nothing. In [safe code](#safe-code) overflow stops the program instead, as it does for Walnut integers.
+- **Overflow wraps around** in two's complement, unlike Walnut's own integers (which become `inf`): `std::hardware_int8: x = 127; x++;` makes `x` `-128`. This is defined behavior, not C++'s undefined signed overflow, and it costs nothing. In [safe code](#safe-code) overflow stops the program instead, as it does for Walnut integers.
 - **No special values.** A hardware integer can't hold `inf`, `nan`, `undefined` or `indeterminate`: putting one in is a compile error, converting a Walnut integer that holds one stops the program with a runtime error, and `x is nan` is always `false`. Dividing or taking `%` by zero stops the program with a runtime error, since there's no `undefined` to give back. `std::traits::integer_traits<T>::has_special_values` is `false` for them.
-- A shift by a negative amount or by at least the type's width stops the program, the same as for Walnut integers, and `>>` keeps the sign of signed values.
+- A shift by a negative amount or by at least the type's width stops the program, the same as for Walnut integers, and `>>` keeps the sign of signed values in two's complement (`-7 >> 1` is -4).
+- Converting a Walnut integer that's out of a hardware integer's range gives the nearest value it can hold, as other casts do.
 - Converting a float to a hardware integer cuts off the fraction, as `static_cast` does for Walnut integers; `nan`, infinity or a value outside the type's range stops the program.
 - `std::traits::make_signed` and `make_unsigned` go between the signed and unsigned hardware types of the same width, `promote` and `demote` move between hardware widths (8 to 64 bits), `float_from_int` gives `std::hardware_float` (or `std::hardware_double` for 64 bits), and `int_from_float` gives the hardware integer of the same width.
 
@@ -299,8 +300,8 @@ function main() -> int {
 ```
 
 **Checks**
-- An integer that doesn't fit its suffix's type is a warning, and it wraps around: `300ss` becomes 44.
-- Negating an unsigned literal (`-5u`) is a warning, because it wraps to a large positive value.
+- An integer that doesn't fit its suffix's type is a warning, and it becomes `inf`: `300ss` is `inf`, since a `short short int` holds -255 to 255.
+- Negating an unsigned literal (`-5u`) is a warning, because an unsigned result below zero becomes 0.
 - A float too small for its suffix's type is a warning, because it becomes 0.
 - A float too large for its type is an error, because the type can't represent it (`1e400s`). So is an integer too large for every integer type.
 - Suffixes are part of the language. They can't be overloaded, and you can't define new ones.
@@ -341,7 +342,7 @@ Here `a` is `undefined`, `empty` is `true`, `f` is `undefined`, `n` is `inf`, `c
 **Where they come from**
 - The keywords `inf`, `nan`, `undefined` and `indeterminate`. On their own they take the type they go into, so `int: x = undefined;` needs no cast. `auto` and `var` make them a `float`.
 - Arithmetic: dividing a non-zero number by zero gives `undefined`, for floats as well as integers (not `inf` as in C). `0 / 0` and the other indeterminate forms give `indeterminate`, and a result that would be complex gives `nan`.
-- A float that overflows becomes `inf`. Integer overflow still wraps around; it never becomes `inf`.
+- A float or integer that overflows becomes `inf` (or `-inf`). An unsigned integer that would go below zero becomes 0.
 
 **Arithmetic with special values**
 - They pass through: `undefined + 1` is `undefined`, `inf + 1` is `inf` and `-inf * 2` is `-inf`.
@@ -971,8 +972,10 @@ function main() -> int {
 Here `quotient` is `3`, `remainder` is `2`, `power` is `289`, `mixed` is `50`, `tower` is `512`, `bits` is `21`, `before` is `0` and `after` is `2`.
 
 **Integer arithmetic**
-- Overflow wraps around, as in two's complement: `int` 2147483647 + 1 is -2147483648, and `unsigned int` 0 - 1 is 4294967295.
-- Division truncates toward zero (`-7 / 2` is -3), and `>>` keeps the sign (`-7 >> 1` is -4).
+- Integers are sign and magnitude, not two's complement: an `int` holds -4294967295 to 4294967295, every bit going to the magnitude.
+- Overflow becomes `inf` or `-inf`: `int` 4294967295 + 1 is `inf`. An unsigned result below zero becomes 0, so `unsigned int` 0 - 1 is 0. With [`--check-overflow`](#safety-checks) or in [safe code](#safe-code), both stop the program instead.
+- Division truncates toward zero (`-7 / 2` is -3), and so does `>>`, which shifts the magnitude and keeps the sign (`-7 >> 1` is -3). `<<` that pushes bits out of the magnitude overflows to `inf`.
+- `&`, `|` and `^` work on the magnitudes, and on the signs as one more bit: `-5 & 3` is 1 and `-5 | 3` is -7. `~` flips every magnitude bit and keeps the sign, so `~0` is 4294967295 for an `int` and `~~x` is always `x` (except that `~` of the largest magnitude is 0, which has no sign).
 
 Integer division or `%` by zero doesn't stop the program: it gives `undefined` (or `indeterminate` for `0 / 0`). See [Special values](#special-values).
 
@@ -1175,12 +1178,15 @@ function main() -> int {
     *writable = 9;
     bump(n);
     int: truncated = static_cast<int>(3.99);
-    unsigned int: wrapped = static_cast<unsigned int>(-5);
+    unsigned int: clamped = static_cast<unsigned int>(-5);
+    short short int: small = static_cast<short short int>(1000);
     return 0;
 } end function main
 ```
 
-Here `n` ends as `10`, `truncated` is `3`, and `wrapped` is `4294967291`.
+Here `n` ends as `10`, `truncated` is `3`, `clamped` is `0` and `small` is `255`.
+
+A cast to an integer type that can't hold the value gives the nearest value it can: the largest or smallest of the type, or 0 for a negative value going into an unsigned type. Floats cast the same way, after the fraction is cut off; a float holding `inf` or another special value keeps it. Clamping counts as overflow: when the compiler can work out the value, as for `small` above, it warns, and with `--check-overflow` the warning is an error that stops the build. With `--check-overflow`, a cast that clamps while the program runs stops it too.
 
 **`const_cast` rules**
 - The target must be a pointer or reference type, and only `const` and `volatile` may differ between the two types.
@@ -4134,7 +4140,7 @@ Code that isn't marked `safe` can already do anything, so there is no `unsafe` k
   Fields can be deleted too, as in a destructor's `delete this->p;`. Within one function, deleting the same field twice, or using it after deleting it, is an error until it's given a new value (`self.p = nullptr;`).
 - **Moves are tracked.** After `std::core::move(data)`, using `data` or moving it again is an error until it's given a new value. This covers fields (`std::core::move(self.items)`), moving inside a loop (the second time through moves it again), moving on only some paths (`if (c) then { take(std::core::move(data)); } take(data);`), and using a whole object after one of its fields was moved out.
 - **No escape hatches.** `reinterpret_cast`, `const_cast`, reading or writing a field of a `union`, `goto`, and `extern "C"` or `extern "C++"` code blocks are errors.
-- **Integer overflow stops the program.** `+`, `-`, `*`, negation, `++`, `--` and the compound assignments (`+=` and so on) on integers are checked while the program runs, and a result that doesn't fit stops it with `walnut runtime error: integer overflow in safe code: ...` and exit code 70. Outside safe code they wrap around, unless the program is built with `--check-overflow`.
+- **Integer overflow stops the program.** `+`, `-`, `*`, negation, `++`, `--` and the compound assignments (`+=` and so on) on integers are checked while the program runs, and a result that doesn't fit stops it with `walnut runtime error: integer overflow in safe code: ...` and exit code 70. Outside safe code they become `inf` (or 0 for an unsigned result below zero), unless the program is built with `--check-overflow`.
 - **Ownership is checked.** The compile-time checks of [`--ownership`](#safety-checks) (use after move, use after `delete`, references and pointers to locals that are gone) run on all safe code without the flag, and what would be warnings there are errors.
 - **`switch` is exhaustive.** A case can't fall through to the next one unless it ends with `fallthrough;`, and a `switch` on an enum must handle every value or have a `default:`.
 
@@ -4271,7 +4277,7 @@ Walnut programs are as fast as C++ by default, which also means a wrong index, a
 |---|---|---|
 | `--check-bounds` | Stops the program when an index reaches outside memory made with `new T[n]`, or into memory that was already deleted | Every `new` is recorded, and pointer indexing looks it up |
 | `--check-null` | Stops the program when `*p`, `p->` or `p[i]` uses a null or deleted pointer, and when something is deleted twice or wasn't made with `new` | Every `new` is recorded, and each dereference checks the pointer |
-| `--check-overflow` | Stops the program when `+`, `-`, `*` or negation of fixed-width integers doesn't fit | A check after each of those operations |
+| `--check-overflow` | Stops the program when `+`, `-`, `*` or negation of fixed-width integers doesn't fit, or a cast clamps; constants that overflow or clamp become compile errors instead of warnings | A check after each of those operations and casts |
 | `--check-dangling` | Stops the program when `*p`, `p->` or `p[i]` uses a pointer to a local variable of a function that has already returned | Each dereference compares the pointer with the stack |
 | `--checks` | All four above | |
 | `--leak-check` | When the program ends, lists the memory from `new` that was never deleted, grouped by the line that made it. `--leak-check=error` also makes the program exit with code 3. Setting `WALNUT_LEAKS` to `off`, `warn` or `error` when the program runs overrides it | Every `new` is recorded |

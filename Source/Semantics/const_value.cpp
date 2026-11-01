@@ -12,6 +12,17 @@ const WideInt* ConstTable::intern(const WideInt& v) {
 }
 
 bool ConstTable::fits(const WideInt& v, unsigned int bit_width, bool is_signed) {
+    constexpr std::size_t max_bits = WideInt::bits;
+    if (v.is_undefined()) return false;
+    if (!is_signed && v.is_negative()) return false;
+    return bit_width >= max_bits || (v.magnitude() >> bit_width).is_zero();
+}
+
+bool ConstTable::fits(const WideInt& v, unsigned int bit_width, bool is_signed, bool is_hardware) {
+    return is_hardware ? fits_twos(v, bit_width, is_signed) : fits(v, bit_width, is_signed);
+}
+
+bool ConstTable::fits_twos(const WideInt& v, unsigned int bit_width, bool is_signed) {
     using Mag = WideInt::mag_t;
     constexpr std::size_t max_bits = WideInt::bits;
     if (v.is_undefined()) return false;

@@ -163,10 +163,37 @@ Type* common_of(TypeContext& ctx, Type* a, Type* b, std::string& error) {
     if (is_base(a, BK::Dynamic) || is_base(b, BK::Dynamic)) return ctx.dynamic_();
     if (rank_conversion(b, a, ctx) != ConversionRank::None) return a;
     if (rank_conversion(a, b, ctx) != ConversionRank::None) return b;
+    if (Type* n = numeric_common_type(ctx, a, b)) return n;
     error = "'" + text(a) + "' and '" + text(b) + "' have no common type";
     return nullptr;
 }
 
+}
+
+Type* numeric_common_type(TypeContext& ctx, Type* a, Type* b) {
+    BuiltinType* x = as_builtin(ctx.strip_cv(unref(a)));
+    BuiltinType* y = as_builtin(ctx.strip_cv(unref(b)));
+    if (!is_numeric(x) || !is_numeric(y)) return nullptr;
+    const bool any_float = x->base() == BK::Float || y->base() == BK::Float;
+    const bool hardware = x->is_hardware() && y->is_hardware();
+
+    if (any_float) {
+        int w = -100;
+        for (BuiltinType* t : { x, y }) {
+            if (t->base() == BK::Float) w = std::max(w, t->width());
+        }
+        if (hardware) return ctx.hardware_float(w >= kHardwareDoubleWidth ? kHardwareDoubleWidth : kHardwareFloatWidth);
+        return ctx.builtin_ranked(BK::Float, w, x->is_unsigned() && y->is_unsigned());
+    }
+
+    const int w = std::max(x->width(), y->width());
+    if (hardware) {
+        BuiltinType* wider = x->width() > y->width() ? x : (y->width() > x->width() ? y : nullptr);
+        if (wider) return ctx.hardware_int(w, wider->is_unsigned());
+        return ctx.hardware_int(w, x->is_unsigned() || y->is_unsigned());
+    }
+    const bool any_signed = !x->is_unsigned() || !y->is_unsigned();
+    return ctx.builtin_ranked(BK::Int, w, !any_signed);
 }
 
 std::optional<std::size_t> enumerator_count(Type* t) {

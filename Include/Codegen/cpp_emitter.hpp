@@ -330,6 +330,8 @@ private:
 
     Type* common_type(Type* a, Type* b);
     std::string special_code(semantics::SpecialKind k);
+    std::string special_constant_code(semantics::SpecialKind k);
+    std::string special_constant_of(const std::string& code);
     std::string interpolated_text(nodes::CastExpression* c);
 
     const char* arith_helper(TK op) const;

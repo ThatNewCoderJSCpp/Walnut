@@ -483,6 +483,7 @@ public:
     std::map<std::pair<int, std::vector<Type*>>, std::int64_t> lifecycle_trait_memo;
     std::function<Type*(Type*, std::string_view, const std::vector<parser_types::TemplateArgument*>&)> member_alias_type_hook;
     std::function<Symbol*(Type*, Type*)>               callable_hook;
+    bool                                               overflow_errors = false;
     std::function<bool(Type*, Type*)>                  closure_hook;
     std::vector<Symbol*>                               last_overload_order;
     std::function<Type*(Type*, nodes::ASTNode*)>       range_element_hook;
