@@ -44,7 +44,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config \
+          sudo apt-get install -y ninja-build pkg-config rpm dpkg-dev file unzip \
             libx11-dev libxft-dev libxrender-dev libfontconfig1-dev libfreetype-dev \
             libssl-dev libpango1.0-dev libcairo2-dev zlib1g-dev libjpeg-dev \
             libvulkan-dev libgl-dev
@@ -79,6 +79,25 @@ jobs:
           printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
           smoke/Walnut-*/bin/walnut run smoke/ok.wal
 
+      - name: Make the .tar.xz, .zip, .deb and .rpm
+        run: bash .github/scripts/repackage.sh build/Walnut-*-linux-${{ matrix.arch }}.tar.gz linux-${{ matrix.arch }} "TXZ;ZIP;DEB;RPM"
+
+      - name: Test the .deb
+        run: |
+          sudo apt-get install -y ./build/Walnut-*-linux-${{ matrix.arch }}.deb
+          test -x /opt/walnut/bin/walnut
+          test -L /usr/bin/walnut
+          walnut run smoke/ok.wal
+          sudo apt-get remove -y walnut
+          test ! -e /usr/bin/walnut
+          test ! -e /opt/walnut/bin/walnut
+
+      - name: Check the .rpm
+        run: |
+          rpm -qpi build/Walnut-*-linux-${{ matrix.arch }}.rpm
+          rpm -qpl build/Walnut-*-linux-${{ matrix.arch }}.rpm | grep -x /opt/walnut/bin/walnut
+          rpm -qp --scripts build/Walnut-*-linux-${{ matrix.arch }}.rpm | grep -q "/usr/bin/walnut"
+
       - name: Test the package on a system that only has a C++ compiler
         run: |
           docker run --rm -v "$PWD/smoke:/smoke" ubuntu:22.04 bash -c '
@@ -107,7 +126,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: walnut-linux-${{ matrix.arch }}
-          path: build/Walnut-*.tar.gz
+          path: |
+            build/Walnut-*.tar.gz
+            build/Walnut-*.tar.xz
+            build/Walnut-*.zip
+            build/Walnut-*.deb
+            build/Walnut-*.rpm
+          compression-level: 0
           if-no-files-found: error
 
   macos:
@@ -176,10 +201,23 @@ jobs:
           smoke/Walnut-*/bin/walnut init --status
           smoke/Walnut-*/bin/walnut run smoke/ok.wal
 
+      - name: Make the .tar.xz and .zip
+        run: bash .github/scripts/repackage.sh build/Walnut-*-macos-${{ matrix.arch }}.tar.gz macos-${{ matrix.arch }} "TXZ;ZIP"
+
+      - name: Test the .zip
+        run: |
+          mkdir -p smoke-zip
+          unzip -q build/Walnut-*-macos-${{ matrix.arch }}.zip -d smoke-zip
+          smoke-zip/Walnut-*/bin/walnut run smoke/ok.wal
+
       - uses: actions/upload-artifact@v4
         with:
           name: walnut-macos-${{ matrix.arch }}
-          path: build/Walnut-*.tar.gz
+          path: |
+            build/Walnut-*.tar.gz
+            build/Walnut-*.tar.xz
+            build/Walnut-*.zip
+          compression-level: 0
           if-no-files-found: error
 
   linux-i686:
@@ -193,7 +231,7 @@ jobs:
         run: |
           docker run --rm --platform linux/386 -v "$PWD:/src" -w /src i386/debian:bookworm bash -euo pipefail -c '
             apt-get update
-            apt-get install -y --no-install-recommends ca-certificates git g++ cmake ninja-build pkg-config file binutils \
+            apt-get install -y --no-install-recommends ca-certificates git g++ cmake ninja-build pkg-config file binutils rpm dpkg-dev unzip xz-utils \
               libx11-dev libxft-dev libxrender-dev libfontconfig-dev libfreetype-dev \
               libssl-dev libpango1.0-dev libcairo2-dev zlib1g-dev libjpeg-dev \
               libvulkan-dev libgl-dev
@@ -213,12 +251,25 @@ jobs:
             tar -xzf build/Walnut-*.tar.gz -C smoke
             printf "function main() -> int {\n    return 0;\n} end function main\n" > smoke/ok.wal
             smoke/Walnut-*/bin/walnut run smoke/ok.wal
+            bash .github/scripts/repackage.sh build/Walnut-*-linux-i686.tar.gz linux-i686 "TXZ;ZIP;DEB;RPM"
+            apt-get install -y ./build/Walnut-*-linux-i686.deb
+            test -L /usr/bin/walnut
+            walnut run smoke/ok.wal
+            apt-get remove -y walnut
+            test ! -e /usr/bin/walnut
+            rpm -qpl build/Walnut-*-linux-i686.rpm | grep -x /opt/walnut/bin/walnut
           '
 
       - uses: actions/upload-artifact@v4
         with:
           name: walnut-linux-i686
-          path: build/Walnut-*.tar.gz
+          path: |
+            build/Walnut-*.tar.gz
+            build/Walnut-*.tar.xz
+            build/Walnut-*.zip
+            build/Walnut-*.deb
+            build/Walnut-*.rpm
+          compression-level: 0
           if-no-files-found: error
 
   windows:
@@ -254,7 +305,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build zip unzip
+          sudo apt-get install -y ninja-build zip unzip p7zip-full nsis
           if [ "${{ matrix.wine }}" = "true" ]; then sudo apt-get install -y wine64; fi
 
       - name: Cache llvm-mingw
@@ -319,6 +370,14 @@ jobs:
       - name: Make the package that comes with its compiler
         run: bash .github/scripts/bundle-compiler.sh build/Walnut-*-${{ matrix.platform }}.zip "$BUNDLE_ZIP" "$BUNDLE_URL"
 
+      - name: Make the .7z files and installers
+        run: |
+          plain=$(ls build/Walnut-*-${{ matrix.platform }}.zip)
+          bundled=$(ls build/Walnut-*-${{ matrix.platform }}-with-compiler.zip)
+          bash .github/scripts/repackage.sh "$plain" ${{ matrix.platform }} "7Z;NSIS"
+          bash .github/scripts/repackage.sh "$bundled" ${{ matrix.platform }} "7Z;NSIS" -with-compiler
+          ls -l build/Walnut-*
+
       - name: Test the package with its compiler under Wine
         if: matrix.wine
         run: |
@@ -333,7 +392,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: walnut-${{ matrix.platform }}
-          path: build/Walnut-*.zip
+          path: |
+            build/Walnut-*.zip
+            build/Walnut-*.7z
+            build/Walnut-*.exe
           compression-level: 0
           if-no-files-found: error
 
@@ -386,6 +448,26 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           & .\ok-init.exe
           if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Install and uninstall with the installer that comes with its compiler
+        run: |
+          $exe = Get-ChildItem packages/Walnut-*-with-compiler.exe | Select-Object -First 1
+          $dir = "$env:RUNNER_TEMP\WalnutInstall"
+          Start-Process -FilePath $exe.FullName -ArgumentList "/S", "/D=$dir" -Wait
+          if (-not (Test-Path "$dir\bin\walnut.exe")) { Write-Error "the installer didn't put walnut.exe in $dir\bin"; exit 1 }
+          if (-not (Test-Path "$dir\toolchain\walnut-toolchain.txt")) { Write-Error "the installer didn't put the compiler in $dir\toolchain"; exit 1 }
+          Set-Content ok.wal "function main() -> int {`n    return 0;`n} end function main`n"
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+          & "$dir\bin\walnut.exe" run ok.wal
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Start-Process -FilePath "$dir\Uninstall.exe" -ArgumentList "/S", "_?=$dir" -Wait
+          if (Test-Path "$dir\bin\walnut.exe") { Write-Error "the uninstaller left walnut.exe behind"; exit 1 }
+
+      - name: Check the plain installer and .7z files are there
+        run: |
+          $plain = Get-ChildItem packages/Walnut-*.exe | Where-Object { $_.Name -notlike "*-with-compiler.exe" }
+          if (-not $plain) { Write-Error "there's no plain installer"; exit 1 }
+          if ((Get-ChildItem packages/Walnut-*.7z).Count -ne 2) { Write-Error "there should be two .7z files"; exit 1 }
 
   publish:
     name: Attach Walnut to the release
