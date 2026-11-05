@@ -1,0 +1,22 @@
+import module.video
+import module.threading
+
+function main() -> int {
+    std::video::MediaInfo: info = std::video::probe("video-smoke.mp4");
+    std::video::VideoFrame: f = std::video::extract_frame("video-smoke.mp4", 1.5);
+    std::colors::Color: corner = f.pixel(8, 6);
+    std::video::Demuxer: d = std::video::Demuxer::open("video-smoke.mp4");
+    long int: packets = 0;
+    while (d.read().has_value()) {
+        packets += 1;
+    }
+    std::video::Player: player;
+    player.open("video-smoke.mp4");
+    player.play();
+    std::threading::this_thread::sleep_for(300);
+    std::audio::AudioBuffer: sound = std::audio::load("video-smoke.mp4");
+    if (info.video_supported() && info.width() == 64 && corner.red() > 200 && corner.green() > 200 && corner.blue() < 60 && packets == 115 && player.position() > 0.1 && sound.channels() == 2) then {
+        return 0;
+    }
+    return 1;
+} end function main

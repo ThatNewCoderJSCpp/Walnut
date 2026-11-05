@@ -40,6 +40,7 @@ This prints `64 by 32, pixel (10, 10) is rgb(255, 0, 0)`, then `16 rgb(76, 76, 7
 | `Image()` | An empty image (`is_empty()` is `true`) |
 | `Image::make(width, height)`, `Image::make(width, height, fill)` | A new image, transparent or filled with a color. Throws an [`image_error`](#errors) for a size of 0 or less |
 | `Image::load(path)` | The image in a file; the format is worked out from the file's contents. Throws an `image_error` when it can't be read |
+| `Image::from_rgba(width, height, pixels)` | An image made from RGBA bytes, as a `Vector<std::hardware_uint8>` of `width * height * 4` bytes, row by row from the top, such as a [video frame's](video.md#extract_frame-videoframe-and-picture) `rgba()`. Throws an `image_error` for a size of 0 or less or the wrong number of bytes |
 | `Image::can_read(extension)`, `Image::can_write(extension)` | Whether a format such as `"png"` or `".webp"` can be loaded or saved |
 
 ## Reading and writing pixels
@@ -49,6 +50,7 @@ This prints `64 by 32, pixel (10, 10) is rgb(255, 0, 0)`, then `16 rgb(76, 76, 7
 | `width()`, `height()`, `is_empty()` | The size |
 | `contains(x, y)` | Whether `(x, y)` is inside the image |
 | `pixel(x, y)` | The color at `(x, y)`. Throws an `image_error` outside the image |
+| `to_rgba()` | Every pixel as RGBA bytes, the way `from_rgba` takes them |
 | `set_pixel(x, y, color)` | Changes one pixel. Throws an `image_error` outside the image |
 | `fill(color)` | Sets every pixel |
 | `fill_rect(x, y, width, height, color)` | Sets a rectangle; the parts outside the image are skipped |

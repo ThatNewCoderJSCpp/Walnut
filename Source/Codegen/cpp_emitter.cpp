@@ -91,7 +91,14 @@ bool CppEmitter::needs_header_body(const FuncInfo& f) {
     else if (f.decl->kind == K::OperatorFunctionDeclaration) mods = &static_cast<nodes::OperatorFunctionDeclaration*>(f.decl)->get_modifiers();
     if (mods && mods->has(RM::Inline)) return true;
     if (!callable_params(f).empty()) return true;
-    return function_header(f, false, false).find("auto") != std::string::npos;
+    const std::string header = function_header(f, false, false);
+    auto word_char = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (std::size_t at = header.find("auto"); at != std::string::npos; at = header.find("auto", at + 1)) {
+        const bool starts = at == 0 || !word_char(header[at - 1]);
+        const bool ends = at + 4 >= header.size() || !word_char(header[at + 4]);
+        if (starts && ends) return true;
+    }
+    return false;
 }
 
 void CppEmitter::scan_function_values(const std::vector<CodegenUnit>& units) {
@@ -523,7 +530,8 @@ void CppEmitter::order_records() {
                 Sym* fs = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->symbol : static_cast<nodes::OperatorFunctionDeclaration*>(n)->symbol;
                 const bool lazy = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->lazy_untyped : static_cast<nodes::OperatorFunctionDeclaration*>(n)->lazy_untyped;
                 const bool used = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->native_used : static_cast<nodes::OperatorFunctionDeclaration*>(n)->native_used;
-                if (!fs || lazy || !used) continue;
+                const bool has_body = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->has_body() : static_cast<nodes::OperatorFunctionDeclaration*>(n)->has_body();
+                if (!fs || lazy || !used || has_body) continue;
                 soft(return_type_of(fs));
                 if (const nodes::FunctionParameters* ps = params_of(n)) {
                     for (nodes::FunctionParameter* p : ps->m_params) {
@@ -2607,7 +2615,11 @@ void CppEmitter::if_statement(std::ostream& os, nodes::IfStatement* s) {
             auto* v = static_cast<nodes::VariableDeclaration*>(br->condition);
             if (opened) os << " else ";
             else os << pad();
-            os << "if (" << local_decl(v, false) << "; walnut_rt::truthy(" << local_name(v->get_name()) << ")) ";
+            Type* declared = v->m_bindings.empty() ? m_types.canonicalize(v->get_type_info()) : nullptr;
+            if (declared && prim_auto(v)) declared = v->get_type_info().canonical;
+            Type* held = declared ? value_type(declared) : nullptr;
+            const std::string test = held && held->is_record() ? convert(local_name(v->get_name()), held, m_types.bool_(), v) : "walnut_rt::truthy(" + local_name(v->get_name()) + ")";
+            os << "if (" << local_decl(v, false) << "; " << test << ") ";
         } else {
             if (opened) os << " else ";
             else os << pad();

@@ -1,0 +1,912 @@
+import module.audio
+import module.collections
+import module.colors
+import module.optional
+
+namespace std {
+    namespace errors {
+        class video_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class video_error
+    } end namespace errors
+
+    namespace video {
+        using std::collections::Vector;
+        using std::optional::Optional;
+        using std::colors::Color;
+
+        enum MediaType { video, audio, subtitle, other }
+
+        enum PixelFormat { none, gray, yuv420p, yuv422p, yuv444p, gray10, yuv420p10, yuv422p10, yuv444p10, gray12, yuv420p12, yuv422p12, yuv444p12, gray14, yuv420p14, yuv422p14, yuv444p14, yuv440p, yuv440p10, yuv440p12 }
+
+        enum Deinterlace { off, when_interlaced, on }
+
+        enum DeinterlaceMode { weave, bob, linear, yadif, yadif_spatial }
+
+        enum PlayerState { closed, paused, playing, ended, error }
+
+        enum EventType { loaded, first_frame, play, pause, playing, waiting, seeking, seeked, ended, looped, rate_changed, volume_changed, track_changed, warning, error }
+
+        namespace detail {
+            function fail(const string&: what, const string&: why) -> std::errors::video_error {
+                return std::errors::video_error(static_cast<string>(`${what}: ${why}`));
+            } end function fail
+
+            function check_not_empty(const string&: problem, const string&: what) -> void {
+                if (problem.size() > 0) then {
+                    throw fail(what, problem);
+                }
+            } end function check_not_empty
+        } end namespace detail
+
+        struct PlayerOptions {
+            bool: video = true;
+            bool: audio = true;
+            bool: rgba = false;
+            bool: autoplay = false;
+            bool: loop = false;
+            bool: preserve_pitch = true;
+            float: volume = 1.0;
+            bool: muted = false;
+            float: rate = 1.0;
+            long int: max_queued_frames = 0;
+            float: presentation_offset = 0.0;
+            float: audio_buffer_seconds = 1.0;
+            long int: sample_rate = 48000;
+            long int: channels = 2;
+            string: device = "";
+            long int: latency_ms = 30;
+            Deinterlace: deinterlace = Deinterlace::when_interlaced;
+            DeinterlaceMode: deinterlace_mode = DeinterlaceMode::yadif;
+            bool: deinterlace_field_rate = false;
+
+            constructor() { }
+        } end struct PlayerOptions
+
+        class Track;
+        class VideoFrame;
+        class Picture;
+        class Packet;
+
+        extern "C++" from "<walnut_video.hpp>" {
+            class Api as "walnut_rt::video::api" {
+            public:
+                static function native_error() -> string as "walnut_rt::video::last_error";
+                static function codec_supported(const string&: codec) -> bool as "walnut_rt::video::codec_supported";
+                static function video_codec_supported(const string&: codec) -> bool as "walnut_rt::video::video_codec_supported";
+                static function audio_codec_supported(const string&: codec) -> bool as "walnut_rt::video::audio_codec_supported";
+                static function codec_name(const string&: codec) -> string as "walnut_rt::video::codec_name";
+                static function supported_video_codecs() -> Vector<string> as "walnut_rt::video::supported_video_codecs";
+                static function container_of(const Vector<std::hardware_uint8>&: data) -> string as "walnut_rt::video::container_of";
+                static function is_annexb(const Vector<std::hardware_uint8>&: data) -> bool as "walnut_rt::video::is_annexb";
+                static function extract(const string&: path, float: seconds) -> VideoFrame as "walnut_rt::video::extract";
+                static function read_file(const string&: path) -> Vector<std::hardware_uint8> as "walnut_rt::video::read_file";
+                static function extract_bytes(const Vector<std::hardware_uint8>&: data, float: seconds) -> VideoFrame as "walnut_rt::video::extract_bytes";
+            } end class Api
+
+            class Track as "walnut_rt::video::track" {
+                function native_kind() const -> long int as "kind";
+
+            public:
+                constructor();
+                function valid() const -> bool;
+                function index() const -> long int;
+                function id() const -> long int;
+
+                function kind() const -> MediaType {
+                    return static_cast<MediaType>(native_kind());
+                } end function kind
+
+                function kind_name() const -> string;
+                function codec() const -> string;
+                function codec_name() const -> string;
+                function supported() const -> bool;
+                function language() const -> string;
+                function name() const -> string;
+                function is_default() const -> bool;
+                function width() const -> long int;
+                function height() const -> long int;
+                function display_width() const -> long int;
+                function display_height() const -> long int;
+                function rotation() const -> long int;
+                function frame_rate() const -> float;
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+                function bits_per_sample() const -> long int;
+                function bitrate() const -> long int;
+                function duration() const -> float;
+                function frame_count() const -> long int;
+                function codec_config() const -> Vector<std::hardware_uint8>;
+
+                function to_string() const -> string {
+                    if (kind() == MediaType::video) then {
+                        return static_cast<string>(`${index()}: video ${codec_name()} ${width()}x${height()} at ${frame_rate()} fps`);
+                    }
+                    if (kind() == MediaType::audio) then {
+                        return static_cast<string>(`${index()}: audio ${codec()} ${sample_rate()} Hz, ${channels()} channels`);
+                    }
+                    return static_cast<string>(`${index()}: ${kind_name()} ${codec()}`);
+                } end function to_string
+            } end class Track
+
+            class MediaInfo as "walnut_rt::video::media_info" {
+                static function native_probe(const string&: path) -> MediaInfo as "walnut_rt::video::media_info::probe";
+                static function native_probe_bytes(const Vector<std::hardware_uint8>&: data) -> MediaInfo as "walnut_rt::video::media_info::probe_bytes";
+                function native_track(long int: index) const -> Track as "at";
+                function native_track_count() const -> long int as "track_count";
+
+            public:
+                constructor();
+
+                static function probe(const string&: path) -> MediaInfo {
+                    MediaInfo: info = native_probe(path);
+                    if (!info.valid()) then {
+                        throw detail::fail(static_cast<string>(`can't read '${path}'`), info.error());
+                    }
+                    return info;
+                } end function probe
+
+                static function probe(const Vector<std::hardware_uint8>&: data) -> MediaInfo {
+                    MediaInfo: info = native_probe_bytes(data);
+                    if (!info.valid()) then {
+                        throw detail::fail("can't read the media", info.error());
+                    }
+                    return info;
+                } end function probe
+
+                function valid() const -> bool;
+                function error() const -> string;
+                function container() const -> string;
+                function duration() const -> float;
+
+                function tracks() const -> Vector<Track> {
+                    Vector<Track>: out;
+                    for (long int: i = 0; i < native_track_count(); i++) {
+                        out.push_back(native_track(i));
+                    }
+                    return out;
+                } end function tracks
+
+                function track_count() const -> long int {
+                    return native_track_count();
+                } end function track_count
+
+                function track(long int: index) const -> Track {
+                    if (index < 0 || index >= native_track_count()) then {
+                        throw std::errors::video_error(static_cast<string>(`MediaInfo::track(): there is no track ${index} (the file has ${native_track_count()})`));
+                    }
+                    return native_track(index);
+                } end function track
+
+                function tag(const string&: key) const -> string;
+                function tag_keys() const -> Vector<string>;
+                function video_track() const -> long int;
+                function audio_track() const -> long int;
+
+                function has_video() const -> bool {
+                    return video_track() >= 0;
+                } end function has_video
+
+                function has_audio() const -> bool {
+                    return audio_track() >= 0;
+                } end function has_audio
+
+                function video_supported() const -> bool;
+                function audio_supported() const -> bool;
+                function video_codec() const -> string;
+                function audio_codec() const -> string;
+                function video_error() const -> string;
+                function audio_error() const -> string;
+                function width() const -> long int;
+                function height() const -> long int;
+                function display_width() const -> long int;
+                function display_height() const -> long int;
+                function display_aspect() const -> float;
+                function rotation() const -> long int;
+                function frame_rate() const -> float;
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+
+                function to_string() const -> string {
+                    return static_cast<string>(`${container()}, ${duration()} s, ${native_track_count()} tracks`);
+                } end function to_string
+            } end class MediaInfo
+
+            class Picture as "walnut_rt::video::picture" {
+                function native_get(long int: x, long int: y) const -> long int as "get";
+                function native_save(const string&: path, long int: quality) const -> string as "save";
+
+            public:
+                constructor();
+                function empty() const -> bool;
+                function width() const -> long int;
+                function height() const -> long int;
+                function serial() const -> long int;
+                function time() const -> float;
+                function pixels() const -> Vector<std::hardware_uint8>;
+
+                function pixel(long int: x, long int: y) const -> Color {
+                    if (x < 0 || y < 0 || x >= width() || y >= height()) then {
+                        throw std::errors::video_error(static_cast<string>(`Picture::pixel(): (${x}, ${y}) is outside the ${width()} by ${height()} picture`));
+                    }
+                    return Color::from_packed(native_get(x, y));
+                } end function pixel
+
+                inline function save(const string&: path, long int: quality = 90) const -> void {
+                    detail::check_not_empty(native_save(path, quality), static_cast<string>(`can't save '${path}'`));
+                } end function save
+
+                function to_string() const -> string {
+                    return static_cast<string>(`Picture(${width()}x${height()})`);
+                } end function to_string
+            } end class Picture
+
+            class VideoFrame as "walnut_rt::video::frame" {
+                function native_format() const -> long int as "format";
+                function native_get(long int: x, long int: y) const -> long int as "get";
+                function native_plane(long int: index) const -> Vector<std::hardware_uint8> as "plane";
+                function native_sample(long int: index, long int: x, long int: y) const -> long int as "sample";
+                function native_save(const string&: path, long int: quality) const -> string as "save";
+
+                function check_plane(long int: index, const string&: what) const -> void {
+                    if (index < 0 || index >= plane_count()) then {
+                        throw std::errors::video_error(static_cast<string>(`${what}: plane ${index} doesn't exist in a ${format_name()} frame (${plane_count()} planes)`));
+                    }
+                } end function check_plane
+
+            public:
+                constructor();
+                function empty() const -> bool;
+                function width() const -> long int;
+                function height() const -> long int;
+                function pts() const -> float;
+                function keyframe() const -> bool;
+                function serial() const -> long int;
+
+                function format() const -> PixelFormat {
+                    return static_cast<PixelFormat>(native_format());
+                } end function format
+
+                function format_name() const -> string;
+                function bit_depth() const -> long int;
+                function plane_count() const -> long int;
+                function bytes_per_sample() const -> long int;
+                function plane_width(long int: index) const -> long int;
+                function plane_height(long int: index) const -> long int;
+                function sar_num() const -> long int;
+                function sar_den() const -> long int;
+                function display_aspect() const -> float;
+                function full_range() const -> bool;
+                function color_matrix() const -> string;
+                function chroma_shift_x() const -> long int;
+                function chroma_shift_y() const -> long int;
+                function max_sample_value() const -> long int;
+                function interlaced() const -> bool;
+                function top_field_first() const -> bool;
+                function structure_name() const -> string;
+                function repeat_fields() const -> long int;
+
+                function plane(long int: index) const -> Vector<std::hardware_uint8> {
+                    check_plane(index, "VideoFrame::plane()");
+                    return native_plane(index);
+                } end function plane
+
+                function sample(long int: index, long int: x, long int: y) const -> long int {
+                    check_plane(index, "VideoFrame::sample()");
+                    if (x < 0 || y < 0 || x >= plane_width(index) || y >= plane_height(index)) then {
+                        throw std::errors::video_error(static_cast<string>(`VideoFrame::sample(): (${x}, ${y}) is outside plane ${index} (${plane_width(index)} by ${plane_height(index)})`));
+                    }
+                    return native_sample(index, x, y);
+                } end function sample
+
+                function pixel(long int: x, long int: y) const -> Color {
+                    if (x < 0 || y < 0 || x >= width() || y >= height()) then {
+                        throw std::errors::video_error(static_cast<string>(`VideoFrame::pixel(): (${x}, ${y}) is outside the ${width()} by ${height()} frame`));
+                    }
+                    return Color::from_packed(native_get(x, y));
+                } end function pixel
+
+                function rgba() const -> Vector<std::hardware_uint8>;
+                function to_picture() const -> Picture;
+
+                inline function save(const string&: path, long int: quality = 90) const -> void {
+                    detail::check_not_empty(native_save(path, quality), static_cast<string>(`can't save '${path}'`));
+                } end function save
+
+                function to_string() const -> string {
+                    return static_cast<string>(`VideoFrame(${width()}x${height()} ${format_name()} at ${pts()} s)`);
+                } end function to_string
+            } end class VideoFrame
+
+            class Packet as "walnut_rt::video::packet" {
+            public:
+                constructor();
+                function valid() const -> bool;
+                function track() const -> long int;
+                function pts() const -> float;
+                function dts() const -> float;
+                function duration() const -> float;
+                function keyframe() const -> bool;
+                function position() const -> long int;
+                function size() const -> long int;
+                function data() const -> Vector<std::hardware_uint8>;
+                function discard_padding() const -> float;
+
+                function to_string() const -> string {
+                    return static_cast<string>(`Packet(track ${track()}, ${size()} bytes at ${pts()} s)`);
+                } end function to_string
+            } end class Packet
+
+            class Demuxer as "walnut_rt::video::demuxer" {
+                function native_open(const string&: path) -> string as "open";
+                function native_open_bytes(const Vector<std::hardware_uint8>&: data) -> string as "open_bytes";
+                function native_track(long int: index) const -> Track as "at";
+                function native_track_count() const -> long int as "track_count";
+                function native_best(long int: kind) const -> long int as "best_track";
+                function native_select(long int: index, bool: on) -> void as "select";
+                function native_read() -> Packet as "read";
+                function native_seek(float: seconds, bool: before) -> bool as "seek";
+
+                function check_track(long int: index, const string&: what) const -> void {
+                    if (index < 0 || index >= native_track_count()) then {
+                        throw std::errors::video_error(static_cast<string>(`${what}: there is no track ${index} (the file has ${native_track_count()})`));
+                    }
+                } end function check_track
+
+            public:
+                constructor();
+                constructor(const Demuxer&: other) = delete;
+                constructor(Demuxer&&: other);
+                operator(=) function(Demuxer&&: other) -> Demuxer&;
+
+                static function open(const string&: path) -> Demuxer {
+                    Demuxer: d;
+                    detail::check_not_empty(d.native_open(path), static_cast<string>(`can't open '${path}'`));
+                    return std::core::move(d);
+                } end function open
+
+                static function open(const Vector<std::hardware_uint8>&: data) -> Demuxer {
+                    Demuxer: d;
+                    detail::check_not_empty(d.native_open_bytes(data), "can't open the media");
+                    return std::core::move(d);
+                } end function open
+
+                function close() -> void;
+                function is_open() const -> bool;
+
+                function tracks() const -> Vector<Track> {
+                    Vector<Track>: out;
+                    for (long int: i = 0; i < native_track_count(); i++) {
+                        out.push_back(native_track(i));
+                    }
+                    return out;
+                } end function tracks
+
+                function track_count() const -> long int {
+                    return native_track_count();
+                } end function track_count
+
+                function track(long int: index) const -> Track {
+                    check_track(index, "Demuxer::track()");
+                    return native_track(index);
+                } end function track
+
+                function duration() const -> float;
+                function format_name() const -> string;
+                function tag(const string&: key) const -> string;
+                function tag_keys() const -> Vector<string>;
+
+                function best_track(MediaType: kind) const -> long int {
+                    return native_best(static_cast<long int>(kind));
+                } end function best_track
+
+                function select(long int: index, bool: on = true) -> void {
+                    check_track(index, "Demuxer::select()");
+                    native_select(index, on);
+                } end function select
+
+                function select_only(long int: index) -> void {
+                    check_track(index, "Demuxer::select_only()");
+                    for (long int: i = 0; i < native_track_count(); i++) {
+                        native_select(i, i == index);
+                    }
+                } end function select_only
+
+                function selected(long int: index) const -> bool;
+
+                function read() -> Optional<Packet> {
+                    Packet: p = native_read();
+                    if (!p.valid()) then {
+                        return std::optional::nothing<Packet>();
+                    }
+                    return Optional<Packet>(p);
+                } end function read
+
+                function seek(float: seconds, bool: keyframe_before = true) -> bool {
+                    return native_seek(seconds, keyframe_before);
+                } end function seek
+
+                function rewind() -> bool;
+            } end class Demuxer
+
+            class VideoDecoder as "walnut_rt::video::decoder" {
+                static function native_create(const Track&: track) -> VideoDecoder as "walnut_rt::video::decoder::create";
+                function native_decode(const Packet&: packet) -> string as "decode";
+                function native_decode_bytes(const Vector<std::hardware_uint8>&: data, float: pts) -> string as "decode_bytes";
+                function native_receive() -> VideoFrame as "receive";
+
+            public:
+                constructor();
+                constructor(const VideoDecoder&: other) = delete;
+                constructor(VideoDecoder&&: other);
+                operator(=) function(VideoDecoder&&: other) -> VideoDecoder&;
+
+                static function for_track(const Track&: track) -> VideoDecoder {
+                    VideoDecoder: d = native_create(track);
+                    if (!d.valid()) then {
+                        throw detail::fail(static_cast<string>(`can't decode track ${track.index()}`), Api::native_error());
+                    }
+                    return std::core::move(d);
+                } end function for_track
+
+                function valid() const -> bool;
+
+                function decode(const Packet&: packet) -> void {
+                    detail::check_not_empty(native_decode(packet), "VideoDecoder::decode()");
+                } end function decode
+
+                function decode(const Vector<std::hardware_uint8>&: data, float: pts = 0.0) -> void {
+                    detail::check_not_empty(native_decode_bytes(data, pts), "VideoDecoder::decode()");
+                } end function decode
+
+                function receive() -> Optional<VideoFrame> {
+                    VideoFrame: f = native_receive();
+                    if (f.empty()) then {
+                        return std::optional::nothing<VideoFrame>();
+                    }
+                    return Optional<VideoFrame>(f);
+                } end function receive
+
+                function flush() -> void;
+                function reset() -> void;
+                function codec() const -> string;
+                function width() const -> long int;
+                function height() const -> long int;
+                function frames_decoded() const -> long int;
+                function error_count() const -> long int;
+            } end class VideoDecoder
+
+            class H264Decoder as "walnut_rt::video::h264_decoder" {
+                function native_open(const Vector<std::hardware_uint8>&: avcc) -> string as "open";
+                function native_open_annexb() -> bool as "open_annexb";
+                function native_decode(const Vector<std::hardware_uint8>&: data, float: pts) -> string as "decode";
+                function native_receive() -> VideoFrame as "receive";
+
+            public:
+                constructor();
+                constructor(const H264Decoder&: other) = delete;
+                constructor(H264Decoder&&: other);
+                operator(=) function(H264Decoder&&: other) -> H264Decoder&;
+
+                function open(const Vector<std::hardware_uint8>&: avcc) -> void {
+                    detail::check_not_empty(native_open(avcc), "H264Decoder::open()");
+                } end function open
+
+                function open_annexb() -> void {
+                    native_open_annexb();
+                } end function open_annexb
+
+                function decode(const Vector<std::hardware_uint8>&: data, float: pts = 0.0) -> void {
+                    if (!is_open()) then {
+                        throw std::errors::video_error("H264Decoder::decode(): the decoder isn't open; call open() or open_annexb() first");
+                    }
+                    detail::check_not_empty(native_decode(data, pts), "H264Decoder::decode()");
+                } end function decode
+
+                function receive() -> Optional<VideoFrame> {
+                    VideoFrame: f = native_receive();
+                    if (f.empty()) then {
+                        return std::optional::nothing<VideoFrame>();
+                    }
+                    return Optional<VideoFrame>(f);
+                } end function receive
+
+                function flush() -> void;
+                function reset() -> void;
+                function close() -> void;
+                function is_open() const -> bool;
+                function profile() const -> long int;
+                function level() const -> long int;
+                function chroma_format() const -> long int;
+                function bit_depth() const -> long int;
+                function width() const -> long int;
+                function height() const -> long int;
+                function coded_width() const -> long int;
+                function coded_height() const -> long int;
+                function progressive() const -> bool;
+                function cabac() const -> bool;
+                function frame_rate() const -> float;
+                function frames_decoded() const -> long int;
+                function error_count() const -> long int;
+            } end class H264Decoder
+
+            class H264Reader as "walnut_rt::video::h264_reader" {
+                function native_open(const string&: path) -> string as "open";
+                function native_open_bytes(const Vector<std::hardware_uint8>&: data) -> string as "open_bytes";
+                function native_read() -> Vector<std::hardware_uint8> as "read";
+
+            public:
+                constructor();
+                constructor(const H264Reader&: other) = delete;
+                constructor(H264Reader&&: other);
+                operator(=) function(H264Reader&&: other) -> H264Reader&;
+
+                static function open(const string&: path) -> H264Reader {
+                    H264Reader: r;
+                    detail::check_not_empty(r.native_open(path), static_cast<string>(`can't open '${path}'`));
+                    return std::core::move(r);
+                } end function open
+
+                static function open(const Vector<std::hardware_uint8>&: data) -> H264Reader {
+                    H264Reader: r;
+                    detail::check_not_empty(r.native_open_bytes(data), "can't read the H.264 data");
+                    return std::core::move(r);
+                } end function open
+
+                function read() -> Optional<Vector<std::hardware_uint8>> {
+                    Vector<std::hardware_uint8>: unit = native_read();
+                    if (unit.size() == 0) then {
+                        return std::optional::nothing<Vector<std::hardware_uint8>>();
+                    }
+                    return Optional<Vector<std::hardware_uint8>>(unit);
+                } end function read
+
+                function rewind() -> void;
+                function close() -> void;
+                function is_open() const -> bool;
+            } end class H264Reader
+
+            class PlayerEvent as "walnut_rt::video::event" {
+                function native_type() const -> long int as "type";
+
+            public:
+                constructor();
+
+                function type() const -> EventType {
+                    return static_cast<EventType>(native_type());
+                } end function type
+
+                function name() const -> string;
+                function position() const -> float;
+                function message() const -> string;
+
+                function to_string() const -> string {
+                    if (message().size() > 0) then {
+                        return static_cast<string>(`${name()} at ${position()} s: ${message()}`);
+                    }
+                    return static_cast<string>(`${name()} at ${position()} s`);
+                } end function to_string
+            } end class PlayerEvent
+
+            class EventList as "walnut_rt::video::event_list" {
+            public:
+                constructor();
+                function size() const -> long int;
+                function at(long int: index) const -> PlayerEvent;
+            } end class EventList
+
+            class PlayerStats as "walnut_rt::video::stats" {
+            public:
+                constructor();
+                function frames_decoded() const -> long int;
+                function frames_presented() const -> long int;
+                function frames_dropped() const -> long int;
+                function frames_skipped() const -> long int;
+                function packets_skipped() const -> long int;
+                function decode_errors() const -> long int;
+                function audio_underruns() const -> long int;
+                function queued_packets() const -> long int;
+                function queued_frames() const -> long int;
+                function audio_buffered() const -> float;
+                function average_decode_ms() const -> float;
+                function average_convert_ms() const -> float;
+                function audio_clock() const -> bool;
+                function frames_deinterlaced() const -> long int;
+                function deinterlacing() const -> bool;
+            } end class PlayerStats
+
+            class Player as "walnut_rt::video::player" {
+                function native_configure(bool: video, bool: audio, bool: rgba, bool: autoplay, bool: loop, bool: preserve_pitch, float: volume, bool: muted, float: rate, long int: max_queued_frames, float: presentation_offset, float: audio_buffer_seconds, long int: sample_rate, long int: channels, const string&: device, long int: latency_ms) -> void as "configure";
+                function native_open(const string&: path) -> string as "open";
+                function native_open_bytes(const Vector<std::hardware_uint8>&: data) -> string as "open_bytes";
+                function native_track(long int: index) const -> Track as "at";
+                function native_track_count() const -> long int as "track_count";
+                function native_select_video(long int: index) -> string as "select_video_track";
+                function native_select_audio(long int: index) -> string as "select_audio_track";
+                function native_seek(float: seconds, bool: accurate) -> bool as "seek";
+                function native_state() const -> long int as "state_value";
+                function native_set_rate(float: rate) -> bool as "set_rate";
+                function native_poll() -> EventList as "poll";
+                function native_on_event(function(const PlayerEvent&) -> void: callback) -> void as "set_event_callback";
+                function native_next_frame() -> VideoFrame as "next_frame";
+                function native_current_frame() -> VideoFrame as "current_frame";
+                function native_next_picture() -> Picture as "next_picture";
+                function native_attach(const std::audio::Mixer&: mixer) -> void as "attach";
+                function native_play() -> void as "play";
+                function native_set_volume(float: volume) -> void as "set_volume";
+                function native_configure_deinterlace(long int: setting, long int: mode, bool: field_rate) -> void as "configure_deinterlace";
+                function native_set_deinterlace(long int: setting) -> void as "set_deinterlace_value";
+                function native_deinterlace() const -> long int as "deinterlace_value";
+                function native_set_deinterlace_mode(long int: mode, bool: field_rate) -> void as "set_deinterlace_mode_value";
+                function native_deinterlace_mode() const -> long int as "deinterlace_mode_value";
+
+                function check_open(const string&: what) const -> void {
+                    if (!is_open()) then {
+                        throw std::errors::video_error(static_cast<string>(`${what}: nothing is open; call open() first`));
+                    }
+                } end function check_open
+
+            public:
+                constructor();
+                constructor(const Player&: other) = delete;
+                constructor(Player&&: other);
+                operator(=) function(Player&&: other) -> Player&;
+
+                function set_options(const PlayerOptions&: o) -> void {
+                    native_configure(o.video, o.audio, o.rgba, o.autoplay, o.loop, o.preserve_pitch, o.volume, o.muted, o.rate, o.max_queued_frames, o.presentation_offset, o.audio_buffer_seconds, o.sample_rate, o.channels, o.device, o.latency_ms);
+                    native_configure_deinterlace(static_cast<long int>(o.deinterlace), static_cast<long int>(o.deinterlace_mode), o.deinterlace_field_rate);
+                } end function set_options
+
+                function open(const string&: path) -> void {
+                    detail::check_not_empty(native_open(path), static_cast<string>(`can't open '${path}'`));
+                } end function open
+
+                function open(const string&: path, const PlayerOptions&: o) -> void {
+                    set_options(o);
+                    open(path);
+                } end function open
+
+                function open(const Vector<std::hardware_uint8>&: data) -> void {
+                    detail::check_not_empty(native_open_bytes(data), "can't open the media");
+                } end function open
+
+                function open(const Vector<std::hardware_uint8>&: data, const PlayerOptions&: o) -> void {
+                    set_options(o);
+                    open(data);
+                } end function open
+
+                function close() -> void;
+                function is_open() const -> bool;
+                function info() const -> MediaInfo;
+
+                function tracks() const -> Vector<Track> {
+                    Vector<Track>: out;
+                    for (long int: i = 0; i < native_track_count(); i++) {
+                        out.push_back(native_track(i));
+                    }
+                    return out;
+                } end function tracks
+
+                function duration() const -> float;
+                function has_video() const -> bool;
+                function has_audio() const -> bool;
+                function width() const -> long int;
+                function height() const -> long int;
+                function display_width() const -> long int;
+                function display_height() const -> long int;
+                function display_aspect() const -> float;
+                function rotation() const -> long int;
+                function frame_rate() const -> float;
+                function video_track() const -> long int;
+                function audio_track() const -> long int;
+
+                function select_video_track(long int: index) -> void {
+                    check_open("Player::select_video_track()");
+                    detail::check_not_empty(native_select_video(index), static_cast<string>(`can't play video track ${index}`));
+                } end function select_video_track
+
+                function select_audio_track(long int: index) -> void {
+                    check_open("Player::select_audio_track()");
+                    detail::check_not_empty(native_select_audio(index), static_cast<string>(`can't play audio track ${index}`));
+                } end function select_audio_track
+
+                function video_error() const -> string;
+                function audio_error() const -> string;
+
+                function play() -> void {
+                    check_open("Player::play()");
+                    native_play();
+                } end function play
+
+                function pause() -> void;
+                function stop() -> void;
+
+                function seek(float: seconds, bool: accurate = true) -> bool {
+                    check_open("Player::seek()");
+                    return native_seek(seconds, accurate);
+                } end function seek
+
+                function position() const -> float;
+
+                function state() const -> PlayerState {
+                    return static_cast<PlayerState>(native_state());
+                } end function state
+
+                function state_name() const -> string;
+                function playing() const -> bool as "is_playing";
+                function paused() const -> bool as "is_paused";
+                function seeking() const -> bool as "is_seeking";
+                function buffering() const -> bool as "is_buffering";
+                function ended() const -> bool;
+                function error() const -> string;
+
+                function set_loop(bool: on) -> void;
+                function loop() const -> bool;
+
+                function set_rate(float: rate) -> void {
+                    if (!(rate > 0.0) || !native_set_rate(rate)) then {
+                        throw std::errors::video_error(static_cast<string>(`Player::set_rate(): the rate has to be above 0, not ${rate}`));
+                    }
+                } end function set_rate
+
+                function rate() const -> float;
+                function set_preserve_pitch(bool: on) -> void;
+                function preserve_pitch() const -> bool;
+
+                function set_volume(float: volume) -> void {
+                    if (volume < 0.0) then {
+                        throw std::errors::video_error(static_cast<string>(`Player::set_volume(): the volume can't be negative (${volume})`));
+                    }
+                    native_set_volume(volume);
+                } end function set_volume
+
+                function volume() const -> float;
+                function set_muted(bool: on) -> void;
+                function muted() const -> bool;
+
+                function set_deinterlace(Deinterlace: setting) -> void {
+                    native_set_deinterlace(static_cast<long int>(setting));
+                } end function set_deinterlace
+
+                function deinterlace() const -> Deinterlace {
+                    return static_cast<Deinterlace>(native_deinterlace());
+                } end function deinterlace
+
+                function set_deinterlace_mode(DeinterlaceMode: mode, bool: field_rate = false) -> void {
+                    native_set_deinterlace_mode(static_cast<long int>(mode), field_rate);
+                } end function set_deinterlace_mode
+
+                function deinterlace_mode() const -> DeinterlaceMode {
+                    return static_cast<DeinterlaceMode>(native_deinterlace_mode());
+                } end function deinterlace_mode
+
+                function deinterlace_name() const -> string;
+                function deinterlace_mode_name() const -> string;
+                function deinterlace_field_rate() const -> bool;
+                function deinterlacing() const -> bool as "is_deinterlacing";
+
+                function events() -> Vector<PlayerEvent> {
+                    EventList: list = native_poll();
+                    Vector<PlayerEvent>: out;
+                    for (long int: i = 0; i < list.size(); i++) {
+                        out.push_back(list.at(i));
+                    }
+                    return out;
+                } end function events
+
+                function on_event(function(const PlayerEvent&) -> void: callback) -> void {
+                    native_on_event(callback);
+                } end function on_event
+
+                function clear_on_event() -> void as "clear_event_callback";
+                function callback_error() const -> string;
+
+                function frame() -> Optional<VideoFrame> {
+                    VideoFrame: f = native_next_frame();
+                    if (f.empty()) then {
+                        return std::optional::nothing<VideoFrame>();
+                    }
+                    return Optional<VideoFrame>(f);
+                } end function frame
+
+                function current_frame() -> Optional<VideoFrame> {
+                    VideoFrame: f = native_current_frame();
+                    if (f.empty()) then {
+                        return std::optional::nothing<VideoFrame>();
+                    }
+                    return Optional<VideoFrame>(f);
+                } end function current_frame
+
+                function frame_rgba() -> Optional<Picture> {
+                    Picture: p = native_next_picture();
+                    if (p.empty()) then {
+                        return std::optional::nothing<Picture>();
+                    }
+                    return Optional<Picture>(p);
+                } end function frame_rgba
+
+                function frame_serial() const -> long int;
+                function frame_time() const -> float;
+                function next_frame_delay() const -> float;
+                function next_frame_delay_ms(long int: fallback_ms = 10) const -> long int;
+                function stats() const -> PlayerStats as "statistics";
+
+                function attach(std::audio::Mixer&: mixer) -> void {
+                    native_attach(mixer);
+                } end function attach
+
+                function detach() -> void;
+                function attached() const -> bool;
+                function wait(long int: timeout_ms = -1) const -> bool;
+            } end class Player
+        } end extern
+
+        function probe(const string&: path) -> MediaInfo {
+            return MediaInfo::probe(path);
+        } end function probe
+
+        function probe(const Vector<std::hardware_uint8>&: data) -> MediaInfo {
+            return MediaInfo::probe(data);
+        } end function probe
+
+        function extract_frame(const string&: path, float: seconds = 0.0) -> VideoFrame {
+            VideoFrame: f = Api::extract(path, seconds);
+            if (f.empty()) then {
+                throw detail::fail(static_cast<string>(`can't get a frame from '${path}' at ${seconds} s`), Api::native_error());
+            }
+            return f;
+        } end function extract_frame
+
+        function extract_frame(const Vector<std::hardware_uint8>&: data, float: seconds = 0.0) -> VideoFrame {
+            VideoFrame: f = Api::extract_bytes(data, seconds);
+            if (f.empty()) then {
+                throw detail::fail(static_cast<string>(`can't get a frame at ${seconds} s`), Api::native_error());
+            }
+            return f;
+        } end function extract_frame
+
+        function read_file(const string&: path) -> Vector<std::hardware_uint8> {
+            Vector<std::hardware_uint8>: data = Api::read_file(path);
+            const string: problem = Api::native_error();
+            if (problem.size() > 0) then {
+                throw detail::fail(static_cast<string>(`can't read '${path}'`), problem);
+            }
+            return data;
+        } end function read_file
+
+        function codec_supported(const string&: codec) -> bool {
+            return Api::codec_supported(codec);
+        } end function codec_supported
+
+        function video_codec_supported(const string&: codec) -> bool {
+            return Api::video_codec_supported(codec);
+        } end function video_codec_supported
+
+        function audio_codec_supported(const string&: codec) -> bool {
+            return Api::audio_codec_supported(codec);
+        } end function audio_codec_supported
+
+        function codec_name(const string&: codec) -> string {
+            return Api::codec_name(codec);
+        } end function codec_name
+
+        function supported_video_codecs() -> Vector<string> {
+            return Api::supported_video_codecs();
+        } end function supported_video_codecs
+
+        function container_of(const Vector<std::hardware_uint8>&: data) -> string {
+            return Api::container_of(data);
+        } end function container_of
+
+        function is_annexb(const Vector<std::hardware_uint8>&: data) -> bool {
+            return Api::is_annexb(data);
+        } end function is_annexb
+    } end namespace video
+} end namespace std
