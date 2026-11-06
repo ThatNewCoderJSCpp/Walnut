@@ -1,3 +1,4 @@
+import module.collections
 import module.colors
 
 namespace std {
@@ -44,6 +45,8 @@ namespace std {
                 function native_hue_rotated(float: degrees) const -> Image as "hue_rotated";
                 function native_opacity(float: percent) const -> Image as "opacity";
                 function native_replace(long int: old_rgba, long int: new_rgba) const -> Image as "replace_color";
+                static function native_from_rgba(long int: w, long int: h, const std::collections::Vector<std::hardware_uint8>&: pixels) -> Image as "walnut_rt::gfx::image::from_rgba";
+                function native_to_rgba() const -> std::collections::Vector<std::hardware_uint8> as "to_rgba";
 
                 function check(long int: x, long int: y, const string&: what) const -> void {
                     if (!contains(x, y)) then {
@@ -67,6 +70,20 @@ namespace std {
                     }
                     return Image(w, h, fill.packed());
                 } end function make
+
+                static function from_rgba(long int: w, long int: h, const std::collections::Vector<std::hardware_uint8>&: pixels) -> Image {
+                    if (w <= 0 || h <= 0) then {
+                        throw std::errors::image_error(static_cast<string>(`Image::from_rgba() needs a width and height above 0, not ${w} by ${h}`));
+                    }
+                    if (pixels.size() != w * h * 4) then {
+                        throw std::errors::image_error(static_cast<string>(`Image::from_rgba(): a ${w} by ${h} image needs ${w * h * 4} bytes, not ${pixels.size()}`));
+                    }
+                    return native_from_rgba(w, h, pixels);
+                } end function from_rgba
+
+                function to_rgba() const -> std::collections::Vector<std::hardware_uint8> {
+                    return native_to_rgba();
+                } end function to_rgba
 
                 static function load(const string&: path) -> Image {
                     Image: img = native_load(path);

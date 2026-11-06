@@ -1,0 +1,1463 @@
+import module.collections
+import module.optional
+
+namespace std {
+    namespace errors {
+        class audio_error {
+        public:
+            string: message;
+
+            constructor(const string&: m) : message = m { }
+
+            function what() const -> string {
+                return message;
+            } end function what
+        } end class audio_error
+    } end namespace errors
+
+    namespace audio {
+        using std::collections::Vector;
+
+        enum DeviceKind { output, input, loopback }
+
+        enum FileType { detect, wav, flac, mp3, ogg_vorbis, ogg_opus, aac, mp4, matroska, ogg }
+
+        enum SampleFormat { u8, s16, s24, s32, f32, f64, alaw, ulaw }
+
+        enum Quality { fast, medium, high, best }
+
+        enum FadeCurve { linear, equal_power, logarithmic, exponential, s_curve }
+
+        enum FilterType { lowpass, highpass, bandpass, notch, peak, lowshelf, highshelf, allpass }
+
+        enum Waveform { sine, square, saw, triangle, noise }
+
+        enum VoicePreset { none, helium, deep, robot, alien, monster, radio, telephone, megaphone, cave, underwater, whisper, feminine, masculine }
+
+        enum Scale { chromatic, major, minor, harmonic_minor, pentatonic_major, pentatonic_minor, blues }
+
+        enum StretchQuality { fast, normal, high }
+
+        enum StretchMode { detect, phase_vocoder, wsola }
+
+        enum AutomationCurve { linear, hold, exponential, s_curve, bezier }
+
+        namespace detail {
+            function fail(const string&: what, const string&: why) -> std::errors::audio_error {
+                return std::errors::audio_error(static_cast<string>(`${what}: ${why}`));
+            } end function fail
+
+            function check_not_empty(const string&: problem, const string&: what) -> void {
+                if (problem.size() > 0) then {
+                    throw fail(what, problem);
+                }
+            } end function check_not_empty
+        } end namespace detail
+
+        struct SaveOptions {
+            FileType: format = FileType::detect;
+            SampleFormat: wav_format = SampleFormat::s16;
+            bool: dither = true;
+            long int: flac_compression = 5;
+            long int: flac_bits = 16;
+            long int: mp3_bitrate = 192;
+            bool: mp3_vbr = false;
+            long int: mp3_vbr_quality = 2;
+            long int: mp3_quality = 2;
+            Vector<string>: tag_keys;
+            Vector<string>: tag_values;
+
+            constructor() { }
+
+            constructor(FileType: f) : format = f { }
+
+            function tag(const string&: key, const string&: value) -> SaveOptions& {
+                tag_keys.push_back(key);
+                tag_values.push_back(value);
+                return *this;
+            } end function tag
+        } end struct SaveOptions
+
+        class AudioBuffer;
+        class Loudness;
+        class Effect;
+        class EffectChain;
+
+        extern "C++" from "<walnut_audio.hpp>" {
+            class Device as "walnut_rt::audio::device" {
+                function native_kind() const -> long int as "kind";
+
+            public:
+                constructor();
+                function id() const -> string;
+                function name() const -> string;
+                function is_default() const -> bool;
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+                function backend() const -> string;
+
+                function kind() const -> DeviceKind {
+                    return static_cast<DeviceKind>(native_kind());
+                } end function kind
+
+                function to_string() const -> string {
+                    return static_cast<string>(`${name()} (${backend()}, ${sample_rate()} Hz, ${channels()} channels)`);
+                } end function to_string
+            } end class Device
+
+            class DeviceList as "walnut_rt::audio::device_list" {
+            public:
+                constructor();
+                static function list(long int: kind) -> DeviceList as "walnut_rt::audio::device_list::list";
+                static function default_of(long int: kind) -> DeviceList as "walnut_rt::audio::device_list::default_of";
+                function size() const -> long int;
+                function at(long int: index) const -> Device;
+            } end class DeviceList
+
+            class Api as "walnut_rt::audio::api" {
+            public:
+                static function backend_name() -> string as "walnut_rt::audio::backend_name";
+                static function available_backends() -> Vector<string> as "walnut_rt::audio::available_backends";
+                static function set_backend(const string&: name) -> string as "walnut_rt::audio::set_backend";
+                static function type_from_extension(const string&: path) -> long int as "walnut_rt::audio::type_from_extension";
+                static function readable_extensions() -> Vector<string> as "walnut_rt::audio::readable_extensions";
+                static function writable_extensions() -> Vector<string> as "walnut_rt::audio::writable_extensions";
+                static function voice_preset_names() -> Vector<string> as "walnut_rt::audio::voice_preset_names";
+                static function crossfade(const AudioBuffer&: first, const AudioBuffer&: second, float: seconds, long int: curve) -> AudioBuffer as "walnut_rt::audio::crossfade";
+                static function mix(const AudioBuffer&: first, const AudioBuffer&: second, float: gain) -> AudioBuffer as "walnut_rt::audio::mix";
+                static function db_to_gain(float: db) -> float as "walnut_rt::audio::db_to_gain";
+                static function gain_to_db(float: gain) -> float as "walnut_rt::audio::gain_to_db";
+            } end class Api
+
+            class AudioFileInfo as "walnut_rt::audio::file_info" {
+                function native_type() const -> long int as "type";
+                function ok() const -> bool;
+
+            public:
+                constructor();
+                static function native_read(const string&: path) -> AudioFileInfo as "walnut_rt::audio::file_info::read";
+                static function native_error() -> string as "walnut_rt::audio::last_error";
+
+                static function read(const string&: path) -> AudioFileInfo {
+                    AudioFileInfo: info = native_read(path);
+                    if (!info.ok()) then {
+                        throw detail::fail(static_cast<string>(`can't read '${path}'`), native_error());
+                    }
+                    return info;
+                } end function read
+
+                function format() const -> FileType {
+                    return static_cast<FileType>(native_type());
+                } end function format
+
+                function format_name() const -> string as "type_name";
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+                function frames() const -> long int;
+                function duration() const -> float;
+                function bitrate_kbps() const -> long int;
+                function tag(const string&: key) const -> string;
+                function tag_keys() const -> Vector<string>;
+            } end class AudioFileInfo
+
+            class AudioBuffer as "walnut_rt::audio::buffer" {
+                static function native_load(const string&: path) -> AudioBuffer as "walnut_rt::audio::buffer::load";
+                static function native_error() -> string as "walnut_rt::audio::last_error";
+                static function native_from_samples(const Vector<std::hardware_float>&: samples, long int: channels, long int: rate) -> AudioBuffer as "walnut_rt::audio::buffer::from_samples";
+                static function native_tone(float: frequency, float: seconds, long int: rate, long int: channels, float: amplitude, long int: shape) -> AudioBuffer as "walnut_rt::audio::buffer::tone";
+                function native_save(const string&: path, long int: type, long int: wav_format, bool: dither, long int: flac_compression, long int: flac_bits, long int: mp3_bitrate, bool: mp3_vbr, long int: mp3_vbr_quality, long int: mp3_quality, const Vector<string>&: keys, const Vector<string>&: values) const -> string as "save";
+                function native_get(long int: frame, long int: channel) const -> std::hardware_float as "get";
+                function native_set(long int: frame, long int: channel, std::hardware_float: value) -> void as "set";
+                function native_set_wide(long int: frame, long int: channel, float: value) -> void as "set_wide";
+                function native_channel(long int: index) const -> Vector<std::hardware_float> as "channel";
+                function native_set_channel(long int: index, const Vector<std::hardware_float>&: values) -> void as "set_channel";
+                function native_append(const AudioBuffer&: other) -> bool as "append";
+                function native_insert(long int: at, const AudioBuffer&: other) -> bool as "insert";
+                function native_erase(long int: start, long int: count) -> void as "erase";
+                function native_mix_in(const AudioBuffer&: other, long int: at, float: gain) -> bool as "mix_in";
+                function native_slice(long int: start, long int: count) const -> AudioBuffer as "slice";
+                function native_with_channels(long int: channels) const -> AudioBuffer as "with_channels";
+                function native_resampled(long int: rate, long int: quality) const -> AudioBuffer as "resampled";
+                function native_converted(long int: channels, long int: rate, long int: quality) const -> AudioBuffer as "converted";
+                function native_fade(long int: start, long int: count, float: from_gain, float: to_gain, long int: curve) -> void as "fade";
+                function native_fade_in(float: seconds, long int: curve) -> void as "fade_in";
+                function native_fade_out(float: seconds, long int: curve) -> void as "fade_out";
+                function native_swap(long int: first, long int: second) -> void as "swap_channels";
+                function native_silence_ranges(float: threshold_db, float: min_seconds) const -> Vector<std::hardware_int64> as "silence_ranges";
+                function native_gain_envelope(const Vector<std::hardware_double>&: times, const Vector<std::hardware_double>&: dbs) -> void as "gain_envelope";
+                function native_time_stretched(float: tempo, long int: quality, long int: mode) const -> AudioBuffer as "time_stretched";
+                function native_pitch_changed(float: semitones, long int: quality, long int: mode) const -> AudioBuffer as "pitch_changed";
+                function native_tempo_and_pitch(float: tempo, float: semitones, long int: quality, long int: mode) const -> AudioBuffer as "tempo_and_pitch_changed";
+                function native_speed_changed(float: factor, long int: quality) const -> AudioBuffer as "speed_changed";
+                function native_spectrum(long int: bands, float: min_hz, float: max_hz, long int: fft_size) const -> Vector<std::hardware_float> as "spectrum";
+
+                function native_set_sample_rate(long int: rate) -> void as "set_sample_rate";
+                function native_resize(long int: frames) -> void as "resize";
+                function check(long int: frame, long int: channel, const string&: what) const -> void {
+                    if (frame < 0 || frame >= frames() || channel < 0 || channel >= channels()) then {
+                        throw std::errors::audio_error(static_cast<string>(`${what}: frame ${frame}, channel ${channel} is outside the buffer (${frames()} frames, ${channels()} channels)`));
+                    }
+                } end function check
+
+                function check_range(long int: start, long int: count, const string&: what) const -> void {
+                    if (start < 0 || count < 0 || start + count > frames()) then {
+                        throw std::errors::audio_error(static_cast<string>(`${what}: frames ${start} to ${start + count} are outside the buffer's ${frames()} frames`));
+                    }
+                } end function check_range
+
+                function check_format(long int: c, long int: rate, const string&: what) const -> void {
+                    if (c <= 0 || c > 64) then {
+                        throw std::errors::audio_error(static_cast<string>(`${what}: a buffer needs 1 to 64 channels, not ${c}`));
+                    }
+                    if (rate <= 0) then {
+                        throw std::errors::audio_error(static_cast<string>(`${what}: the sample rate has to be above 0, not ${rate}`));
+                    }
+                } end function check_format
+
+                function check_same(const AudioBuffer&: other, const string&: what) const -> void {
+                    if (other.channels() != channels() || other.sample_rate() != sample_rate()) then {
+                        throw std::errors::audio_error(static_cast<string>(`${what}: the buffers don't match (${channels()} channels at ${sample_rate()} Hz and ${other.channels()} channels at ${other.sample_rate()} Hz); use converted() first`));
+                    }
+                } end function check_same
+
+            public:
+                constructor();
+                constructor(long int: channels, long int: sample_rate) as "walnut_rt::audio::buffer";
+                constructor(long int: channels, long int: sample_rate, long int: frames) as "walnut_rt::audio::buffer";
+
+                static function make(long int: channels, long int: sample_rate, long int: frames = 0) -> AudioBuffer {
+                    AudioBuffer: probe;
+                    probe.check_format(channels, sample_rate, "AudioBuffer::make()");
+                    if (frames < 0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::make(): the length can't be negative (${frames} frames)`));
+                    }
+                    return AudioBuffer(channels, sample_rate, frames);
+                } end function make
+
+                static function silence(float: seconds, long int: sample_rate = 48000, long int: channels = 2) -> AudioBuffer {
+                    AudioBuffer: probe;
+                    probe.check_format(channels, sample_rate, "AudioBuffer::silence()");
+                    long int: count = static_cast<long int>(seconds * static_cast<float>(sample_rate) + 0.5);
+                    if (count < 0) then {
+                        count = 0;
+                    }
+                    return AudioBuffer(channels, sample_rate, count);
+                } end function silence
+
+                static function tone(float: frequency, float: seconds, long int: sample_rate = 48000, long int: channels = 1, float: amplitude = 0.5, Waveform: shape = Waveform::sine) -> AudioBuffer {
+                    AudioBuffer: probe;
+                    probe.check_format(channels, sample_rate, "AudioBuffer::tone()");
+                    return native_tone(frequency, seconds, sample_rate, channels, amplitude, static_cast<long int>(shape));
+                } end function tone
+
+                static function from_samples(const Vector<std::hardware_float>&: samples, long int: channels, long int: sample_rate) -> AudioBuffer {
+                    AudioBuffer: probe;
+                    probe.check_format(channels, sample_rate, "AudioBuffer::from_samples()");
+                    return native_from_samples(samples, channels, sample_rate);
+                } end function from_samples
+
+                static function load(const string&: path) -> AudioBuffer {
+                    AudioBuffer: b = native_load(path);
+                    if (b.empty()) then {
+                        const string: problem = native_error();
+                        if (problem.size() > 0) then {
+                            throw detail::fail(static_cast<string>(`can't load '${path}'`), problem);
+                        }
+                    }
+                    return b;
+                } end function load
+
+                function save(const string&: path, const SaveOptions&: options = SaveOptions()) const -> void {
+                    const string: problem = native_save(path, static_cast<long int>(options.format), static_cast<long int>(options.wav_format), options.dither, options.flac_compression, options.flac_bits, options.mp3_bitrate, options.mp3_vbr, options.mp3_vbr_quality, options.mp3_quality, options.tag_keys, options.tag_values);
+                    detail::check_not_empty(problem, static_cast<string>(`can't save '${path}'`));
+                } end function save
+
+                function save(const string&: path, FileType: format) const -> void {
+                    save(path, SaveOptions(format));
+                } end function save
+
+                function channels() const -> long int;
+                function sample_rate() const -> long int;
+                function frames() const -> long int;
+                function sample_count() const -> long int;
+                function duration() const -> float;
+                function empty() const -> bool;
+
+                function sample(long int: frame, long int: channel = 0) const -> std::hardware_float {
+                    check(frame, channel, "AudioBuffer::sample()");
+                    return native_get(frame, channel);
+                } end function sample
+
+                function set_sample(long int: frame, long int: channel, std::hardware_float: value) -> void {
+                    check(frame, channel, "AudioBuffer::set_sample()");
+                    native_set(frame, channel, value);
+                } end function set_sample
+
+                function set_sample(long int: frame, long int: channel, float: value) -> void {
+                    check(frame, channel, "AudioBuffer::set_sample()");
+                    native_set_wide(frame, channel, value);
+                } end function set_sample
+
+                function samples() const -> Vector<std::hardware_float>;
+                function set_samples(const Vector<std::hardware_float>&: values) -> void;
+
+                function channel(long int: index) const -> Vector<std::hardware_float> {
+                    if (index < 0 || index >= channels()) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::channel(): channel ${index} doesn't exist in a ${channels()}-channel buffer`));
+                    }
+                    return native_channel(index);
+                } end function channel
+
+                function set_channel(long int: index, const Vector<std::hardware_float>&: values) -> void {
+                    if (index < 0 || index >= channels()) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::set_channel(): channel ${index} doesn't exist in a ${channels()}-channel buffer`));
+                    }
+                    native_set_channel(index, values);
+                } end function set_channel
+
+                function set_sample_rate(long int: rate) -> void {
+                    if (rate <= 0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::set_sample_rate(): the sample rate has to be above 0, not ${rate}`));
+                    }
+                    native_set_sample_rate(rate);
+                } end function set_sample_rate
+
+                function resize(long int: frames) -> void {
+                    if (frames < 0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::resize(): the length can't be negative (${frames} frames)`));
+                    }
+                    native_resize(frames);
+                } end function resize
+
+                function clear() -> void;
+                function silence() -> void;
+
+                function append(const AudioBuffer&: other) -> void {
+                    if (empty() && channels() == 0) then {
+                        *this = other;
+                        return;
+                    }
+                    check_same(other, "AudioBuffer::append()");
+                    native_append(other);
+                } end function append
+
+                function insert(long int: at_frame, const AudioBuffer&: other) -> void {
+                    check_same(other, "AudioBuffer::insert()");
+                    if (at_frame < 0 || at_frame > frames()) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::insert(): frame ${at_frame} is outside the buffer's ${frames()} frames`));
+                    }
+                    native_insert(at_frame, other);
+                } end function insert
+
+                function erase(long int: start_frame, long int: count) -> void {
+                    check_range(start_frame, count, "AudioBuffer::erase()");
+                    native_erase(start_frame, count);
+                } end function erase
+
+                function mix(const AudioBuffer&: other, long int: at_frame = 0, float: gain = 1.0) -> void {
+                    check_same(other, "AudioBuffer::mix()");
+                    if (at_frame < 0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::mix(): frame ${at_frame} is negative`));
+                    }
+                    native_mix_in(other, at_frame, gain);
+                } end function mix
+
+                function slice(long int: start_frame, long int: count) const -> AudioBuffer {
+                    check_range(start_frame, count, "AudioBuffer::slice()");
+                    return native_slice(start_frame, count);
+                } end function slice
+
+                function cut(float: start_seconds, float: length_seconds) const -> AudioBuffer {
+                    long int: start = frame_at(start_seconds);
+                    long int: end_frame = frame_at(start_seconds + length_seconds);
+                    if (start > frames()) then {
+                        start = frames();
+                    }
+                    if (end_frame > frames()) then {
+                        end_frame = frames();
+                    }
+                    if (end_frame < start) then {
+                        end_frame = start;
+                    }
+                    return native_slice(start, end_frame - start);
+                } end function cut
+
+                function with_channels(long int: count) const -> AudioBuffer {
+                    check_format(count, sample_rate(), "AudioBuffer::with_channels()");
+                    return native_with_channels(count);
+                } end function with_channels
+
+                function resampled(long int: rate, Quality: quality = Quality::high) const -> AudioBuffer {
+                    check_format(channels(), rate, "AudioBuffer::resampled()");
+                    return native_resampled(rate, static_cast<long int>(quality));
+                } end function resampled
+
+                function converted(long int: channels_wanted, long int: rate, Quality: quality = Quality::high) const -> AudioBuffer {
+                    check_format(channels_wanted, rate, "AudioBuffer::converted()");
+                    return native_converted(channels_wanted, rate, static_cast<long int>(quality));
+                } end function converted
+
+                function to_mono() const -> AudioBuffer;
+                function to_stereo() const -> AudioBuffer;
+
+                function swap_channels(long int: first = 0, long int: second = 1) -> void {
+                    if (first < 0 || second < 0 || first >= channels() || second >= channels()) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::swap_channels(): channels ${first} and ${second} don't both exist in a ${channels()}-channel buffer`));
+                    }
+                    native_swap(first, second);
+                } end function swap_channels
+
+                function frame_at(float: seconds) const -> long int;
+                function seconds_at(long int: frame) const -> float;
+
+                function peak() const -> std::hardware_float;
+                function rms() const -> std::hardware_float;
+                function peak_db() const -> float;
+                function true_peak_db() const -> float;
+                function gain(float: factor) -> void as "apply_gain";
+                function gain_db(float: db) -> void as "apply_gain_db";
+                function normalize(float: target_peak = 1.0) -> void;
+                function normalize_db(float: target_db) -> void;
+                function clamp() -> void;
+
+                function loudness() const -> Loudness as "walnut_rt::audio::loudness::measure";
+                function normalize_loudness(float: target_lufs = -14.0, float: max_true_peak_db = -1.0) -> void as "walnut_rt::audio::normalize_loudness";
+
+                function fade(long int: start_frame, long int: count, float: from_gain, float: to_gain, FadeCurve: curve = FadeCurve::linear) -> void {
+                    check_range(start_frame, count, "AudioBuffer::fade()");
+                    native_fade(start_frame, count, from_gain, to_gain, static_cast<long int>(curve));
+                } end function fade
+
+                function fade_in(float: seconds, FadeCurve: curve = FadeCurve::linear) -> void {
+                    native_fade_in(seconds, static_cast<long int>(curve));
+                } end function fade_in
+
+                function fade_out(float: seconds, FadeCurve: curve = FadeCurve::linear) -> void {
+                    native_fade_out(seconds, static_cast<long int>(curve));
+                } end function fade_out
+
+                function gain_envelope(const Vector<std::hardware_double>&: times, const Vector<std::hardware_double>&: dbs) -> void {
+                    if (times.size() != dbs.size()) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::gain_envelope(): ${times.size()} times but ${dbs.size()} levels`));
+                    }
+                    native_gain_envelope(times, dbs);
+                } end function gain_envelope
+
+                function reverse() -> void;
+                function invert_polarity() -> void;
+                function remove_dc() -> void;
+                function pad(float: before_seconds, float: after_seconds) -> void;
+                function trim_silence(float: threshold_db = -60.0, float: keep_ms = 10.0) -> void;
+
+                function silent_parts(float: threshold_db = -60.0, float: min_seconds = 0.1) const -> Vector<std::hardware_int64> {
+                    return native_silence_ranges(threshold_db, min_seconds);
+                } end function silent_parts
+
+                function time_stretched(float: tempo, StretchQuality: quality = StretchQuality::high, StretchMode: mode = StretchMode::detect) const -> AudioBuffer {
+                    if (tempo < 0.25 || tempo > 4.0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::time_stretched(): the tempo has to be between 0.25 and 4, not ${tempo}`));
+                    }
+                    return native_time_stretched(tempo, static_cast<long int>(quality), static_cast<long int>(mode));
+                } end function time_stretched
+
+                function pitch_shifted(float: semitones, StretchQuality: quality = StretchQuality::high, StretchMode: mode = StretchMode::detect) const -> AudioBuffer {
+                    if (semitones < -24.0 || semitones > 24.0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::pitch_shifted(): the shift has to be between -24 and 24 semitones, not ${semitones}`));
+                    }
+                    return native_pitch_changed(semitones, static_cast<long int>(quality), static_cast<long int>(mode));
+                } end function pitch_shifted
+
+                function stretched(float: tempo, float: semitones, StretchQuality: quality = StretchQuality::high, StretchMode: mode = StretchMode::detect) const -> AudioBuffer {
+                    if (tempo < 0.25 || tempo > 4.0 || semitones < -24.0 || semitones > 24.0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::stretched(): the tempo has to be between 0.25 and 4 and the shift between -24 and 24 semitones, not ${tempo} and ${semitones}`));
+                    }
+                    return native_tempo_and_pitch(tempo, semitones, static_cast<long int>(quality), static_cast<long int>(mode));
+                } end function stretched
+
+                function speed_changed(float: factor, Quality: quality = Quality::high) const -> AudioBuffer {
+                    if (factor <= 0.0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::speed_changed(): the factor has to be above 0, not ${factor}`));
+                    }
+                    return native_speed_changed(factor, static_cast<long int>(quality));
+                } end function speed_changed
+
+                function pitch(float: min_hz = 50.0, float: max_hz = 2000.0) const -> float as "detect_pitch";
+
+                function spectrum(long int: bands = 32, float: min_hz = 20.0, float: max_hz = 20000.0, long int: fft_size = 4096) const -> Vector<std::hardware_float> {
+                    if (bands <= 0) then {
+                        throw std::errors::audio_error(static_cast<string>(`AudioBuffer::spectrum(): the number of bands has to be above 0, not ${bands}`));
+                    }
+                    return native_spectrum(bands, min_hz, max_hz, fft_size);
+                } end function spectrum
+
+                function apply(const Effect&: effect, bool: keep_tail = true) -> void {
+                    effect.apply_to(*this, keep_tail);
+                } end function apply
+
+                function apply(const EffectChain&: chain, bool: keep_tail = true) -> void {
+                    chain.apply_to(*this, keep_tail);
+                } end function apply
+
+                function applied(const Effect&: effect, bool: keep_tail = true) const -> AudioBuffer {
+                    return effect.process(*this, keep_tail);
+                } end function applied
+
+                function applied(const EffectChain&: chain, bool: keep_tail = true) const -> AudioBuffer {
+                    return chain.process(*this, keep_tail);
+                } end function applied
+
+                function to_string() const -> string {
+                    return static_cast<string>(`AudioBuffer(${channels()} channels, ${sample_rate()} Hz, ${frames()} frames)`);
+                } end function to_string
+            } end class AudioBuffer
+
+            class Loudness as "walnut_rt::audio::loudness" {
+            public:
+                constructor();
+                function integrated() const -> float;
+                function range() const -> float;
+                function true_peak_db() const -> float;
+                function sample_peak_db() const -> float;
+                function max_momentary() const -> float;
+                function max_short_term() const -> float;
+            } end class Loudness
+
+            class AudioBlock as "walnut_rt::audio::block" {
+                function native_set(long int: frame, long int: channel, std::hardware_float: value) -> void as "set";
+                function native_set_wide(long int: frame, long int: channel, float: value) -> void as "set_wide";
+                function native_get_index(long int: index) const -> std::hardware_float as "get_index";
+                function native_set_index(long int: index, std::hardware_float: value) -> void as "set_index";
+                function native_set_index_wide(long int: index, float: value) -> void as "set_index_wide";
+                function native_fill(std::hardware_float: value) -> void as "fill";
+                function native_fill_wide(float: value) -> void as "fill_wide";
+                function native_copy(const AudioBuffer&: source, long int: start, float: gain, bool: add) -> long int as "copy_from";
+
+            public:
+                constructor();
+                function frames() const -> long int;
+                function channels() const -> long int;
+                function sample_rate() const -> long int;
+                function sample_count() const -> long int;
+                function writable() const -> bool;
+                function get(long int: frame, long int: channel = 0) const -> std::hardware_float;
+
+                function set(long int: frame, long int: channel, std::hardware_float: value) -> void {
+                    native_set(frame, channel, value);
+                } end function set
+
+                function set(long int: frame, long int: channel, float: value) -> void {
+                    native_set_wide(frame, channel, value);
+                } end function set
+
+                function sample(long int: index) const -> std::hardware_float {
+                    return native_get_index(index);
+                } end function sample
+
+                function set_sample(long int: index, std::hardware_float: value) -> void {
+                    native_set_index(index, value);
+                } end function set_sample
+
+                function set_sample(long int: index, float: value) -> void {
+                    native_set_index_wide(index, value);
+                } end function set_sample
+
+                function fill(std::hardware_float: value) -> void {
+                    native_fill(value);
+                } end function fill
+
+                function fill(float: value) -> void {
+                    native_fill_wide(value);
+                } end function fill
+
+                function silence() -> void {
+                    native_fill_wide(0.0);
+                } end function silence
+
+                function gain(float: factor) -> void as "apply_gain";
+                function peak() const -> std::hardware_float;
+                function rms() const -> std::hardware_float;
+
+                function copy_from(const AudioBuffer&: source, long int: start_frame = 0, float: gain = 1.0) -> long int {
+                    return native_copy(source, start_frame, gain, false);
+                } end function copy_from
+
+                function add_from(const AudioBuffer&: source, long int: start_frame = 0, float: gain = 1.0) -> long int {
+                    return native_copy(source, start_frame, gain, true);
+                } end function add_from
+
+                function to_buffer() const -> AudioBuffer;
+            } end class AudioBlock
+
+            class Stream as "walnut_rt::audio::stream" {
+                static function native_playback(const string&: device, long int: rate, long int: channels, long int: latency_ms, const string&: name, function(AudioBlock&) -> void: callback) -> Stream as "walnut_rt::audio::stream::open_playback";
+                static function native_capture(long int: kind, const string&: device, long int: rate, long int: channels, long int: latency_ms, const string&: name, function(const AudioBlock&) -> void: callback) -> Stream as "walnut_rt::audio::stream::open_capture";
+                static function native_error() -> string as "walnut_rt::audio::last_error";
+                function native_start() -> string as "start";
+                function native_kind() const -> long int as "kind";
+
+                static function opened(Stream&&: s, const string&: what) -> Stream {
+                    if (!s.is_open()) then {
+                        throw detail::fail(what, native_error());
+                    }
+                    return std::core::move(s);
+                } end function opened
+
+            public:
+                constructor();
+                constructor(const Stream&: other) = delete;
+                constructor(Stream&&: other);
+                operator(=) function(Stream&&: other) -> Stream&;
+
+                static function playback(function(AudioBlock&) -> void: callback, const string&: device = "", long int: sample_rate = 0, long int: channels = 0, long int: latency_ms = 20, const string&: name = "walnut") -> Stream {
+                    return opened(native_playback(device, sample_rate, channels, latency_ms, name, callback), "can't open the output device");
+                } end function playback
+
+                static function capture(function(const AudioBlock&) -> void: callback, const string&: device = "", long int: sample_rate = 0, long int: channels = 0, long int: latency_ms = 20, const string&: name = "walnut") -> Stream {
+                    return opened(native_capture(1, device, sample_rate, channels, latency_ms, name, callback), "can't open the input device");
+                } end function capture
+
+                static function loopback(function(const AudioBlock&) -> void: callback, const string&: device = "", long int: sample_rate = 0, long int: channels = 0, long int: latency_ms = 20, const string&: name = "walnut") -> Stream {
+                    return opened(native_capture(2, device, sample_rate, channels, latency_ms, name, callback), "can't open the loopback device");
+                } end function loopback
+
+                function start() -> void {
+                    detail::check_not_empty(native_start(), "can't start the stream");
+                } end function start
+
+                function stop() -> void;
+                function close() -> void;
+                function is_open() const -> bool;
+                function running() const -> bool;
+                function failed() const -> bool;
+                function error() const -> string;
+
+                function check() const -> void {
+                    if (failed()) then {
+                        throw detail::fail("the audio stream stopped", error());
+                    }
+                } end function check
+
+                function kind() const -> DeviceKind {
+                    return static_cast<DeviceKind>(native_kind());
+                } end function kind
+
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+                function latency_frames() const -> long int;
+                function device_name() const -> string;
+                function frames_processed() const -> long int;
+                function seconds_processed() const -> float;
+            } end class Stream
+
+            class Effect as "walnut_rt::audio::effect" {
+                static function native_gain(float: db) -> Effect as "walnut_rt::audio::effect::gain";
+                static function native_filter(long int: type, float: frequency, float: q, float: gain_db, float: slope_db) -> Effect as "walnut_rt::audio::effect::filter";
+                static function native_parametric_eq(long int: bands) -> Effect as "walnut_rt::audio::effect::parametric_eq";
+                static function native_compressor(float: threshold, float: ratio, float: attack, float: release) -> Effect as "walnut_rt::audio::effect::compressor";
+                static function native_limiter(float: ceiling, float: release, float: lookahead) -> Effect as "walnut_rt::audio::effect::limiter";
+                static function native_gate(float: threshold, float: attack, float: hold, float: release) -> Effect as "walnut_rt::audio::effect::noise_gate";
+                static function native_expander(float: threshold, float: ratio) -> Effect as "walnut_rt::audio::effect::expander";
+                static function native_de_esser(float: frequency, float: threshold, float: amount) -> Effect as "walnut_rt::audio::effect::de_esser";
+                static function native_pitch_shifter(float: semitones) -> Effect as "walnut_rt::audio::effect::pitch_shifter";
+                static function native_formant_shifter(float: semitones) -> Effect as "walnut_rt::audio::effect::formant_shifter";
+                static function native_voice_changer(long int: preset) -> Effect as "walnut_rt::audio::effect::voice_changer";
+                static function native_hum_remover(float: frequency) -> Effect as "walnut_rt::audio::effect::hum_remover";
+                static function native_create(const string&: type) -> Effect as "walnut_rt::audio::effect::create";
+                static function native_custom(const string&: name, function(AudioBlock&) -> void: body) -> Effect as "walnut_rt::audio::effect::custom";
+                static function native_from_json(const string&: json) -> Effect as "walnut_rt::audio::effect::from_json";
+                static function native_error() -> string as "walnut_rt::audio::last_error";
+                function native_set(const string&: parameter, float: value) -> bool as "set";
+                function native_set_band(long int: index, long int: type, float: frequency, float: q, float: gain_db, bool: enabled) -> bool as "set_band";
+                function native_set_graphic_band(long int: index, float: gain_db) -> bool as "set_graphic_band";
+                function native_learn_noise(const AudioBuffer&: noise) -> string as "learn_noise";
+                function native_process(const AudioBuffer&: input, bool: keep_tail) const -> AudioBuffer as "process";
+                function native_apply(AudioBuffer&: buffer, bool: keep_tail) const -> void as "apply";
+                function valid() const -> bool;
+
+                function native_get(const string&: parameter) const -> float as "get";
+                function native_minimum(const string&: parameter) const -> float as "minimum";
+                function native_maximum(const string&: parameter) const -> float as "maximum";
+                static function native_autotune() -> Effect as "walnut_rt::audio::effect::autotune";
+                function require(const string&: parameter, const string&: what) const -> void {
+                    if (!has(parameter)) then {
+                        string: known = "";
+                        for (const string&: n in parameter_names()) {
+                            if (known.size() > 0) then {
+                                known += ", ";
+                            }
+                            known += n;
+                        }
+                        throw std::errors::audio_error(static_cast<string>(`${what}: the ${name()} effect has no parameter '${parameter}' (it has: ${known})`));
+                    }
+                } end function require
+
+                static function made(Effect&&: e, const string&: what) -> Effect {
+                    if (!e.valid()) then {
+                        throw detail::fail(what, native_error());
+                    }
+                    return std::core::move(e);
+                } end function made
+
+            public:
+                constructor();
+
+                static function gain(float: db = 0.0) -> Effect {
+                    return native_gain(db);
+                } end function gain
+
+                static function filter(FilterType: type, float: frequency, float: q = 0.70710678, float: gain_db = 0.0, float: slope_db = 12.0) -> Effect {
+                    return native_filter(static_cast<long int>(type), frequency, q, gain_db, slope_db);
+                } end function filter
+
+                static function lowpass(float: frequency, float: q = 0.70710678) -> Effect {
+                    return native_filter(static_cast<long int>(FilterType::lowpass), frequency, q, 0.0, 12.0);
+                } end function lowpass
+
+                static function highpass(float: frequency, float: q = 0.70710678) -> Effect {
+                    return native_filter(static_cast<long int>(FilterType::highpass), frequency, q, 0.0, 12.0);
+                } end function highpass
+
+                static function bandpass(float: frequency, float: q = 1.0) -> Effect {
+                    return native_filter(static_cast<long int>(FilterType::bandpass), frequency, q, 0.0, 12.0);
+                } end function bandpass
+
+                static function notch(float: frequency, float: q = 5.0) -> Effect {
+                    return native_filter(static_cast<long int>(FilterType::notch), frequency, q, 0.0, 12.0);
+                } end function notch
+
+                static function eq(long int: bands = 8) -> Effect {
+                    if (bands < 1 || bands > 16) then {
+                        throw std::errors::audio_error(static_cast<string>(`Effect::eq(): an equalizer has 1 to 16 bands, not ${bands}`));
+                    }
+                    return native_parametric_eq(bands);
+                } end function eq
+
+                static function graphic_eq() -> Effect as "walnut_rt::audio::effect::graphic_eq";
+                static function dc_blocker() -> Effect as "walnut_rt::audio::effect::dc_blocker";
+
+                static function compressor(float: threshold_db = -18.0, float: ratio = 4.0, float: attack_ms = 10.0, float: release_ms = 100.0) -> Effect {
+                    return native_compressor(threshold_db, ratio, attack_ms, release_ms);
+                } end function compressor
+
+                static function limiter(float: ceiling_db = -1.0, float: release_ms = 50.0, float: lookahead_ms = 5.0) -> Effect {
+                    return native_limiter(ceiling_db, release_ms, lookahead_ms);
+                } end function limiter
+
+                static function gate(float: threshold_db = -40.0, float: attack_ms = 1.0, float: hold_ms = 50.0, float: release_ms = 100.0) -> Effect {
+                    return native_gate(threshold_db, attack_ms, hold_ms, release_ms);
+                } end function gate
+
+                static function expander(float: threshold_db = -40.0, float: ratio = 2.0) -> Effect {
+                    return native_expander(threshold_db, ratio);
+                } end function expander
+
+                static function de_esser(float: frequency = 6000.0, float: threshold_db = -30.0, float: amount_db = 6.0) -> Effect {
+                    return native_de_esser(frequency, threshold_db, amount_db);
+                } end function de_esser
+
+                static function reverb() -> Effect as "walnut_rt::audio::effect::reverb";
+                static function delay() -> Effect as "walnut_rt::audio::effect::delay";
+                static function distortion() -> Effect as "walnut_rt::audio::effect::distortion";
+                static function bitcrusher() -> Effect as "walnut_rt::audio::effect::bitcrusher";
+                static function chorus() -> Effect as "walnut_rt::audio::effect::chorus";
+                static function flanger() -> Effect as "walnut_rt::audio::effect::flanger";
+                static function phaser() -> Effect as "walnut_rt::audio::effect::phaser";
+                static function tremolo() -> Effect as "walnut_rt::audio::effect::tremolo";
+                static function vibrato() -> Effect as "walnut_rt::audio::effect::vibrato";
+                static function autopan() -> Effect as "walnut_rt::audio::effect::autopan";
+
+                static function pitch_shift(float: semitones) -> Effect {
+                    return native_pitch_shifter(semitones);
+                } end function pitch_shift
+
+                static function formant_shift(float: semitones) -> Effect {
+                    return native_formant_shifter(semitones);
+                } end function formant_shift
+
+                static function autotune(long int: key = 0, Scale: scale = Scale::chromatic) -> Effect {
+                    Effect: e = native_autotune();
+                    e.native_set("key", static_cast<float>(key));
+                    e.native_set("scale", static_cast<float>(static_cast<long int>(scale)));
+                    return e;
+                } end function autotune
+
+                static function voice_changer(VoicePreset: preset = VoicePreset::none) -> Effect {
+                    return native_voice_changer(static_cast<long int>(preset));
+                } end function voice_changer
+
+                static function voice_eq() -> Effect as "walnut_rt::audio::effect::voice_eq";
+                static function ring_modulator() -> Effect as "walnut_rt::audio::effect::ring_modulator";
+                static function vocoder() -> Effect as "walnut_rt::audio::effect::vocoder";
+                static function noise_reduction() -> Effect as "walnut_rt::audio::effect::noise_reduction";
+
+                static function hum_remover(float: frequency = 0.0) -> Effect {
+                    return native_hum_remover(frequency);
+                } end function hum_remover
+
+                static function click_remover() -> Effect as "walnut_rt::audio::effect::click_remover";
+
+                static function create(const string&: type) -> Effect {
+                    Effect: e = native_create(type);
+                    if (!e.valid()) then {
+                        throw std::errors::audio_error(static_cast<string>(`Effect::create(): there is no effect type '${type}'`));
+                    }
+                    return e;
+                } end function create
+
+                static function types() -> Vector<string> as "walnut_rt::audio::effect::types";
+
+                static function custom(function(AudioBlock&) -> void: body, const string&: name = "custom") -> Effect {
+                    return native_custom(name, body);
+                } end function custom
+
+                static function from_json(const string&: json) -> Effect {
+                    return made(native_from_json(json), "can't read the effect");
+                } end function from_json
+
+                function name() const -> string;
+                function type() const -> string;
+                function has(const string&: parameter) const -> bool;
+
+                function set(const string&: parameter, float: value) -> void {
+                    require(parameter, "Effect::set()");
+                    native_set(parameter, value);
+                } end function set
+
+                function get(const string&: parameter) const -> float {
+                    require(parameter, "Effect::get()");
+                    return native_get(parameter);
+                } end function get
+
+                function minimum(const string&: parameter) const -> float {
+                    require(parameter, "Effect::minimum()");
+                    return native_minimum(parameter);
+                } end function minimum
+
+                function maximum(const string&: parameter) const -> float {
+                    require(parameter, "Effect::maximum()");
+                    return native_maximum(parameter);
+                } end function maximum
+
+                function unit(const string&: parameter) const -> string;
+                function parameter_names() const -> Vector<string>;
+                function set_enabled(bool: on) -> void;
+                function enabled() const -> bool;
+                function reset() -> void;
+                function latency_frames() const -> long int;
+                function tail_frames() const -> long int;
+
+                function set_band(long int: index, FilterType: type, float: frequency, float: q = 1.0, float: gain_db = 0.0, bool: on = true) -> void {
+                    if (!native_set_band(index, static_cast<long int>(type), frequency, q, gain_db, on)) then {
+                        throw std::errors::audio_error(static_cast<string>(`Effect::set_band(): band ${index} doesn't exist (this is a '${name()}' effect with ${band_count()} bands; only Effect::eq() has bands to set this way)`));
+                    }
+                } end function set_band
+
+                function set_band_gain(long int: index, float: gain_db) -> void {
+                    if (!native_set_graphic_band(index, gain_db)) then {
+                        throw std::errors::audio_error(static_cast<string>(`Effect::set_band_gain(): band ${index} doesn't exist (only Effect::graphic_eq() has 10 fixed bands)`));
+                    }
+                } end function set_band_gain
+
+                function band_count() const -> long int;
+
+                function learn_noise(const AudioBuffer&: noise) -> void {
+                    detail::check_not_empty(native_learn_noise(noise), "Effect::learn_noise()");
+                } end function learn_noise
+
+                function detected_pitch() const -> float;
+                function gain_reduction_db() const -> float;
+                function error() const -> string;
+                function clear_error() -> void;
+                function clone() const -> Effect;
+                function to_json() const -> string;
+
+                function process(const AudioBuffer&: input, bool: keep_tail = true) const -> AudioBuffer {
+                    return native_process(input, keep_tail);
+                } end function process
+
+                function apply_to(AudioBuffer&: buffer, bool: keep_tail = true) const -> void {
+                    native_apply(buffer, keep_tail);
+                } end function apply_to
+            } end class Effect
+
+            class EffectChain as "walnut_rt::audio::chain" {
+                static function native_voice_preset(long int: preset) -> EffectChain as "walnut_rt::audio::chain::voice_preset";
+                static function native_voice_preset_named(const string&: name) -> EffectChain as "walnut_rt::audio::chain::voice_preset_named";
+                static function native_load(const string&: path) -> EffectChain as "walnut_rt::audio::chain::load_preset";
+                static function native_from_json(const string&: json) -> EffectChain as "walnut_rt::audio::chain::from_json";
+                static function native_error() -> string as "walnut_rt::audio::last_error";
+                function native_save(const string&: path, const string&: name, const string&: author, const string&: description) const -> string as "save_preset";
+                function native_insert(long int: index, const Effect&: effect) -> bool as "insert";
+                function native_remove(long int: index) -> bool as "remove";
+                function native_move(long int: from_index, long int: to_index) -> bool as "move_effect";
+                function native_at(long int: index) const -> Effect as "at";
+                function native_process(const AudioBuffer&: input, bool: keep_tail) const -> AudioBuffer as "process";
+                function native_apply(AudioBuffer&: buffer, bool: keep_tail) const -> void as "apply";
+
+                function native_add(const Effect&: effect) -> void as "add";
+                function check_index(long int: index, long int: limit, const string&: what) const -> void {
+                    if (index < 0 || index >= limit) then {
+                        throw std::errors::audio_error(static_cast<string>(`${what}: index ${index} is out of range for a chain of ${size()} effects`));
+                    }
+                } end function check_index
+
+                static function loaded(EffectChain&&: c, const string&: what) -> EffectChain {
+                    const string: problem = native_error();
+                    if (problem.size() > 0) then {
+                        throw detail::fail(what, problem);
+                    }
+                    return std::core::move(c);
+                } end function loaded
+
+            public:
+                constructor();
+
+                constructor(Effect...: effects) {
+                    for (const Effect&: e in effects) {
+                        add(e);
+                    }
+                }
+
+                static function voice_preset(VoicePreset: preset) -> EffectChain {
+                    return native_voice_preset(static_cast<long int>(preset));
+                } end function voice_preset
+
+                static function voice_preset(const string&: name) -> EffectChain {
+                    bool: known = false;
+                    for (const string&: n in voice_preset_names()) {
+                        if (n == name) then {
+                            known = true;
+                        }
+                    }
+                    if (!known) then {
+                        throw std::errors::audio_error(static_cast<string>(`EffectChain::voice_preset(): there is no voice preset named '${name}'`));
+                    }
+                    return native_voice_preset_named(name);
+                } end function voice_preset
+
+                static function voice_preset_names() -> Vector<string> as "walnut_rt::audio::chain::voice_preset_names";
+
+                static function load(const string&: path) -> EffectChain {
+                    return loaded(native_load(path), static_cast<string>(`can't load the preset '${path}'`));
+                } end function load
+
+                static function from_json(const string&: json) -> EffectChain {
+                    return loaded(native_from_json(json), "can't read the preset");
+                } end function from_json
+
+                function save(const string&: path, const string&: name = "", const string&: author = "", const string&: description = "") const -> void {
+                    detail::check_not_empty(native_save(path, name, author, description), static_cast<string>(`can't save the preset '${path}'`));
+                } end function save
+
+                function to_json(const string&: name = "") const -> string;
+
+                function add(const Effect&: effect) -> EffectChain& {
+                    native_add(effect);
+                    return *this;
+                } end function add
+
+                function insert(long int: index, const Effect&: effect) -> void {
+                    check_index(index, size() + 1, "EffectChain::insert()");
+                    native_insert(index, effect);
+                } end function insert
+
+                function remove(long int: index) -> void {
+                    check_index(index, size(), "EffectChain::remove()");
+                    native_remove(index);
+                } end function remove
+
+                function move(long int: from_index, long int: to_index) -> void {
+                    check_index(from_index, size(), "EffectChain::move()");
+                    check_index(to_index, size(), "EffectChain::move()");
+                    native_move(from_index, to_index);
+                } end function move
+
+                function clear() -> void;
+                function size() const -> long int;
+
+                function at(long int: index) const -> Effect {
+                    check_index(index, size(), "EffectChain::at()");
+                    return native_at(index);
+                } end function at
+
+                operator([]) function(long int: index) const -> Effect {
+                    return at(index);
+                }
+
+                function reset() -> void;
+                function set_enabled(bool: on) -> void;
+                function enabled() const -> bool;
+                function latency_frames() const -> long int;
+                function tail_frames() const -> long int;
+                function as_effect() const -> Effect;
+
+                function process(const AudioBuffer&: input, bool: keep_tail = true) const -> AudioBuffer {
+                    return native_process(input, keep_tail);
+                } end function process
+
+                function apply_to(AudioBuffer&: buffer, bool: keep_tail = true) const -> void {
+                    native_apply(buffer, keep_tail);
+                } end function apply_to
+            } end class EffectChain
+
+            class LiveChain as "walnut_rt::audio::duplex" {
+                function native_start(const string&: input, const string&: output, long int: rate, long int: channels, long int: latency_ms, bool: loopback) -> string as "start";
+
+            public:
+                constructor();
+                constructor(const LiveChain&: other) = delete;
+                constructor(LiveChain&&: other);
+
+                function start(const string&: input = "", const string&: output = "", long int: sample_rate = 0, long int: channels = 0, long int: latency_ms = 20, bool: loopback = false) -> void {
+                    detail::check_not_empty(native_start(input, output, sample_rate, channels, latency_ms, loopback), "can't start the live chain");
+                } end function start
+
+                function stop() -> void;
+                function running() const -> bool;
+                function failed() const -> bool;
+                function error() const -> string;
+
+                function check() const -> void {
+                    if (failed()) then {
+                        throw detail::fail("the live chain stopped", error());
+                    }
+                } end function check
+
+                function effects() const -> EffectChain;
+                function set_effects(const EffectChain&: chain) -> void;
+                function set_gain(float: gain) -> void;
+                function gain() const -> float;
+                function set_bypass(bool: on) -> void;
+                function bypass() const -> bool;
+                function set_muted(bool: on) -> void;
+                function muted() const -> bool;
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+                function input_device() const -> string;
+                function output_device() const -> string;
+                function underruns() const -> long int;
+                function overruns() const -> long int;
+                function dropped_frames() const -> long int;
+                function frames_processed() const -> long int;
+                function input_peak() -> float;
+                function output_peak() -> float;
+                function latency_ms() const -> float;
+            } end class LiveChain
+
+            class Sound as "walnut_rt::audio::sound" {
+                static function native_load(const string&: path) -> Sound as "walnut_rt::audio::sound::load";
+                static function native_error() -> string as "walnut_rt::audio::last_error";
+
+            public:
+                constructor();
+                constructor(const AudioBuffer&: buffer);
+
+                static function load(const string&: path) -> Sound {
+                    Sound: s = native_load(path);
+                    if (!s.valid()) then {
+                        const string: problem = native_error();
+                        if (problem.size() > 0) then {
+                            throw detail::fail(static_cast<string>(`can't load '${path}'`), problem);
+                        }
+                    }
+                    return s;
+                } end function load
+
+                function valid() const -> bool;
+                function channels() const -> long int;
+                function sample_rate() const -> long int;
+                function frames() const -> long int;
+                function duration() const -> float;
+                function to_buffer() const -> AudioBuffer;
+            } end class Sound
+
+            class Voice as "walnut_rt::audio::voice" {
+                function native_stop(float: fade_out) -> void as "stop";
+
+            public:
+                constructor();
+                function id() const -> long int;
+                function valid() const -> bool;
+                function is_playing() const -> bool;
+                function is_paused() const -> bool;
+
+                function stop(float: fade_out_seconds = 0.0) -> void {
+                    native_stop(fade_out_seconds);
+                } end function stop
+
+                function pause() -> void;
+                function resume() -> void;
+                function set_gain(float: gain) -> void;
+                function set_pan(float: pan) -> void;
+                function set_speed(float: speed) -> void;
+                function set_loop(bool: on) -> void;
+                function set_pitch(float: semitones) -> bool;
+                function set_preserve_pitch(bool: on) -> bool;
+                function seek(float: seconds) -> bool;
+                function position() const -> float;
+                function duration() const -> float;
+
+                function wait(long int: timeout_ms = -1) const -> bool;
+            } end class Voice
+
+            class Mixer as "walnut_rt::audio::mixer" {
+                function native_play(const Sound&: sound, float: gain, float: pan, float: speed, bool: loop, bool: paused, float: start, float: fade_in, float: pitch, bool: preserve_pitch) -> Voice as "play";
+                function native_play_buffer(const AudioBuffer&: buffer, float: gain, float: pan, float: speed, bool: loop, bool: paused, float: start, float: fade_in, float: pitch, bool: preserve_pitch) -> Voice as "play_buffer";
+                function native_play_file(const string&: path, float: gain, float: pan, float: speed, bool: loop, bool: paused, float: start, float: fade_in, float: pitch, bool: preserve_pitch) -> Voice as "play_file";
+                static function native_error() -> string as "walnut_rt::audio::last_error";
+                function native_start(const string&: device, long int: latency_ms) -> string as "start";
+                function native_stop_all(float: fade_out) -> void as "stop_all";
+                function native_render(long int: frames) -> AudioBuffer as "render";
+
+            public:
+                constructor();
+                constructor(long int: sample_rate, long int: channels = 2);
+                constructor(const Mixer&: other) = delete;
+                constructor(Mixer&&: other);
+
+                function play(const Sound&: sound, float: gain = 1.0, float: pan = 0.0, float: speed = 1.0, bool: loop = false, bool: paused = false, float: start = 0.0, float: fade_in = 0.0, float: pitch = 0.0, bool: preserve_pitch = false) -> Voice {
+                    if (!sound.valid()) then {
+                        throw std::errors::audio_error("Mixer::play(): the sound is empty");
+                    }
+                    return native_play(sound, gain, pan, speed, loop, paused, start, fade_in, pitch, preserve_pitch);
+                } end function play
+
+                function play(const AudioBuffer&: buffer, float: gain = 1.0, float: pan = 0.0, float: speed = 1.0, bool: loop = false, bool: paused = false, float: start = 0.0, float: fade_in = 0.0, float: pitch = 0.0, bool: preserve_pitch = false) -> Voice {
+                    if (buffer.empty()) then {
+                        throw std::errors::audio_error("Mixer::play(): the buffer is empty");
+                    }
+                    return native_play_buffer(buffer, gain, pan, speed, loop, paused, start, fade_in, pitch, preserve_pitch);
+                } end function play
+
+                function play_file(const string&: path, float: gain = 1.0, float: pan = 0.0, float: speed = 1.0, bool: loop = false, bool: paused = false, float: start = 0.0, float: fade_in = 0.0, float: pitch = 0.0, bool: preserve_pitch = false) -> Voice {
+                    Voice: v = native_play_file(path, gain, pan, speed, loop, paused, start, fade_in, pitch, preserve_pitch);
+                    if (!v.valid()) then {
+                        throw detail::fail(static_cast<string>(`can't play '${path}'`), native_error());
+                    }
+                    return v;
+                } end function play_file
+
+                function stop_all(float: fade_out_seconds = 0.0) -> void {
+                    native_stop_all(fade_out_seconds);
+                } end function stop_all
+
+                function voice_count() const -> long int;
+                function set_master_gain(float: gain) -> void;
+                function master_gain() const -> float;
+                function output_peak() const -> float;
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+                function effects() const -> EffectChain;
+
+                function render(long int: frames) -> AudioBuffer {
+                    if (frames < 0) then {
+                        throw std::errors::audio_error(static_cast<string>(`Mixer::render(): the length can't be negative (${frames} frames)`));
+                    }
+                    if (output_running()) then {
+                        throw std::errors::audio_error("Mixer::render(): the mixer is playing through a device; call stop_output() first");
+                    }
+                    return native_render(frames);
+                } end function render
+
+                function render_seconds(float: seconds) -> AudioBuffer {
+                    return render(static_cast<long int>(seconds * static_cast<float>(sample_rate()) + 0.5));
+                } end function render_seconds
+
+                function start(const string&: device = "", long int: latency_ms = 30) -> void {
+                    detail::check_not_empty(native_start(device, latency_ms), "can't start the mixer's output");
+                } end function start
+
+                function stop_output() -> void;
+                function output_running() const -> bool;
+                function output_failed() const -> bool;
+                function output_error() const -> string;
+                function device_name() const -> string;
+                function wait_idle(long int: timeout_ms = -1) const -> bool;
+            } end class Mixer
+
+            class Track as "walnut_rt::audio::track" {
+                function native_add_clip(const Sound&: sound, float: position, const string&: name) -> long int as "add_clip";
+                function native_add_buffer(const AudioBuffer&: buffer, float: position, const string&: name) -> long int as "add_buffer";
+                function native_set_clip_fades(long int: index, float: fade_in, float: fade_out, long int: curve) -> void as "set_clip_fades";
+                function native_automate(long int: target, long int: effect_index, const string&: parameter, float: time, float: value, long int: curve) -> void as "automate";
+
+            public:
+                constructor();
+                function name() const -> string;
+                function set_name(const string&: name) -> void;
+                function index() const -> long int;
+                function set_volume_db(float: db) -> void;
+                function volume_db() const -> float;
+                function set_pan(float: pan) -> void;
+                function pan() const -> float;
+                function set_mute(bool: on) -> void;
+                function mute() const -> bool;
+                function set_solo(bool: on) -> void;
+                function solo() const -> bool;
+                function length() const -> float;
+
+                function add_clip(const Sound&: sound, float: position = 0.0, const string&: name = "") -> long int {
+                    return native_add_clip(sound, position, name);
+                } end function add_clip
+
+                function add_clip(const AudioBuffer&: buffer, float: position = 0.0, const string&: name = "") -> long int {
+                    if (buffer.empty()) then {
+                        throw std::errors::audio_error("Track::add_clip(): the buffer is empty");
+                    }
+                    return native_add_buffer(buffer, position, name);
+                } end function add_clip
+
+                function clip_count() const -> long int;
+                function remove_clip(long int: index) -> bool;
+                function split_clip(long int: index, float: time) -> bool;
+                function clip_position(long int: index) const -> float;
+                function clip_length(long int: index) const -> float;
+                function clip_end(long int: index) const -> float;
+                function clip_name(long int: index) const -> string;
+                function move_clip(long int: index, float: time) -> void;
+                function set_clip_gain_db(long int: index, float: db) -> void;
+                function set_clip_muted(long int: index, bool: on) -> void;
+                function trim_clip_start(long int: index, float: time) -> void;
+                function trim_clip_end(long int: index, float: time) -> void;
+
+                function set_clip_fades(long int: index, float: fade_in, float: fade_out, FadeCurve: curve = FadeCurve::linear) -> void {
+                    native_set_clip_fades(index, fade_in, fade_out, static_cast<long int>(curve));
+                } end function set_clip_fades
+
+                function effects() -> EffectChain;
+
+                function automate_volume(float: time, float: db, AutomationCurve: curve = AutomationCurve::linear) -> void {
+                    native_automate(0, 0, "", time, db, static_cast<long int>(curve));
+                } end function automate_volume
+
+                function automate_pan(float: time, float: pan, AutomationCurve: curve = AutomationCurve::linear) -> void {
+                    native_automate(1, 0, "", time, pan, static_cast<long int>(curve));
+                } end function automate_pan
+
+                function automate_mute(float: time, bool: muted) -> void {
+                    float: value = 0.0;
+                    if (muted) then {
+                        value = 1.0;
+                    }
+                    native_automate(2, 0, "", time, value, static_cast<long int>(AutomationCurve::hold));
+                } end function automate_mute
+
+                function automate_effect(long int: effect_index, const string&: parameter, float: time, float: value, AutomationCurve: curve = AutomationCurve::linear) -> void {
+                    EffectChain: chain = effects();
+                    if (effect_index < 0 || effect_index >= chain.size()) then {
+                        throw std::errors::audio_error(static_cast<string>(`Track::automate_effect(): the track has no effect ${effect_index} (it has ${chain.size()})`));
+                    }
+                    if (!chain.at(effect_index).has(parameter)) then {
+                        throw std::errors::audio_error(static_cast<string>(`Track::automate_effect(): the ${chain.at(effect_index).name()} effect has no parameter '${parameter}'`));
+                    }
+                    native_automate(3, effect_index, parameter, time, value, static_cast<long int>(curve));
+                } end function automate_effect
+
+                function clear_automation() -> void;
+            } end class Track
+
+            class Timeline as "walnut_rt::audio::timeline" {
+                function native_automate_master(float: time, float: db, long int: curve) -> void as "automate_master_volume";
+                function native_track_at(long int: index) const -> Track as "track_at";
+
+            public:
+                constructor();
+                constructor(long int: sample_rate, long int: channels = 2);
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+
+                function add_track(const string&: name = "") -> Track;
+                function track_count() const -> long int;
+
+                function track(long int: index) const -> Track {
+                    if (index < 0 || index >= track_count()) then {
+                        throw std::errors::audio_error(static_cast<string>(`Timeline::track(): track ${index} is out of range for a timeline with ${track_count()} tracks`));
+                    }
+                    return native_track_at(index);
+                } end function track
+
+                function remove_track(long int: index) -> bool;
+                function length() const -> float;
+                function set_tempo(float: bpm) -> void;
+                function tempo() const -> float;
+                function beats_to_seconds(float: beats) const -> float;
+                function bars_to_seconds(float: bars) const -> float;
+                function snap(float: seconds, float: division_beats = 1.0) const -> float;
+                function add_marker(float: time, const string&: name = "") -> long int;
+                function marker_count() const -> long int;
+                function marker_time(long int: index) const -> float;
+                function marker_name(long int: index) const -> string;
+                function set_master_volume_db(float: db) -> void;
+                function master_volume_db() const -> float;
+                function set_loop(float: start, float: end_time, bool: on = true) -> void;
+                function master_effects() -> EffectChain;
+
+                function automate_master_volume(float: time, float: db, AutomationCurve: curve = AutomationCurve::linear) -> void {
+                    native_automate_master(time, db, static_cast<long int>(curve));
+                } end function automate_master_volume
+
+                function render(bool: include_tail = true) const -> AudioBuffer;
+
+                function render(float: start, float: end_time, bool: include_tail = false) const -> AudioBuffer as "render_range";
+
+                function export(const string&: path, const SaveOptions&: options = SaveOptions()) const -> void {
+                    render().save(path, options);
+                } end function export
+            } end class Timeline
+
+            class TimelinePlayer as "walnut_rt::audio::timeline_player" {
+                function native_start(const string&: device, long int: latency_ms) -> string as "start";
+                function native_render(long int: frames) -> AudioBuffer as "render";
+
+            public:
+                constructor();
+                constructor(long int: sample_rate, long int: channels = 2);
+                constructor(const TimelinePlayer&: other) = delete;
+                constructor(TimelinePlayer&&: other);
+                function update(const Timeline&: timeline) -> void;
+                function play() -> void;
+                function pause() -> void;
+                function stop() -> void;
+                function seek(float: seconds) -> void;
+                function set_loop(float: start, float: end_time, bool: on = true) -> void;
+                function is_playing() const -> bool;
+                function position() const -> float;
+                function output_peak() const -> float;
+                function sample_rate() const -> long int;
+                function channels() const -> long int;
+
+                function render(long int: frames) -> AudioBuffer {
+                    if (output_running()) then {
+                        throw std::errors::audio_error("TimelinePlayer::render(): the player is playing through a device; call stop_output() first");
+                    }
+                    return native_render(frames);
+                } end function render
+
+                function start(const string&: device = "", long int: latency_ms = 30) -> void {
+                    detail::check_not_empty(native_start(device, latency_ms), "can't start the timeline's output");
+                } end function start
+
+                function stop_output() -> void;
+                function output_running() const -> bool;
+            } end class TimelinePlayer
+
+        } end extern
+
+        function split_on_silence(const AudioBuffer&: buffer, float: threshold_db = -50.0, float: min_silence_seconds = 0.3) -> Vector<AudioBuffer> {
+            Vector<std::hardware_int64>: quiet = buffer.silent_parts(threshold_db, min_silence_seconds);
+            Vector<AudioBuffer>: parts;
+            long int: at = 0;
+            long int: i = 0;
+            while (i + 1 < quiet.size()) {
+                const long int: begin_quiet = quiet[i];
+                const long int: end_quiet = quiet[i + 1];
+                if (begin_quiet > at) then {
+                    parts.push_back(buffer.slice(at, begin_quiet - at));
+                }
+                at = end_quiet;
+                i += 2;
+            }
+            if (at < buffer.frames()) then {
+                parts.push_back(buffer.slice(at, buffer.frames() - at));
+            }
+            return parts;
+        } end function split_on_silence
+
+        function crossfade(const AudioBuffer&: first, const AudioBuffer&: second, float: seconds, FadeCurve: curve = FadeCurve::equal_power) -> AudioBuffer {
+            if (first.channels() != second.channels() || first.sample_rate() != second.sample_rate()) then {
+                throw std::errors::audio_error("crossfade(): the buffers need the same channels and sample rate; use converted() first");
+            }
+            return Api::crossfade(first, second, seconds, static_cast<long int>(curve));
+        } end function crossfade
+
+        function mix(const AudioBuffer&: first, const AudioBuffer&: second, float: gain = 1.0) -> AudioBuffer {
+            if (first.channels() != second.channels() || first.sample_rate() != second.sample_rate()) then {
+                throw std::errors::audio_error("mix(): the buffers need the same channels and sample rate; use converted() first");
+            }
+            return Api::mix(first, second, gain);
+        } end function mix
+
+        function db_to_gain(float: db) -> float {
+            return Api::db_to_gain(db);
+        } end function db_to_gain
+
+        function gain_to_db(float: gain) -> float {
+            return Api::gain_to_db(gain);
+        } end function gain_to_db
+
+        function backend() -> string {
+            return Api::backend_name();
+        } end function backend
+
+        function backends() -> Vector<string> {
+            return Api::available_backends();
+        } end function backends
+
+        function use_backend(const string&: name) -> void {
+            detail::check_not_empty(Api::set_backend(name), static_cast<string>(`can't use the audio backend '${name}'`));
+        } end function use_backend
+
+        function devices() -> Vector<Device> {
+            DeviceList: list = DeviceList::list(-1);
+            Vector<Device>: out;
+            for (long int: i = 0; i < list.size(); i++) {
+                out.push_back(list.at(i));
+            }
+            return out;
+        } end function devices
+
+        function devices(DeviceKind: kind) -> Vector<Device> {
+            DeviceList: list = DeviceList::list(static_cast<long int>(kind));
+            Vector<Device>: out;
+            for (long int: i = 0; i < list.size(); i++) {
+                out.push_back(list.at(i));
+            }
+            return out;
+        } end function devices
+
+        function default_device(DeviceKind: kind = DeviceKind::output) -> std::optional::Optional<Device> {
+            DeviceList: list = DeviceList::default_of(static_cast<long int>(kind));
+            if (list.size() == 0) then {
+                return std::optional::nothing<Device>();
+            }
+            return std::optional::Optional<Device>(list.at(0));
+        } end function default_device
+
+        function file_info(const string&: path) -> AudioFileInfo {
+            return AudioFileInfo::read(path);
+        } end function file_info
+
+        function format_of(const string&: path) -> FileType {
+            return static_cast<FileType>(Api::type_from_extension(path));
+        } end function format_of
+
+        function readable_extensions() -> Vector<string> {
+            return Api::readable_extensions();
+        } end function readable_extensions
+
+        function writable_extensions() -> Vector<string> {
+            return Api::writable_extensions();
+        } end function writable_extensions
+
+        function voice_preset_name(VoicePreset: preset) -> string {
+            return Api::voice_preset_names()[static_cast<long int>(preset)];
+        } end function voice_preset_name
+
+        function load(const string&: path) -> AudioBuffer {
+            return AudioBuffer::load(path);
+        } end function load
+
+        function play(const AudioBuffer&: buffer, const string&: device = "") -> void {
+            Mixer: m(buffer.sample_rate(), buffer.channels());
+            m.start(device);
+            Voice: v = m.play(buffer);
+            v.wait();
+            m.stop_output();
+        } end function play
+
+        function play_file(const string&: path, const string&: device = "") -> void {
+            AudioBuffer: b = AudioBuffer::load(path);
+            play(b, device);
+        } end function play_file
+    } end namespace audio
+} end namespace std

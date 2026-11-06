@@ -11,7 +11,7 @@ function main() -> int {
 } end function main
 ```
 
-Programs reach the screen, files and the rest of the system by calling C or C++ directly, as `puts` does above. The full language is described in [documentation.md](documentation.md). Walnut's library has its own documentation, one page per module, in [Documentation/Library](Documentation/Library/README.md). `core` comes with every program; the other modules, such as `io`, `collections`, `linalg`, `statistics`, `combinatorics`, `units`, `memory`, `graphs`, `windows`, `graphics`, `images`, `ui`, `game`, `time`, `networking` and `crypto`, are imported by name.
+Programs reach the screen, files and the rest of the system by calling C or C++ directly, as `puts` does above. The full language is described in [documentation.md](documentation.md). Walnut's library has its own documentation, one page per module, in [Documentation/Library](Documentation/Library/README.md). `core` comes with every program; the other modules, such as `io`, `collections`, `linalg`, `statistics`, `combinatorics`, `units`, `memory`, `graphs`, `windows`, `graphics`, `images`, `audio`, `video`, `ui`, `game`, `time`, `networking` and `crypto`, are imported by name.
 
 ## Requirements
 

@@ -1,0 +1,16 @@
+import module.audio
+
+function main() -> int {
+    std::audio::AudioBuffer: tone = std::audio::AudioBuffer::tone(440.0, 0.2, channels = 2);
+    tone.save("audio-smoke.flac");
+    std::audio::AudioBuffer: back = std::audio::AudioBuffer::load("audio-smoke.flac");
+    std::audio::Mixer: mixer;
+    mixer.effects().add(std::audio::Effect::reverb());
+    mixer.play(back);
+    std::audio::AudioBuffer: mixed = mixer.render(4800);
+    std::audio::play(back);
+    if (back.frames() == tone.frames() && mixed.peak() > 0.1) then {
+        return 0;
+    }
+    return 1;
+} end function main

@@ -90,6 +90,13 @@ public:
 
     static std::string load_error() { return last_error(); }
 
+    static image from_rgba(long long width, long long height, const std::vector<std::uint8_t>& pixels) {
+        if (width <= 0 || height <= 0 || pixels.size() != static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u) return image();
+        return image(fi::BitmapImage::from_rgba(u(width), u(height), pixels.data()));
+    }
+
+    std::vector<std::uint8_t> to_rgba() const { return img.to_rgba(); }
+
     bool valid() const { return img.width() > 0 && img.height() > 0; }
     long long width() const { return img.width(); }
     long long height() const { return img.height(); }

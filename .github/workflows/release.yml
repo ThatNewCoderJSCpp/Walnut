@@ -78,6 +78,11 @@ jobs:
           tar -xzf build/Walnut-*.tar.gz -C smoke
           printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
           smoke/Walnut-*/bin/walnut run smoke/ok.wal
+          cp .github/scripts/audio-smoke.wal smoke/audio.wal
+          (cd smoke && FIZMO_AUDIO_BACKEND=null Walnut-*/bin/walnut run audio.wal)
+          cp .github/scripts/video-smoke.wal smoke/video.wal
+          cp .github/scripts/video-smoke.mp4 smoke/video-smoke.mp4
+          (cd smoke && FIZMO_AUDIO_BACKEND=null Walnut-*/bin/walnut run video.wal)
 
       - name: Make the .tar.xz, .zip, .deb and .rpm
         run: bash .github/scripts/repackage.sh build/Walnut-*-linux-${{ matrix.arch }}.tar.gz linux-${{ matrix.arch }} "TXZ;ZIP;DEB;RPM"
@@ -105,6 +110,8 @@ jobs:
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq g++ > /dev/null
             /smoke/Walnut-*/bin/walnut run /smoke/ok.wal
+            (cd /tmp && FIZMO_AUDIO_BACKEND=null /smoke/Walnut-*/bin/walnut run /smoke/audio.wal)
+            (cp /smoke/video-smoke.mp4 /tmp/ && cd /tmp && FIZMO_AUDIO_BACKEND=null /smoke/Walnut-*/bin/walnut run /smoke/video.wal)
             if /smoke/Walnut-*/bin/walnut run /smoke/ok.wal --cxx no-such-compiler 2>&1 | grep -q "cannot find the C++ compiler"; then exit 0; fi
             echo "::error::walnut did not explain a missing C++ compiler"
             exit 1
@@ -200,6 +207,11 @@ jobs:
           printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
           smoke/Walnut-*/bin/walnut init --status
           smoke/Walnut-*/bin/walnut run smoke/ok.wal
+          cp .github/scripts/audio-smoke.wal smoke/audio.wal
+          (cd smoke && FIZMO_AUDIO_BACKEND=null Walnut-*/bin/walnut run audio.wal)
+          cp .github/scripts/video-smoke.wal smoke/video.wal
+          cp .github/scripts/video-smoke.mp4 smoke/video-smoke.mp4
+          (cd smoke && FIZMO_AUDIO_BACKEND=null Walnut-*/bin/walnut run video.wal)
 
       - name: Make the .tar.xz and .zip
         run: bash .github/scripts/repackage.sh build/Walnut-*-macos-${{ matrix.arch }}.tar.gz macos-${{ matrix.arch }} "TXZ;ZIP"
@@ -251,6 +263,11 @@ jobs:
             tar -xzf build/Walnut-*.tar.gz -C smoke
             printf "function main() -> int {\n    return 0;\n} end function main\n" > smoke/ok.wal
             smoke/Walnut-*/bin/walnut run smoke/ok.wal
+            cp .github/scripts/audio-smoke.wal smoke/audio.wal
+            (cd smoke && FIZMO_AUDIO_BACKEND=null Walnut-*/bin/walnut run audio.wal)
+            cp .github/scripts/video-smoke.wal smoke/video.wal
+            cp .github/scripts/video-smoke.mp4 smoke/video-smoke.mp4
+            (cd smoke && FIZMO_AUDIO_BACKEND=null Walnut-*/bin/walnut run video.wal)
             bash .github/scripts/repackage.sh build/Walnut-*-linux-i686.tar.gz linux-i686 "TXZ;ZIP;DEB;RPM"
             apt-get install -y ./build/Walnut-*-linux-i686.deb
             test -L /usr/bin/walnut
@@ -388,6 +405,11 @@ jobs:
           wineboot --init || true
           wine "$walnut" init --status
           wine "$walnut" run smoke/ok.wal
+          cp .github/scripts/audio-smoke.wal smoke/audio.wal
+          (cd smoke && FIZMO_AUDIO_BACKEND=null wine "$(realpath "$walnut")" run audio.wal)
+          cp .github/scripts/video-smoke.wal smoke/video.wal
+          cp .github/scripts/video-smoke.mp4 smoke/video-smoke.mp4
+          (cd smoke && FIZMO_AUDIO_BACKEND=null wine "$(realpath "$walnut")" run video.wal)
 
       - uses: actions/upload-artifact@v4
         with:
