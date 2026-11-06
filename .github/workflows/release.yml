@@ -401,15 +401,15 @@ jobs:
           mkdir -p smoke
           unzip -q build/Walnut-*-with-compiler.zip -d smoke
           printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
-          walnut=$(ls -d smoke/Walnut-*)/bin/walnut.exe
+          walnut=$(realpath "$(ls -d smoke/Walnut-*)/bin/walnut.exe")
           wineboot --init || true
           wine "$walnut" init --status
           wine "$walnut" run smoke/ok.wal
           cp .github/scripts/audio-smoke.wal smoke/audio.wal
-          (cd smoke && FIZMO_AUDIO_BACKEND=null wine "$(realpath "$walnut")" run audio.wal)
+          (cd smoke && FIZMO_AUDIO_BACKEND=null wine "$walnut" run audio.wal)
           cp .github/scripts/video-smoke.wal smoke/video.wal
           cp .github/scripts/video-smoke.mp4 smoke/video-smoke.mp4
-          (cd smoke && FIZMO_AUDIO_BACKEND=null wine "$(realpath "$walnut")" run video.wal)
+          (cd smoke && FIZMO_AUDIO_BACKEND=null wine "$walnut" run video.wal)
 
       - uses: actions/upload-artifact@v4
         with:
