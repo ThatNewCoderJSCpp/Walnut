@@ -526,6 +526,16 @@ void CppEmitter::order_records() {
             };
             for (const auto& member : r->decl->get_members()) {
                 nodes::ASTNode* n = member.node;
+                if (n && n->kind == K::ConstructorDeclaration) {
+                    auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
+                    if (c->m_special == nodes::ConstructorDeclaration::Special::Delete || c->m_body) continue;
+                    if (const nodes::FunctionParameters* ps = c->get_parameters()) {
+                        for (nodes::FunctionParameter* p : ps->m_params) {
+                            if (p) soft(m_types.canonicalize(p->get_type()));
+                        }
+                    }
+                    continue;
+                }
                 if (!n || (n->kind != K::FunctionDeclaration && n->kind != K::OperatorFunctionDeclaration)) continue;
                 Sym* fs = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->symbol : static_cast<nodes::OperatorFunctionDeclaration*>(n)->symbol;
                 const bool lazy = n->kind == K::FunctionDeclaration ? static_cast<nodes::FunctionDeclaration*>(n)->lazy_untyped : static_cast<nodes::OperatorFunctionDeclaration*>(n)->lazy_untyped;
@@ -3460,7 +3470,7 @@ std::string CppEmitter::native_args(const nodes::FunctionParameters* ps) {
         const bool moved = pt && pt->is_reference() && static_cast<semantics::ReferenceType*>(pt)->ref_qual() == semantics::RefQual::RValue;
 
         if (rr && rr->native && !declared_is_param(p->get_type())) {
-            out += moved ? "std::move(" + name + ".native)" : name + ".native";
+            out += moved ? "std::move(walnut_rt::deferred<W_>(" + name + ").native)" : "walnut_rt::deferred<W_>(" + name + ").native";
         } else if (b && (b->base() == BK::Int || b->base() == BK::Float || b->base() == BK::Bool || b->base() == BK::Char) && !declared_is_param(p->get_type())) {
             out += "walnut_rt::to_native<" + native_type(vt, false) + ">(" + name + ")";
         } else {

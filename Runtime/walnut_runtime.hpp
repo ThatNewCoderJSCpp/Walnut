@@ -1539,6 +1539,9 @@ inline T& index(T* p, const I& i) {
 
 struct native_tag {};
 
+template <int W_, typename T>
+constexpr T&& deferred(T&& v) noexcept { return static_cast<T&&>(v); }
+
 template <typename P, typename C, typename R>
 inline P native_ptr(C& c, R&& r) {
     if constexpr (std::is_pointer_v<std::decay_t<R>>) return r;
