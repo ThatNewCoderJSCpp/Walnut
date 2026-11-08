@@ -1,0 +1,160 @@
+namespace std {
+    namespace physics {
+        extern "C++" from "<walnut_physics.hpp>" {
+            class World as "walnut_rt::physics::world" {
+            public:
+                constructor();
+
+                function set_gravity(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function set_time_step(std::hardware_float: seconds) -> void;
+                function set_substeps(long int: count) -> void;
+                function set_iterations(long int: velocity, long int: position) -> void;
+                function set_solver(const string&: kind) -> void;
+                function set_soft(long int: substeps, std::hardware_float: contact_hertz, std::hardware_float: damping, std::hardware_float: push_speed) -> void;
+                function set_broadphase(const string&: kind) -> void;
+                function set_threads(long int: count) -> void;
+                function set_wide_solver(bool: on) -> void;
+                function set_deterministic(bool: on) -> void;
+                function set_continuous(bool: on, bool: everything) -> void;
+                function set_sleeping(bool: on) -> void;
+                function set_reuse_contacts(bool: on) -> void;
+                function set_event_callbacks(bool: on) -> void;
+
+                function step() -> void;
+                function step_by(std::hardware_float: seconds) -> void;
+
+                function add_box(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: hx, std::hardware_float: hy, std::hardware_float: hz, const string&: kind) -> long int;
+                function add_sphere(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: radius, const string&: kind) -> long int;
+                function add_capsule(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: half_height, std::hardware_float: radius, const string&: kind) -> long int;
+                function add_cylinder(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: half_height, std::hardware_float: radius, const string&: kind) -> long int;
+                function add_cone(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: half_height, std::hardware_float: radius, const string&: kind) -> long int;
+                function add_rounded_box(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: hx, std::hardware_float: hy, std::hardware_float: hz, std::hardware_float: rounding, const string&: kind) -> long int;
+                function add_rounded_box_core(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: hx, std::hardware_float: hy, std::hardware_float: hz, std::hardware_float: rounding, const string&: kind) -> long int;
+                function add_ground(std::hardware_float: height) -> long int;
+                function add_terrain(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, long int: columns, long int: rows, std::hardware_float: cell, const string&: heights) -> long int;
+                function add_mesh(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, const string&: points, const string&: triangles, bool: two_sided, const string&: kind) -> long int;
+
+                function add_box(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: hx, std::hardware_float: hy, std::hardware_float: hz) -> long int {
+                    return add_box(x, y, z, hx, hy, hz, "dynamic");
+                } end function add_box
+
+                function add_sphere(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: radius) -> long int {
+                    return add_sphere(x, y, z, radius, "dynamic");
+                } end function add_sphere
+
+                function remove(long int: body) -> void;
+                function exists(long int: body) const -> bool;
+                function body_count() const -> long int;
+
+                function x(long int: body) const -> std::hardware_float;
+                function y(long int: body) const -> std::hardware_float;
+                function z(long int: body) const -> std::hardware_float;
+                function vx(long int: body) const -> std::hardware_float;
+                function vy(long int: body) const -> std::hardware_float;
+                function vz(long int: body) const -> std::hardware_float;
+                function qx(long int: body) const -> std::hardware_float;
+                function qy(long int: body) const -> std::hardware_float;
+                function qz(long int: body) const -> std::hardware_float;
+                function qw(long int: body) const -> std::hardware_float;
+                function mass(long int: body) const -> std::hardware_float;
+
+                function set_position(long int: body, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function set_velocity(long int: body, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function set_spin(long int: body, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function push(long int: body, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function set_damping(long int: body, std::hardware_float: linear, std::hardware_float: angular) -> void;
+                function set_gravity_scale(long int: body, std::hardware_float: scale) -> void;
+                function set_speed_caps(long int: body, std::hardware_float: speed, std::hardware_float: spin) -> void;
+
+                function set_friction(long int: body, std::hardware_float: friction) -> void;
+                function set_bounce(long int: body, std::hardware_float: bounce) -> void;
+                function set_rolling_friction(long int: body, std::hardware_float: friction) -> void;
+                function set_spinning_friction(long int: body, std::hardware_float: friction) -> void;
+                function set_grip(long int: body, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function set_sensor(long int: body, bool: on) -> void;
+
+                function set_layer(long int: body, long int: layer) -> void;
+                function set_mask(long int: body, long int: mask) -> void;
+                function layer(long int: body) const -> long int;
+                function mask(long int: body) const -> long int;
+                function can_collide(long int: a, long int: b) const -> bool;
+
+                function set_quality(long int: body, const string&: quality) -> void;
+                function set_iterations_for(long int: body, long int: velocity, long int: position) -> void;
+                function set_fast_moves(long int: body, const string&: mode) -> void;
+                function set_sleep(long int: body, std::hardware_float: speed, std::hardware_float: spin, std::hardware_float: delay) -> void;
+                function awake(long int: body) const -> bool;
+                function wake(long int: body) -> void;
+                function set_flag(long int: body, const string&: name, bool: on) -> void;
+                function flag(long int: body, const string&: name) const -> bool;
+
+                function raycast(std::hardware_float: ox, std::hardware_float: oy, std::hardware_float: oz, std::hardware_float: dx, std::hardware_float: dy, std::hardware_float: dz, std::hardware_float: max_distance, long int: layers) -> bool;
+                function hit_body() const -> long int;
+                function hit_distance() const -> std::hardware_float;
+                function hit_x() const -> std::hardware_float;
+                function hit_y() const -> std::hardware_float;
+                function hit_z() const -> std::hardware_float;
+                function hit_nx() const -> std::hardware_float;
+                function hit_ny() const -> std::hardware_float;
+                function hit_nz() const -> std::hardware_float;
+                function overlap_sphere(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: radius, long int: layers) -> long int;
+                function overlap_box(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: hx, std::hardware_float: hy, std::hardware_float: hz, long int: layers) -> long int;
+                function found(long int: index) const -> long int;
+                function sphere_cast(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: radius, std::hardware_float: dx, std::hardware_float: dy, std::hardware_float: dz, long int: layers) -> std::hardware_float;
+
+                function raycast(std::hardware_float: ox, std::hardware_float: oy, std::hardware_float: oz, std::hardware_float: dx, std::hardware_float: dy, std::hardware_float: dz, std::hardware_float: max_distance) -> bool {
+                    return raycast(ox, oy, oz, dx, dy, dz, max_distance, -1l);
+                } end function raycast
+
+                function add_joint(const string&: kind, long int: a, long int: b, std::hardware_float: ax, std::hardware_float: ay, std::hardware_float: az, std::hardware_float: dx, std::hardware_float: dy, std::hardware_float: dz) -> long int;
+                function add_spring(long int: a, long int: b, std::hardware_float: ax, std::hardware_float: ay, std::hardware_float: az, std::hardware_float: rest, std::hardware_float: hertz, std::hardware_float: damping) -> long int;
+                function set_motor(long int: joint, bool: on, std::hardware_float: speed, std::hardware_float: max_force) -> void;
+                function set_limits(long int: joint, bool: on, std::hardware_float: lower, std::hardware_float: upper) -> void;
+                function set_joint_spring(long int: joint, std::hardware_float: hertz, std::hardware_float: damping, std::hardware_float: target) -> void;
+                function set_break_force(long int: joint, std::hardware_float: force, std::hardware_float: torque) -> void;
+                function joint_angle(long int: joint) const -> std::hardware_float;
+                function joint_translation(long int: joint) const -> std::hardware_float;
+                function joint_broken(long int: joint) const -> bool;
+                function remove_joint(long int: joint) -> void;
+
+                function begin_count() const -> long int;
+                function end_count() const -> long int;
+                function begin_a(long int: index) const -> long int;
+                function begin_b(long int: index) const -> long int;
+                function end_a(long int: index) const -> long int;
+                function end_b(long int: index) const -> long int;
+
+                function add_cloth(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, long int: columns, long int: rows, std::hardware_float: spacing, std::hardware_float: mass) -> long int;
+                function add_rope(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: dx, std::hardware_float: dy, std::hardware_float: dz, long int: segments, std::hardware_float: length) -> long int;
+                function add_cloth_sheet(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: width, std::hardware_float: height, long int: columns, long int: rows, std::hardware_float: mass) -> long int;
+                function add_cloth_triangles(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: width, std::hardware_float: height, long int: triangles, std::hardware_float: mass) -> long int;
+                function triangle_count(long int: cloth) -> long int;
+                function cloth_columns(long int: cloth) -> long int;
+                function cloth_rows(long int: cloth) -> long int;
+                function set_cloth_stiffness(long int: cloth, std::hardware_float: stretch, std::hardware_float: shear, std::hardware_float: bend) -> void;
+                function set_cloth_air(long int: cloth, std::hardware_float: drag, std::hardware_float: lift, std::hardware_float: wind_x, std::hardware_float: wind_y, std::hardware_float: wind_z) -> void;
+                function pin_point(long int: cloth, long int: point) -> void;
+                function unpin_point(long int: cloth, long int: point) -> void;
+                function attach_point(long int: cloth, long int: point, long int: body) -> void;
+                function point_count(long int: cloth) -> long int;
+                function point_at(long int: cloth, long int: column, long int: row) -> long int;
+                function point_x(long int: cloth, long int: point) -> std::hardware_float;
+                function point_y(long int: cloth, long int: point) -> std::hardware_float;
+                function point_z(long int: cloth, long int: point) -> std::hardware_float;
+                function remove_cloth(long int: cloth) -> void;
+
+                function set_rebase_distance(std::hardware_float: meters) -> void;
+                function set_focus(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function origin_x() const -> std::hardware_float;
+                function origin_y() const -> std::hardware_float;
+                function origin_z() const -> std::hardware_float;
+                function shift_origin(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function awake_count() const -> long int;
+                function pair_count() const -> long int;
+                function island_count() const -> long int;
+                function layer_rejects() const -> long int;
+                function reused_contacts() const -> long int;
+            } end class World
+        } end extern
+    } end namespace physics
+} end namespace std
