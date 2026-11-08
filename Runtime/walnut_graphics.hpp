@@ -13,6 +13,7 @@
 #include "fizmo/../../Source/Input/gamepad.hpp"
 #include "fizmo/../../Source/Graphics/model_3d.hpp"
 #include "fizmo/../../Source/Graphics/Renderer/renderer.hpp"
+#include "fizmo/../../Source/Graphics/visibility_3d.hpp"
 #include "fizmo/../../Source/Text/text_style.hpp"
 #include "fizmo/../../Source/Text/fonts.hpp"
 
@@ -1079,6 +1080,10 @@ public:
     void set_sky(long long col, const F& intensity) { l.sky_color = color(col); l.sky_intensity = static_cast<float>(d(intensity)); }
     void set_ambient(const F& a) { l.ambient = static_cast<float>(d(a)); }
     void set_shadows(bool on) { l.sun_shadow.enabled = on; }
+    void set_shadow_distance(const F& m) { l.sun_shadow.distance = std::max(1.0, d(m)); }
+    void set_shadow_resolution(long long r) { l.sun_shadow.resolution = static_cast<unsigned int>(std::clamp<long long>(r, 256, 8192)); }
+    void set_layered_shadows(bool on) { l.sun_shadow.layered = on; }
+    void set_soft_shadows(bool on) { l.sun_shadow.soft = on; }
     void set_atmosphere(bool on) { l.atmosphere.enabled = on; }
     void set_exposure(const F& e) { l.tone_map.enabled = true; l.tone_map.exposure = static_cast<float>(d(e)); }
     long long add_point_light(const F& x, const F& y, const F& z, long long col, const F& intensity, const F& radius) {
@@ -1095,6 +1100,110 @@ public:
     void move_point_light(long long i, const F& x, const F& y, const F& z) { if (i >= 0 && i < point_light_count()) l.point_lights[static_cast<std::size_t>(i)].position = v3(x, y, z); }
     void clear_point_lights() { l.point_lights.clear(); }
     long long point_light_count() const { return static_cast<long long>(l.point_lights.size()); }
+};
+
+class visibility {
+public:
+    fg::Visibility3D v;
+
+    long long add(const F& x0, const F& y0, const F& z0, const F& x1, const F& y1, const F& z1, bool occluder, bool caster) {
+        std::uint32_t flags = 0;
+        if (occluder) flags |= fg::VIS_OCCLUDER;
+        if (caster) flags |= fg::VIS_CASTER;
+        return static_cast<long long>(v.add(box(x0, y0, z0, x1, y1, z1), flags));
+    }
+    void update(long long h, const F& x0, const F& y0, const F& z0, const F& x1, const F& y1, const F& z1) { v.update(handle(h), box(x0, y0, z0, x1, y1, z1)); }
+    void remove(long long h) { v.remove(handle(h)); }
+    void set_lods(long long h, const F& a, const F& b, const F& c) {
+        fg::LodLevels3D l;
+        for (double s : { d(a), d(b), d(c) }) {
+            if (s > 0.0) l.distances[static_cast<std::size_t>(l.count++)] = s;
+        }
+        std::sort(l.distances.begin(), l.distances.begin() + l.count);
+        v.set_lods(handle(h), l);
+    }
+    void set_always(long long h, bool on) { v.set_flags(handle(h), fg::VIS_CASTER | (on ? fg::VIS_ALWAYS : 0u)); }
+    void set_occlusion(bool on) { v.edit_settings().occlusion = on; }
+    void set_max_distance(const F& m) { v.edit_settings().max_distance = std::max(0.0, d(m)); }
+    void set_min_pixels(const F& p) { v.edit_settings().min_screen_pixels = std::max(0.0, d(p)); }
+    void set_shadow_distances(const F& real, const F& blob) {
+        fg::ShadowLodSettings3D& s = v.edit_settings().shadows;
+        s.enabled = true;
+        s.real_distance = std::max(0.0, d(real));
+        s.blob_distance = std::max(s.real_distance, d(blob));
+    }
+    void set_up_axis(long long axis) { v.edit_settings().up_axis = static_cast<int>(std::clamp<long long>(axis, 0, 2)); }
+    void cull(const camera3d& cam) { v.cull(cam.c); }
+    bool visible(long long h) const { return v.visible(static_cast<fg::Visibility3D::Handle>(h)); }
+    bool occluded(long long h) const { return v.result(static_cast<fg::Visibility3D::Handle>(h)).occluded; }
+    long long lod(long long h) const { return v.lod(static_cast<fg::Visibility3D::Handle>(h)); }
+    long long shadow(long long h) const { return static_cast<long long>(v.shadow(static_cast<fg::Visibility3D::Handle>(h))); }
+    long long visible_count() const { return static_cast<long long>(v.stats().visible); }
+    long long occluded_count() const { return static_cast<long long>(v.stats().occluded); }
+    long long culled_count() const { const auto& s = v.stats(); return static_cast<long long>(s.frustum_culled + s.distance_culled + s.small_culled + s.occluded); }
+    long long blob_count() const { return static_cast<long long>(v.blobs().size()); }
+    F blob_x(long long i) const { return w(blob(i).center.x); }
+    F blob_y(long long i) const { return w(blob(i).center.y); }
+    F blob_z(long long i) const { return w(blob(i).center.z); }
+    F blob_radius(long long i) const { return w(blob(i).radius); }
+    F blob_opacity(long long i) const { return w(blob(i).opacity); }
+
+private:
+    static fg::VisBox3D box(const F& x0, const F& y0, const F& z0, const F& x1, const F& y1, const F& z1) {
+        return { linalg::vector3d{ std::min(d(x0), d(x1)), std::min(d(y0), d(y1)), std::min(d(z0), d(z1)) }, linalg::vector3d{ std::max(d(x0), d(x1)), std::max(d(y0), d(y1)), std::max(d(z0), d(z1)) } };
+    }
+    fg::Visibility3D::Handle handle(long long h) const {
+        if (h < 0 || !v.valid(static_cast<fg::Visibility3D::Handle>(h))) fail("there's no visibility object " + std::to_string(h));
+        return static_cast<fg::Visibility3D::Handle>(h);
+    }
+    const fg::BlobShadow3D& blob(long long i) const {
+        if (i < 0 || static_cast<std::size_t>(i) >= v.blobs().size()) fail("blob " + std::to_string(i) + " is out of range (there are " + std::to_string(v.blobs().size()) + ")");
+        return v.blobs()[static_cast<std::size_t>(i)];
+    }
+};
+
+class lod_grid {
+public:
+    fg::LodQuadtree3D q;
+
+    void setup(const F& world_size, const F& base_distance, long long levels, long long up_axis) {
+        fg::LodQuadtreeSettings3D s;
+        s.world_size = std::max(1e-3, d(world_size));
+        s.base_distance = std::max(0.0, d(base_distance));
+        s.max_level = static_cast<int>(std::clamp<long long>(levels, 0, 24));
+        s.up_axis = static_cast<int>(std::clamp<long long>(up_axis, 0, 2));
+        q.set_settings(s);
+    }
+    void set_origin(const F& x, const F& y, const F& z) {
+        fg::LodQuadtreeSettings3D s = q.settings();
+        s.origin = v3(x, y, z);
+        q.set_settings(s);
+    }
+    bool update(const F& x, const F& y, const F& z) { return q.update(v3(x, y, z)); }
+    long long tile_count() const { return static_cast<long long>(q.tiles().size()); }
+    F tile_x(long long i) const { return w(tile(i).center.x); }
+    F tile_y(long long i) const { return w(tile(i).center.y); }
+    F tile_z(long long i) const { return w(tile(i).center.z); }
+    F tile_size(long long i) const { return w(tile(i).size); }
+    long long tile_level(long long i) const { return tile(i).level; }
+    long long tile_key(long long i) const { return static_cast<long long>(tile(i).key); }
+    long long added_count() const { return static_cast<long long>(q.added().size()); }
+    long long added_key(long long i) const {
+        if (i < 0 || static_cast<std::size_t>(i) >= q.added().size()) fail("added tile " + std::to_string(i) + " is out of range");
+        return static_cast<long long>(q.added()[static_cast<std::size_t>(i)].key);
+    }
+    long long removed_count() const { return static_cast<long long>(q.removed().size()); }
+    long long removed_key(long long i) const {
+        if (i < 0 || static_cast<std::size_t>(i) >= q.removed().size()) fail("removed tile " + std::to_string(i) + " is out of range");
+        return static_cast<long long>(q.removed()[static_cast<std::size_t>(i)]);
+    }
+    long long level_at(const F& x, const F& y, const F& z) const { return q.level_at(v3(x, y, z)); }
+
+private:
+    const fg::LodTile3D& tile(long long i) const {
+        if (i < 0 || static_cast<std::size_t>(i) >= q.tiles().size()) fail("tile " + std::to_string(i) + " is out of range (there are " + std::to_string(q.tiles().size()) + ")");
+        return q.tiles()[static_cast<std::size_t>(i)];
+    }
 };
 
 class model {

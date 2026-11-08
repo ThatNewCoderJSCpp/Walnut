@@ -734,6 +734,10 @@ namespace std {
                 function enabled() const -> bool;
                 function set_ambient(float: amount) -> void;
                 function set_shadows(bool: on) -> void;
+                function set_shadow_distance(float: meters) -> void;
+                function set_shadow_resolution(long int: pixels) -> void;
+                function set_layered_shadows(bool: on) -> void;
+                function set_soft_shadows(bool: on) -> void;
                 function set_atmosphere(bool: on) -> void;
                 function set_exposure(float: exposure) -> void;
                 function clear_point_lights() -> void;
@@ -763,6 +767,59 @@ namespace std {
                     native_move_point(index, position.x, position.y, position.z);
                 } end function move_point_light
             } end class Lighting
+
+            class Visibility as "walnut_rt::gfx::visibility" {
+            public:
+                constructor();
+                function add(float: x0, float: y0, float: z0, float: x1, float: y1, float: z1, bool: occluder, bool: caster) -> long int;
+                function update(long int: object, float: x0, float: y0, float: z0, float: x1, float: y1, float: z1) -> void;
+                function remove(long int: object) -> void;
+                function set_lods(long int: object, float: first, float: second, float: third) -> void;
+                function set_always(long int: object, bool: on) -> void;
+                function set_occlusion(bool: on) -> void;
+                function set_max_distance(float: meters) -> void;
+                function set_min_pixels(float: pixels) -> void;
+                function set_shadow_distances(float: real, float: blob) -> void;
+                function set_up_axis(long int: axis) -> void;
+                function cull(const Camera3D&: camera) -> void;
+                function visible(long int: object) const -> bool;
+                function occluded(long int: object) const -> bool;
+                function lod(long int: object) const -> long int;
+                function shadow(long int: object) const -> long int;
+                function visible_count() const -> long int;
+                function occluded_count() const -> long int;
+                function culled_count() const -> long int;
+                function blob_count() const -> long int;
+                function blob_x(long int: index) const -> float;
+                function blob_y(long int: index) const -> float;
+                function blob_z(long int: index) const -> float;
+                function blob_radius(long int: index) const -> float;
+                function blob_opacity(long int: index) const -> float;
+
+                function add(float: x0, float: y0, float: z0, float: x1, float: y1, float: z1) -> long int {
+                    return add(x0, y0, z0, x1, y1, z1, false, true);
+                } end function add
+            } end class Visibility
+
+            class LodGrid as "walnut_rt::gfx::lod_grid" {
+            public:
+                constructor();
+                function setup(float: world_size, float: base_distance, long int: levels, long int: up_axis) -> void;
+                function set_origin(float: x, float: y, float: z) -> void;
+                function update(float: x, float: y, float: z) -> bool;
+                function tile_count() const -> long int;
+                function tile_x(long int: index) const -> float;
+                function tile_y(long int: index) const -> float;
+                function tile_z(long int: index) const -> float;
+                function tile_size(long int: index) const -> float;
+                function tile_level(long int: index) const -> long int;
+                function tile_key(long int: index) const -> long int;
+                function added_count() const -> long int;
+                function added_key(long int: index) const -> long int;
+                function removed_count() const -> long int;
+                function removed_key(long int: index) const -> long int;
+                function level_at(float: x, float: y, float: z) const -> long int;
+            } end class LodGrid
 
             class Model as "walnut_rt::gfx::model" {
                 static function native_load(const string&: path, float: scale, bool: z_up) -> Model as "walnut_rt::gfx::model::load";

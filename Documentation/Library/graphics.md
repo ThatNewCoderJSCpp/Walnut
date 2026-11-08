@@ -221,6 +221,7 @@ This prints `12 triangles; the origin is at 200, 150`.
 
 - **Sun and sky:** `set_sun(direction, color, intensity)`, `set_sky(color, intensity)` and `set_ambient`.
 - **Effects:** `set_shadows(on)`, `set_atmosphere(on)` and `set_exposure`.
+- **Shadow tuning:** `set_shadow_distance(meters)` is how far real shadows reach (past it, use blob shadows from `Visibility`), `set_shadow_resolution(pixels)`, `set_soft_shadows(on)` and `set_layered_shadows(on)`. Layered shadows are on by default: things that haven't moved for a few frames are drawn once into a cached layer, and each frame only the moving casters are drawn on top of a copy of it.
 - **Point lights:** up to 64, with `add_point_light(position, color)` or `add_point_light(position, color, intensity, radius)`. It gives the light's number, which `move_point_light(number, position)` uses; `clear_point_lights()` removes them all.
 
 **Models.** `Model::load(path, scale = 1.0, z_up = true)` reads a glTF (`.gltf`, `.glb`) or OBJ file, with its materials and textures, and throws a `graphics_error` when it can't. `vertex_count()`, `bounds_min()`, `bounds_max()` and `find_animation(name)` describe it.
@@ -230,6 +231,21 @@ An `Animator(model)` plays a model's animations:
 - **Playing:** `play(name)` or `play(index)`, with `loop`, `fade_seconds` and `speed` as optional extra arguments. `stop()` ends it.
 - **Each frame:** call `update(dt)`, then draw it with `draw_model`.
 - **Reading and changing:** `time()`, `duration()`, `finished()`, `set_speed()` and `set_time()`.
+
+**Visibility.** A `Visibility` decides what's worth drawing each frame. Give it each object's box with `add(x0, y0, z0, x1, y1, z1)` (or `add(..., occluder, caster)`), which gives the object's number. Call `update(number, ...)` when the box moves and `remove(number)` when it's gone. Each frame, `cull(camera)` works out:
+
+- **Hidden objects:** outside the camera's view, past `set_max_distance(meters)`, smaller than `set_min_pixels(pixels)` on screen, or behind an occluder. Occluders are objects added with `occluder = true` whose box is solid, like walls and buildings. They're drawn into a small depth buffer, and anything fully behind them is hidden. `set_occlusion(false)` turns that last test off.
+- **Level of detail:** `set_lods(number, first, second, third)` gives the distances where an object switches to its next level, and `lod(number)` gives the level to draw (0 is the most detailed). A little slack stops it flickering between two levels at an edge.
+- **Shadow level:** `set_shadow_distances(real, blob)`. Then `shadow(number)` is 0 for a real shadow, 1 for a blob and 2 for none. The blobs to draw are `blob_count()`, with `blob_x(i)`, `blob_y(i)`, `blob_z(i)`, `blob_radius(i)` and `blob_opacity(i)`.
+
+`visible(number)`, `occluded(number)`, `visible_count()`, `occluded_count()` and `culled_count()` report the result. `set_always(number, true)` keeps an object drawn whatever the tests say. `set_up_axis(0, 1 or 2)` says which way is up for blobs.
+
+**LodGrid.** A `LodGrid` is a quadtree of ground tiles that are fine near the camera and coarse far away, the way terrain and voxel worlds stream their chunks.
+
+- **Setting up:** `setup(world_size, base_distance, levels, up_axis)` and `set_origin(x, y, z)`.
+- **Each frame:** `update(x, y, z)` with the camera's position. It's `true` when the tile set changed.
+- **Reading tiles:** `tile_count()`, then `tile_x/y/z(i)`, `tile_size(i)`, `tile_level(i)` and `tile_key(i)`.
+- **Changes:** `added_count()` with `added_key(i)`, and `removed_count()` with `removed_key(i)`, so you only build or free the tiles that changed. `level_at(x, y, z)` gives the tile level under a point.
 
 ## Tilemaps
 
