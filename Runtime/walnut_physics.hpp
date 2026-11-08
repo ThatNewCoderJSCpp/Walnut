@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -80,6 +81,57 @@ inline R positive(R v, const char* what) {
     return v;
 }
 
+inline fp::FluidLevel fluid_level_named(const std::string& name) {
+    if (name == "blocky") return fp::FluidLevel::blocky;
+    if (name == "still") return fp::FluidLevel::still;
+    if (name == "flowing") return fp::FluidLevel::flowing;
+    if (name == "waves") return fp::FluidLevel::waves;
+    if (name == "realistic") return fp::FluidLevel::realistic;
+    fail("a fluid level must be blocky, still, flowing, waves or realistic, not '" + name + "'");
+}
+
+inline std::string fluid_level_name(fp::FluidLevel level) { return fp::to_string(level); }
+
+inline fp::FluidMaterial fluid_preset_named(const std::string& name) {
+    if (name == "water" || name.empty()) return fp::FluidMaterial::water();
+    if (name == "sea-water" || name == "sea_water") return fp::FluidMaterial::sea_water();
+    if (name == "oil") return fp::FluidMaterial::oil();
+    if (name == "honey") return fp::FluidMaterial::honey();
+    if (name == "lava") return fp::FluidMaterial::lava();
+    if (name == "mud") return fp::FluidMaterial::mud();
+    if (name == "mercury") return fp::FluidMaterial::mercury();
+    fail("a fluid preset must be water, sea-water, oil, honey, lava, mud or mercury, not '" + name + "'");
+}
+
+inline fp::FluidQuality fluid_quality_of(long long q) {
+    if (q < 0 || q > 3) fail("fluid quality must be 0 (low), 1 (medium), 2 (high) or 3 (ultra), not " + std::to_string(q));
+    return static_cast<fp::FluidQuality>(q);
+}
+
+inline bool edit_fluid_material(fp::FluidMaterial& m, const std::string& property, R v) {
+    if (!std::isfinite(v)) fail("a fluid's " + property + " must be a finite number");
+    if (property == "density") m.density = positive(v, "a fluid's density");
+    else if (property == "viscosity") m.viscosity = std::max(0.0_r, v);
+    else if (property == "surface-tension") m.surface_tension = std::max(0.0_r, v);
+    else if (property == "drag") m.linear_drag = std::max(0.0_r, v);
+    else if (property == "quadratic-drag") m.quadratic_drag = std::max(0.0_r, v);
+    else if (property == "angular-drag") m.angular_drag = std::max(0.0_r, v);
+    else if (property == "friction") m.friction = std::max(0.0_r, v);
+    else if (property == "bounce") m.restitution = std::clamp(v, 0.0_r, 1.0_r);
+    else if (property == "stiffness") m.stiffness = std::clamp(v, 0.0_r, 1.0_r);
+    else if (property == "temperature") m.temperature = v;
+    else if (property == "opacity") m.color.a = static_cast<float>(std::clamp(v, 0.0_r, 1.0_r));
+    else return false;
+    m.preset = fp::FluidPreset::custom;
+    return true;
+}
+
+inline const char* fluid_properties() { return "density, viscosity, surface-tension, drag, quadratic-drag, angular-drag, friction, bounce, stiffness, temperature, opacity or wave-height"; }
+
+inline fp::FluidColor fluid_color(R r, R g, R b, float a) {
+    return fp::FluidColor{ static_cast<float>(std::clamp(r, 0.0_r, 1.0_r)), static_cast<float>(std::clamp(g, 0.0_r, 1.0_r)), static_cast<float>(std::clamp(b, 0.0_r, 1.0_r)), a };
+}
+
 class world {
 public:
     world() : m_sim(std::make_unique<fp::Simulation3D>()) {}
@@ -108,7 +160,10 @@ public:
         else if (kind == "octree") m_sim->config().broadphase = fp::Broadphase3D::Octree;
         else fail("the broadphase must be tree or octree, not '" + kind + "'");
     }
-    void set_threads(long long n) { m_sim->config().threads = static_cast<int>(std::clamp<long long>(n, 1, 64)); }
+    void set_threads(long long n) {
+        m_sim->config().threads = static_cast<int>(std::clamp<long long>(n, 1, 64));
+        if (m_fluids) m_fluids->set_threads(m_sim->config().threads);
+    }
     void set_wide_solver(bool on) { m_sim->config().simd = on; }
     void set_deterministic(bool on) { m_sim->config().deterministic = on; }
     void set_continuous(bool on, bool everything) {
@@ -119,8 +174,15 @@ public:
     void set_reuse_contacts(bool on) { m_sim->config().reuse_contacts = on; }
     void set_event_callbacks(bool on) { m_sim->config().event_callbacks = on; }
 
-    void step() { m_sim->step(); }
-    void step_by(R dt) { m_sim->step(positive(dt, "the time step")); }
+    void step() {
+        step_fluids(m_sim->config().fixed_dt);
+        m_sim->step();
+    }
+    void step_by(R dt) {
+        positive(dt, "the time step");
+        step_fluids(dt);
+        m_sim->step(dt);
+    }
 
     long long add_box(R x, R y, R z, R hx, R hy, R hz, const std::string& kind) {
         return add(x, y, z, fp::Shape3D::make_box(positive(hx, "a half size"), positive(hy, "a half size"), positive(hz, "a half size")), kind);
@@ -183,6 +245,23 @@ public:
         }
         return add(x, y, z, fp::Shape3D::make_mesh(std::move(verts), std::move(tris), two_sided), kind);
     }
+    long long add_hemisphere(R x, R y, R z, R r, const std::string& kind) {
+        return add(x, y, z, fp::Shape3D::make_hemisphere(positive(r, "a radius")), kind);
+    }
+    long long add_sphere_section(R x, R y, R z, R r, R polar_min, R polar_max, R azimuth_min, R azimuth_max, R inner_radius, const std::string& kind) {
+        fp::SphereSection3D s;
+        s.radius = positive(r, "a radius");
+        if (!(inner_radius >= 0.0_r) || inner_radius >= r) fail("the inner radius must be at least 0 and less than the radius");
+        if (!(polar_min >= 0.0_r && polar_max <= 180.0_r && polar_min < polar_max)) fail("the polar range must go up from 0 to at most 180 degrees");
+        if (!(azimuth_min < azimuth_max)) fail("the azimuth range must go up, like 0 to 360 degrees");
+        s.polar_min = polar_min;
+        s.polar_max = polar_max;
+        s.azimuth_min = azimuth_min;
+        s.azimuth_max = azimuth_max;
+        s.inner_radius = inner_radius;
+        if (s.is_full_sphere() || s.is_convex()) return add(x, y, z, fp::Shape3D::make_sphere_section(s), kind);
+        return add_parts(x, y, z, fp::Shape3D::make_sphere_section_parts(s), kind);
+    }
 
     void remove(long long id) {
         fp::RigidBody3D& b = body(id);
@@ -230,6 +309,16 @@ public:
         body(id).set_angular_damping(std::max(0.0_r, angular));
     }
     void set_gravity_scale(long long id, R s) { body(id).set_gravity_scale(s); }
+    void set_density(long long id, R kg_per_m3) {
+        fp::RigidBody3D& b = body(id);
+        b.set_density(positive(kg_per_m3, "a density"));
+        b.wake();
+    }
+    void set_mass(long long id, R kg) {
+        fp::RigidBody3D& b = body(id);
+        b.set_mass(positive(kg, "a mass"));
+        b.wake();
+    }
     void set_speed_caps(long long id, R speed, R spin) {
         fp::RigidBody3D& b = body(id);
         if (speed > 0.0_r) {
@@ -242,17 +331,19 @@ public:
         }
     }
 
-    void set_friction(long long id, R f) { collider(id).material.friction = std::max(0.0_r, f); }
-    void set_bounce(long long id, R e) { collider(id).material.restitution = std::clamp(e, 0.0_r, 1.0_r); }
-    void set_rolling_friction(long long id, R f) { collider(id).material.rolling_friction = std::max(0.0_r, f); }
-    void set_spinning_friction(long long id, R f) { collider(id).material.spinning_friction = std::max(0.0_r, f); }
+    void set_friction(long long id, R f) { each_collider(id, [&](fp::Collider3D& c) { c.material.friction = std::max(0.0_r, f); }); }
+    void set_bounce(long long id, R e) { each_collider(id, [&](fp::Collider3D& c) { c.material.restitution = std::clamp(e, 0.0_r, 1.0_r); }); }
+    void set_rolling_friction(long long id, R f) { each_collider(id, [&](fp::Collider3D& c) { c.material.rolling_friction = std::max(0.0_r, f); }); }
+    void set_spinning_friction(long long id, R f) { each_collider(id, [&](fp::Collider3D& c) { c.material.spinning_friction = std::max(0.0_r, f); }); }
     void set_grip(long long id, R gx, R gy, R gz) {
-        fp::Material3D& m = collider(id).material;
-        m.anisotropic_x = std::max(0.0_r, gx);
-        m.anisotropic_y = std::max(0.0_r, gy);
-        m.anisotropic_z = std::max(0.0_r, gz);
+        each_collider(id, [&](fp::Collider3D& c) {
+            fp::Material3D& m = c.material;
+            m.anisotropic_x = std::max(0.0_r, gx);
+            m.anisotropic_y = std::max(0.0_r, gy);
+            m.anisotropic_z = std::max(0.0_r, gz);
+        });
     }
-    void set_sensor(long long id, bool on) { collider(id).is_sensor = on; }
+    void set_sensor(long long id, bool on) { each_collider(id, [&](fp::Collider3D& c) { c.is_sensor = on; }); }
 
     void set_layer(long long id, long long layer) { body(id).set_collision_layer(static_cast<std::uint64_t>(layer)); }
     void set_mask(long long id, long long mask) { body(id).set_collision_mask(static_cast<std::uint64_t>(mask)); }
@@ -457,13 +548,171 @@ public:
     long long layer_rejects() const { return static_cast<long long>(m_sim->stats().layer_rejects); }
     long long reused_contacts() const { return static_cast<long long>(m_sim->stats().reused_manifolds); }
 
+    long long add_fluid(const std::string& level, R x, R y, R z, R hx, R hy, R hz, const std::string& preset, R fill, R cell) {
+        const fp::FluidLevel lv = fluid_level_named(level);
+        const fp::FluidMaterial mat = fluid_preset_named(preset);
+        positive(hx, "a half size");
+        positive(hy, "a half size");
+        positive(hz, "a half size");
+        if (!(fill >= 0.0_r && fill <= 1.0_r)) fail("a fluid's fill must be from 0 to 1");
+        if (!(cell >= 0.0_r) || !std::isfinite(cell)) fail("a fluid's cell size must be 0 (pick one) or above");
+        fp::FluidVolumeDef def = fp::FluidVolumeDef::box(lv, fp::AABB3D(V3{ x - hx, y - hy, z - hz }, V3{ x + hx, y + hy, z + hz }), mat, fill);
+        const R longest = std::max({ hx, hy, hz }) * 2.0_r;
+        if (cell > 0.0_r) {
+            def.cell_size = cell;
+            def.particles.radius = cell * 0.5_r;
+        } else {
+            def.cell_size = std::clamp(longest / 40.0_r, 0.1_r, 1.0_r);
+            def.particles.radius = std::clamp(longest / 80.0_r, 0.04_r, 0.25_r);
+            if (lv == fp::FluidLevel::blocky) def.cell_size = std::max(def.cell_size, 0.5_r);
+        }
+        if (lv == fp::FluidLevel::blocky || lv == fp::FluidLevel::flowing) {
+            const double cells = std::ceil(2.0 * hx / def.cell_size) * std::ceil(2.0 * hy / def.cell_size) * std::ceil(2.0 * hz / def.cell_size);
+            if (cells > 16.0e6) fail("that fluid would have " + std::to_string(static_cast<long long>(cells)) + " cells; give it a bigger cell size (at most 16 million cells)");
+        }
+        fp::FluidVolume3D& v = fluids().add_volume(def);
+        m_volumes.push_back(&v);
+        m_voxelized.push_back(m_static_version);
+        if (voxelizes(lv)) v.voxelize(*m_sim);
+        return static_cast<long long>(m_volumes.size()) - 1;
+    }
+    void set_fluid(long long id, const std::string& property, R value) {
+        fp::FluidVolume3D& v = volume(id);
+        if (property == "wave-height") {
+            fp::FluidVolumeDef& d = v.edit_def();
+            d.waves.swell_amplitude = std::max(0.0_r, value);
+            d.still.bob_amplitude = std::max(0.0_r, value);
+            return;
+        }
+        fp::FluidMaterial m = v.material();
+        if (!edit_fluid_material(m, property, value)) fail("a fluid property must be " + std::string(fluid_properties()) + ", not '" + property + "'");
+        v.set_material(m);
+    }
+    void set_fluid_color(long long id, R r, R g, R b) {
+        fp::FluidVolume3D& v = volume(id);
+        fp::FluidMaterial m = v.material();
+        m.color = fluid_color(r, g, b, m.color.a);
+        v.set_material(m);
+    }
+    void set_fluid_current(long long id, R x, R y, R z) {
+        fp::FluidVolume3D& v = volume(id);
+        v.set_current(V3{ x, y, z });
+        v.wake();
+    }
+    void set_fluid_quality(long long q) {
+        m_fluid_quality = static_cast<long long>(fluid_quality_of(q));
+        if (m_fluids) m_fluids->set_quality(static_cast<fp::FluidQuality>(m_fluid_quality));
+    }
+    void remove_fluid(long long id) {
+        fp::FluidVolume3D& v = volume(id);
+        m_fluids->remove_volume(v);
+        m_volumes[static_cast<std::size_t>(id)] = nullptr;
+    }
+    bool fluid_exists(long long id) const { return id >= 0 && static_cast<std::size_t>(id) < m_volumes.size() && m_volumes[static_cast<std::size_t>(id)]; }
+    long long fluid_count() const { return m_fluids ? static_cast<long long>(m_fluids->volume_count()) : 0; }
+    std::string fluid_level(long long id) const { return fluid_level_name(cvolume(id).level()); }
+    R fluid_surface(R x, R y, R z) const { return m_fluids ? m_fluids->surface_height(V3{ x, y, z }) : -std::numeric_limits<R>::max(); }
+    R fluid_depth(R x, R y, R z) const { return m_fluids ? m_fluids->depth_at(V3{ x, y, z }) : -std::numeric_limits<R>::max(); }
+    bool fluid_inside(R x, R y, R z) const { return m_fluids && m_fluids->inside(V3{ x, y, z }); }
+    R fluid_velocity_x(R x, R y, R z) const { return m_fluids ? m_fluids->velocity_at(V3{ x, y, z }).x : 0.0_r; }
+    R fluid_velocity_y(R x, R y, R z) const { return m_fluids ? m_fluids->velocity_at(V3{ x, y, z }).y : 0.0_r; }
+    R fluid_velocity_z(R x, R y, R z) const { return m_fluids ? m_fluids->velocity_at(V3{ x, y, z }).z : 0.0_r; }
+    R fluid_volume(long long id) const { return cvolume(id).total_volume(); }
+    bool fluid_sleeping(long long id) const { return cvolume(id).sleeping(); }
+
+    long long fluid_particle_count(long long id) const { return static_cast<long long>(cvolume(id).particle_count()); }
+    R fluid_particle_x(long long id, long long i) const { return particle(id, i).x; }
+    R fluid_particle_y(long long id, long long i) const { return particle(id, i).y; }
+    R fluid_particle_z(long long id, long long i) const { return particle(id, i).z; }
+    R fluid_particle_radius(long long id) const { return cvolume(id).particle_radius(); }
+    long long fluid_cells_x(long long id) const { return cvolume(id).cells_x(); }
+    long long fluid_cells_y(long long id) const { return cvolume(id).cells_y(); }
+    long long fluid_cells_z(long long id) const { return cvolume(id).cells_z(); }
+    R fluid_cell_size(long long id) const { return cvolume(id).cell_size(); }
+    R fluid_cell(long long id, long long i, long long j, long long k) const {
+        const fp::FluidVolume3D& v = cvolume(id);
+        const std::size_t c = cell_at(v, i, j, k);
+        return c < v.cell_fill().size() ? v.cell_fill()[c] : 0.0_r;
+    }
+    bool fluid_solid(long long id, long long i, long long j, long long k) const {
+        const fp::FluidVolume3D& v = cvolume(id);
+        cell_at(v, i, j, k);
+        return v.solid(static_cast<int>(i), static_cast<int>(j), static_cast<int>(k));
+    }
+    long long fluid_columns_x(long long id) const { return cvolume(id).columns_x(); }
+    long long fluid_columns_z(long long id) const { return cvolume(id).columns_z(); }
+    R fluid_column_size(long long id) const { return cvolume(id).column_size(); }
+    R fluid_height(long long id, long long i, long long k) const {
+        const fp::FluidVolume3D& v = cvolume(id);
+        if (i < 0 || k < 0 || i >= v.columns_x() || k >= v.columns_z()) fail("column (" + std::to_string(i) + ", " + std::to_string(k) + ") is outside the fluid's " + std::to_string(v.columns_x()) + " by " + std::to_string(v.columns_z()) + " columns");
+        const std::vector<R>& h = v.heights();
+        const std::size_t c = v.column_index(static_cast<int>(i), static_cast<int>(k));
+        return c < h.size() ? h[c] : 0.0_r;
+    }
+
 private:
+    static bool voxelizes(fp::FluidLevel lv) { return lv == fp::FluidLevel::blocky || lv == fp::FluidLevel::flowing || lv == fp::FluidLevel::waves; }
+    fp::FluidWorld3D& fluids() {
+        if (!m_fluids) {
+            fp::FluidWorld3D::Config cfg;
+            cfg.gravity = m_sim->config().gravity;
+            cfg.fixed_dt = m_sim->config().fixed_dt;
+            cfg.threads = std::max(1, m_sim->config().threads);
+            cfg.quality = static_cast<fp::FluidQuality>(m_fluid_quality);
+            m_fluids = std::make_unique<fp::FluidWorld3D>(cfg);
+            m_fluids->set_quality(cfg.quality);
+            m_fluids->set_threads(cfg.threads);
+        }
+        m_fluids->set_gravity(m_sim->config().gravity);
+        return *m_fluids;
+    }
+    void step_fluids(R dt) {
+        if (!m_fluids) return;
+        for (std::size_t i = 0; i < m_volumes.size(); ++i) {
+            if (!m_volumes[i] || m_voxelized[i] == m_static_version) continue;
+            m_voxelized[i] = m_static_version;
+            if (voxelizes(m_volumes[i]->level())) m_volumes[i]->voxelize(*m_sim);
+        }
+        m_fluids->set_gravity(m_sim->config().gravity);
+        m_fluids->step(*m_sim, dt);
+    }
+    fp::FluidVolume3D& volume(long long id) {
+        if (!fluid_exists(id)) fail("there's no fluid " + std::to_string(id));
+        return *m_volumes[static_cast<std::size_t>(id)];
+    }
+    const fp::FluidVolume3D& cvolume(long long id) const {
+        if (!fluid_exists(id)) fail("there's no fluid " + std::to_string(id));
+        return *m_volumes[static_cast<std::size_t>(id)];
+    }
+    const V3& particle(long long id, long long i) const {
+        const fp::FluidVolume3D& v = cvolume(id);
+        if (i < 0 || static_cast<std::size_t>(i) >= v.particle_count()) fail("fluid particle " + std::to_string(i) + " is out of range (there are " + std::to_string(v.particle_count()) + ")");
+        return v.positions()[static_cast<std::size_t>(i)];
+    }
+    static std::size_t cell_at(const fp::FluidVolume3D& v, long long i, long long j, long long k) {
+        if (!v.valid_cell(static_cast<int>(i), static_cast<int>(j), static_cast<int>(k)) || i > 1000000 || j > 1000000 || k > 1000000) fail("cell (" + std::to_string(i) + ", " + std::to_string(j) + ", " + std::to_string(k) + ") is outside the fluid's " + std::to_string(v.cells_x()) + " by " + std::to_string(v.cells_y()) + " by " + std::to_string(v.cells_z()) + " cells");
+        return v.cell_index(static_cast<int>(i), static_cast<int>(j), static_cast<int>(k));
+    }
     long long add(R x, R y, R z, const fp::Shape3D& shape, const std::string& kind) {
         fp::RigidBody3D& b = m_sim->add_body(V3{ x, y, z }, kind_flags(kind));
         fp::Collider3D& c = b.add_collider(shape);
+        if (kind == "static" || kind == "fixed") ++m_static_version;
         m_bodies.push_back(&b);
         m_colliders.push_back(&c);
         return static_cast<long long>(m_bodies.size()) - 1;
+    }
+    long long add_parts(R x, R y, R z, const std::vector<fp::Shape3D>& parts, const std::string& kind) {
+        if (parts.empty()) fail("that sphere section has nothing left in it");
+        fp::RigidBody3D& b = m_sim->add_body(V3{ x, y, z }, kind_flags(kind));
+        for (const auto& p : parts) b.add_collider(p);
+        if (kind == "static" || kind == "fixed") ++m_static_version;
+        m_bodies.push_back(&b);
+        m_colliders.push_back(&b.colliders_mut()[0]);
+        return static_cast<long long>(m_bodies.size()) - 1;
+    }
+    template <class F>
+    void each_collider(long long id, F&& f) {
+        for (auto& c : body(id).colliders_mut()) f(c);
     }
     fp::RigidBody3D& body(long long id) {
         if (!exists(id)) fail("there's no body " + std::to_string(id));
@@ -517,6 +766,11 @@ private:
     }
 
     std::unique_ptr<fp::Simulation3D> m_sim;
+    std::unique_ptr<fp::FluidWorld3D> m_fluids;
+    std::vector<fp::FluidVolume3D*> m_volumes;
+    std::vector<unsigned long long> m_voxelized;
+    unsigned long long m_static_version = 0;
+    long long m_fluid_quality = 1;
     std::vector<fp::RigidBody3D*> m_bodies;
     std::vector<fp::Collider3D*> m_colliders;
     std::vector<fp::Joint3D*> m_joints;

@@ -104,6 +104,8 @@ A `Path` is built with `move_to`, `line_to`, `quad_to`, `cubic_to`, `arc_to(cx, 
 
 A `Texture` is an image prepared for drawing over and over, which is faster than drawing the `Image` each frame. Make one with `Texture::from_image(image, filter = Filter::nearest, wrap = Wrap::clamp)` or `Texture::load(path, ...)`. `Filter::bilinear` smooths it when it's scaled.
 
+**Texture roles.** Colours in a picture are stored in sRGB, but normal, roughness, metal, occlusion and ORM maps hold plain numbers and have to be read as linear data, or bumps and shine come out wrong. `Texture::load` and `Texture::from_image` make sRGB textures, so for a 3D map use `Texture::load_as(path, role, filter = Filter::bilinear, wrap = Wrap::tile)` or `Texture::from_image_as(image, role, ...)`, which also turn on mipmaps. The role is `"color"`, `"emissive"` (both sRGB), `"normal"`, `"roughness"`, `"metallic"`, `"occlusion"`, `"orm"`, `"opacity"` or `"data"` (all linear). On any texture, `set_role(role)`, `set_color_space("srgb" or "linear")`, `color_space()`, `set_mipmaps(on)` and `mipmaps()` change and read it. A material keeps its own copy of each texture it's given, so set the role first.
+
 A `Sprite` is a texture with a position, rotation, scale and more, for things that move. `Sprite(texture)` or `Sprite::at(texture, x, y)` makes one. Its methods are:
 
 - **Position:** `set_position`, `move`, `move_forward(forward, sideways)`, `x`, `y`.
@@ -205,6 +207,14 @@ This prints `12 triangles; the origin is at 200, 150`.
 - **Presets:** `Material::make(preset)` takes a `MaterialPreset`: `plain`, `double_sided`, `transparent`, `unlit`, `metal`, `polished_metal`, `brushed_metal`, `plastic`, `glossy_plastic`, `rubber`, `wood`, `stone`, `ceramic` or `fabric`.
 - **Other ways to make one:** `Material::glowing(color, strength)`, `Material::physical(metallic, roughness)` and `Material::textured(texture)`.
 - **Setters:** `set_texture`, `set_cull(Cull::back / none / front)`, `set_blend(Blend::opaque / alpha / additive)`, `set_lit`, `set_depth(test, write)`, `set_shadow(Shadow::cast / no_shadow / cast_only)`, `set_fog`, `set_pbr(metallic, roughness)`, `set_emissive(color, strength)` and `set_occlusion`.
+- **Reflections:** `set_reflectivity(amount)` from 0 to 1, where 1 is a mirror and lower values look polished or wet (scaled by roughness). `reflectivity()` reads it.
+- **Maps:** each one keeps the texture alive for as long as the material needs it.
+  - `set_normal_map(texture, strength = 1.0)` adds surface detail. Load it with the `"normal"` role.
+  - `set_orm_map(texture, has_occlusion = true)` reads occlusion from red, roughness from green and metal from blue. Pass `false` when the red channel isn't occlusion.
+  - `set_emissive_map(texture)` makes parts glow. If the material wasn't glowing yet, the glow becomes white at strength 1, so `set_emissive` tints and scales it.
+  - `set_opacity_map(texture)`, and `set_alpha_cutoff(cutoff)` from 0 to 1, which drops pixels whose alpha is below it (leaves and fences).
+  - `has_normal_map()`, `has_orm_map()`, `has_emissive_map()`, `has_opacity_map()` and `clear_maps()` (which keeps the colour texture).
+- **Texture placement:** `set_tiling(u, v)` repeats the textures, `set_offset(u, v)` slides them and `set_uv_rotation(degrees)` turns them. `set_triplanar(on, scale = 1.0)` maps the textures from the three axes instead of the mesh's own coordinates, for terrain and rocks with no UVs, and `set_triplanar_sharpness(sharpness)` (4 by default) sets how hard the blend between axes is.
 
 **Drawing in 3D:**
 
@@ -223,6 +233,7 @@ This prints `12 triangles; the origin is at 200, 150`.
 - **Effects:** `set_shadows(on)`, `set_atmosphere(on)` and `set_exposure`.
 - **Shadow tuning:** `set_shadow_distance(meters)` is how far real shadows reach (past it, use blob shadows from `Visibility`), `set_shadow_resolution(pixels)`, `set_soft_shadows(on)` and `set_layered_shadows(on)`. Layered shadows are on by default: things that haven't moved for a few frames are drawn once into a cached layer, and each frame only the moving casters are drawn on top of a copy of it.
 - **Point lights:** up to 64, with `add_point_light(position, color)` or `add_point_light(position, color, intensity, radius)`. It gives the light's number, which `move_point_light(number, position)` uses; `clear_point_lights()` removes them all.
+- **Point light spread:** `set_point_light_falloff(number, spread, spill = 0.35, reference_distance = 0.0)`. A `"blob"` light (the default) is a compact pool that fades out by its radius. A `"natural"` light fades with the square of the distance, at full strength at `reference_distance` and smoothly gone by the radius, so it keeps lighting a whole room. `spill`, from 0 to 4, wraps light onto surfaces facing slightly away, which looks like light bouncing off nearby walls. A `reference_distance` of 0 leaves it as it was (1 metre to begin with). `point_light_falloff(number)`, `point_light_spill(number)` and `point_light_reference(number)` read them back.
 
 **Models.** `Model::load(path, scale = 1.0, z_up = true)` reads a glTF (`.gltf`, `.glb`) or OBJ file, with its materials and textures, and throws a `graphics_error` when it can't. `vertex_count()`, `bounds_min()`, `bounds_max()` and `find_animation(name)` describe it.
 
@@ -246,6 +257,38 @@ An `Animator(model)` plays a model's animations:
 - **Each frame:** `update(x, y, z)` with the camera's position. It's `true` when the tile set changed.
 - **Reading tiles:** `tile_count()`, then `tile_x/y/z(i)`, `tile_size(i)`, `tile_level(i)` and `tile_key(i)`.
 - **Changes:** `added_count()` with `added_key(i)`, and `removed_count()` with `removed_key(i)`, so you only build or free the tiles that changed. `level_at(x, y, z)` gives the tile level under a point.
+
+**Particles.** `Particles` is Fizmo's particle system: emitters with budgets, distance detail levels, culling, threads and pooled one-shot effects. `Particles()` holds up to 100,000 particles and `Particles(budget)` sets the limit.
+
+```walnut
+std::graphics::Particles: fx;
+fx.add_ground(0.0);
+long int: torch = fx.add_emitter("fire");
+fx.set_position(torch, 2.0, 0.0, -4.0);
+long int: boom = fx.add_effect("explosion");
+while (win.poll()) {
+    fx.step(1.0 / 60.0, camera);
+    r.begin_frame();
+    r.begin_3d(camera);
+    fx.draw(r);
+    r.end_3d();
+    r.present();
+}
+```
+
+- **Emitters:** `add_emitter(preset)`, `add_emitter(preset, dimension)` or `add_emitter(preset, dimension, pixels_per_unit)` gives the emitter's number. The presets are `sparks`, `smoke`, `fire`, `explosion`, `dust`, `rain`, `snow`, `magic`, `debris`, `bubbles`, `steam`, `embers` and `impact`. The dimension is `"3d"` (metres, y up, the default) or `"2d"` (pixels, y down, 50 pixels to the metre unless given).
+- **Settings:** `settings_text(emitter)` gives every setting as `key: value` lines, and `add_emitter_text(text)` makes an emitter from that text (keys left out keep their defaults). `set_setting(emitter, key, value)` changes one, like `set_setting(torch, "rate", "200")` or `set_setting(torch, "color", "1, 0.5, 0.2, 1")`, and `setting(emitter, key)` reads one. The keys are Fizmo's `EmitterSettings` fields, such as `rate`, `lifetime`, `speed`, `size`, `color`, `gravity_scale`, `drag`, `shape`, `blend` and `collide`.
+- **Placing:** `set_position(emitter, x, y, z)` (or `x, y` in 2D, or a `Vec3`) leaves a trail between the old and new place, and `teleport(emitter, x, y, z)` doesn't. `set_direction(emitter, x, y, z)` turns the emission axis that way, `set_orientation(emitter, forward..., up...)` sets both axes, and `set_angle(emitter, degrees)` turns a 2D emitter. `set_velocity(emitter, x, y, z)` is the speed handed on to particles that inherit it; `clear_velocity(emitter)` goes back to measuring it from movement.
+- **Playing:** `play`, `stop` (live particles finish), `pause(emitter, on)`, `restart`, `burst(emitter, count)` (gives how many fit), `clear(emitter)`, `remove(emitter)`, `exists`, `playing` and `finished`.
+- **Counting:** `count(emitter)` (with its sub-emitters), `count()` for everything, `emitter_count()`, `spawned()` and `limited()` (spawns the budget refused in the last step), and `step_ms()`.
+- **One-shot effects:** `add_effect(preset, dimension = "3d", pixels_per_unit = 50.0)` or `add_effect_text(text)` gives an effect number. `spawn(effect, x, y, z)` and `spawn_2d(effect, x, y, angle = 0.0)` fire one off, reusing finished ones so nothing is allocated.
+- **Colliders:** `add_ground(height)`, `add_plane(normal..., point...)`, `add_box(x0, y0, z0, x1, y1, z1)`, `add_sphere(x, y, z, radius)` and `clear_colliders()`. Emitters with `collide: true` bounce off them.
+- **Speed:** `set_budget(count)`, `set_threads(count)` (0 uses every core) and `set_origin(x, y, z)` for large worlds.
+- **Texture:** `set_texture(emitter, texture)`; without one, particles are soft round dots.
+- **Each frame (3D):** `step(seconds, camera)` updates everything and culls what the camera can't see, and `draw(renderer)` draws with the camera from the last step (or `draw(renderer, camera)` with another one), between `begin_3d` and `end_3d`. `step(seconds)` updates without culling.
+- **Each frame (2D):** `step_2d(seconds, x0, y0, x1, y1)` with the visible rectangle, then `draw_2d(renderer)`, which follows the current 2D camera. Keep 2D and 3D emitters in separate `Particles`, because each step culls against one view.
+
+Both `draw` methods give how many particles they drew.
 
 ## Tilemaps
 
@@ -297,4 +340,4 @@ Tiles are numbered by "gid": each tile sheet added with `add_tileset(texture, ti
 
 ## Errors
 
-`Renderer::make`, `Texture::from_image`, `RenderTarget::make`, `load_font`, `begin_target`, `begin_3d`, `Model::load`, `TileMap::load_tiled` and the tile and mesh methods given a wrong number throw a `std::errors::graphics_error` when they can't do what was asked. `Texture::load` throws a [`std::errors::image_error`](images.md#errors) when the file can't be read. Their `what()` (or their `message` field) says why.
+Particle, material and lighting methods given an unknown preset, role, spread, setting or number throw a runtime error that says what was wrong. `Renderer::make`, `Texture::from_image`, `RenderTarget::make`, `load_font`, `begin_target`, `begin_3d`, `Model::load`, `TileMap::load_tiled` and the tile and mesh methods given a wrong number throw a `std::errors::graphics_error` when they can't do what was asked. `Texture::load` throws a [`std::errors::image_error`](images.md#errors) when the file can't be read. Their `what()` (or their `message` field) says why.

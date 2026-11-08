@@ -33,6 +33,8 @@ namespace std {
                 function add_ground(std::hardware_float: height) -> long int;
                 function add_terrain(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, long int: columns, long int: rows, std::hardware_float: cell, const string&: heights) -> long int;
                 function add_mesh(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, const string&: points, const string&: triangles, bool: two_sided, const string&: kind) -> long int;
+                function add_hemisphere(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: radius, const string&: kind) -> long int;
+                function add_sphere_section(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: radius, std::hardware_float: polar_min, std::hardware_float: polar_max, std::hardware_float: azimuth_min, std::hardware_float: azimuth_max, std::hardware_float: inner_radius, const string&: kind) -> long int;
 
                 function add_box(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: hx, std::hardware_float: hy, std::hardware_float: hz) -> long int {
                     return add_box(x, y, z, hx, hy, hz, "dynamic");
@@ -64,6 +66,8 @@ namespace std {
                 function push(long int: body, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
                 function set_damping(long int: body, std::hardware_float: linear, std::hardware_float: angular) -> void;
                 function set_gravity_scale(long int: body, std::hardware_float: scale) -> void;
+                function set_density(long int: body, std::hardware_float: kg_per_m3) -> void;
+                function set_mass(long int: body, std::hardware_float: kg) -> void;
                 function set_speed_caps(long int: body, std::hardware_float: speed, std::hardware_float: spin) -> void;
 
                 function set_friction(long int: body, std::hardware_float: friction) -> void;
@@ -154,6 +158,43 @@ namespace std {
                 function island_count() const -> long int;
                 function layer_rejects() const -> long int;
                 function reused_contacts() const -> long int;
+
+                function add_fluid(const string&: level, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: half_x, std::hardware_float: half_y, std::hardware_float: half_z, const string&: preset, std::hardware_float: fill, std::hardware_float: cell_size) -> long int;
+                function set_fluid(long int: fluid, const string&: property, std::hardware_float: value) -> void;
+                function set_fluid_color(long int: fluid, std::hardware_float: r, std::hardware_float: g, std::hardware_float: b) -> void;
+                function set_fluid_current(long int: fluid, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) -> void;
+                function set_fluid_quality(long int: quality) -> void;
+                function remove_fluid(long int: fluid) -> void;
+                function fluid_exists(long int: fluid) const -> bool;
+                function fluid_count() const -> long int;
+                function fluid_level(long int: fluid) const -> string;
+                function fluid_surface(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) const -> std::hardware_float;
+                function fluid_depth(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) const -> std::hardware_float;
+                function fluid_inside(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) const -> bool;
+                function fluid_velocity_x(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) const -> std::hardware_float;
+                function fluid_velocity_y(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) const -> std::hardware_float;
+                function fluid_velocity_z(std::hardware_float: x, std::hardware_float: y, std::hardware_float: z) const -> std::hardware_float;
+                function fluid_volume(long int: fluid) const -> std::hardware_float;
+                function fluid_sleeping(long int: fluid) const -> bool;
+                function fluid_particle_count(long int: fluid) const -> long int;
+                function fluid_particle_x(long int: fluid, long int: index) const -> std::hardware_float;
+                function fluid_particle_y(long int: fluid, long int: index) const -> std::hardware_float;
+                function fluid_particle_z(long int: fluid, long int: index) const -> std::hardware_float;
+                function fluid_particle_radius(long int: fluid) const -> std::hardware_float;
+                function fluid_cells_x(long int: fluid) const -> long int;
+                function fluid_cells_y(long int: fluid) const -> long int;
+                function fluid_cells_z(long int: fluid) const -> long int;
+                function fluid_cell_size(long int: fluid) const -> std::hardware_float;
+                function fluid_cell(long int: fluid, long int: i, long int: j, long int: k) const -> std::hardware_float;
+                function fluid_solid(long int: fluid, long int: i, long int: j, long int: k) const -> bool;
+                function fluid_columns_x(long int: fluid) const -> long int;
+                function fluid_columns_z(long int: fluid) const -> long int;
+                function fluid_column_size(long int: fluid) const -> std::hardware_float;
+                function fluid_height(long int: fluid, long int: i, long int: k) const -> std::hardware_float;
+
+                function add_fluid(const string&: level, std::hardware_float: x, std::hardware_float: y, std::hardware_float: z, std::hardware_float: half_x, std::hardware_float: half_y, std::hardware_float: half_z, const string&: preset, std::hardware_float: fill) -> long int {
+                    return add_fluid(level, x, y, z, half_x, half_y, half_z, preset, fill, 0.0);
+                } end function add_fluid
             } end class World
         } end extern
     } end namespace physics

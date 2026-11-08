@@ -431,6 +431,29 @@ namespace std {
                 function set_wrap(Wrap: m) -> void {
                     native_set_wrap(static_cast<long int>(m));
                 } end function set_wrap
+
+                function set_role(const string&: role) -> void;
+                function set_color_space(const string&: space) -> void;
+                function color_space() const -> string;
+                function set_mipmaps(bool: on) -> void;
+                function mipmaps() const -> bool;
+
+                static function load_as(const string&: path, const string&: role, Filter: filter = Filter::bilinear, Wrap: wrap = Wrap::tile) -> Texture {
+                    Texture: t = Texture(Image::load(path), static_cast<long int>(filter), static_cast<long int>(wrap));
+                    t.set_role(role);
+                    t.set_mipmaps(true);
+                    return t;
+                } end function load_as
+
+                static function from_image_as(const Image&: img, const string&: role, Filter: filter = Filter::bilinear, Wrap: wrap = Wrap::tile) -> Texture {
+                    if (img.is_empty()) then {
+                        throw std::errors::graphics_error("a texture needs an image that isn't empty");
+                    }
+                    Texture: t = Texture(img, static_cast<long int>(filter), static_cast<long int>(wrap));
+                    t.set_role(role);
+                    t.set_mipmaps(true);
+                    return t;
+                } end function from_image_as
             } end class Texture
 
             class Sprite as "walnut_rt::gfx::sprite" {
@@ -714,6 +737,36 @@ namespace std {
                 function set_emissive(const Color&: c, float: strength = 1.0) -> void {
                     native_set_emissive(c.packed(), strength);
                 } end function set_emissive
+
+                function set_reflectivity(float: amount) -> void;
+                function reflectivity() const -> float;
+                function set_normal_map(const Texture&: t, float: strength) -> void;
+                function set_orm_map(const Texture&: t, bool: has_occlusion) -> void;
+                function set_emissive_map(const Texture&: t) -> void;
+                function set_opacity_map(const Texture&: t) -> void;
+                function has_normal_map() const -> bool;
+                function has_orm_map() const -> bool;
+                function has_emissive_map() const -> bool;
+                function has_opacity_map() const -> bool;
+                function clear_maps() -> void;
+                function set_alpha_cutoff(float: cutoff) -> void;
+                function set_tiling(float: u, float: v) -> void;
+                function set_offset(float: u, float: v) -> void;
+                function set_uv_rotation(float: degrees) -> void;
+                function set_triplanar(bool: on, float: scale) -> void;
+                function set_triplanar_sharpness(float: sharpness) -> void;
+
+                function set_normal_map(const Texture&: t) -> void {
+                    set_normal_map(t, 1.0);
+                } end function set_normal_map
+
+                function set_orm_map(const Texture&: t) -> void {
+                    set_orm_map(t, true);
+                } end function set_orm_map
+
+                function set_triplanar(bool: on) -> void {
+                    set_triplanar(on, 1.0);
+                } end function set_triplanar
             } end class Material
 
             class Lighting as "walnut_rt::gfx::lighting" {
@@ -766,6 +819,19 @@ namespace std {
                 function move_point_light(long int: index, const Vec3&: position) -> void {
                     native_move_point(index, position.x, position.y, position.z);
                 } end function move_point_light
+
+                function set_point_light_falloff(long int: index, const string&: spread, float: spill, float: reference_distance) -> void;
+                function point_light_falloff(long int: index) -> string;
+                function point_light_spill(long int: index) -> float;
+                function point_light_reference(long int: index) -> float;
+
+                function set_point_light_falloff(long int: index, const string&: spread) -> void {
+                    set_point_light_falloff(index, spread, 0.35, 0.0);
+                } end function set_point_light_falloff
+
+                function set_point_light_falloff(long int: index, const string&: spread, float: spill) -> void {
+                    set_point_light_falloff(index, spread, spill, 0.0);
+                } end function set_point_light_falloff
             } end class Lighting
 
             class Visibility as "walnut_rt::gfx::visibility" {
@@ -1309,6 +1375,124 @@ namespace std {
                     return native_draw_tilemap(map, x, y);
                 } end function draw_tilemap
             } end class Renderer
+
+            class Particles as "walnut_rt::gfx::particles" {
+                function native_add_emitter(const string&: preset, const string&: dimension, float: pixels_per_unit) -> long int as "add_emitter";
+                function native_add_effect(const string&: preset, const string&: dimension, float: pixels_per_unit) -> long int as "add_effect";
+                function native_step_camera(float: seconds, const Camera3D&: camera) -> void as "step_camera";
+                function native_draw_camera(Renderer&: renderer, const Camera3D&: camera) -> long int as "draw_camera";
+                function native_count_of(long int: emitter) const -> long int as "count_of";
+                function native_clear_emitter(long int: emitter) -> void as "clear_emitter";
+
+            public:
+                constructor();
+                constructor(long int: budget);
+
+                function add_emitter(const string&: preset) -> long int {
+                    return native_add_emitter(preset, "3d", 50.0);
+                } end function add_emitter
+
+                function add_emitter(const string&: preset, const string&: dimension) -> long int {
+                    return native_add_emitter(preset, dimension, 50.0);
+                } end function add_emitter
+
+                function add_emitter(const string&: preset, const string&: dimension, float: pixels_per_unit) -> long int {
+                    return native_add_emitter(preset, dimension, pixels_per_unit);
+                } end function add_emitter
+
+                function add_emitter_text(const string&: settings) -> long int;
+                function settings_text(long int: emitter) const -> string;
+                function set_setting(long int: emitter, const string&: key, const string&: value) -> void;
+                function setting(long int: emitter, const string&: key) const -> string;
+
+                function set_position(long int: emitter, float: x, float: y, float: z) -> void;
+                function teleport(long int: emitter, float: x, float: y, float: z) -> void;
+                function set_direction(long int: emitter, float: x, float: y, float: z) -> void;
+                function set_orientation(long int: emitter, float: fx, float: fy, float: fz, float: ux, float: uy, float: uz) -> void;
+                function set_angle(long int: emitter, float: degrees) -> void;
+                function set_velocity(long int: emitter, float: x, float: y, float: z) -> void;
+                function clear_velocity(long int: emitter) -> void;
+                function set_texture(long int: emitter, const Texture&: t) -> void;
+
+                function set_position(long int: emitter, float: x, float: y) -> void {
+                    set_position(emitter, x, y, 0.0);
+                } end function set_position
+
+                function set_position(long int: emitter, const Vec3&: p) -> void {
+                    set_position(emitter, p.x, p.y, p.z);
+                } end function set_position
+
+                function set_direction(long int: emitter, const Vec3&: d) -> void {
+                    set_direction(emitter, d.x, d.y, d.z);
+                } end function set_direction
+
+                function play(long int: emitter) -> void;
+                function stop(long int: emitter) -> void;
+                function pause(long int: emitter, bool: paused) -> void;
+                function restart(long int: emitter) -> void;
+                function burst(long int: emitter, long int: count) -> long int;
+                function remove(long int: emitter) -> void;
+                function exists(long int: emitter) const -> bool;
+                function playing(long int: emitter) const -> bool;
+                function finished(long int: emitter) const -> bool;
+                function count() const -> long int;
+                function emitter_count() const -> long int;
+                function clear() -> void;
+
+                function count(long int: emitter) const -> long int {
+                    return native_count_of(emitter);
+                } end function count
+
+                function clear(long int: emitter) -> void {
+                    native_clear_emitter(emitter);
+                } end function clear
+
+                function add_effect(const string&: preset) -> long int {
+                    return native_add_effect(preset, "3d", 50.0);
+                } end function add_effect
+
+                function add_effect(const string&: preset, const string&: dimension) -> long int {
+                    return native_add_effect(preset, dimension, 50.0);
+                } end function add_effect
+
+                function add_effect(const string&: preset, const string&: dimension, float: pixels_per_unit) -> long int {
+                    return native_add_effect(preset, dimension, pixels_per_unit);
+                } end function add_effect
+
+                function add_effect_text(const string&: settings) -> long int;
+                function spawn(long int: effect, float: x, float: y, float: z) -> bool;
+                function spawn_2d(long int: effect, float: x, float: y, float: angle) -> bool;
+
+                function spawn_2d(long int: effect, float: x, float: y) -> bool {
+                    return spawn_2d(effect, x, y, 0.0);
+                } end function spawn_2d
+
+                function set_budget(long int: budget) -> void;
+                function set_threads(long int: count) -> void;
+                function set_origin(float: x, float: y, float: z) -> void;
+                function add_ground(float: height) -> void;
+                function add_plane(float: nx, float: ny, float: nz, float: px, float: py, float: pz) -> void;
+                function add_box(float: x0, float: y0, float: z0, float: x1, float: y1, float: z1) -> void;
+                function add_sphere(float: x, float: y, float: z, float: radius) -> void;
+                function clear_colliders() -> void;
+
+                function step(float: seconds) -> void;
+                function step_2d(float: seconds, float: x0, float: y0, float: x1, float: y1) -> void;
+                function draw(Renderer&: renderer) -> long int;
+                function draw_2d(Renderer&: renderer) -> long int;
+
+                function step(float: seconds, const Camera3D&: camera) -> void {
+                    native_step_camera(seconds, camera);
+                } end function step
+
+                function draw(Renderer&: renderer, const Camera3D&: camera) -> long int {
+                    return native_draw_camera(renderer, camera);
+                } end function draw
+
+                function spawned() const -> long int;
+                function limited() const -> long int;
+                function step_ms() const -> float;
+            } end class Particles
         } end extern
     } end namespace graphics
 } end namespace std

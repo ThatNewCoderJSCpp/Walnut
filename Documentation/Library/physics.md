@@ -1,6 +1,6 @@
 # physics
 
-`physics` is Walnut's front end to Fizmo's 3D rigid body engine, the same one Orchard runs on.
+`physics` is Walnut's front end to Fizmo's 3D rigid body engine and its 3D fluids, the same ones Orchard runs on.
 
 ```walnut
 import module.physics
@@ -19,7 +19,8 @@ Everything is in the namespace `std::physics`. Numbers cross as `std::hardware_f
 7. [Joints](#joints)
 8. [Cloth and ropes](#cloth-and-ropes)
 9. [Contact events](#contact-events)
-10. [Errors](#errors)
+10. [Fluids](#fluids)
+11. [Errors](#errors)
 
 ## A first example
 
@@ -68,10 +69,13 @@ Every `add_...` gives a body number. The last argument is `"dynamic"` (the defau
 | `add_ground(height)` | A flat static ground |
 | `add_terrain(x, y, z, columns, rows, cell, heights)` | A static heightfield; `heights` is `columns × rows` numbers separated by commas |
 | `add_mesh(x, y, z, points, triangles, two_sided, kind)` | A triangle mesh; `points` is x,y,z numbers separated by commas and `triangles` is 3 point numbers for each triangle, counted from 0. A one-sided mesh only blocks from the side its triangles face (counter-clockwise when you look at it) |
+| `add_hemisphere(x, y, z, radius, kind)` | A solid half sphere, flat face down at the body's position and the dome pointing up |
+| `add_sphere_section(x, y, z, radius, polar_min, polar_max, azimuth_min, azimuth_max, inner_radius, kind)` | Part of a sphere. Angles are in degrees: polar goes from 0 at the top to 180 at the bottom, azimuth goes round the up axis from +x (0) towards +z (90). An `inner_radius` above 0 hollows it out (a bowl is polar 90 to 180 with an inner radius). Shapes that aren't convex are made from several convex pieces on one body |
 
 - **Reading:** `x`, `y`, `z`, `vx`, `vy`, `vz`, the rotation as `qx`, `qy`, `qz`, `qw`, and `mass`, each taking the body number.
 - **Moving:** `set_position`, `set_velocity`, `set_spin` and `push` (an impulse).
 - **Slowing:** `set_damping(body, linear, angular)`, `set_gravity_scale(body, scale)` and `set_speed_caps(body, speed, spin)`.
+- **Weight:** bodies start as dense as water (1000 kg/m³). `set_density(body, kg_per_m3)` changes that, and `set_mass(body, kg)` sets the mass directly. A body lighter than a fluid floats in it.
 - **Removing:** `remove(body)` and `exists(body)`.
 
 ## Surfaces
@@ -143,6 +147,49 @@ More points cost more time, roughly in step with the point count.
 
 After each `step()`, `begin_count()` and `end_count()` give how many touches started and ended, and `begin_a(i)`, `begin_b(i)`, `end_a(i)` and `end_b(i)` give the two bodies. Only bodies with the `contacts` flag (on by default) report them. `set_event_callbacks(false)` skips Fizmo's per-contact callbacks, which the buffers don't need.
 
+## Fluids
+
+A `World` can hold bodies of water, oil, lava and other fluids. They're Fizmo's `FluidWorld3D`, made the first time you add one and stepped by `step()` and `step_by()` just before the bodies, so buoyancy, drag and currents act on every dynamic body in them, and bodies push the fluid back (ripples, wakes and splashes).
+
+```walnut
+std::physics::World: world;
+world.add_ground(0.0);
+long int: pool = world.add_fluid("still", 0.0, 1.0, 0.0, 8.0, 1.0, 8.0, "water", 0.8);
+long int: crate = world.add_box(0.0, 3.0, 0.0, 0.5, 0.5, 0.5);
+world.set_density(crate, 500.0);
+for (long int: i = 0l; i < 600l; i += 1l) {
+    world.step();
+}
+std::io::println(world.y(crate));
+```
+
+This prints about `1.6`: the crate floats half under the surface at 1.6.
+
+`add_fluid(level, x, y, z, half_x, half_y, half_z, preset, fill)` fills a box centred on `(x, y, z)` up to `fill` (0 to 1) of its height and gives the fluid's number. `add_fluid(..., fill, cell_size)` sets the size of its cells (and its particles, half that) instead of picking one from the box size; 0 picks.
+
+| Level | Feels like | How it works |
+|---|---|---|
+| `"blocky"` | Minecraft | Blocks of water that drop and spread a level per block, ticking a few times a second |
+| `"still"` | A flat pool | A flat surface that only floats and slows things; almost free |
+| `"flowing"` | Modded Minecraft | Each cell holds part of a block and the total is kept exactly, so it drains down holes and evens out |
+| `"waves"` | A lake | A height field that flows and carries ripples, with optional swell |
+| `"realistic"` | A particle simulation | Particles that pour over walls and splash; the slowest |
+
+The presets are `"water"`, `"sea-water"`, `"oil"`, `"honey"`, `"lava"`, `"mud"` and `"mercury"`. Static bodies inside a `blocky`, `flowing` or `waves` fluid become solid in it. That happens when the fluid is added, and again on the next step when more static bodies are added.
+
+- **Changing it:** `set_fluid(fluid, property, value)` takes `"density"` (kg/m³), `"viscosity"` (Pa·s), `"surface-tension"`, `"drag"`, `"quadratic-drag"`, `"angular-drag"`, `"friction"`, `"bounce"`, `"stiffness"`, `"temperature"`, `"opacity"` or `"wave-height"` (the swell for `waves`, the bob for `still`). `set_fluid_color(fluid, r, g, b)` takes 0 to 1 each, and `set_fluid_current(fluid, x, y, z)` makes it carry things along.
+- **Quality:** `set_fluid_quality(0 to 3)` (low, medium, high, ultra; medium to begin with) sets resolution, substeps and particle limits. Set it before adding fluids, since the resolution is picked when a fluid is made. `set_threads` covers fluids too.
+- **Removing:** `remove_fluid(fluid)`, `fluid_exists(fluid)`, `fluid_count()` and `fluid_level(fluid)`.
+- **Queries at a point:** `fluid_surface(x, y, z)` is the height of the surface over that point, `fluid_depth(x, y, z)` how far below it the point is (negative above it), `fluid_inside(x, y, z)`, and `fluid_velocity_x/y/z(x, y, z)` the flow there. Away from every fluid, the surface and depth are the lowest number a `std::hardware_float` holds. `fluid_volume(fluid)` is how much fluid there is in cubic metres, and `fluid_sleeping(fluid)` says whether it has settled.
+
+**Drawing.** With y up, a fluid's cells and columns start at the low corner of its box.
+
+- **Cells** (`blocky` and `flowing`): `fluid_cells_x/y/z(fluid)` and `fluid_cell_size(fluid)`. `fluid_cell(fluid, i, j, k)` is how full cell `(i, j, k)` is (0 to 1, a little more when squeezed), with `j` going up, and `fluid_solid(fluid, i, j, k)` says whether it's a wall.
+- **Columns** (`waves`): `fluid_columns_x/z(fluid)`, `fluid_column_size(fluid)` and `fluid_height(fluid, i, k)`, the height of the surface above the box's floor.
+- **Particles** (`realistic`): `fluid_particle_count(fluid)`, `fluid_particle_x/y/z(fluid, i)` and `fluid_particle_radius(fluid)`. Their order changes from step to step.
+
+For 2D fluid sandboxes (falling sand, pouring, painting walls), see [fluids](fluids.md).
+
 ## Errors
 
-Bad input throws with a message naming the problem: a body or joint number that doesn't exist, an unknown flag, kind, quality or solver name, a size or radius that isn't above 0, a terrain whose height list is the wrong length, or an index out of range.
+Bad input throws with a message naming the problem: a body, joint or fluid number that doesn't exist, an unknown flag, kind, quality, solver, fluid level, preset or property name, a size or radius that isn't above 0, a terrain whose height list is the wrong length, or an index out of range.

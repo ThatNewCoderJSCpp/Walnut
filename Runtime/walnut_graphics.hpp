@@ -13,7 +13,9 @@
 #include "fizmo/../../Source/Input/gamepad.hpp"
 #include "fizmo/../../Source/Graphics/model_3d.hpp"
 #include "fizmo/../../Source/Graphics/Renderer/renderer.hpp"
+#include "fizmo/../../Source/Graphics/texture_library.hpp"
 #include "fizmo/../../Source/Graphics/visibility_3d.hpp"
+#include "fizmo/../../Source/Graphics/Particles/particles.hpp"
 #include "fizmo/../../Source/Text/text_style.hpp"
 #include "fizmo/../../Source/Text/fonts.hpp"
 
@@ -609,6 +611,30 @@ public:
     void set_wrap(long long m) { t.set_wrap(static_cast<fg::WrapMode>(m)); }
     long long filter() const { return static_cast<long long>(t.filter()); }
     image to_image() const { return t.image() ? image(*t.image()) : image(); }
+    void set_role(const std::string& role) {
+        const std::string r = squash(role);
+        fg::TextureRole tr = fg::TextureRole::Color;
+        if (r == "color" || r == "colour" || r == "albedo" || r == "basecolor") tr = fg::TextureRole::Color;
+        else if (r == "emissive") tr = fg::TextureRole::Emissive;
+        else if (r == "normal") tr = fg::TextureRole::Normal;
+        else if (r == "roughness") tr = fg::TextureRole::Roughness;
+        else if (r == "metallic") tr = fg::TextureRole::Metallic;
+        else if (r == "occlusion" || r == "ao") tr = fg::TextureRole::Occlusion;
+        else if (r == "orm" || r == "packed") tr = fg::TextureRole::Packed;
+        else if (r == "opacity") tr = fg::TextureRole::Opacity;
+        else if (r == "data") tr = fg::TextureRole::Data;
+        else fail("a texture role must be color, emissive, normal, roughness, metallic, occlusion, orm, opacity or data, not '" + role + "'");
+        t.set_color_space(fg::default_color_space(tr));
+    }
+    void set_color_space(const std::string& space) {
+        const std::string c = squash(space);
+        if (c == "srgb") t.set_color_space(fg::ColorSpace::SRGB);
+        else if (c == "linear") t.set_color_space(fg::ColorSpace::Linear);
+        else fail("a color space must be srgb or linear, not '" + space + "'");
+    }
+    std::string color_space() const { return t.color_space() == fg::ColorSpace::SRGB ? "srgb" : "linear"; }
+    void set_mipmaps(bool on) { t.set_mipmaps(on); }
+    bool mipmaps() const { return t.mipmaps(); }
 };
 
 class sprite {
@@ -1013,12 +1039,30 @@ class material {
 public:
     fg::Material3D m;
     std::shared_ptr<fg::Texture> tex;
+    std::shared_ptr<fg::Texture> normal_tex;
+    std::shared_ptr<fg::Texture> orm_tex;
+    std::shared_ptr<fg::Texture> emissive_tex;
+    std::shared_ptr<fg::Texture> opacity_tex;
 
     material() = default;
-    material(const material& o) : m(o.m), tex(o.tex) { m.texture = tex.get(); }
-    material& operator=(const material& o) { m = o.m; tex = o.tex; m.texture = tex.get(); return *this; }
+    material(const material& o) : m(o.m), tex(o.tex), normal_tex(o.normal_tex), orm_tex(o.orm_tex), emissive_tex(o.emissive_tex), opacity_tex(o.opacity_tex) { bind(); }
+    material& operator=(const material& o) {
+        m = o.m;
+        tex = o.tex;
+        normal_tex = o.normal_tex;
+        orm_tex = o.orm_tex;
+        emissive_tex = o.emissive_tex;
+        opacity_tex = o.opacity_tex;
+        bind();
+        return *this;
+    }
 
-    static material of(const fg::Material3D& mm) { material out; out.m = mm; out.m.texture = nullptr; return out; }
+    static material of(const fg::Material3D& mm) {
+        material out;
+        out.m = mm;
+        out.bind();
+        return out;
+    }
     static material preset(long long which) {
         switch (which) {
             case 1: return of(fg::Material3D::double_sided());
@@ -1055,6 +1099,66 @@ public:
     bool lit() const { return m.lit; }
     F metallic() const { return w(m.metallic); }
     F roughness() const { return w(m.roughness); }
+
+    void set_reflectivity(const F& r) { m.pbr = true; m.reflectivity = static_cast<float>(std::clamp(d(r), 0.0, 1.0)); }
+    F reflectivity() const { return w(m.reflectivity); }
+    void set_normal_map(const texture& t, const F& strength) {
+        normal_tex = keep(t, "a normal map");
+        m.with_normal_map(*normal_tex, static_cast<float>(std::max(0.0, d(strength))));
+    }
+    void set_orm_map(const texture& t, bool has_occlusion) {
+        orm_tex = keep(t, "an ORM map");
+        m.with_orm_map(*orm_tex, has_occlusion);
+    }
+    void set_emissive_map(const texture& t) {
+        emissive_tex = keep(t, "an emissive map");
+        m.with_emissive_map(*emissive_tex);
+        if (m.emissive_strength <= 0.0f) {
+            m.emissive = fc::Color(255, 255, 255, 255);
+            m.emissive_strength = 1.0f;
+        }
+    }
+    void set_opacity_map(const texture& t) {
+        opacity_tex = keep(t, "an opacity map");
+        m.with_opacity_map(*opacity_tex);
+    }
+    bool has_normal_map() const { return static_cast<bool>(normal_tex); }
+    bool has_orm_map() const { return static_cast<bool>(orm_tex); }
+    bool has_emissive_map() const { return static_cast<bool>(emissive_tex); }
+    bool has_opacity_map() const { return static_cast<bool>(opacity_tex); }
+    void clear_maps() {
+        normal_tex.reset();
+        orm_tex.reset();
+        emissive_tex.reset();
+        opacity_tex.reset();
+        bind();
+    }
+    void set_alpha_cutoff(const F& cutoff) { m.alpha_cutoff = static_cast<float>(std::clamp(d(cutoff), 0.0, 1.0)); }
+    void set_tiling(const F& tu, const F& tv) { m.uv.scale_u = static_cast<float>(d(tu)); m.uv.scale_v = static_cast<float>(d(tv)); }
+    void set_offset(const F& ou, const F& ov) { m.uv.offset_u = static_cast<float>(d(ou)); m.uv.offset_v = static_cast<float>(d(ov)); }
+    void set_uv_rotation(const F& degrees) { m.uv.rotation = static_cast<float>(d(degrees) * 3.14159265358979323846 / 180.0); }
+    void set_triplanar(bool on, const F& scale) {
+        m.triplanar = on;
+        if (on) {
+            const double k = d(scale);
+            if (!(k > 0.0)) fail("a triplanar scale must be above 0");
+            m.triplanar_scale = static_cast<float>(k);
+        }
+    }
+    void set_triplanar_sharpness(const F& sharpness) { m.triplanar_sharpness = static_cast<float>(std::max(1.0, d(sharpness))); }
+
+private:
+    static std::shared_ptr<fg::Texture> keep(const texture& t, const char* what) {
+        if (!t.valid()) fail(std::string(what) + " needs a texture that isn't empty");
+        return std::make_shared<fg::Texture>(t.t);
+    }
+    void bind() {
+        m.texture = tex.get();
+        m.normal_map = normal_tex.get();
+        m.orm_map = orm_tex.get();
+        m.emissive_map = emissive_tex.get();
+        m.opacity_map = opacity_tex.get();
+    }
 };
 
 class lighting {
@@ -1100,6 +1204,24 @@ public:
     void move_point_light(long long i, const F& x, const F& y, const F& z) { if (i >= 0 && i < point_light_count()) l.point_lights[static_cast<std::size_t>(i)].position = v3(x, y, z); }
     void clear_point_lights() { l.point_lights.clear(); }
     long long point_light_count() const { return static_cast<long long>(l.point_lights.size()); }
+    void set_point_light_falloff(long long i, const std::string& spread, const F& spill, const F& reference_distance) {
+        fg::PointLight3D& p = point(i);
+        const std::string sp = squash(spread);
+        if (sp == "natural" || sp == "physical") p.falloff = fg::LightFalloff3D::Physical;
+        else if (sp == "blob" || sp == "window") p.falloff = fg::LightFalloff3D::Window;
+        else fail("a point light's spread must be natural or blob, not '" + spread + "'");
+        p.spill = static_cast<float>(std::clamp(d(spill), 0.0, 4.0));
+        if (d(reference_distance) > 0.0) p.reference_distance = static_cast<float>(d(reference_distance));
+    }
+    std::string point_light_falloff(long long i) { return point(i).falloff == fg::LightFalloff3D::Physical ? "natural" : "blob"; }
+    F point_light_spill(long long i) { return w(point(i).spill); }
+    F point_light_reference(long long i) { return w(point(i).reference_distance); }
+
+private:
+    fg::PointLight3D& point(long long i) {
+        if (i < 0 || i >= point_light_count()) fail("there's no point light " + std::to_string(i) + " (there are " + std::to_string(point_light_count()) + ")");
+        return l.point_lights[static_cast<std::size_t>(i)];
+    }
 };
 
 class visibility {
@@ -1347,6 +1469,219 @@ public:
             case 3: return w(last_hit.normal_x);
             default: return w(last_hit.normal_y);
         }
+    }
+};
+
+namespace fx = fizmo::particles;
+
+inline fx::ParticlePreset particle_preset_named(const std::string& name) {
+    static const char* const names[] = { "sparks", "smoke", "fire", "explosion", "dust", "rain", "snow", "magic", "debris", "bubbles", "steam", "embers", "impact" };
+    for (int k = 0; k < static_cast<int>(fx::ParticlePreset::Count); ++k) {
+        if (name == names[k]) return static_cast<fx::ParticlePreset>(k);
+    }
+    if (name == "magic-sparkle" || name == "magic_sparkle") return fx::ParticlePreset::MagicSparkle;
+    fail("a particle preset must be sparks, smoke, fire, explosion, dust, rain, snow, magic, debris, bubbles, steam, embers or impact, not '" + name + "'");
+}
+
+inline fx::ParticleDim particle_dimension_named(const std::string& name) {
+    if (name == "3d" || name == "3D") return fx::ParticleDim::D3;
+    if (name == "2d" || name == "2D") return fx::ParticleDim::D2;
+    fail("a particle dimension must be 3d or 2d, not '" + name + "'");
+}
+
+inline linalg::vector3d up_for(const linalg::vector3d& f) {
+    const double len = std::sqrt(f.x * f.x + f.y * f.y + f.z * f.z);
+    if (len <= 1e-12) fail("a direction can't be all zeros");
+    return std::abs(f.y / len) > 0.99 ? linalg::vector3d{ 0.0, 0.0, 1.0 } : linalg::vector3d{ 0.0, 1.0, 0.0 };
+}
+
+class particles {
+public:
+    struct state {
+        std::unique_ptr<fx::ParticleSystem> sys;
+        std::vector<fx::Emitter*> emitters;
+        std::vector<std::shared_ptr<fg::Texture>> textures;
+        std::vector<int> effects;
+        fx::DrawList3D list3;
+        fx::DrawList2D list2;
+    };
+
+    std::shared_ptr<state> s;
+
+    particles() : particles(100000) {}
+    explicit particles(long long budget) : s(std::make_shared<state>()) {
+        fx::SystemSettings settings;
+        settings.budget = static_cast<std::size_t>(std::clamp<long long>(budget, 1, 100000000));
+        s->sys = std::make_unique<fx::ParticleSystem>(settings);
+    }
+
+    long long add_emitter(const std::string& preset, const std::string& dimension, const F& pixels_per_unit) {
+        const double ppu = d(pixels_per_unit);
+        if (!(ppu > 0.0)) fail("pixels per unit must be above 0");
+        return adopt(s->sys->create_emitter(fx::preset(particle_preset_named(preset), particle_dimension_named(dimension), static_cast<float>(ppu))));
+    }
+    long long add_emitter_text(const std::string& text) { return adopt(s->sys->create_emitter(parse(text))); }
+    std::string settings_text(long long id) const { return fx::to_text(cemitter(id).settings()); }
+    void set_setting(long long id, const std::string& key, const std::string& value) {
+        fx::Emitter& e = emitter(id);
+        const std::string k = trim(key);
+        if (k.empty() || k.find_first_of(":\n") != std::string::npos) fail("a particle setting name can't be empty or hold ':' or a new line");
+        if (value.find('\n') != std::string::npos) fail("a particle setting's value can't hold a new line");
+        std::string text = fx::to_text(e.settings());
+        const std::size_t at = find_key(text, k);
+        if (at == std::string::npos) fail("there's no particle setting called '" + k + "'");
+        const std::size_t end = text.find('\n', at);
+        text.replace(at, (end == std::string::npos ? text.size() : end) - at, k + ": " + trim(value));
+        e.set_settings(parse(text));
+    }
+    std::string setting(long long id, const std::string& key) const {
+        const std::string text = fx::to_text(cemitter(id).settings());
+        const std::string k = trim(key);
+        const std::size_t at = find_key(text, k);
+        if (at == std::string::npos) fail("there's no particle setting called '" + k + "'");
+        const std::size_t end = text.find('\n', at);
+        return trim(text.substr(at + k.size() + 1, (end == std::string::npos ? text.size() : end) - at - k.size() - 1));
+    }
+
+    void set_position(long long id, const F& x, const F& y, const F& z) { emitter(id).set_position(d(x), d(y), d(z)); }
+    void teleport(long long id, const F& x, const F& y, const F& z) { emitter(id).teleport(v3(x, y, z)); }
+    void set_direction(long long id, const F& x, const F& y, const F& z) {
+        const linalg::vector3d f = v3(x, y, z);
+        emitter(id).set_orientation(f, up_for(f));
+    }
+    void set_orientation(long long id, const F& fx_, const F& fy, const F& fz, const F& ux, const F& uy, const F& uz) {
+        const linalg::vector3d f = v3(fx_, fy, fz), u = v3(ux, uy, uz);
+        up_for(f);
+        if (u.x * u.x + u.y * u.y + u.z * u.z <= 1e-24) fail("an up direction can't be all zeros");
+        emitter(id).set_orientation(f, u);
+    }
+    void set_angle(long long id, const F& degrees) { emitter(id).set_angle(d(degrees)); }
+    void set_velocity(long long id, const F& x, const F& y, const F& z) { emitter(id).set_velocity(v3(x, y, z)); }
+    void clear_velocity(long long id) { emitter(id).clear_velocity(); }
+    void set_texture(long long id, const texture& t) {
+        fx::Emitter& e = emitter(id);
+        auto keep = std::make_shared<fg::Texture>(t.t);
+        s->textures[static_cast<std::size_t>(id)] = keep;
+        e.set_texture(keep.get());
+    }
+
+    void play(long long id) { emitter(id).play(); }
+    void stop(long long id) { emitter(id).stop(); }
+    void pause(long long id, bool paused) { emitter(id).pause(paused); }
+    void restart(long long id) { emitter(id).restart(); }
+    long long burst(long long id, long long n) { return static_cast<long long>(emitter(id).burst(static_cast<int>(std::clamp<long long>(n, 0, 10000000)))); }
+    void clear_emitter(long long id) { emitter(id).clear(); }
+    void remove(long long id) {
+        fx::Emitter& e = emitter(id);
+        s->sys->destroy(e);
+        s->emitters[static_cast<std::size_t>(id)] = nullptr;
+        s->textures[static_cast<std::size_t>(id)].reset();
+    }
+    bool exists(long long id) const { return id >= 0 && static_cast<std::size_t>(id) < s->emitters.size() && s->emitters[static_cast<std::size_t>(id)]; }
+    bool playing(long long id) const { return cemitter(id).playing(); }
+    bool finished(long long id) const { return cemitter(id).finished(); }
+    long long count_of(long long id) const { return static_cast<long long>(cemitter(id).total_count()); }
+    long long count() const { return static_cast<long long>(s->sys->particle_count()); }
+    long long emitter_count() const { return static_cast<long long>(s->sys->emitter_count()); }
+    void clear() { s->sys->clear(); }
+
+    long long add_effect(const std::string& preset, const std::string& dimension, const F& pixels_per_unit) {
+        const double ppu = d(pixels_per_unit);
+        if (!(ppu > 0.0)) fail("pixels per unit must be above 0");
+        s->effects.push_back(s->sys->register_effect(fx::preset(particle_preset_named(preset), particle_dimension_named(dimension), static_cast<float>(ppu)), 4));
+        return static_cast<long long>(s->effects.size()) - 1;
+    }
+    long long add_effect_text(const std::string& text) {
+        s->effects.push_back(s->sys->register_effect(parse(text), 4));
+        return static_cast<long long>(s->effects.size()) - 1;
+    }
+    bool spawn(long long effect, const F& x, const F& y, const F& z) { return s->sys->spawn_effect(effect_id(effect), v3(x, y, z)) != nullptr; }
+    bool spawn_2d(long long effect, const F& x, const F& y, const F& angle) { return s->sys->spawn_effect_2d(effect_id(effect), d(x), d(y), d(angle)) != nullptr; }
+
+    void set_budget(long long n) { s->sys->set_budget(static_cast<std::size_t>(std::clamp<long long>(n, 1, 100000000))); }
+    void set_threads(long long n) { s->sys->set_threads(static_cast<int>(std::clamp<long long>(n, 0, 64))); }
+    void set_origin(const F& x, const F& y, const F& z) { s->sys->set_origin(v3(x, y, z)); }
+    void add_ground(const F& height) { s->sys->add_ground(d(height)); }
+    void add_plane(const F& nx, const F& ny, const F& nz, const F& px, const F& py, const F& pz) {
+        const linalg::vector3d n = v3(nx, ny, nz);
+        const double len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+        if (len <= 1e-12) fail("a plane's normal can't be all zeros");
+        s->sys->add_plane(linalg::vector3d{ n.x / len, n.y / len, n.z / len }, v3(px, py, pz));
+    }
+    void add_box(const F& x0, const F& y0, const F& z0, const F& x1, const F& y1, const F& z1) {
+        s->sys->add_box(linalg::vector3d{ std::min(d(x0), d(x1)), std::min(d(y0), d(y1)), std::min(d(z0), d(z1)) }, linalg::vector3d{ std::max(d(x0), d(x1)), std::max(d(y0), d(y1)), std::max(d(z0), d(z1)) });
+    }
+    void add_sphere(const F& x, const F& y, const F& z, const F& radius) {
+        if (!(d(radius) > 0.0)) fail("a radius must be above 0");
+        s->sys->add_sphere(v3(x, y, z), d(radius));
+    }
+    void clear_colliders() { s->sys->clear_colliders(); }
+
+    void step(const F& seconds) { s->sys->step(dt(seconds), fx::CameraView::none()); }
+    void step_camera(const F& seconds, const camera3d& cam) { s->sys->step(dt(seconds), fx::CameraView::from_camera(cam.c)); }
+    void step_2d(const F& seconds, const F& x0, const F& y0, const F& x1, const F& y1) { s->sys->step(dt(seconds), fx::CameraView::from_rect(d(x0), d(y0), d(x1), d(y1))); }
+    long long draw_camera(renderer& r, const camera3d& cam) {
+        if (!r.valid()) return 0;
+        fx::build_draw_list(*s->sys, fx::CameraView::from_camera(cam.c), s->list3);
+        return static_cast<long long>(fx::draw(r.R(), s->list3));
+    }
+    long long draw(renderer& r) {
+        if (!r.valid()) return 0;
+        const fx::CameraView& view = s->sys->last_view();
+        if (!view.active || view.is_2d) fail("draw(renderer) needs step(seconds, camera) first; or call draw(renderer, camera)");
+        fx::build_draw_list(*s->sys, view, s->list3);
+        return static_cast<long long>(fx::draw(r.R(), s->list3));
+    }
+    long long draw_2d(renderer& r) { return r.valid() ? static_cast<long long>(fx::draw_particles_2d(r.R(), *s->sys, s->list2)) : 0; }
+
+    long long spawned() const { return static_cast<long long>(s->sys->stats().spawned); }
+    long long limited() const { return static_cast<long long>(s->sys->stats().limited); }
+    F step_ms() const { return w(s->sys->stats().step_ms); }
+
+private:
+    long long adopt(fx::Emitter& e) {
+        s->emitters.push_back(&e);
+        s->textures.emplace_back();
+        return static_cast<long long>(s->emitters.size()) - 1;
+    }
+    fx::Emitter& emitter(long long id) {
+        if (!exists(id)) fail("there's no particle emitter " + std::to_string(id));
+        return *s->emitters[static_cast<std::size_t>(id)];
+    }
+    const fx::Emitter& cemitter(long long id) const {
+        if (!exists(id)) fail("there's no particle emitter " + std::to_string(id));
+        return *s->emitters[static_cast<std::size_t>(id)];
+    }
+    int effect_id(long long effect) const {
+        if (effect < 0 || static_cast<std::size_t>(effect) >= s->effects.size()) fail("there's no particle effect " + std::to_string(effect));
+        return s->effects[static_cast<std::size_t>(effect)];
+    }
+    static double dt(const F& seconds) {
+        const double t = d(seconds);
+        if (!(t >= 0.0) || !std::isfinite(t)) fail("the time step can't be below 0");
+        return t;
+    }
+    static fx::EmitterSettings parse(const std::string& text) {
+        fx::EmitterSettings st;
+        std::string why;
+        if (!fx::from_text(text, st, &why)) fail("those particle settings have a problem: " + why);
+        return st;
+    }
+    static std::string trim(const std::string& t) {
+        const std::size_t a = t.find_first_not_of(" \t\r");
+        if (a == std::string::npos) return std::string();
+        const std::size_t b = t.find_last_not_of(" \t\r");
+        return t.substr(a, b - a + 1);
+    }
+    static std::size_t find_key(const std::string& text, const std::string& key) {
+        std::size_t at = 0;
+        while (at < text.size()) {
+            if (text.compare(at, key.size(), key) == 0 && at + key.size() < text.size() && text[at + key.size()] == ':') return at;
+            const std::size_t nl = text.find('\n', at);
+            if (nl == std::string::npos) break;
+            at = nl + 1;
+        }
+        return std::string::npos;
     }
 };
 
