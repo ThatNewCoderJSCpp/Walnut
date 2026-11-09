@@ -625,6 +625,29 @@ public:
     R fluid_particle_y(long long id, long long i) const { return particle(id, i).y; }
     R fluid_particle_z(long long id, long long i) const { return particle(id, i).z; }
     R fluid_particle_radius(long long id) const { return cvolume(id).particle_radius(); }
+    long long fluid_mesh_vertex_count(long long id) const { return static_cast<long long>(cvolume(id).surface_mesh().positions.size()); }
+    long long fluid_mesh_triangle_count(long long id) const { return static_cast<long long>(cvolume(id).surface_mesh().indices.size() / 3); }
+    R fluid_mesh_x(long long id, long long i) const { return mesh_vertex(id, i).x; }
+    R fluid_mesh_y(long long id, long long i) const { return mesh_vertex(id, i).y; }
+    R fluid_mesh_z(long long id, long long i) const { return mesh_vertex(id, i).z; }
+    R fluid_mesh_normal_x(long long id, long long i) const { return mesh_normal(id, i).x; }
+    R fluid_mesh_normal_y(long long id, long long i) const { return mesh_normal(id, i).y; }
+    R fluid_mesh_normal_z(long long id, long long i) const { return mesh_normal(id, i).z; }
+    R fluid_mesh_foam(long long id, long long i) const {
+        const fp::FluidSurfaceMesh3D& m = cvolume(id).surface_mesh();
+        mesh_vertex(id, i);
+        return static_cast<std::size_t>(i) < m.foam.size() ? m.foam[static_cast<std::size_t>(i)] : 0.0_r;
+    }
+    long long fluid_mesh_index(long long id, long long i) const {
+        const fp::FluidSurfaceMesh3D& m = cvolume(id).surface_mesh();
+        if (i < 0 || static_cast<std::size_t>(i) >= m.indices.size()) fail("fluid mesh index " + std::to_string(i) + " is out of range (there are " + std::to_string(m.indices.size()) + ")");
+        return static_cast<long long>(m.indices[static_cast<std::size_t>(i)]);
+    }
+    long long fluid_mesh_version(long long id) const { return static_cast<long long>(cvolume(id).surface_version()); }
+    long long fluid_spray_count(long long id) const { return static_cast<long long>(cvolume(id).surface_mesh().spray.size()); }
+    R fluid_spray_x(long long id, long long i) const { return spray(id, i).x; }
+    R fluid_spray_y(long long id, long long i) const { return spray(id, i).y; }
+    R fluid_spray_z(long long id, long long i) const { return spray(id, i).z; }
     long long fluid_cells_x(long long id) const { return cvolume(id).cells_x(); }
     long long fluid_cells_y(long long id) const { return cvolume(id).cells_y(); }
     long long fluid_cells_z(long long id) const { return cvolume(id).cells_z(); }
@@ -688,6 +711,21 @@ private:
         const fp::FluidVolume3D& v = cvolume(id);
         if (i < 0 || static_cast<std::size_t>(i) >= v.particle_count()) fail("fluid particle " + std::to_string(i) + " is out of range (there are " + std::to_string(v.particle_count()) + ")");
         return v.positions()[static_cast<std::size_t>(i)];
+    }
+    const V3& mesh_vertex(long long id, long long i) const {
+        const fp::FluidSurfaceMesh3D& m = cvolume(id).surface_mesh();
+        if (i < 0 || static_cast<std::size_t>(i) >= m.positions.size()) fail("fluid mesh vertex " + std::to_string(i) + " is out of range (there are " + std::to_string(m.positions.size()) + ")");
+        return m.positions[static_cast<std::size_t>(i)];
+    }
+    const V3& mesh_normal(long long id, long long i) const {
+        const fp::FluidSurfaceMesh3D& m = cvolume(id).surface_mesh();
+        if (i < 0 || static_cast<std::size_t>(i) >= m.normals.size()) fail("fluid mesh vertex " + std::to_string(i) + " is out of range (there are " + std::to_string(m.normals.size()) + ")");
+        return m.normals[static_cast<std::size_t>(i)];
+    }
+    const V3& spray(long long id, long long i) const {
+        const fp::FluidSurfaceMesh3D& m = cvolume(id).surface_mesh();
+        if (i < 0 || static_cast<std::size_t>(i) >= m.spray.size()) fail("fluid spray drop " + std::to_string(i) + " is out of range (there are " + std::to_string(m.spray.size()) + ")");
+        return m.spray[static_cast<std::size_t>(i)];
     }
     static std::size_t cell_at(const fp::FluidVolume3D& v, long long i, long long j, long long k) {
         if (!v.valid_cell(static_cast<int>(i), static_cast<int>(j), static_cast<int>(k)) || i > 1000000 || j > 1000000 || k > 1000000) fail("cell (" + std::to_string(i) + ", " + std::to_string(j) + ", " + std::to_string(k) + ") is outside the fluid's " + std::to_string(v.cells_x()) + " by " + std::to_string(v.cells_y()) + " by " + std::to_string(v.cells_z()) + " cells");

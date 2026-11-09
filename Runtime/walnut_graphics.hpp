@@ -19,6 +19,7 @@
 #include "fizmo/../../Source/Text/text_style.hpp"
 #include "fizmo/../../Source/Text/fonts.hpp"
 
+#include <array>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -1043,9 +1044,13 @@ public:
     std::shared_ptr<fg::Texture> orm_tex;
     std::shared_ptr<fg::Texture> emissive_tex;
     std::shared_ptr<fg::Texture> opacity_tex;
+    std::array<std::shared_ptr<fg::Texture>, fg::Material3D::MAX_SPLAT_LAYERS> layer_tex;
+    std::array<std::shared_ptr<fg::Texture>, fg::Material3D::MAX_SPLAT_LAYERS> layer_normal_tex;
+    std::shared_ptr<fg::Texture> splat_tex;
+    std::shared_ptr<fg::Texture> splat_b_tex;
 
     material() = default;
-    material(const material& o) : m(o.m), tex(o.tex), normal_tex(o.normal_tex), orm_tex(o.orm_tex), emissive_tex(o.emissive_tex), opacity_tex(o.opacity_tex) { bind(); }
+    material(const material& o) : m(o.m), tex(o.tex), normal_tex(o.normal_tex), orm_tex(o.orm_tex), emissive_tex(o.emissive_tex), opacity_tex(o.opacity_tex), layer_tex(o.layer_tex), layer_normal_tex(o.layer_normal_tex), splat_tex(o.splat_tex), splat_b_tex(o.splat_b_tex) { bind(); }
     material& operator=(const material& o) {
         m = o.m;
         tex = o.tex;
@@ -1053,9 +1058,37 @@ public:
         orm_tex = o.orm_tex;
         emissive_tex = o.emissive_tex;
         opacity_tex = o.opacity_tex;
+        layer_tex = o.layer_tex;
+        layer_normal_tex = o.layer_normal_tex;
+        splat_tex = o.splat_tex;
+        splat_b_tex = o.splat_b_tex;
         bind();
         return *this;
     }
+    void set_layer(long long i, const texture& t, const F& tiling, long long tint) {
+        const int k = layer_index(i);
+        layer_tex[static_cast<std::size_t>(k)] = std::make_shared<fg::Texture>(t.t);
+        m.with_layer(k, layer_tex[static_cast<std::size_t>(k)].get(), static_cast<float>(std::max(0.0001, d(tiling))), color(tint), layer_normal_tex[static_cast<std::size_t>(k)].get());
+    }
+    void set_layer_normal_map(long long i, const texture& t) {
+        const int k = layer_index(i);
+        layer_normal_tex[static_cast<std::size_t>(k)] = std::make_shared<fg::Texture>(t.t);
+        m.layer_normals[k] = layer_normal_tex[static_cast<std::size_t>(k)].get();
+    }
+    void set_splat_map(const texture& weights) { splat_tex = std::make_shared<fg::Texture>(weights.t); m.splat_map = splat_tex.get(); }
+    void set_second_splat_map(const texture& weights) { splat_b_tex = std::make_shared<fg::Texture>(weights.t); m.splat_map_b = splat_b_tex.get(); }
+    void set_height_blend(const F& depth) { m.splat_height_blend = static_cast<float>(std::max(0.0, d(depth))); }
+    void set_splat_triplanar(bool on) { m.splat_triplanar = on; }
+    void clear_layers() {
+        for (auto& p : layer_tex) p.reset();
+        for (auto& p : layer_normal_tex) p.reset();
+        splat_tex.reset();
+        splat_b_tex.reset();
+        m.layer_count = 0;
+        bind();
+    }
+    long long layer_count() const { return m.layer_count; }
+    void set_soft(bool on, const F& distance, const F& near_fade) { m.soft = on; m.soft_distance = static_cast<float>(std::max(0.0, d(distance))); m.soft_near_fade = static_cast<float>(std::max(0.0, d(near_fade))); }
 
     static material of(const fg::Material3D& mm) {
         material out;
@@ -1158,6 +1191,16 @@ private:
         m.orm_map = orm_tex.get();
         m.emissive_map = emissive_tex.get();
         m.opacity_map = opacity_tex.get();
+        for (int i = 0; i < fg::Material3D::MAX_SPLAT_LAYERS; ++i) {
+            m.layers[i] = layer_tex[static_cast<std::size_t>(i)].get();
+            m.layer_normals[i] = layer_normal_tex[static_cast<std::size_t>(i)].get();
+        }
+        m.splat_map = splat_tex.get();
+        m.splat_map_b = splat_b_tex.get();
+    }
+    static int layer_index(long long i) {
+        if (i < 0 || i >= fg::Material3D::MAX_SPLAT_LAYERS) fail("a material has layers 0 to " + std::to_string(fg::Material3D::MAX_SPLAT_LAYERS - 1) + ", not " + std::to_string(i));
+        return static_cast<int>(i);
     }
 };
 
@@ -1178,6 +1221,87 @@ public:
         }
         return out;
     }
+    static lighting quality(const std::string& level) {
+        const std::string q = squash(level);
+        int n = 1;
+        if (q == "off") return preset(0);
+        if (q == "low") n = 0;
+        else if (q == "medium") n = 1;
+        else if (q == "high") n = 2;
+        else if (q == "ultra") n = 3;
+        else fail("lighting quality must be off, low, medium, high or ultra, not '" + level + "'");
+        lighting out;
+        fg::SunShadow3D sun = n == 0 ? fg::SunShadow3D::low() : n == 1 ? fg::SunShadow3D::medium() : fg::SunShadow3D::high();
+        sun.distance = n >= 3 ? 96.0 : n == 2 ? 80.0 : 48.0;
+        out.l = fg::SceneLighting3D::daylight(sun);
+        fg::SceneLighting3D& s = out.l;
+        s.atmosphere.glow_spread = 8.0f;
+        s.atmosphere.glow_focus = 400.0f;
+        s.atmosphere.glow_strength = 0.35f;
+        s.atmosphere.fog_density = 0.0025f;
+        s.atmosphere.fog_start = 32.0f;
+        if (n >= 1) {
+            s.sun_intensity = n >= 3 ? 1.1f : 1.0f;
+            s.sky_intensity = n >= 3 ? 0.55f : 0.58f;
+            s.max_light = n >= 3 ? 2.5f : 2.2f;
+            s.sun_shadow.soft = true;
+            s.sun_shadow.strength = n >= 3 ? 0.92f : 0.85f;
+            s.tone_map.enabled = true;
+            s.tone_map.exposure = 0.9f;
+            s.tone_map.saturation = n >= 3 ? 1.2f : 1.15f;
+            s.capsule_shadows.enabled = true;
+            s.capsule_shadows.strength = s.sun_shadow.strength;
+            s.ambient_occlusion.enabled = true;
+            s.ambient_occlusion.radius = n >= 3 ? 1.0f : 0.8f;
+            s.ambient_occlusion.strength = n >= 3 ? 1.15f : 1.0f;
+            s.ambient_occlusion.samples = n >= 3 ? 16 : n == 2 ? 12 : 8;
+            s.ambient_occlusion.half_resolution = n < 3;
+        }
+        if (n >= 2) {
+            s.point_shadows = n >= 3 ? fg::PointShadows3D::high() : fg::PointShadows3D::medium();
+            s.shafts.enabled = true;
+            s.shafts.samples = n >= 3 ? 64u : 48u;
+            s.shafts.strength = n >= 3 ? 0.3f : 0.25f;
+            s.shafts.focus = 24.0f;
+            s.volumetrics.enabled = true;
+            s.volumetrics.steps = n >= 3 ? 48u : 24u;
+            s.volumetrics.cell_size = n >= 3 ? 6u : 8u;
+            s.volumetrics.density = n >= 3 ? 0.06f : 0.04f;
+            s.volumetrics.intensity = n >= 3 ? 2.0f : 1.0f;
+            s.volumetrics.anisotropy = 0.5f;
+            s.surfaces.screen_reflections = true;
+            s.surfaces.reflection_steps = n >= 3 ? 48u : 32u;
+        }
+        if (n >= 3) {
+            s.sun_shadow.resolution = 4096;
+            s.sun_shadow.filter_taps = 6;
+            s.sun_shadow.light_size = 1.5f;
+        }
+        return out;
+    }
+    void set_ambient_occlusion(bool on, const F& radius, const F& strength) {
+        l.ambient_occlusion.enabled = on;
+        if (d(radius) > 0.0) l.ambient_occlusion.radius = static_cast<float>(d(radius));
+        if (d(strength) > 0.0) l.ambient_occlusion.strength = static_cast<float>(d(strength));
+    }
+    void set_light_shafts(bool on) { l.shafts.enabled = on; }
+    void set_volumetric_light(bool on, const F& density) { l.volumetrics.enabled = on; if (d(density) > 0.0) l.volumetrics.density = static_cast<float>(d(density)); }
+    void set_point_shadows(bool on) { l.point_shadows.enabled = on; }
+    void set_screen_reflections(bool on) { l.surfaces.screen_reflections = on; }
+    void set_fog(const F& density, const F& start) { l.atmosphere.fog_density = static_cast<float>(std::max(0.0, d(density))); l.atmosphere.fog_start = static_cast<float>(std::max(0.0, d(start))); }
+    void set_saturation(const F& s) { l.tone_map.enabled = true; l.tone_map.saturation = static_cast<float>(std::clamp(d(s), 0.0, 4.0)); }
+    void set_max_light(const F& m) { l.max_light = static_cast<float>(std::max(0.1, d(m))); }
+    long long add_capsule_shadow(const F& ax, const F& ay, const F& az, const F& bx, const F& by, const F& bz, const F& radius) {
+        l.capsule_shadows.enabled = true;
+        l.capsule_shadows.capsules.emplace_back(v3(ax, ay, az), v3(bx, by, bz), static_cast<float>(std::max(0.0, d(radius))));
+        return static_cast<long long>(l.capsule_shadows.capsules.size()) - 1;
+    }
+    void move_capsule_shadow(long long i, const F& ax, const F& ay, const F& az, const F& bx, const F& by, const F& bz) {
+        if (i < 0 || static_cast<std::size_t>(i) >= l.capsule_shadows.capsules.size()) fail("there's no capsule shadow " + std::to_string(i));
+        l.capsule_shadows.capsules[static_cast<std::size_t>(i)].start = v3(ax, ay, az);
+        l.capsule_shadows.capsules[static_cast<std::size_t>(i)].end = v3(bx, by, bz);
+    }
+    void clear_capsule_shadows() { l.capsule_shadows.capsules.clear(); }
     void set_enabled(bool on) { l.enabled = on; }
     bool enabled() const { return l.enabled; }
     void set_sun(const F& dx, const F& dy, const F& dz, long long col, const F& intensity) { l.enabled = true; l.sun_direction = v3(dx, dy, dz); l.sun_color = color(col); l.sun_intensity = static_cast<float>(d(intensity)); }

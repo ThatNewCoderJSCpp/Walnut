@@ -187,6 +187,7 @@ The presets are `"water"`, `"sea-water"`, `"oil"`, `"honey"`, `"lava"`, `"mud"` 
 - **Cells** (`blocky` and `flowing`): `fluid_cells_x/y/z(fluid)` and `fluid_cell_size(fluid)`. `fluid_cell(fluid, i, j, k)` is how full cell `(i, j, k)` is (0 to 1, a little more when squeezed), with `j` going up, and `fluid_solid(fluid, i, j, k)` says whether it's a wall.
 - **Columns** (`waves`): `fluid_columns_x/z(fluid)`, `fluid_column_size(fluid)` and `fluid_height(fluid, i, k)`, the height of the surface above the box's floor.
 - **Particles** (`realistic`): `fluid_particle_count(fluid)`, `fluid_particle_x/y/z(fluid, i)` and `fluid_particle_radius(fluid)`. Their order changes from step to step.
+- **Surface mesh** (`realistic`, `flowing`, `blocky`): a closed water surface to draw instead of the particles. `fluid_mesh_vertex_count(fluid)`, `fluid_mesh_x/y/z(fluid, i)`, `fluid_mesh_normal_x/y/z(fluid, i)`, `fluid_mesh_foam(fluid, i)` (0 to 1, shade splashes white), `fluid_mesh_triangle_count(fluid)` and `fluid_mesh_index(fluid, i)` (three per triangle, counter-clockwise from outside). `fluid_mesh_version(fluid)` changes only when the surface moved, so rebuild your mesh only then. Detached droplets: `fluid_spray_count(fluid)` and `fluid_spray_x/y/z(fluid, i)`.
 
 For 2D fluid sandboxes (falling sand, pouring, painting walls), see [fluids](fluids.md).
 

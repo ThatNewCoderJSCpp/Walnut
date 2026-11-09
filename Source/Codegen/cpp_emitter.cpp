@@ -4334,7 +4334,19 @@ void CppEmitter::emit_init(std::ostream& os) {
     m_current_record = nullptr;
     m_current_return = m_types.void_();
 
-    for (nodes::ASTNode* n : m_script) {
+    std::vector<nodes::ASTNode*> ordered;
+    ordered.reserve(m_script.size());
+    auto from_header = [this](const nodes::ASTNode* n) {
+        if (!source_path || n->file_id == static_cast<std::uint32_t>(-1)) return false;
+        const std::string path = source_path(FileId(n->file_id));
+        return path.size() >= 5 && path.compare(path.size() - 5, 5, ".walh") == 0;
+    };
+    for (nodes::ASTNode* n : m_script)
+        if ((n->kind == K::VariableDeclaration || n->kind == K::ArrayDeclaration) && from_header(n)) ordered.push_back(n);
+    for (nodes::ASTNode* n : m_script)
+        if (!((n->kind == K::VariableDeclaration || n->kind == K::ArrayDeclaration) && from_header(n))) ordered.push_back(n);
+
+    for (nodes::ASTNode* n : ordered) {
         if (n->kind == K::VariableDeclaration) {
             auto* v = static_cast<nodes::VariableDeclaration*>(n);
 

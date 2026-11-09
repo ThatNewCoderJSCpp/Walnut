@@ -719,6 +719,19 @@ namespace std {
                 function set_fog(bool: on) -> void;
                 function set_pbr(float: metallic, float: roughness) -> void;
                 function set_occlusion(float: amount) -> void;
+                function native_set_layer(long int: index, const Texture&: t, float: tiling, long int: rgba) -> void as "set_layer";
+                function set_layer_normal_map(long int: index, const Texture&: normal) -> void;
+                function set_splat_map(const Texture&: weights) -> void;
+                function set_second_splat_map(const Texture&: weights) -> void;
+                function set_height_blend(float: depth) -> void;
+                function set_splat_triplanar(bool: on) -> void;
+                function clear_layers() -> void;
+                function layer_count() const -> long int;
+                function set_soft(bool: on, float: distance = 0.5, float: near_fade = 0.0) -> void;
+
+                function set_layer(long int: index, const Texture&: t, float: tiling = 1.0, const Color&: tint = Color(255, 255, 255)) -> void {
+                    native_set_layer(index, t, tiling, tint.packed());
+                } end function set_layer
                 function metallic() const -> float;
                 function roughness() const -> float;
 
@@ -782,6 +795,27 @@ namespace std {
                 static function make(LightingPreset: preset = LightingPreset::off) -> Lighting {
                     return native_preset(static_cast<long int>(preset));
                 } end function make
+
+                static function quality(const string&: level) -> Lighting;
+                function set_ambient_occlusion(bool: on, float: radius = 0.0, float: strength = 0.0) -> void;
+                function set_light_shafts(bool: on) -> void;
+                function set_volumetric_light(bool: on, float: density = 0.0) -> void;
+                function set_point_shadows(bool: on) -> void;
+                function set_screen_reflections(bool: on) -> void;
+                function set_fog(float: density, float: start) -> void;
+                function set_saturation(float: saturation) -> void;
+                function set_max_light(float: brightest) -> void;
+                function clear_capsule_shadows() -> void;
+                function native_add_capsule(float: ax, float: ay, float: az, float: bx, float: by, float: bz, float: radius) -> long int as "add_capsule_shadow";
+                function native_move_capsule(long int: index, float: ax, float: ay, float: az, float: bx, float: by, float: bz) -> void as "move_capsule_shadow";
+
+                function add_capsule_shadow(const Vec3&: start, const Vec3&: finish, float: radius) -> long int {
+                    return native_add_capsule(start.x, start.y, start.z, finish.x, finish.y, finish.z, radius);
+                } end function add_capsule_shadow
+
+                function move_capsule_shadow(long int: index, const Vec3&: start, const Vec3&: finish) -> void {
+                    native_move_capsule(index, start.x, start.y, start.z, finish.x, finish.y, finish.z);
+                } end function move_capsule_shadow
 
                 function set_enabled(bool: on) -> void;
                 function enabled() const -> bool;
