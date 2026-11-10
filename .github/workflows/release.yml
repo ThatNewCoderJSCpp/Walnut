@@ -335,7 +335,7 @@ jobs:
       - name: Download llvm-mingw
         if: steps.llvm-mingw-cache.outputs.cache-hit != 'true'
         run: |
-          curl -fL --retry 5 --retry-delay 10 -o /tmp/llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_MINGW_VERSION/$LLVM_MINGW.tar.xz"
+          curl -fL --retry 10 --retry-delay 20 --retry-all-errors -o /tmp/llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_MINGW_VERSION/$LLVM_MINGW.tar.xz"
           mkdir -p ~/llvm-mingw
           tar -xf /tmp/llvm-mingw.tar.xz -C ~/llvm-mingw --strip-components=1
 
@@ -380,7 +380,7 @@ jobs:
       - name: Download the Windows llvm-mingw to bundle
         run: |
           name="llvm-mingw-$LLVM_MINGW_VERSION-ucrt-${{ matrix.host }}"
-          curl -fL --retry 5 --retry-delay 10 -o "$RUNNER_TEMP/$name.zip" "https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_MINGW_VERSION/$name.zip"
+          curl -fL --retry 10 --retry-delay 20 --retry-all-errors -o "$RUNNER_TEMP/$name.zip" "https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_MINGW_VERSION/$name.zip"
           echo "BUNDLE_ZIP=$RUNNER_TEMP/$name.zip" >> "$GITHUB_ENV"
           echo "BUNDLE_URL=https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_MINGW_VERSION/$name.zip" >> "$GITHUB_ENV"
 
