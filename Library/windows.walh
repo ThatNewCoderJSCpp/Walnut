@@ -22,6 +22,7 @@ namespace std {
         using std::colors::Color;
         using std::images::Image;
         using std::input::Key;
+        using std::input::KeyKind;
         using std::input::MouseButton;
         using std::input::Modifiers;
         using std::input::PointerType;
@@ -43,6 +44,8 @@ namespace std {
             MouseButton: button = MouseButton::no_button;
             Key: key = Key::unknown;
             Key: logical_key = Key::unknown;
+            Key: physical_key = Key::unknown;
+            long int: scancode = 0;
             string: key_name = "";
             Modifiers: modifiers;
             bool: repeat_press = false;
@@ -76,6 +79,50 @@ namespace std {
             function is_key(Key: k) const -> bool {
                 return (type == EventType::key_press || type == EventType::key_release) && key == k;
             } end function is_key
+
+            function is_key_event() const -> bool {
+                return type == EventType::key_press || type == EventType::key_release;
+            } end function is_key_event
+
+            function is_physical_key(Key: k) const -> bool {
+                return is_key_event() && k != Key::unknown && physical_key == k;
+            } end function is_physical_key
+
+            function is_logical_key(Key: k) const -> bool {
+                return is_key_event() && k != Key::unknown && logical_key == k;
+            } end function is_logical_key
+
+            function is_either_key(Key: k) const -> bool {
+                return is_physical_key(k) || is_logical_key(k);
+            } end function is_either_key
+
+            function is_key(Key: k, KeyKind: kind) const -> bool {
+                if (kind == KeyKind::physical) then {
+                    return is_physical_key(k);
+                }
+                if (kind == KeyKind::logical) then {
+                    return is_logical_key(k);
+                }
+                return is_either_key(k);
+            } end function is_key
+
+            function key_of(KeyKind: kind) const -> Key {
+                if (kind == KeyKind::physical) then {
+                    return physical_key;
+                }
+                if (kind == KeyKind::logical) then {
+                    return logical_key;
+                }
+                return logical_key != Key::unknown ? logical_key : physical_key;
+            } end function key_of
+
+            function physical_name() const -> string {
+                return std::input::key_name(physical_key);
+            } end function physical_name
+
+            function logical_name() const -> string {
+                return std::input::key_name(logical_key);
+            } end function logical_name
 
             function is_mouse() const -> bool {
                 return type == EventType::mouse_move || type == EventType::mouse_click || type == EventType::mouse_release || type == EventType::mouse_scroll || type == EventType::mouse_double_click;
@@ -125,6 +172,8 @@ namespace std {
                     function button() const -> long int;
                     function key() const -> long int;
                     function logical_key() const -> long int;
+                    function physical_key() const -> long int;
+                    function scancode() const -> long int;
                     function key_name() const -> string;
                     function modifiers() const -> long int;
                     function repeat() const -> bool;
@@ -190,6 +239,8 @@ namespace std {
                 e.button = b >= 0 && b <= 5 ? static_cast<MouseButton>(b) : MouseButton::no_button;
                 e.key = std::input::key_from_index(n.key());
                 e.logical_key = std::input::key_from_index(n.logical_key());
+                e.physical_key = std::input::key_from_index(n.physical_key());
+                e.scancode = n.scancode();
                 e.key_name = n.key_name();
                 e.modifiers = Modifiers(n.modifiers());
                 e.repeat_press = n.repeat();
@@ -292,6 +343,10 @@ namespace std {
                 function native_key_double_pressed(long int: k) const -> bool as "key_double_pressed";
                 function native_key_held_for(long int: k) const -> float as "key_held_for";
                 function native_logical_key_down(long int: k) const -> bool as "logical_key_down";
+                function native_logical_key_pressed(long int: k) const -> bool as "logical_key_pressed";
+                function native_logical_key_released(long int: k) const -> bool as "logical_key_released";
+                function native_logical_key_double_pressed(long int: k) const -> bool as "logical_key_double_pressed";
+                function native_logical_key_held_for(long int: k) const -> float as "logical_key_held_for";
                 function native_modifiers() const -> long int as "modifiers";
                 function native_mouse_down(long int: b) const -> bool as "mouse_down";
                 function native_mouse_pressed(long int: b) const -> bool as "mouse_pressed";
@@ -430,6 +485,94 @@ namespace std {
                 function logical_key_down(Key: k) const -> bool {
                     return native_logical_key_down(static_cast<long int>(k));
                 } end function logical_key_down
+
+                function logical_key_pressed(Key: k) const -> bool {
+                    return native_logical_key_pressed(static_cast<long int>(k));
+                } end function logical_key_pressed
+
+                function logical_key_released(Key: k) const -> bool {
+                    return native_logical_key_released(static_cast<long int>(k));
+                } end function logical_key_released
+
+                function logical_key_double_pressed(Key: k) const -> bool {
+                    return native_logical_key_double_pressed(static_cast<long int>(k));
+                } end function logical_key_double_pressed
+
+                function logical_key_held_for(Key: k) const -> float {
+                    return native_logical_key_held_for(static_cast<long int>(k));
+                } end function logical_key_held_for
+
+                function physical_key_down(Key: k) const -> bool {
+                    return native_key_down(static_cast<long int>(k));
+                } end function physical_key_down
+
+                function physical_key_pressed(Key: k) const -> bool {
+                    return native_key_pressed(static_cast<long int>(k));
+                } end function physical_key_pressed
+
+                function physical_key_released(Key: k) const -> bool {
+                    return native_key_released(static_cast<long int>(k));
+                } end function physical_key_released
+
+                function physical_key_double_pressed(Key: k) const -> bool {
+                    return native_key_double_pressed(static_cast<long int>(k));
+                } end function physical_key_double_pressed
+
+                function physical_key_held_for(Key: k) const -> float {
+                    return native_key_held_for(static_cast<long int>(k));
+                } end function physical_key_held_for
+
+                function key_down(Key: k, KeyKind: kind) const -> bool {
+                    if (kind == KeyKind::physical) then {
+                        return physical_key_down(k);
+                    }
+                    if (kind == KeyKind::logical) then {
+                        return logical_key_down(k);
+                    }
+                    return physical_key_down(k) || logical_key_down(k);
+                } end function key_down
+
+                function key_pressed(Key: k, KeyKind: kind) const -> bool {
+                    if (kind == KeyKind::physical) then {
+                        return physical_key_pressed(k);
+                    }
+                    if (kind == KeyKind::logical) then {
+                        return logical_key_pressed(k);
+                    }
+                    return physical_key_pressed(k) || logical_key_pressed(k);
+                } end function key_pressed
+
+                function key_released(Key: k, KeyKind: kind) const -> bool {
+                    if (kind == KeyKind::physical) then {
+                        return physical_key_released(k);
+                    }
+                    if (kind == KeyKind::logical) then {
+                        return logical_key_released(k);
+                    }
+                    return physical_key_released(k) || logical_key_released(k);
+                } end function key_released
+
+                function key_double_pressed(Key: k, KeyKind: kind) const -> bool {
+                    if (kind == KeyKind::physical) then {
+                        return physical_key_double_pressed(k);
+                    }
+                    if (kind == KeyKind::logical) then {
+                        return logical_key_double_pressed(k);
+                    }
+                    return physical_key_double_pressed(k) || logical_key_double_pressed(k);
+                } end function key_double_pressed
+
+                function key_held_for(Key: k, KeyKind: kind) const -> float {
+                    if (kind == KeyKind::physical) then {
+                        return physical_key_held_for(k);
+                    }
+                    if (kind == KeyKind::logical) then {
+                        return logical_key_held_for(k);
+                    }
+                    const float: p = physical_key_held_for(k);
+                    const float: l = logical_key_held_for(k);
+                    return p > l ? p : l;
+                } end function key_held_for
 
                 function modifiers() const -> Modifiers {
                     return Modifiers(native_modifiers());

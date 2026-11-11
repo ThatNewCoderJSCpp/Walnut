@@ -67,6 +67,8 @@ Each `poll()` queues what happened as `WindowEvent`s:
 | `precise_x`, `precise_y` | The pointer position with fractions, for pens and touch |
 | `button` | The `MouseButton` for clicks |
 | `key`, `logical_key`, `key_name` | For key events: the physical key, the key the keyboard layout makes it, and its name |
+| `physical_key` | The physical key again (the same as `key`), named to match `logical_key` |
+| `scancode` | The platform's raw scancode |
 | `modifiers` | The `Modifiers` held at the time |
 | `repeat_press` | Whether a `key_press` came from holding the key down |
 | `text_value` | The characters typed, for `text_input` |
@@ -76,7 +78,21 @@ Each `poll()` queues what happened as `WindowEvent`s:
 | `paths` | The files, for `files_dropped` (call `set_drop_enabled(true)` first) |
 | `gamepad`, `gamepad_button`, `gamepad_axis`, `axis_value` | For gamepad events |
 
-`is_key(key)`, `is_mouse()` and `is_keyboard()` are shortcuts for checking the type.
+`is_key(key)`, `is_mouse()` and `is_keyboard()` are shortcuts for checking the type. `is_key(key)` checks the physical key, as it always has.
+
+For key events there are also:
+
+| Method | Gives |
+|---|---|
+| `is_physical_key(key)` | Whether this is that key by position, whatever the layout |
+| `is_logical_key(key)` | Whether the layout makes it that key |
+| `is_either_key(key)` | Either of those |
+| `is_key(key, kind)` | One of the three, picked by a `KeyKind`: `KeyKind::physical`, `KeyKind::logical` or `KeyKind::either` |
+| `key_of(kind)` | The physical or logical key (`either` gives the logical key when there is one) |
+| `physical_name()`, `logical_name()` | The names of the two keys |
+| `is_key_event()` | Whether this is a `key_press` or `key_release` |
+
+On an AZERTY keyboard, the key to the right of Tab is `Key::q` physically and `Key::a` logically, so `is_physical_key(Key::q)` and `is_logical_key(Key::a)` are both true for it. Use physical keys for movement (WASD stays in the same place) and logical keys for shortcuts (Ctrl+Z is undo on every layout).
 
 ## Input state
 
@@ -86,7 +102,9 @@ Besides events, a window keeps track of what is held down, which is usually easi
 |---|---|
 | `key_down(key)`, `key_pressed(key)`, `key_released(key)`, `key_double_pressed(key)` | The state of a physical key |
 | `key_held_for(key)` | How many seconds the key has been held, or 0 |
-| `logical_key_down(key)` | The same as `key_down`, by the key the layout makes |
+| `physical_key_down(key)`, `physical_key_pressed(key)`, `physical_key_released(key)`, `physical_key_double_pressed(key)`, `physical_key_held_for(key)` | The same as the ones above, named to say it |
+| `logical_key_down(key)`, `logical_key_pressed(key)`, `logical_key_released(key)`, `logical_key_double_pressed(key)`, `logical_key_held_for(key)` | The same, by the key the layout makes |
+| `key_down(key, kind)`, `key_pressed(key, kind)`, `key_released(key, kind)`, `key_double_pressed(key, kind)`, `key_held_for(key, kind)` | Either kind, picked by a `KeyKind`; `KeyKind::either` is true when the physical or the logical key is |
 | `modifiers()` | The `Modifiers` held now |
 | `mouse_x()`, `mouse_y()`, `mouse_dx()`, `mouse_dy()` | The mouse position, and how far it moved this frame |
 | `mouse_down(button)`, `mouse_pressed(button)`, `mouse_released(button)`, `mouse_double_clicked(button)` | Mouse buttons; the button defaults to `MouseButton::left` |

@@ -197,6 +197,22 @@ public:
 inline bool can_read_format(const std::string& extension) { return fi::can_decode(fi::format_from_extension(extension)); }
 inline bool can_write_format(const std::string& extension) { return fi::can_encode(fi::format_from_extension(extension)); }
 
+namespace input_detail {
+
+template <typename M>
+auto logical_hold(const M& in, fn::Key k, int) -> decltype(in.logical_key_hold_duration(k)) { return in.logical_key_hold_duration(k); }
+
+template <typename M>
+double logical_hold(const M& in, fn::Key k, long) { return in.key_hold_duration(std::string(fn::key_name(k))); }
+
+template <typename M>
+auto logical_double(const M& in, fn::Key k, int) -> decltype(in.is_logical_key_double_pressed(k)) { return in.is_logical_key_double_pressed(k); }
+
+template <typename M>
+bool logical_double(const M& in, fn::Key k, long) { return in.is_key_double_pressed(std::string(fn::key_name(k))); }
+
+} // namespace input_detail
+
 class event {
 public:
     fw::WindowEvent e{};
@@ -212,6 +228,8 @@ public:
     long long button() const { return static_cast<long long>(e.button); }
     long long key() const { return static_cast<long long>(e.physical_key); }
     long long logical_key() const { return static_cast<long long>(e.logical_key); }
+    long long physical_key() const { return static_cast<long long>(e.physical_key); }
+    long long scancode() const { return static_cast<long long>(e.scancode); }
     std::string key_name() const { return e.key_name; }
     long long modifiers() const { return static_cast<long long>(e.mods); }
     bool repeat() const { return e.repeat; }
@@ -351,6 +369,9 @@ public:
     F key_held_for(long long k) const { return w(s ? s->input.key_hold_duration(static_cast<fn::Key>(k)) : 0.0); }
     bool logical_key_down(long long k) const { return s && s->input.is_logical_key_down(static_cast<fn::Key>(k)); }
     bool logical_key_pressed(long long k) const { return s && s->input.is_logical_key_just_pressed(static_cast<fn::Key>(k)); }
+    bool logical_key_released(long long k) const { return s && s->input.is_logical_key_just_released(static_cast<fn::Key>(k)); }
+    bool logical_key_double_pressed(long long k) const { return s && input_detail::logical_double(s->input, static_cast<fn::Key>(k), 0); }
+    F logical_key_held_for(long long k) const { return w(s ? input_detail::logical_hold(s->input, static_cast<fn::Key>(k), 0) : 0.0); }
     long long modifiers() const { return s ? static_cast<long long>(s->input.modifiers()) : 0; }
     std::string typed_text() const { return s ? s->input.text_input() : std::string(); }
     long long mouse_x() const { return s ? s->input.mouse_x() : 0; }

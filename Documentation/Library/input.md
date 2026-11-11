@@ -28,7 +28,9 @@ This prints `Space F5 1` and `Ctrl+Shift 1 0`.
 
 ## Keys
 
-`Key` names a physical key, by where it sits on a US keyboard:
+`Key` names a key by where it sits on a US keyboard. A key press has two of them: the **physical** key, which is the key in that spot whatever the layout, and the **logical** key, which is what the layout makes it. On a US keyboard they're the same. On AZERTY, the key to the right of Tab is physically `Key::q` and logically `Key::a`. `KeyKind` says which one you mean: `KeyKind::physical`, `KeyKind::logical` or `KeyKind::either`. A [`Window`](windows.md) has checks for each.
+
+
 
 | Group | Names |
 |---|---|
@@ -52,6 +54,13 @@ This prints `Space F5 1` and `Ctrl+Shift 1 0`.
 | `key_from_name(name)` | The key with that name, ignoring case, or `Key::unknown`. Common other spellings such as `"Esc"` work too |
 | `is_letter(key)`, `is_digit(key)`, `is_function_key(key)`, `is_arrow(key)`, `is_modifier(key)` | Which group a key is in. `is_digit` counts the number row and the number pad |
 | `key_from_index(n)` | The key with that number, or `Key::unknown` |
+| `key_string(key)`, `key_from_string(name)` | The same as `key_name` and `key_from_name` |
+| `is_numpad(key)`, `is_punctuation(key)` | More groups |
+| `is_layout_dependent(key)` | Whether a layout can move the key: letters, the number row and punctuation |
+| `modifier_of(key)` | The `modifier` flag a modifier key sets (`modifier::shift` for both Shift keys), or `modifier::none` |
+| `key_kind_name(kind)` | `"Physical"`, `"Logical"` or `"Either"` |
+
+Keys are numbers, so comparing them never compares strings. `key_name` reads Fizmo's key table by index, and `key_from_name` looks the name up in a hashed index.
 
 ## Mouse buttons and pointers
 
