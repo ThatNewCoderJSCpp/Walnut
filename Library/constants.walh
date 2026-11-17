@@ -1,5 +1,6 @@
 import module.math
 
+safe(compile) {
 namespace std {
     namespace constants {
         template <typename T = float>
@@ -286,3 +287,4 @@ namespace std {
 
     } end namespace constants
 } end namespace std
+} end safe

@@ -263,6 +263,18 @@ std::string default_text(std::string_view name, bool angle) {
     return text.empty() ? std::string("...") : text;
 }
 
+std::string receiver_text(const N::FunctionParameters* ps) {
+    if (!ps) return std::string();
+    switch (ps->receiver) {
+        case N::Receiver::Value:      return "self";
+        case N::Receiver::ConstValue: return "const self";
+        case N::Receiver::Ref:        return "self&";
+        case N::Receiver::ConstRef:   return "const self&";
+        case N::Receiver::RValue:     return "self&&";
+        default:                      return std::string();
+    }
+}
+
 std::string signature(const N::FunctionDeclaration* f, S::TypeContext* types = nullptr) {
     if (f->variable_template) {
         std::string t = type_text(f->m_return_type, types);
@@ -271,9 +283,11 @@ std::string signature(const N::FunctionDeclaration* f, S::TypeContext* types = n
     }
 
     std::string out = prefix(f->m_modifiers) + "function " + joined(f->m_name_parts) + "(";
+    const std::string receiver = receiver_text(f->m_parameters);
+    out += receiver;
 
     if (f->m_parameters) {
-        bool first = true;
+        bool first = receiver.empty();
 
         for (const N::FunctionParameter* p : f->m_parameters->m_params) {
             if (!p) continue;
@@ -292,7 +306,9 @@ std::string signature(const N::FunctionDeclaration* f, S::TypeContext* types = n
     }
 
     out += ")";
-    if (f->m_qualifiers.has(modifiers::FunctionQualifiers::Const)) out += " const";
+    if (receiver.empty() && f->m_qualifiers.has(modifiers::FunctionQualifiers::Const)) out += " const";
+    if (f->m_qualifiers.has(modifiers::FunctionQualifiers::Consteval)) out += " consteval";
+    if (f->m_qualifiers.has(modifiers::FunctionQualifiers::Async)) out += " async";
     if (f->m_qualifiers.has(modifiers::FunctionQualifiers::Noexcept)) out += " noexcept";
     const std::string ret = type_text(f->m_return_type, types);
     if (!ret.empty()) out += " -> " + ret;
@@ -306,9 +322,9 @@ std::string iterable_text(const N::FunctionParameter* p, S::TypeContext* types) 
 }
 
 std::string params_text(const N::FunctionParameters* ps, S::TypeContext* types) {
-    std::string out;
+    std::string out = receiver_text(ps);
     if (!ps) return out;
-    bool first = true;
+    bool first = out.empty();
 
     for (const N::FunctionParameter* p : ps->m_params) {
         if (!p) continue;
@@ -417,7 +433,7 @@ std::string function_signature(const S::Symbol* s, S::TypeContext* types) {
     if (s->decl->kind == K::OperatorFunctionDeclaration) {
         const auto* o = static_cast<const N::OperatorFunctionDeclaration*>(s->decl);
         std::string out = template_prefix(s, types) + "operator(" + operator_spelling(o, types) + ") function(" + params_text(o->m_parameters, types) + ")";
-        if (o->m_qualifiers.has(modifiers::FunctionQualifiers::Const)) out += " const";
+        if (receiver_text(o->m_parameters).empty() && o->m_qualifiers.has(modifiers::FunctionQualifiers::Const)) out += " const";
         const std::string ret = type_text(o->m_return_type, types);
         if (!ret.empty() && !o->is_conversion()) out += " -> " + ret;
         return out;
@@ -519,7 +535,7 @@ constexpr KeywordDoc k_keyword_docs[] = {
     { TK::IfKeyword, "keyword", "if (condition) then { ... }", "Runs a block when the condition is true; `then` and braces are required. The condition can declare a variable, and `if constexpr` chooses a branch at compile time." },
     { TK::ImportKeyword, "keyword", "import module.io", "Brings in names exported by another Walnut file, or a module found by name (library modules appear under `std::name`)." },
     { TK::IncludeKeyword, "keyword", "#include \"shapes.walh\"", "Used in the `#include` preprocessor directive, which inserts a `.wal` or `.walh` file. A header is pasted at most once into each file." },
-    { TK::InKeyword, "keyword", "for (int: v in items) { ... }", "Separates the loop variable from the sequence in a `for ... in` loop over arrays, strings, generators, brace lists or classes with `begin()` and `end()`." },
+    { TK::InKeyword, "keyword", "for (int: v in items) { ... }", "Separates the loop variable from the sequence in a `for ... in` loop over arrays, strings, generators, brace lists or classes with `begin()` and `end()`. Outside a `for`'s parentheses, `x in items` is `true` when `items` holds a value equal to `x`, and `x not in items` (or `x !in items`) is its opposite." },
     { TK::InlineKeyword, "keyword", "inline int: shared = 0;", "Modifier that allows a variable or function to be defined in several files." },
     { TK::InfinityKeyword, "literal", "", "Positive infinity, which every integer and float type can hold; `-inf` is negative infinity. It takes the type it goes into, and `x is inf` is true for both signs." },
     { TK::NanKeyword, "literal", "", "The special value for a result that exists but isn't a real number, such as `(-8.0) ** 0.5`. It is unordered, so test it with `x is nan`." },
@@ -555,7 +571,7 @@ constexpr KeywordDoc k_keyword_docs[] = {
     { TK::SwitchKeyword, "keyword", "switch (n) { case 1: ...; break; default: ... }", "Chooses a branch by value; works on integers, characters, enums, `string` and `text`. A case that runs into the next one gets a warning unless it ends with `fallthrough;`." },
     { TK::ThenKeyword, "keyword", "if (condition) then { ... }", "Required between an `if` or `else if` condition and its block, and after `else`." },
     { TK::ThisKeyword, "keyword", "this->value", "A pointer to the current object inside a method. `export this` exports every global declaration in the file." },
-    { TK::SelfKeyword, "keyword", "self.x", "The current object itself, the same as `*this`; `self(x)` calls the object's own `operator(())`. It is `const` in a `const` method, and a lambda that captures `[this]` can use it." },
+    { TK::SelfKeyword, "keyword", "self.x", "The current object itself, the same as `*this`; `self(x)` calls the object's own `operator(())`. It is `const` in a `const` method, and a lambda that captures `[this]` can use it. As a method's first parameter it is the receiver, which says how the method uses its object: `const self&` reads it, `self&` changes it, `self&&` takes it over and `self` works on a copy; a method with a receiver reaches its members only through `self.`." },
     { TK::ThrowKeyword, "keyword", "throw 42;", "Throws any value: a number, a string or an object. `throw;` on its own rethrows the exception currently being handled." },
     { TK::TryKeyword, "keyword", "try { ... } catch (int: e) { ... }", "Runs a block whose exceptions are handled by the `catch` clauses after it." },
     { TK::True, "literal", "", "The `bool` value true." },
@@ -579,11 +595,11 @@ constexpr KeywordDoc k_keyword_docs[] = {
     { TK::CharacterDeclaration, "type", "char: c = 'd';", "One Unicode character (code point). A `char` plus or minus a whole number is another `char`, and `static_cast<int>(c)` gives its code point." },
     { TK::ConstantDeclaration, "keyword", "const int: c = 2;", "Modifier meaning the variable can't be assigned after initialization. After a method's parameter list, it means the method doesn't change the object." },
     { TK::DecimalDeclaration, "type", "float: ratio = 0.5;", "A fixed-width floating-point type. `float` is 128 bits, while `double` and `decimal` start two steps wider at 512 bits; `short` and `long` move the width one step each, and `unsigned` floats can't go below 0." },
-    { TK::IntegerDeclaration, "type", "int: count = 3;", "A fixed-width signed integer. `int` is 32 bits and `integer` starts four steps wider at 512 bits; `short` and `long` move the width one step each. Overflow wraps around." },
+    { TK::IntegerDeclaration, "type", "int: count = 3;", "A fixed-width signed integer. `int` is 32 bits and `integer` starts four steps wider at 512 bits; `short` and `long` move the width one step each. Overflow gives `inf` or `-inf` instead of wrapping around (in safe code, or with `--check-overflow`, it stops the program)." },
     { TK::LongDeclaration, "type", "long int: n = 5;", "Makes a number type one step wider (up to two times): `long int` is 64 bits, `long long int` 128, `long float` 256. A bare `long` means `long int`." },
     { TK::StringDeclaration, "type", "string: name = \"walnut\";", "UTF-8 text written with `\"...\"` literals, which never interpolate. It doesn't convert implicitly to or from `text`; lengths and positions count characters, not bytes." },
     { TK::ShortDeclaration, "type", "short int: s = 3;", "Makes a number type one step narrower (up to two times): `short int` is 16 bits, `short short int` 8, `short float` 64. A bare `short` means `short int`." },
-    { TK::UnsignedDeclaration, "type", "unsigned int: cap = inf;", "Makes any number type unsigned; it goes first, and a bare `unsigned` means `unsigned int`. Unsigned integers wrap around, and an unsigned float that would go negative becomes 0." },
+    { TK::UnsignedDeclaration, "type", "unsigned int: cap = inf;", "Makes any number type unsigned; it goes first, and a bare `unsigned` means `unsigned int`. An unsigned number that would go below zero becomes 0, and one that overflows becomes `inf`." },
     { TK::TextDeclaration, "type", "text: a = `n=${n}`;", "UTF-8 text written with backtick literals, which can interpolate `${expression}`. It works like `string` but is a separate type, so the two don't convert implicitly." },
 };
 
@@ -1638,6 +1654,50 @@ public:
             if (!found) continue;
             link(name.text, found);
             describe(name.text, found, nullptr, 1);
+        }
+
+        const auto text_at = [&list](std::size_t i) { return i < list.size() ? list[i].text : std::string_view(); };
+        const auto kind_at = [&list](std::size_t i) { return i < list.size() ? list[i].kind : TK::Unexpected; };
+        const auto declaration_word = [](TK k) {
+            return k == TK::ClassKeyword || k == TK::StructKeyword || k == TK::UnionKeyword || k == TK::FunctionKeyword || k == TK::NamespaceKeyword
+                || k == TK::TemplateKeyword || k == TK::OperatorKeyword || k == TK::StaticKeyword || k == TK::InlineKeyword || k == TK::ConstexprKeyword
+                || k == TK::HiddenKeyword || k == TK::LocalKeyword || k == TK::GlobalKeyword || k == TK::HoistKeyword || k == TK::VirtualKeyword || k == TK::FriendKeyword;
+        };
+        const auto value_end = [&](std::size_t i) {
+            if (i >= list.size()) return false;
+            const TK k = list[i].kind;
+            if (k == TK::Identifier || k == TK::ThisKeyword || k == TK::SelfKeyword || k == TK::True || k == TK::False || k == TK::NullptrKeyword) return true;
+            return list[i].text == ")" || list[i].text == "]" || list[i].text == "}";
+        };
+
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            const Word& w = list[i];
+            if (w.kind != TK::Identifier || after_member(i) || coded(w.at) || linked(w.at)) continue;
+            const std::string_view next = text_at(i + 1);
+            const std::string_view prev = i > 0 ? list[i - 1].text : std::string_view();
+
+            if (w.text == "safe") {
+                if (i > 0 && kind_at(i - 1) == TK::EndKeyword) {
+                    note(w.text, "} end safe", "**Walnut keyword.** Closes a `safe { ... }` or `safe(compile) { ... }` region.", 0);
+                } else if (next == "(" && text_at(i + 2) == "compile" && text_at(i + 3) == ")") {
+                    note(w.text, "safe(compile) { ... } end safe", "**Walnut keyword.** Marks code as safe, checked by every rule of safe code that works while compiling (receivers, `self.` for members, no raw pointer tricks, tracked `new`, `delete` and moves, exhaustive `switch`), but without the runtime overflow check: integers overflow to `inf` as in ordinary code. The standard library is written this way.", 0);
+                    note(list[i + 2].text, "safe(compile)", "**Walnut keyword.** Turns `safe` into its compile-time-only form: every safe-code rule is checked while compiling, and nothing extra is checked while the program runs.", 0);
+                } else if (next == "{" || declaration_word(kind_at(i + 1))) {
+                    note(w.text, "safe function name() -> int { ... } end function name", "**Walnut keyword.** Marks a function, class, namespace or block as safe code: methods take receivers and use `self.`, raw pointers can only be used where the compiler can follow them, `new`, `delete` and moves are tracked, `switch` is exhaustive, and integer overflow stops the program. `safe(compile)` checks the same rules without the runtime overflow check.", 0);
+                }
+            } else if (w.text == "has" && i > 0 && (value_end(i - 1) || prev == "!" || prev == "not") && next != "(" && next != ":" && next != "=" && next != ";" && next != "," && next != ")") {
+                note(w.text, "items has x", "**Walnut builtin operator.** `true` when `items` holds a value equal to `x`, the same test as `x in items` written the other way round. `items !has x` and `items not has x` are its opposite.", 0);
+            } else if (w.text == "not" && (kind_at(i + 1) == TK::InKeyword || next == "has")) {
+                note(w.text, next == "has" ? "items not has x" : "x not in items", "**Walnut builtin operator.** The opposite of `in` or `has`; also written `!in` and `!has`.", 0);
+            } else if (w.text == "match" && next == "(") {
+                note(w.text, "match (value) { case pattern => result, default => other }", "**Walnut keyword.** Picks the first case whose pattern fits the value, as a statement or as an expression that gives a value. Patterns can compare (`case < 0`), test membership (`case in {1, 2}`), check types and take values apart; `_` fits anything, and `default` runs when nothing else fits.", 0);
+            } else if ((w.text == "goto" || w.text == "label") && kind_at(i + 1) == TK::Identifier && text_at(i + 2) == ";") {
+                note(w.text, w.text == "goto" ? "goto name;" : "label name;", "**Walnut keyword.** `goto name;` jumps to `label name;` in the same function.", 0);
+            } else if (w.text == "invalidate" && kind_at(i + 1) == TK::Identifier) {
+                note(w.text, "invalidate area;", "**Walnut keyword.** Discards the kept value of a `lazy` field, so the next read computes it again.", 0);
+            } else if (w.text == "threadsafe" && (kind_at(i + 1) == TK::LazyKeyword || (i > 0 && kind_at(i - 1) == TK::LazyKeyword))) {
+                note(w.text, "lazy threadsafe float: area = compute_area();", "**Walnut keyword.** Makes a `lazy` field safe to read from several threads at once: one thread computes the value while the others wait.", 0);
+            }
         }
 
         for (std::size_t i = 0; i < list.size(); ++i) {

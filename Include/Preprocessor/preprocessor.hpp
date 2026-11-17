@@ -60,6 +60,12 @@ struct Macro {
     FileId                   def_file = INVALID_FILE;
 };
 
+struct FileMark {
+    std::size_t at = 0;
+    FileId      file = INVALID_FILE;
+    bool        enter = true;
+};
+
 class Preprocessor {
 public:
     Preprocessor(SourceManager& sm, ErrorReporter& reporter, WarningReporter& warnings, Arena& arena);
@@ -71,6 +77,7 @@ public:
     void set_native_args(std::function<std::vector<std::string>(bool)> provider) { m_native_args = std::move(provider); }
 
     tokenizing::TokenStream preprocess(FileId main);
+    const std::vector<FileMark>& file_marks() const noexcept { return m_marks; }
 
 private:
     struct Reader {
@@ -242,6 +249,7 @@ private:
     std::unordered_set<FileId>             m_pragma_once;
     std::vector<CondFrame>                 m_cond;
     std::vector<Token>                     m_out;
+    std::vector<FileMark>                  m_marks;
     FileId                                 m_cur_file = INVALID_FILE;
     std::string                            m_empty_file = "<unknown>";
 };

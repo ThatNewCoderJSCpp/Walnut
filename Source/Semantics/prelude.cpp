@@ -8,5 +8,13 @@ Scope* prelude_scope() {
     return scope;
 }
 
+void reset_prelude_scope() {
+    Scope* scope = prelude_scope();
+    scope->symbols.clear();
+    scope->using_directives.clear();
+    scope->bases.clear();
+    scope->children.clear();
+}
+
 } // namespace semantics
 } // namespace walnut

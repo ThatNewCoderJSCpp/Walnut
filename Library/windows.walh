@@ -4,6 +4,7 @@ import module.colors
 import module.images
 import module.input
 
+safe(compile) {
 namespace std {
     namespace errors {
         class window_error {
@@ -12,8 +13,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class window_error
     } end namespace errors
@@ -68,72 +69,72 @@ namespace std {
 
             constructor() { }
 
-            function width() const -> long int {
-                return x;
+            function width(const self&) -> long int {
+                return self.x;
             } end function width
 
-            function height() const -> long int {
-                return y;
+            function height(const self&) -> long int {
+                return self.y;
             } end function height
 
-            function is_key(Key: k) const -> bool {
-                return (type == EventType::key_press || type == EventType::key_release) && key == k;
+            function is_key(const self&, Key: k) -> bool {
+                return (self.type == EventType::key_press || self.type == EventType::key_release) && self.key == k;
             } end function is_key
 
-            function is_key_event() const -> bool {
-                return type == EventType::key_press || type == EventType::key_release;
+            function is_key_event(const self&) -> bool {
+                return self.type == EventType::key_press || self.type == EventType::key_release;
             } end function is_key_event
 
-            function is_physical_key(Key: k) const -> bool {
-                return is_key_event() && k != Key::unknown && physical_key == k;
+            function is_physical_key(const self&, Key: k) -> bool {
+                return self.is_key_event() && k != Key::unknown && self.physical_key == k;
             } end function is_physical_key
 
-            function is_logical_key(Key: k) const -> bool {
-                return is_key_event() && k != Key::unknown && logical_key == k;
+            function is_logical_key(const self&, Key: k) -> bool {
+                return self.is_key_event() && k != Key::unknown && self.logical_key == k;
             } end function is_logical_key
 
-            function is_either_key(Key: k) const -> bool {
-                return is_physical_key(k) || is_logical_key(k);
+            function is_either_key(const self&, Key: k) -> bool {
+                return self.is_physical_key(k) || self.is_logical_key(k);
             } end function is_either_key
 
-            function is_key(Key: k, KeyKind: kind) const -> bool {
+            function is_key(const self&, Key: k, KeyKind: kind) -> bool {
                 if (kind == KeyKind::physical) then {
-                    return is_physical_key(k);
+                    return self.is_physical_key(k);
                 }
                 if (kind == KeyKind::logical) then {
-                    return is_logical_key(k);
+                    return self.is_logical_key(k);
                 }
-                return is_either_key(k);
+                return self.is_either_key(k);
             } end function is_key
 
-            function key_of(KeyKind: kind) const -> Key {
+            function key_of(const self&, KeyKind: kind) -> Key {
                 if (kind == KeyKind::physical) then {
-                    return physical_key;
+                    return self.physical_key;
                 }
                 if (kind == KeyKind::logical) then {
-                    return logical_key;
+                    return self.logical_key;
                 }
-                return logical_key != Key::unknown ? logical_key : physical_key;
+                return self.logical_key != Key::unknown ? self.logical_key : self.physical_key;
             } end function key_of
 
-            function physical_name() const -> string {
-                return std::input::key_name(physical_key);
+            function physical_name(const self&) -> string {
+                return std::input::key_name(self.physical_key);
             } end function physical_name
 
-            function logical_name() const -> string {
-                return std::input::key_name(logical_key);
+            function logical_name(const self&) -> string {
+                return std::input::key_name(self.logical_key);
             } end function logical_name
 
-            function is_mouse() const -> bool {
-                return type == EventType::mouse_move || type == EventType::mouse_click || type == EventType::mouse_release || type == EventType::mouse_scroll || type == EventType::mouse_double_click;
+            function is_mouse(const self&) -> bool {
+                return self.type == EventType::mouse_move || self.type == EventType::mouse_click || self.type == EventType::mouse_release || self.type == EventType::mouse_scroll || self.type == EventType::mouse_double_click;
             } end function is_mouse
 
-            function is_keyboard() const -> bool {
-                return type == EventType::key_press || type == EventType::key_release || type == EventType::text_input;
+            function is_keyboard(const self&) -> bool {
+                return self.type == EventType::key_press || self.type == EventType::key_release || self.type == EventType::text_input;
             } end function is_keyboard
 
-            function to_string() const -> string {
-                return static_cast<string>(`WindowEvent(${static_cast<long int>(type)}, x ${x}, y ${y})`);
+            function to_string(const self&) -> string {
+                return static_cast<string>(`WindowEvent(${static_cast<long int>(self.type)}, x ${self.x}, y ${self.y})`);
             } end function to_string
         } end struct WindowEvent
 
@@ -154,8 +155,8 @@ namespace std {
 
             constructor() { }
 
-            function to_string() const -> string {
-                return static_cast<string>(`${name} (${width} by ${height} at ${x}, ${y})`);
+            function to_string(const self&) -> string {
+                return static_cast<string>(`${self.name} (${self.width} by ${self.height} at ${self.x}, ${self.y})`);
             } end function to_string
         } end struct Monitor
 
@@ -164,54 +165,54 @@ namespace std {
                 class NativeEvent as "walnut_rt::gfx::event" {
                 public:
                     constructor();
-                    function type() const -> long int;
-                    function x() const -> long int;
-                    function y() const -> long int;
-                    function dx() const -> long int;
-                    function dy() const -> long int;
-                    function button() const -> long int;
-                    function key() const -> long int;
-                    function logical_key() const -> long int;
-                    function physical_key() const -> long int;
-                    function scancode() const -> long int;
-                    function key_name() const -> string;
-                    function modifiers() const -> long int;
-                    function repeat() const -> bool;
-                    function typed() const -> string as "text";
-                    function scroll_x() const -> float;
-                    function scroll_y() const -> float;
-                    function fx() const -> float;
-                    function fy() const -> float;
-                    function pressure() const -> float;
-                    function pointer() const -> long int;
-                    function pointer_id() const -> long int;
-                    function window_x() const -> long int;
-                    function window_y() const -> long int;
-                    function dpi_scale() const -> float;
-                    function gamepad() const -> long int;
-                    function gamepad_button() const -> long int;
-                    function gamepad_axis() const -> long int;
-                    function axis_value() const -> float;
-                    function path_count() const -> long int;
-                    function path(long int: index) const -> string;
+                    function type(const self&) -> long int;
+                    function x(const self&) -> long int;
+                    function y(const self&) -> long int;
+                    function dx(const self&) -> long int;
+                    function dy(const self&) -> long int;
+                    function button(const self&) -> long int;
+                    function key(const self&) -> long int;
+                    function logical_key(const self&) -> long int;
+                    function physical_key(const self&) -> long int;
+                    function scancode(const self&) -> long int;
+                    function key_name(const self&) -> string;
+                    function modifiers(const self&) -> long int;
+                    function repeat(const self&) -> bool;
+                    function typed(const self&) -> string as "text";
+                    function scroll_x(const self&) -> float;
+                    function scroll_y(const self&) -> float;
+                    function fx(const self&) -> float;
+                    function fy(const self&) -> float;
+                    function pressure(const self&) -> float;
+                    function pointer(const self&) -> long int;
+                    function pointer_id(const self&) -> long int;
+                    function window_x(const self&) -> long int;
+                    function window_y(const self&) -> long int;
+                    function dpi_scale(const self&) -> float;
+                    function gamepad(const self&) -> long int;
+                    function gamepad_button(const self&) -> long int;
+                    function gamepad_axis(const self&) -> long int;
+                    function axis_value(const self&) -> float;
+                    function path_count(const self&) -> long int;
+                    function path(const self&, long int: index) -> string;
                 } end class NativeEvent
 
                 class NativeMonitor as "walnut_rt::gfx::monitor" {
                 public:
                     constructor();
-                    function name() const -> string;
-                    function x() const -> long int;
-                    function y() const -> long int;
-                    function width() const -> long int;
-                    function height() const -> long int;
-                    function work_x() const -> long int;
-                    function work_y() const -> long int;
-                    function work_width() const -> long int;
-                    function work_height() const -> long int;
-                    function refresh_rate() const -> float;
-                    function scale() const -> float;
-                    function dpi() const -> float;
-                    function primary() const -> bool;
+                    function name(const self&) -> string;
+                    function x(const self&) -> long int;
+                    function y(const self&) -> long int;
+                    function width(const self&) -> long int;
+                    function height(const self&) -> long int;
+                    function work_x(const self&) -> long int;
+                    function work_y(const self&) -> long int;
+                    function work_width(const self&) -> long int;
+                    function work_height(const self&) -> long int;
+                    function refresh_rate(const self&) -> float;
+                    function scale(const self&) -> float;
+                    function dpi(const self&) -> float;
+                    function primary(const self&) -> bool;
                 } end class NativeMonitor
 
                 class Native as "walnut_rt::gfx::windows_api" {
@@ -287,78 +288,78 @@ namespace std {
 
         extern "C++" from "<walnut_graphics.hpp>" {
             class Gamepad as "walnut_rt::gfx::gamepad" {
-                function native_button(long int: b) const -> bool as "button";
-                function native_pressed(long int: b) const -> bool as "pressed";
-                function native_released(long int: b) const -> bool as "released";
-                function native_axis(long int: a) const -> float as "axis";
-                function native_raw_axis(long int: a) const -> float as "raw_axis";
+                function native_button(const self&, long int: b) -> bool as "button";
+                function native_pressed(const self&, long int: b) -> bool as "pressed";
+                function native_released(const self&, long int: b) -> bool as "released";
+                function native_axis(const self&, long int: a) -> float as "axis";
+                function native_raw_axis(const self&, long int: a) -> float as "raw_axis";
 
             public:
                 constructor();
 
-                function slot() const -> long int;
-                function connected() const -> bool;
-                function mapped() const -> bool;
-                function name() const -> string;
-                function guid() const -> string;
-                function set_deadzones(float: stick, float: trigger) -> void;
-                function has_rumble() const -> bool;
-                function rumble(float: low_frequency, float: high_frequency, long int: milliseconds) -> bool;
-                function stop_rumble() -> bool;
+                function slot(const self&) -> long int;
+                function connected(const self&) -> bool;
+                function mapped(const self&) -> bool;
+                function name(const self&) -> string;
+                function guid(const self&) -> string;
+                function set_deadzones(self&, float: stick, float: trigger) -> void;
+                function has_rumble(const self&) -> bool;
+                function rumble(self&, float: low_frequency, float: high_frequency, long int: milliseconds) -> bool;
+                function stop_rumble(self&) -> bool;
 
-                function button(GamepadButton: b) const -> bool {
-                    return native_button(static_cast<long int>(b));
+                function button(const self&, GamepadButton: b) -> bool {
+                    return self.native_button(static_cast<long int>(b));
                 } end function button
 
-                function pressed(GamepadButton: b) const -> bool {
-                    return native_pressed(static_cast<long int>(b));
+                function pressed(const self&, GamepadButton: b) -> bool {
+                    return self.native_pressed(static_cast<long int>(b));
                 } end function pressed
 
-                function released(GamepadButton: b) const -> bool {
-                    return native_released(static_cast<long int>(b));
+                function released(const self&, GamepadButton: b) -> bool {
+                    return self.native_released(static_cast<long int>(b));
                 } end function released
 
-                function axis(GamepadAxis: a) const -> float {
-                    return native_axis(static_cast<long int>(a));
+                function axis(const self&, GamepadAxis: a) -> float {
+                    return self.native_axis(static_cast<long int>(a));
                 } end function axis
 
-                function raw_axis(GamepadAxis: a) const -> float {
-                    return native_raw_axis(static_cast<long int>(a));
+                function raw_axis(const self&, GamepadAxis: a) -> float {
+                    return self.native_raw_axis(static_cast<long int>(a));
                 } end function raw_axis
             } end class Gamepad
 
             class Window as "walnut_rt::gfx::window" {
-                function valid() const -> bool;
-                function has_event() const -> bool;
-                function native_next() -> detail::NativeEvent as "next_event";
-                function native_set_background(long int: rgba) -> void as "set_background";
-                function native_background() const -> long int as "background";
-                function native_set_mode(long int: mode, long int: monitor) -> bool as "set_mode";
-                function native_mode() const -> long int as "mode";
-                function native_set_cursor(long int: cursor) -> bool as "set_cursor";
-                function native_set_cursor_image(const Image&: img, long int: hx, long int: hy) -> bool as "set_cursor_image";
-                function native_key_down(long int: k) const -> bool as "key_down";
-                function native_key_pressed(long int: k) const -> bool as "key_pressed";
-                function native_key_released(long int: k) const -> bool as "key_released";
-                function native_key_double_pressed(long int: k) const -> bool as "key_double_pressed";
-                function native_key_held_for(long int: k) const -> float as "key_held_for";
-                function native_logical_key_down(long int: k) const -> bool as "logical_key_down";
-                function native_logical_key_pressed(long int: k) const -> bool as "logical_key_pressed";
-                function native_logical_key_released(long int: k) const -> bool as "logical_key_released";
-                function native_logical_key_double_pressed(long int: k) const -> bool as "logical_key_double_pressed";
-                function native_logical_key_held_for(long int: k) const -> float as "logical_key_held_for";
-                function native_modifiers() const -> long int as "modifiers";
-                function native_mouse_down(long int: b) const -> bool as "mouse_down";
-                function native_mouse_pressed(long int: b) const -> bool as "mouse_pressed";
-                function native_mouse_released(long int: b) const -> bool as "mouse_released";
-                function native_mouse_double_clicked(long int: b) const -> bool as "mouse_double_clicked";
-                function native_gamepad_count() const -> long int as "walnut_rt::gfx::gamepad_count";
-                function native_gamepad_slots() const -> long int as "walnut_rt::gfx::gamepad_slots";
-                function native_gamepad(long int: slot) const -> Gamepad as "walnut_rt::gfx::gamepad_at";
-                function native_primary_gamepad() const -> long int as "walnut_rt::gfx::primary_gamepad";
-                function native_any_gamepad_button(long int: b) const -> bool as "walnut_rt::gfx::any_gamepad_button";
-                function native_add_gamepad_mappings(const string&: text_value) const -> long int as "walnut_rt::gfx::add_gamepad_mappings";
-                function native_load_gamepad_mappings(const string&: path) const -> long int as "walnut_rt::gfx::load_gamepad_mappings";
+                function valid(const self&) -> bool;
+                function has_event(const self&) -> bool;
+                function native_next(self&) -> detail::NativeEvent as "next_event";
+                function native_set_background(self&, long int: rgba) -> void as "set_background";
+                function native_background(const self&) -> long int as "background";
+                function native_set_mode(self&, long int: mode, long int: monitor) -> bool as "set_mode";
+                function native_mode(const self&) -> long int as "mode";
+                function native_set_cursor(self&, long int: cursor) -> bool as "set_cursor";
+                function native_set_cursor_image(self&, const Image&: img, long int: hx, long int: hy) -> bool as "set_cursor_image";
+                function native_key_down(const self&, long int: k) -> bool as "key_down";
+                function native_key_pressed(const self&, long int: k) -> bool as "key_pressed";
+                function native_key_released(const self&, long int: k) -> bool as "key_released";
+                function native_key_double_pressed(const self&, long int: k) -> bool as "key_double_pressed";
+                function native_key_held_for(const self&, long int: k) -> float as "key_held_for";
+                function native_logical_key_down(const self&, long int: k) -> bool as "logical_key_down";
+                function native_logical_key_pressed(const self&, long int: k) -> bool as "logical_key_pressed";
+                function native_logical_key_released(const self&, long int: k) -> bool as "logical_key_released";
+                function native_logical_key_double_pressed(const self&, long int: k) -> bool as "logical_key_double_pressed";
+                function native_logical_key_held_for(const self&, long int: k) -> float as "logical_key_held_for";
+                function native_modifiers(const self&) -> long int as "modifiers";
+                function native_mouse_down(const self&, long int: b) -> bool as "mouse_down";
+                function native_mouse_pressed(const self&, long int: b) -> bool as "mouse_pressed";
+                function native_mouse_released(const self&, long int: b) -> bool as "mouse_released";
+                function native_mouse_double_clicked(const self&, long int: b) -> bool as "mouse_double_clicked";
+                function native_gamepad_count(const self&) -> long int as "walnut_rt::gfx::gamepad_count";
+                function native_gamepad_slots(const self&) -> long int as "walnut_rt::gfx::gamepad_slots";
+                function native_gamepad(const self&, long int: slot) -> Gamepad as "walnut_rt::gfx::gamepad_at";
+                function native_primary_gamepad(const self&) -> long int as "walnut_rt::gfx::primary_gamepad";
+                function native_any_gamepad_button(const self&, long int: b) -> bool as "walnut_rt::gfx::any_gamepad_button";
+                function native_add_gamepad_mappings(const self&, const string&: text_value) -> long int as "walnut_rt::gfx::add_gamepad_mappings";
+                function native_load_gamepad_mappings(const self&, const string&: path) -> long int as "walnut_rt::gfx::load_gamepad_mappings";
 
             public:
                 constructor();
@@ -375,240 +376,240 @@ namespace std {
                     return w;
                 } end function open
 
-                function is_open() const -> bool;
-                function poll() -> bool;
-                function close() -> void;
-                function clear_events() -> void;
+                function is_open(const self&) -> bool;
+                function poll(self&) -> bool;
+                function close(self&) -> void;
+                function clear_events(self&) -> void;
 
-                function next_event(WindowEvent&: event) -> bool {
-                    if (!has_event()) then {
+                function next_event(self&, WindowEvent&: event) -> bool {
+                    if (!self.has_event()) then {
                         return false;
                     }
-                    event = detail::event_of(native_next());
+                    event = detail::event_of(self.native_next());
                     return true;
                 } end function next_event
 
-                function events() -> std::collections::Vector<WindowEvent> {
+                function events(self&) -> std::collections::Vector<WindowEvent> {
                     std::collections::Vector<WindowEvent>: out;
-                    while (has_event()) {
-                        out.push_back(detail::event_of(native_next()));
+                    while (self.has_event()) {
+                        out.push_back(detail::event_of(self.native_next()));
                     }
                     return out;
                 } end function events
 
-                function width() const -> long int;
-                function height() const -> long int;
-                function title() const -> string;
-                function set_title(const string&: title) -> void;
-                function set_size(long int: width, long int: height) -> bool;
-                function set_min_size(long int: width, long int: height) -> void;
-                function set_resizable(bool: resizable) -> void;
-                function set_position(long int: x, long int: y) -> bool;
-                function x() const -> long int;
-                function y() const -> long int;
-                function minimize() -> void;
-                function maximize() -> void;
-                function restore() -> void;
-                function focus() -> void;
-                function set_fullscreen(bool: on) -> bool;
-                function fullscreen() const -> bool;
-                function set_borderless(bool: on) -> bool;
-                function dpi_scale() const -> float;
-                function monitor_index() const -> long int;
-                function set_cursor_visible(bool: visible) -> void;
-                function cursor_visible() const -> bool;
-                function set_cursor_locked(bool: locked) -> bool;
-                function cursor_locked() const -> bool;
-                function set_relative_mouse(bool: on) -> bool;
-                function clipboard() -> string;
-                function set_clipboard(const string&: text_value) -> bool;
-                function set_drop_enabled(bool: on) -> void;
-                function start_text_input() -> void;
-                function stop_text_input() -> void;
-                function text_input_active() const -> bool;
-                function typed_text() const -> string;
-                function mouse_x() const -> long int;
-                function mouse_y() const -> long int;
-                function mouse_dx() const -> long int;
-                function mouse_dy() const -> long int;
-                function scroll_x() const -> float;
-                function scroll_y() const -> float;
+                function width(const self&) -> long int;
+                function height(const self&) -> long int;
+                function title(const self&) -> string;
+                function set_title(self&, const string&: title) -> void;
+                function set_size(self&, long int: width, long int: height) -> bool;
+                function set_min_size(self&, long int: width, long int: height) -> void;
+                function set_resizable(self&, bool: resizable) -> void;
+                function set_position(self&, long int: x, long int: y) -> bool;
+                function x(const self&) -> long int;
+                function y(const self&) -> long int;
+                function minimize(self&) -> void;
+                function maximize(self&) -> void;
+                function restore(self&) -> void;
+                function focus(self&) -> void;
+                function set_fullscreen(self&, bool: on) -> bool;
+                function fullscreen(const self&) -> bool;
+                function set_borderless(self&, bool: on) -> bool;
+                function dpi_scale(const self&) -> float;
+                function monitor_index(const self&) -> long int;
+                function set_cursor_visible(self&, bool: visible) -> void;
+                function cursor_visible(const self&) -> bool;
+                function set_cursor_locked(self&, bool: locked) -> bool;
+                function cursor_locked(const self&) -> bool;
+                function set_relative_mouse(self&, bool: on) -> bool;
+                function clipboard(self&) -> string;
+                function set_clipboard(self&, const string&: text_value) -> bool;
+                function set_drop_enabled(self&, bool: on) -> void;
+                function start_text_input(self&) -> void;
+                function stop_text_input(self&) -> void;
+                function text_input_active(const self&) -> bool;
+                function typed_text(const self&) -> string;
+                function mouse_x(const self&) -> long int;
+                function mouse_y(const self&) -> long int;
+                function mouse_dx(const self&) -> long int;
+                function mouse_dy(const self&) -> long int;
+                function scroll_x(const self&) -> float;
+                function scroll_y(const self&) -> float;
 
-                function set_background(const Color&: c) -> void {
-                    native_set_background(c.packed());
+                function set_background(self&, const Color&: c) -> void {
+                    self.native_set_background(c.packed());
                 } end function set_background
 
-                function background() const -> Color {
-                    return Color::from_packed(native_background());
+                function background(const self&) -> Color {
+                    return Color::from_packed(self.native_background());
                 } end function background
 
-                function set_mode(WindowMode: mode, long int: monitor = -1) -> bool {
-                    return native_set_mode(static_cast<long int>(mode), monitor);
+                function set_mode(self&, WindowMode: mode, long int: monitor = -1) -> bool {
+                    return self.native_set_mode(static_cast<long int>(mode), monitor);
                 } end function set_mode
 
-                function mode() const -> WindowMode {
-                    return static_cast<WindowMode>(native_mode());
+                function mode(const self&) -> WindowMode {
+                    return static_cast<WindowMode>(self.native_mode());
                 } end function mode
 
-                function set_cursor(Cursor: cursor) -> bool {
-                    return native_set_cursor(static_cast<long int>(cursor));
+                function set_cursor(self&, Cursor: cursor) -> bool {
+                    return self.native_set_cursor(static_cast<long int>(cursor));
                 } end function set_cursor
 
-                function set_cursor(const Image&: img) -> bool {
-                    return native_set_cursor_image(img, 0, 0);
+                function set_cursor(self&, const Image&: img) -> bool {
+                    return self.native_set_cursor_image(img, 0, 0);
                 } end function set_cursor
 
-                function set_cursor(const Image&: img, long int: hot_x, long int: hot_y) -> bool {
-                    return native_set_cursor_image(img, hot_x, hot_y);
+                function set_cursor(self&, const Image&: img, long int: hot_x, long int: hot_y) -> bool {
+                    return self.native_set_cursor_image(img, hot_x, hot_y);
                 } end function set_cursor
 
-                function key_down(Key: k) const -> bool {
-                    return native_key_down(static_cast<long int>(k));
+                function key_down(const self&, Key: k) -> bool {
+                    return self.native_key_down(static_cast<long int>(k));
                 } end function key_down
 
-                function key_pressed(Key: k) const -> bool {
-                    return native_key_pressed(static_cast<long int>(k));
+                function key_pressed(const self&, Key: k) -> bool {
+                    return self.native_key_pressed(static_cast<long int>(k));
                 } end function key_pressed
 
-                function key_released(Key: k) const -> bool {
-                    return native_key_released(static_cast<long int>(k));
+                function key_released(const self&, Key: k) -> bool {
+                    return self.native_key_released(static_cast<long int>(k));
                 } end function key_released
 
-                function key_double_pressed(Key: k) const -> bool {
-                    return native_key_double_pressed(static_cast<long int>(k));
+                function key_double_pressed(const self&, Key: k) -> bool {
+                    return self.native_key_double_pressed(static_cast<long int>(k));
                 } end function key_double_pressed
 
-                function key_held_for(Key: k) const -> float {
-                    return native_key_held_for(static_cast<long int>(k));
+                function key_held_for(const self&, Key: k) -> float {
+                    return self.native_key_held_for(static_cast<long int>(k));
                 } end function key_held_for
 
-                function logical_key_down(Key: k) const -> bool {
-                    return native_logical_key_down(static_cast<long int>(k));
+                function logical_key_down(const self&, Key: k) -> bool {
+                    return self.native_logical_key_down(static_cast<long int>(k));
                 } end function logical_key_down
 
-                function logical_key_pressed(Key: k) const -> bool {
-                    return native_logical_key_pressed(static_cast<long int>(k));
+                function logical_key_pressed(const self&, Key: k) -> bool {
+                    return self.native_logical_key_pressed(static_cast<long int>(k));
                 } end function logical_key_pressed
 
-                function logical_key_released(Key: k) const -> bool {
-                    return native_logical_key_released(static_cast<long int>(k));
+                function logical_key_released(const self&, Key: k) -> bool {
+                    return self.native_logical_key_released(static_cast<long int>(k));
                 } end function logical_key_released
 
-                function logical_key_double_pressed(Key: k) const -> bool {
-                    return native_logical_key_double_pressed(static_cast<long int>(k));
+                function logical_key_double_pressed(const self&, Key: k) -> bool {
+                    return self.native_logical_key_double_pressed(static_cast<long int>(k));
                 } end function logical_key_double_pressed
 
-                function logical_key_held_for(Key: k) const -> float {
-                    return native_logical_key_held_for(static_cast<long int>(k));
+                function logical_key_held_for(const self&, Key: k) -> float {
+                    return self.native_logical_key_held_for(static_cast<long int>(k));
                 } end function logical_key_held_for
 
-                function physical_key_down(Key: k) const -> bool {
-                    return native_key_down(static_cast<long int>(k));
+                function physical_key_down(const self&, Key: k) -> bool {
+                    return self.native_key_down(static_cast<long int>(k));
                 } end function physical_key_down
 
-                function physical_key_pressed(Key: k) const -> bool {
-                    return native_key_pressed(static_cast<long int>(k));
+                function physical_key_pressed(const self&, Key: k) -> bool {
+                    return self.native_key_pressed(static_cast<long int>(k));
                 } end function physical_key_pressed
 
-                function physical_key_released(Key: k) const -> bool {
-                    return native_key_released(static_cast<long int>(k));
+                function physical_key_released(const self&, Key: k) -> bool {
+                    return self.native_key_released(static_cast<long int>(k));
                 } end function physical_key_released
 
-                function physical_key_double_pressed(Key: k) const -> bool {
-                    return native_key_double_pressed(static_cast<long int>(k));
+                function physical_key_double_pressed(const self&, Key: k) -> bool {
+                    return self.native_key_double_pressed(static_cast<long int>(k));
                 } end function physical_key_double_pressed
 
-                function physical_key_held_for(Key: k) const -> float {
-                    return native_key_held_for(static_cast<long int>(k));
+                function physical_key_held_for(const self&, Key: k) -> float {
+                    return self.native_key_held_for(static_cast<long int>(k));
                 } end function physical_key_held_for
 
-                function key_down(Key: k, KeyKind: kind) const -> bool {
+                function key_down(const self&, Key: k, KeyKind: kind) -> bool {
                     if (kind == KeyKind::physical) then {
-                        return physical_key_down(k);
+                        return self.physical_key_down(k);
                     }
                     if (kind == KeyKind::logical) then {
-                        return logical_key_down(k);
+                        return self.logical_key_down(k);
                     }
-                    return physical_key_down(k) || logical_key_down(k);
+                    return self.physical_key_down(k) || self.logical_key_down(k);
                 } end function key_down
 
-                function key_pressed(Key: k, KeyKind: kind) const -> bool {
+                function key_pressed(const self&, Key: k, KeyKind: kind) -> bool {
                     if (kind == KeyKind::physical) then {
-                        return physical_key_pressed(k);
+                        return self.physical_key_pressed(k);
                     }
                     if (kind == KeyKind::logical) then {
-                        return logical_key_pressed(k);
+                        return self.logical_key_pressed(k);
                     }
-                    return physical_key_pressed(k) || logical_key_pressed(k);
+                    return self.physical_key_pressed(k) || self.logical_key_pressed(k);
                 } end function key_pressed
 
-                function key_released(Key: k, KeyKind: kind) const -> bool {
+                function key_released(const self&, Key: k, KeyKind: kind) -> bool {
                     if (kind == KeyKind::physical) then {
-                        return physical_key_released(k);
+                        return self.physical_key_released(k);
                     }
                     if (kind == KeyKind::logical) then {
-                        return logical_key_released(k);
+                        return self.logical_key_released(k);
                     }
-                    return physical_key_released(k) || logical_key_released(k);
+                    return self.physical_key_released(k) || self.logical_key_released(k);
                 } end function key_released
 
-                function key_double_pressed(Key: k, KeyKind: kind) const -> bool {
+                function key_double_pressed(const self&, Key: k, KeyKind: kind) -> bool {
                     if (kind == KeyKind::physical) then {
-                        return physical_key_double_pressed(k);
+                        return self.physical_key_double_pressed(k);
                     }
                     if (kind == KeyKind::logical) then {
-                        return logical_key_double_pressed(k);
+                        return self.logical_key_double_pressed(k);
                     }
-                    return physical_key_double_pressed(k) || logical_key_double_pressed(k);
+                    return self.physical_key_double_pressed(k) || self.logical_key_double_pressed(k);
                 } end function key_double_pressed
 
-                function key_held_for(Key: k, KeyKind: kind) const -> float {
+                function key_held_for(const self&, Key: k, KeyKind: kind) -> float {
                     if (kind == KeyKind::physical) then {
-                        return physical_key_held_for(k);
+                        return self.physical_key_held_for(k);
                     }
                     if (kind == KeyKind::logical) then {
-                        return logical_key_held_for(k);
+                        return self.logical_key_held_for(k);
                     }
-                    const float: p = physical_key_held_for(k);
-                    const float: l = logical_key_held_for(k);
+                    const float: p = self.physical_key_held_for(k);
+                    const float: l = self.logical_key_held_for(k);
                     return p > l ? p : l;
                 } end function key_held_for
 
-                function modifiers() const -> Modifiers {
-                    return Modifiers(native_modifiers());
+                function modifiers(const self&) -> Modifiers {
+                    return Modifiers(self.native_modifiers());
                 } end function modifiers
 
-                function mouse_down(MouseButton: b = MouseButton::left) const -> bool {
-                    return native_mouse_down(static_cast<long int>(b));
+                function mouse_down(const self&, MouseButton: b = MouseButton::left) -> bool {
+                    return self.native_mouse_down(static_cast<long int>(b));
                 } end function mouse_down
 
-                function mouse_pressed(MouseButton: b = MouseButton::left) const -> bool {
-                    return native_mouse_pressed(static_cast<long int>(b));
+                function mouse_pressed(const self&, MouseButton: b = MouseButton::left) -> bool {
+                    return self.native_mouse_pressed(static_cast<long int>(b));
                 } end function mouse_pressed
 
-                function mouse_released(MouseButton: b = MouseButton::left) const -> bool {
-                    return native_mouse_released(static_cast<long int>(b));
+                function mouse_released(const self&, MouseButton: b = MouseButton::left) -> bool {
+                    return self.native_mouse_released(static_cast<long int>(b));
                 } end function mouse_released
 
-                function mouse_double_clicked(MouseButton: b = MouseButton::left) const -> bool {
-                    return native_mouse_double_clicked(static_cast<long int>(b));
+                function mouse_double_clicked(const self&, MouseButton: b = MouseButton::left) -> bool {
+                    return self.native_mouse_double_clicked(static_cast<long int>(b));
                 } end function mouse_double_clicked
 
-                function gamepad_count() const -> long int {
-                    return native_gamepad_count();
+                function gamepad_count(const self&) -> long int {
+                    return self.native_gamepad_count();
                 } end function gamepad_count
 
-                function gamepad(long int: slot) const -> Gamepad {
-                    if (slot < 0 || slot >= native_gamepad_slots()) then {
+                function gamepad(const self&, long int: slot) -> Gamepad {
+                    if (slot < 0 || slot >= self.native_gamepad_slots()) then {
                         throw std::errors::window_error(static_cast<string>(`there is no gamepad in slot ${slot}`));
                     }
-                    return native_gamepad(slot);
+                    return self.native_gamepad(slot);
                 } end function gamepad
 
-                function gamepads() const -> std::collections::Vector<Gamepad> {
+                function gamepads(const self&) -> std::collections::Vector<Gamepad> {
                     std::collections::Vector<Gamepad>: out;
-                    for (long int: k = 0; k < native_gamepad_slots(); k++) {
-                        Gamepad: g = native_gamepad(k);
+                    for (long int: k = 0; k < self.native_gamepad_slots(); k++) {
+                        Gamepad: g = self.native_gamepad(k);
                         if (g.connected()) then {
                             out.push_back(g);
                         }
@@ -616,28 +617,28 @@ namespace std {
                     return out;
                 } end function gamepads
 
-                function has_gamepad() const -> bool {
-                    return native_primary_gamepad() >= 0;
+                function has_gamepad(const self&) -> bool {
+                    return self.native_primary_gamepad() >= 0;
                 } end function has_gamepad
 
-                function primary_gamepad() const -> Gamepad {
-                    const long int: slot = native_primary_gamepad();
+                function primary_gamepad(const self&) -> Gamepad {
+                    const long int: slot = self.native_primary_gamepad();
                     if (slot < 0) then {
                         throw std::errors::window_error("no gamepad is connected; check has_gamepad() first");
                     }
-                    return native_gamepad(slot);
+                    return self.native_gamepad(slot);
                 } end function primary_gamepad
 
-                function any_gamepad_button(GamepadButton: b) const -> bool {
-                    return native_any_gamepad_button(static_cast<long int>(b));
+                function any_gamepad_button(const self&, GamepadButton: b) -> bool {
+                    return self.native_any_gamepad_button(static_cast<long int>(b));
                 } end function any_gamepad_button
 
-                function add_gamepad_mappings(const string&: mappings) const -> long int {
-                    return native_add_gamepad_mappings(mappings);
+                function add_gamepad_mappings(const self&, const string&: mappings) -> long int {
+                    return self.native_add_gamepad_mappings(mappings);
                 } end function add_gamepad_mappings
 
-                function load_gamepad_mappings(const string&: path) const -> long int {
-                    return native_load_gamepad_mappings(path);
+                function load_gamepad_mappings(const self&, const string&: path) -> long int {
+                    return self.native_load_gamepad_mappings(path);
                 } end function load_gamepad_mappings
             } end class Window
         } end extern
@@ -754,3 +755,4 @@ namespace std {
         } end namespace dialogs
     } end namespace windows
 } end namespace std
+} end safe

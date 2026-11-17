@@ -124,11 +124,13 @@ protected:
 };
 
 enum Safety : std::uint8_t {
-    SafetyNone = 0,
-    SafetySafe = 1
+    SafetyNone    = 0,
+    SafetySafe    = 1,
+    SafetyCompile = 2
 };
 
-inline bool in_safe_code(const ASTNode* n) { return n && n->safety == SafetySafe; }
+inline bool in_safe_code(const ASTNode* n) { return n && n->safety != SafetyNone; }
+inline bool in_runtime_checked_code(const ASTNode* n) { return n && n->safety == SafetySafe; }
 
 bool is_expression(const ASTNode* n);
 

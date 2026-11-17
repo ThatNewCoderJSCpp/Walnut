@@ -18,6 +18,9 @@
                     "include": "#comments"
                 },
                 {
+                    "include": "#native-code"
+                },
+                {
                     "include": "#preprocessor"
                 },
                 {
@@ -207,7 +210,7 @@
         "declarations": {
             "patterns": [
                 {
-                    "match": "(?<=[A-Za-z0-9_>&*\\]\\)])(:)(?!:)[ \\t]*(?!(?:return|break|continue|then|else|if|for|while|do|switch|case|default|throw|try|catch|repeat|fallthrough|in|is|as|end|co_return|co_yield|await)\\b)([A-Za-z_][A-Za-z0-9_]*)\\b(?!\\s*\\()",
+                    "match": "(?<=[A-Za-z0-9_>&*\\]\\)])(:)(?!:)[ \\t]*(?!(?:return|break|continue|then|else|if|for|while|do|switch|case|default|throw|try|catch|repeat|fallthrough|in|is|as|end|co_return|co_yield|await)\\b)([A-Za-z_][A-Za-z0-9_]*)\\b(?!\\s*[(\\]:])",
                     "captures": {
                         "1": {
                             "name": "punctuation.separator.declaration.walnut"
@@ -270,6 +273,23 @@
                     }
                 },
                 {
+                    "match": "\\b(safe)\\s*(\\()\\s*(compile)\\s*(\\))",
+                    "captures": {
+                        "1": {
+                            "name": "storage.modifier.walnut"
+                        },
+                        "2": {
+                            "name": "punctuation.section.parens.begin.walnut"
+                        },
+                        "3": {
+                            "name": "storage.modifier.walnut"
+                        },
+                        "4": {
+                            "name": "punctuation.section.parens.end.walnut"
+                        }
+                    }
+                },
+                {
                     "match": "\\b(safe)\\b(?=\\s*(?:\\{|(?:class|struct|union|function|namespace|template|operator|static|inline|constexpr|hidden|local|global|hoist|virtual|friend)\\b))",
                     "captures": {
                         "1": {
@@ -292,6 +312,33 @@
                             "name": "keyword.control.walnut"
                         }
                     }
+                },
+                {
+                    "match": "\\b(not)\\s+(?=(?:in|has)\\b)",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.operator.word.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "(?:(?<=[A-Za-z0-9_)\\]}\"'`]\\s)|(?<=!))(has)\\b(?=\\s+[^\\s=;,:)])",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.operator.word.walnut"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(threadsafe)\\b(?=\\s+lazy\\b)|(?<=\\blazy\\s)(threadsafe)\\b",
+                    "captures": {
+                        "1": {
+                            "name": "storage.modifier.walnut"
+                        },
+                        "2": {
+                            "name": "storage.modifier.walnut"
+                        }
+                    }
                 }
             ]
         },
@@ -303,7 +350,7 @@
                 },
                 {
                     "name": "keyword.control.walnut",
-                    "match": "\\b(?:fallthrough|co_return|co_yield|continue|default|repeat|return|switch|await|break|catch|label|throw|while|case|down|else|goto|then|end|for|try|as|do|if|in|is)\\b"
+                    "match": "\\b(?:fallthrough|co_await|from|co_return|co_yield|continue|default|repeat|return|switch|await|break|catch|label|throw|while|case|down|else|goto|then|end|for|try|as|do|if|in|is)\\b"
                 },
                 {
                     "name": "storage.type.walnut",
@@ -315,7 +362,7 @@
                 },
                 {
                     "name": "storage.type.primitive.walnut",
-                    "match": "\\b(?:character|unsigned|variable|boolean|decimal|dynamic|floater|integer|special|variant|double|string|array|float|short|auto|bool|char|long|text|void|any|arr|int|str|txt|var|iterable(?=\\s*<))\\b"
+                    "match": "\\b(?:character|unsigned|variable|boolean|decimal|dynamic|floater|integer|special|variant|double|string|array|float|short|auto|bool|char|long|text|void|any|arr|dec|int|str|txt|var|iterable(?=\\s*<))\\b"
                 },
                 {
                     "name": "constant.language.walnut",
@@ -367,6 +414,10 @@
             "patterns": [
                 {
                     "name": "keyword.operator.arrow.walnut",
+                    "match": "=>"
+                },
+                {
+                    "name": "keyword.operator.arrow.walnut",
                     "match": "->"
                 },
                 {
@@ -394,6 +445,80 @@
                     "name": "entity.name.function.template.walnut"
                 }
             }
+        },
+        "native-code": {
+            "patterns": [
+                {
+                    "name": "meta.embedded.block.cpp.walnut",
+                    "begin": "\\b(extern)\\s*(\"C\\+\\+\")\\s*(code)\\s*(\\{)",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "storage.modifier.walnut"
+                        },
+                        "2": {
+                            "name": "string.quoted.double.walnut"
+                        },
+                        "3": {
+                            "name": "storage.modifier.walnut"
+                        },
+                        "4": {
+                            "name": "punctuation.section.block.begin.walnut"
+                        }
+                    },
+                    "end": "(\\})\\s*(end)\\s+(extern)\\b",
+                    "endCaptures": {
+                        "1": {
+                            "name": "punctuation.section.block.end.walnut"
+                        },
+                        "2": {
+                            "name": "keyword.control.end.walnut"
+                        },
+                        "3": {
+                            "name": "storage.type.namespace.walnut"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "source.cpp"
+                        }
+                    ]
+                },
+                {
+                    "name": "meta.embedded.block.c.walnut",
+                    "begin": "\\b(extern)\\s*(\"C\")\\s*(code)\\s*(\\{)",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "storage.modifier.walnut"
+                        },
+                        "2": {
+                            "name": "string.quoted.double.walnut"
+                        },
+                        "3": {
+                            "name": "storage.modifier.walnut"
+                        },
+                        "4": {
+                            "name": "punctuation.section.block.begin.walnut"
+                        }
+                    },
+                    "end": "(\\})\\s*(end)\\s+(extern)\\b",
+                    "endCaptures": {
+                        "1": {
+                            "name": "punctuation.section.block.end.walnut"
+                        },
+                        "2": {
+                            "name": "keyword.control.end.walnut"
+                        },
+                        "3": {
+                            "name": "storage.type.namespace.walnut"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "source.c"
+                        }
+                    ]
+                }
+            ]
         }
     }
 }

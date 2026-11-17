@@ -1,6 +1,7 @@
 #ifndef WALNUT_SEMA_TYPE_WALKER_HPP
 #define WALNUT_SEMA_TYPE_WALKER_HPP
 
+#include <functional>
 #include <algorithm>
 #include <set>
 #include <sstream>
@@ -27,8 +28,15 @@
 namespace walnut {
 namespace semantics {
 
+struct SafetyPolicy {
+    std::function<bool(FileId)> quiet;
+    bool                        eager_members = false;
+};
+
 class TypeWalker {
 public:
+    void set_safety_policy(const SafetyPolicy* policy) noexcept { m_policy = policy; }
+
     TypeWalker(
         TypeContext& types, ErrorReporter& reporter, WarningReporter& warnings, Scope* root,
         Instantiator* inst = nullptr, ThrowContext* throws = nullptr
@@ -374,7 +382,10 @@ private:
     std::unordered_map<const nodes::ASTNode*, Type*> m_default_args;
     void not_safe(nodes::ASTNode* at, const std::string& what);
     void safety_error(const nodes::ASTNode* at, std::uint32_t line, const std::string& message);
+    const SafetyPolicy* m_policy = nullptr;
+    void check_template_receivers(nodes::ASTNode* decl);
     static void mark_safe_subtree(nodes::ASTNode* n);
+    static void mark_safe_subtree(nodes::ASTNode* n, std::uint8_t level);
     static bool is_lazy_field(const Symbol* s);
     std::string lazy_write_problem(nodes::ASTNode* target);
     bool lazy_blocked(const Symbol* s, bool object_const);

@@ -12,42 +12,42 @@ namespace std {
 
             constructor(T*: start, long int: at) : base = start, index = at { }
 
-            operator(==) function(const Pointer&: other) const -> bool {
-                return index == other.index;
+            operator(==) function(const self&, const Pointer&: other) -> bool {
+                return self.index == other.index;
             }
 
-            operator(!=) function(const Pointer&: other) const -> bool {
-                return index != other.index;
+            operator(!=) function(const self&, const Pointer&: other) -> bool {
+                return self.index != other.index;
             }
 
-            operator(++) function() -> Pointer& {
+            operator(++) function(self&) -> Pointer& {
                 if constexpr (Reverse) then {
-                    index -= 1;
+                    self.index -= 1;
                 } else then {
-                    index += 1;
+                    self.index += 1;
                 }
                 return *this;
             }
 
-            operator(--) function() -> Pointer& {
+            operator(--) function(self&) -> Pointer& {
                 if constexpr (Reverse) then {
-                    index += 1;
+                    self.index += 1;
                 } else then {
-                    index -= 1;
+                    self.index -= 1;
                 }
                 return *this;
             }
 
-            operator(*) function() const -> T& {
-                return base[index];
+            operator(*) function(const self&) -> T& {
+                return self.base[self.index];
             }
 
-            operator(->) function() const -> T* {
-                return &base[index];
+            operator(->) function(const self&) -> T* {
+                return &self.base[self.index];
             }
 
-            function position() const -> long int {
-                return index;
+            function position(const self&) -> long int {
+                return self.index;
             } end function position
 
             static function first(T*: start, long int: count) -> Pointer {
@@ -79,42 +79,42 @@ namespace std {
 
             constructor(C*: container, long int: at) : owner = container, index = at { }
 
-            operator(==) function(const Indexed&: other) const -> bool {
-                return index == other.index;
+            operator(==) function(const self&, const Indexed&: other) -> bool {
+                return self.index == other.index;
             }
 
-            operator(!=) function(const Indexed&: other) const -> bool {
-                return index != other.index;
+            operator(!=) function(const self&, const Indexed&: other) -> bool {
+                return self.index != other.index;
             }
 
-            operator(++) function() -> Indexed& {
+            operator(++) function(self&) -> Indexed& {
                 if constexpr (Reverse) then {
-                    index -= 1;
+                    self.index -= 1;
                 } else then {
-                    index += 1;
+                    self.index += 1;
                 }
                 return *this;
             }
 
-            operator(--) function() -> Indexed& {
+            operator(--) function(self&) -> Indexed& {
                 if constexpr (Reverse) then {
-                    index += 1;
+                    self.index += 1;
                 } else then {
-                    index -= 1;
+                    self.index -= 1;
                 }
                 return *this;
             }
 
-            operator(*) function() const -> T& {
-                return (*owner)[index];
+            operator(*) function(const self&) -> T& {
+                return (*self.owner)[self.index];
             }
 
-            operator(->) function() const -> T* {
-                return &(*owner)[index];
+            operator(->) function(const self&) -> T* {
+                return &(*self.owner)[self.index];
             }
 
-            function position() const -> long int {
-                return index;
+            function position(const self&) -> long int {
+                return self.index;
             } end function position
 
             static function first(C*: container, long int: count) -> Indexed {
@@ -145,38 +145,38 @@ namespace std {
 
             constructor(N*: at) : node = at { }
 
-            operator(==) function(const Linked&: other) const -> bool {
-                return node == other.node;
+            operator(==) function(const self&, const Linked&: other) -> bool {
+                return self.node == other.node;
             }
 
-            operator(!=) function(const Linked&: other) const -> bool {
-                return node != other.node;
+            operator(!=) function(const self&, const Linked&: other) -> bool {
+                return self.node != other.node;
             }
 
-            operator(++) function() -> Linked& {
+            operator(++) function(self&) -> Linked& {
                 if constexpr (Reverse) then {
-                    node = node->prev;
+                    self.node = self.node->prev;
                 } else then {
-                    node = node->next;
+                    self.node = self.node->next;
                 }
                 return *this;
             }
 
-            operator(--) function() -> Linked& {
+            operator(--) function(self&) -> Linked& {
                 if constexpr (Reverse) then {
-                    node = node->next;
+                    self.node = self.node->next;
                 } else then {
-                    node = node->prev;
+                    self.node = self.node->prev;
                 }
                 return *this;
             }
 
-            operator(*) function() const -> T& {
-                return node->value;
+            operator(*) function(const self&) -> T& {
+                return self.node->value;
             }
 
-            operator(->) function() const -> T* {
-                return &node->value;
+            operator(->) function(const self&) -> T* {
+                return &self.node->value;
             }
         } end class Linked
 
@@ -245,51 +245,51 @@ namespace std {
                 return Tree(nullptr);
             } end function past
 
-            operator(==) function(const Tree&: other) const -> bool {
-                return node == other.node;
+            operator(==) function(const self&, const Tree&: other) -> bool {
+                return self.node == other.node;
             }
 
-            operator(!=) function(const Tree&: other) const -> bool {
-                return node != other.node;
+            operator(!=) function(const self&, const Tree&: other) -> bool {
+                return self.node != other.node;
             }
 
-            operator(++) function() -> Tree& {
+            operator(++) function(self&) -> Tree& {
                 if constexpr (Reverse) then {
-                    node = before(node);
+                    self.node = before(self.node);
                 } else then {
-                    node = after(node);
+                    self.node = after(self.node);
                 }
                 return *this;
             }
 
-            operator(--) function() -> Tree& {
+            operator(--) function(self&) -> Tree& {
                 if constexpr (Reverse) then {
-                    node = after(node);
+                    self.node = after(self.node);
                 } else then {
-                    node = before(node);
+                    self.node = before(self.node);
                 }
                 return *this;
             }
 
-            operator(*) function() const -> T& {
-                return node->entry;
+            operator(*) function(const self&) -> T& {
+                return self.node->entry;
             }
 
-            operator(->) function() const -> T* {
-                return &node->entry;
+            operator(->) function(const self&) -> T* {
+                return &self.node->entry;
             }
         } end class Tree
 
         template <typename T, bool Reverse = false>
         class Sparse {
-            function settle() -> void {
+            function settle(self&) -> void {
                 if constexpr (Reverse) then {
-                    while (index >= 0 && state[index] != filled) {
-                        index -= 1;
+                    while (self.index >= 0 && self.state[self.index] != self.filled) {
+                        self.index -= 1;
                     }
                 } else then {
-                    while (index < capacity && state[index] != filled) {
-                        index += 1;
+                    while (self.index < self.capacity && self.state[self.index] != self.filled) {
+                        self.index += 1;
                     }
                 }
             } end function settle
@@ -325,33 +325,34 @@ namespace std {
                 }
             } end function past
 
-            operator(==) function(const Sparse&: other) const -> bool {
-                return index == other.index;
+            operator(==) function(const self&, const Sparse&: other) -> bool {
+                return self.index == other.index;
             }
 
-            operator(!=) function(const Sparse&: other) const -> bool {
-                return index != other.index;
+            operator(!=) function(const self&, const Sparse&: other) -> bool {
+                return self.index != other.index;
             }
 
-            operator(++) function() -> Sparse& {
+            operator(++) function(self&) -> Sparse& {
                 if constexpr (Reverse) then {
-                    index -= 1;
+                    self.index -= 1;
                 } else then {
-                    index += 1;
+                    self.index += 1;
                 }
-                settle();
+                self.settle();
                 return *this;
             }
 
-            operator(*) function() const -> T& {
-                return slots[index];
+            operator(*) function(const self&) -> T& {
+                return self.slots[self.index];
             }
 
-            operator(->) function() const -> T* {
-                return &slots[index];
+            operator(->) function(const self&) -> T* {
+                return &self.slots[self.index];
             }
         } end class Sparse
 
+        safe(compile) {
         template <typename It, typename K>
         class Keys {
         public:
@@ -363,21 +364,21 @@ namespace std {
 
             constructor(const It&: at) : inner = at { }
 
-            operator(==) function(const Keys&: other) const -> bool {
-                return inner == other.inner;
+            operator(==) function(const self&, const Keys&: other) -> bool {
+                return self.inner == other.inner;
             }
 
-            operator(!=) function(const Keys&: other) const -> bool {
-                return inner != other.inner;
+            operator(!=) function(const self&, const Keys&: other) -> bool {
+                return self.inner != other.inner;
             }
 
-            operator(++) function() -> Keys& {
-                ++inner;
+            operator(++) function(self&) -> Keys& {
+                ++self.inner;
                 return *this;
             }
 
-            operator(*) function() const -> K& {
-                return (*inner).first;
+            operator(*) function(const self&) -> K& {
+                return (*self.inner).first;
             }
         } end class Keys
 
@@ -392,21 +393,21 @@ namespace std {
 
             constructor(const It&: at) : inner = at { }
 
-            operator(==) function(const Values&: other) const -> bool {
-                return inner == other.inner;
+            operator(==) function(const self&, const Values&: other) -> bool {
+                return self.inner == other.inner;
             }
 
-            operator(!=) function(const Values&: other) const -> bool {
-                return inner != other.inner;
+            operator(!=) function(const self&, const Values&: other) -> bool {
+                return self.inner != other.inner;
             }
 
-            operator(++) function() -> Values& {
-                ++inner;
+            operator(++) function(self&) -> Values& {
+                ++self.inner;
                 return *this;
             }
 
-            operator(*) function() const -> V& {
-                return (*inner).second;
+            operator(*) function(const self&) -> V& {
+                return (*self.inner).second;
             }
         } end class Values
 
@@ -420,16 +421,16 @@ namespace std {
 
             constructor(const It&: a, const It&: b) : first = a, last = b { }
 
-            function begin() const -> It {
-                return first;
+            function begin(const self&) -> It {
+                return self.first;
             } end function begin
 
-            function end() const -> It {
-                return last;
+            function end(const self&) -> It {
+                return self.last;
             } end function end
 
-            function empty() const -> bool {
-                return !(first != last);
+            function empty(const self&) -> bool {
+                return !(self.first != self.last);
             } end function empty
         } end class Range
 
@@ -581,6 +582,8 @@ namespace std {
             B: second;
         } end struct Zipped
 
+        } end safe
+
         namespace detail {
             template <typename T>
             class Held {
@@ -595,8 +598,19 @@ namespace std {
                 destructor() {
                     delete[] items;
                 }
+
+                function put(self&, const T&: item) -> void {
+                    self.items[self.size] = item;
+                    self.size += 1;
+                } end function put
+
+                function at(const self&, long int: index) -> const T& {
+                    return self.items[index];
+                } end function at
             } end class Held
         } end namespace detail
+
+        safe(compile) {
 
         function range(long int: start, long int: stop, long int: step) -> generator<long int> {
             if (step == 0) then {
@@ -642,15 +656,14 @@ namespace std {
             }
             detail::Held<B>: held(n);
             for (const B&: item in b) {
-                held.items[held.size] = item;
-                held.size += 1;
+                held.put(item);
             }
             long int: j = 0;
             for (const A&: item in a) {
                 if (j >= held.size) then {
                     break;
                 }
-                co_yield Zipped<A, B>{item, held.items[j]};
+                co_yield Zipped<A, B>{item, held.at(j)};
                 j += 1;
             }
         } end function zip
@@ -766,8 +779,10 @@ namespace std {
                 co_yield total;
             }
         } end function running
+        } end safe
     } end namespace iterators
 
+    safe(compile) {
     namespace errors {
         class empty_range {
         public:
@@ -775,9 +790,10 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class empty_range
     } end namespace errors
+    } end safe
 } end namespace std

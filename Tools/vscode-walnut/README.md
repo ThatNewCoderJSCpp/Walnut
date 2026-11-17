@@ -4,7 +4,7 @@ Coloring, error underlines and hover info for Walnut (`.wal` and `.walh` files),
 
 The coloring works in two layers:
 
-- **The grammar** (`syntaxes/walnut.tmLanguage.json`) colors the text as soon as a file opens, from its shape alone: keywords, strings and `${}` interpolation, numbers, comments, declarations (`int: total`), calls, `self`, the name after `end function` and so on.
+- **The grammar** (`syntaxes/walnut.tmLanguage.json`) colors the text as soon as a file opens, from its shape alone: keywords, strings and `${}` interpolation, numbers, comments, declarations (`int: total`), calls, `self`, the name after `end function`, `safe` and `safe(compile)`, the word operators `has` and `not in`, and so on. The C or C++ inside an `extern "C" code { ... }` or `extern "C++" code { ... }` block is colored as C or C++, by VS Code's own C/C++ coloring.
 - **The compiler** fills in what only the type checker knows. A moment after you stop typing, the extension runs `walnut highlight` on the file (unsaved changes included). The compiler says what every name really is (a variable, a parameter, a field, a type, a namespace, an enum member, a function) and which operators call an operator function you wrote, such as the `+` in `a + b` for two `Mesh` values. The same run underlines the compiler's errors and warnings, and lists them in the **Problems** panel.
 
 `.wal` files get a walnut icon in the explorer and on tabs, and `.walh` (or `.hwal`) headers get the same walnut with an "h" badge, whenever your file icon theme doesn't have its own icon for them. Headers are the separate **Walnut Header** language so they can have their own icon; they're colored, underlined and hovered exactly like `.wal` files.
@@ -20,7 +20,7 @@ Hold the mouse over code to see what the compiler knows about it:
 | Over | Shows |
 |---|---|
 | A variable, parameter or field | Its declaration with the real type (`auto` and `typeof(...)` are worked out), and its value if it's `const`, `constexpr` or `inline` with a constant initializer |
-| A function name | Its signature |
+| A function name | Its signature, with the method's receiver (`const self&`, `self&`, `self&&`) when it has one |
 | A call | The signature, the type the call gives, and the result if the call can run at compile time, as in `fib(12)` |
 | A `constexpr` function with no parameters, where it's declared | Its result |
 | A variable template, as in `factorial<5>` | Its value |
@@ -30,7 +30,7 @@ Hold the mouse over code to see what the compiler knows about it:
 | A type, alias or enum | What it is: `using Name = string`, `struct geo::Point`, `enum Color : short int` |
 | An enum member | Its underlying type and value: `short int: Color::Green = 5` |
 | A variable made with a constructor, as in `Pair: p(3, 4)` | Which constructor made it |
-| A keyword, builtin type or literal | What it is and how it's written: `if (condition) then { ... }` with "Walnut keyword", `long int` as a 64-bit signed integer |
+| A keyword, builtin type or literal | What it is and how it's written: `if (condition) then { ... }` with "Walnut keyword", `long int` as a 64-bit signed integer. Words that are only keywords in some places (`safe`, `compile` in `safe(compile)`, `has`, `not`, `match`, `goto`, `label`, `invalidate`, `threadsafe`) get the same hover where they act as keywords |
 | `std`, a library module or an `import module.io` | Which library module it is and the file it comes from |
 
 Inside a template, a name or operator lists the type it has in each instantiation, such as `int, float`. Turn hovers off with the `walnut.hover` setting.

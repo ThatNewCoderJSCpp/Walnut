@@ -812,6 +812,8 @@ Here `how_many` is `4` (`12 7 30 18`), `first` is `1`, `largest` is `30`, the ev
 - a `Pair` combines its two halves;
 - a class or struct uses its own `hash()` method.
 
+Hashes use the whole range of `unsigned long int`, so arithmetic on them would overflow to `inf`. `std::collections::hash_combine(a, b)` joins two hashes into one, wrapping around the way hash functions expect, and is what `Pair` uses.
+
 So a type of your own can be a key once it has `==` and a `hash()` method:
 
 ```walnut
@@ -824,7 +826,7 @@ struct Cell {
         return row == o.row && col == o.col;
     }
     function hash() const -> unsigned long int {
-        return std::collections::hash_of(row) * 31ul + std::collections::hash_of(col);
+        return std::collections::hash_combine(std::collections::hash_of(row), std::collections::hash_of(col));
     } end function hash
 } end struct Cell
 

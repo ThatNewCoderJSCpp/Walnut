@@ -1,5 +1,6 @@
 import module.collections
 
+safe(compile) {
 namespace std {
     namespace numerics {
         template <typename T>
@@ -132,3 +133,4 @@ namespace std {
         } end function solve_linear
     } end namespace numerics
 } end namespace std
+} end safe

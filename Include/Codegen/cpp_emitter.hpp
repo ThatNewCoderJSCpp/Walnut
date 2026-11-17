@@ -44,6 +44,17 @@ struct CodegenUnit {
     semantics::Scope*      root = nullptr;
 };
 
+struct LinkOptions {
+    enum class Output { Program, Object, Library };
+
+    Output                             output = Output::Program;
+    bool                               shared_definitions = false;
+    std::function<bool(FileId)>        prebuilt;
+    std::function<bool(FileId)>        pinned;
+    std::function<std::string(FileId)> file_key;
+    std::function<bool(FileId)>        own_init;
+};
+
 class CppEmitter {
     using K   = nodes::ASTNode::Kind;
     using TK  = tokenizing::Token::Kind;
@@ -75,6 +86,12 @@ public:
     std::function<std::string(FileId)> source_path;
     std::function<bool(FileId)> tracks_lines;
     bool unbuffered = false;
+    LinkOptions link;
+
+    bool has_entry_point() const { return m_main_fn || !m_script_statements.empty(); }
+    const std::vector<FileId>& own_init_files() const { return m_own_init_files; }
+    const std::vector<FileId>& prebuilt_init_files() const { return m_prebuilt_init_files; }
+    std::string file_init_name(FileId file);
 
 private:
     struct RecordInfo {
@@ -528,6 +545,44 @@ private:
     void emit_definitions(std::ostream& os);
 
     void emit_init(std::ostream& os);
+
+    std::vector<nodes::ASTNode*>                  m_script_statements;
+    std::vector<FileId>                           m_file_order;
+    std::vector<FileId>                           m_own_init_files;
+    std::vector<FileId>                           m_prebuilt_init_files;
+    std::vector<const Sym*>                       m_walnut_externs;
+    std::vector<nodes::VariableDeclaration*>      m_walnut_extern_vars;
+    std::unordered_map<std::string, RecordInfo*>  m_pinned_records;
+    std::set<std::string>                         m_emitted_definitions;
+    std::map<FileId, std::string>                 m_file_keys;
+    std::string                                   m_def_prefix;
+    std::function<bool(const nodes::ASTNode*)>    m_global_filter;
+    bool                                          m_globals_inline = false;
+    std::map<std::string, std::pair<std::string, std::size_t>> m_fixed_origin;
+
+    bool per_file_inits() const { return link.output != LinkOptions::Output::Program && !has_entry_point(); }
+    bool has_own_init(FileId f) const { return std::find(m_own_init_files.begin(), m_own_init_files.end(), f) != m_own_init_files.end(); }
+    bool header_shared(std::uint32_t file) const;
+    bool is_prebuilt_file(std::uint32_t file) const { return link.prebuilt && file != static_cast<std::uint32_t>(-1) && link.prebuilt(FileId(file)); }
+    bool is_pinned_file(std::uint32_t file) const { return file != static_cast<std::uint32_t>(-1) && ((link.pinned && link.pinned(FileId(file))) || is_prebuilt_file(file)); }
+    std::string file_key_of(std::uint32_t file);
+    static bool file_scoped(const Sym* s);
+    static bool inside_function(const Sym* s);
+    std::string fixed_global(const std::string& base, const Sym* s, std::uint32_t file, const nodes::ASTNode* at);
+    bool is_walnut_extern(const Sym* s) const;
+    bool skips_function_definition(const FuncInfo& f);
+    bool shares_function_definition(const FuncInfo& f) const;
+    bool shares_record_definition(const RecordInfo* r) const;
+    bool claim_definition(const std::string& name);
+    void note_file(std::uint32_t file);
+    void plan_inits();
+    void emit_walnut_externs(std::ostream& os);
+    void emit_init_nodes(std::ostream& os, const std::vector<nodes::ASTNode*>& nodes);
+    void emit_file_init(std::ostream& os, FileId file);
+    std::vector<nodes::ASTNode*> init_nodes_of(const std::function<bool(const nodes::ASTNode*)>& keep);
+    void emit_global_definitions(std::ostream& os, const std::function<bool(const nodes::ASTNode*)>& keep);
+    std::string init_declarations();
+    bool check_library_entry();
 };
 
 } // namespace codegen

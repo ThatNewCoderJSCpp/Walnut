@@ -1,14 +1,15 @@
+safe(compile) {
 namespace std {
     template <typename T, T V>
     struct value_constant {
         static constexpr T: value = V;
         using value_type = T;
 
-        constexpr operator(T) function() const {
+        constexpr operator(T) function(const self&) {
             return V;
         }
 
-        constexpr operator(()) function() const -> T {
+        constexpr operator(()) function(const self&) -> T {
             return V;
         }
     } end struct value_constant
@@ -18,11 +19,11 @@ namespace std {
         static constexpr bool: value = V;
         using value_type = bool;
 
-        constexpr operator(bool) function() const {
+        constexpr operator(bool) function(const self&) {
             return V;
         }
 
-        constexpr operator(()) function() const -> bool {
+        constexpr operator(()) function(const self&) -> bool {
             return V;
         }
     } end struct bool_constant
@@ -33,11 +34,11 @@ namespace std {
         static constexpr T: value = V;
         using value_type = T;
 
-        constexpr operator(T) function() const {
+        constexpr operator(T) function(const self&) {
             return V;
         }
 
-        constexpr operator(()) function() const -> T {
+        constexpr operator(()) function(const self&) -> T {
             return V;
         }
     } end struct integer_constant
@@ -48,11 +49,11 @@ namespace std {
         static constexpr T: value = V;
         using value_type = T;
 
-        constexpr operator(T) function() const {
+        constexpr operator(T) function(const self&) {
             return V;
         }
 
-        constexpr operator(()) function() const -> T {
+        constexpr operator(()) function(const self&) -> T {
             return V;
         }
     } end struct float_constant
@@ -62,11 +63,11 @@ namespace std {
         static constexpr char: value = V;
         using value_type = char;
 
-        constexpr operator(char) function() const {
+        constexpr operator(char) function(const self&) {
             return V;
         }
 
-        constexpr operator(()) function() const -> char {
+        constexpr operator(()) function(const self&) -> char {
             return V;
         }
     } end struct char_constant
@@ -76,11 +77,11 @@ namespace std {
         static constexpr string: value = V;
         using value_type = string;
 
-        constexpr operator(string) function() const {
+        constexpr operator(string) function(const self&) {
             return V;
         }
 
-        constexpr operator(()) function() const -> string {
+        constexpr operator(()) function(const self&) -> string {
             return V;
         }
     } end struct string_constant
@@ -90,11 +91,11 @@ namespace std {
         static constexpr text: value = V;
         using value_type = text;
 
-        constexpr operator(text) function() const {
+        constexpr operator(text) function(const self&) {
             return V;
         }
 
-        constexpr operator(()) function() const -> text {
+        constexpr operator(()) function(const self&) -> text {
             return V;
         }
     } end struct text_constant
@@ -1253,8 +1254,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class empty_sequence
 
@@ -1264,8 +1265,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class match_error
     } end namespace errors
@@ -1622,3 +1623,4 @@ namespace std {
         } end namespace detail
     } end namespace core
 } end namespace std
+} end safe

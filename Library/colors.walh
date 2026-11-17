@@ -1,6 +1,7 @@
 import module.math
 import module.random
 
+safe(compile) {
 namespace std {
     namespace errors {
         class color_error {
@@ -9,8 +10,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class color_error
     } end namespace errors
@@ -142,8 +143,8 @@ namespace std {
 
             constructor(float: h, float: s, float: l, float: a = 1.0) : hue = h, saturation = s, lightness = l, alpha = a { }
 
-            function to_string() const -> string {
-                return static_cast<string>(`hsl(${hue}, ${saturation}, ${lightness}, ${alpha})`);
+            function to_string(const self&) -> string {
+                return static_cast<string>(`hsl(${self.hue}, ${self.saturation}, ${self.lightness}, ${self.alpha})`);
             } end function to_string
         } end struct HSL
 
@@ -157,8 +158,8 @@ namespace std {
 
             constructor(float: h, float: s, float: v, float: a = 1.0) : hue = h, saturation = s, value = v, alpha = a { }
 
-            function to_string() const -> string {
-                return static_cast<string>(`hsv(${hue}, ${saturation}, ${value}, ${alpha})`);
+            function to_string(const self&) -> string {
+                return static_cast<string>(`hsv(${self.hue}, ${self.saturation}, ${self.value}, ${self.alpha})`);
             } end function to_string
         } end struct HSV
 
@@ -276,66 +277,66 @@ namespace std {
                 return Color(std::random::random_int(0, 255), std::random::random_int(0, 255), std::random::random_int(0, 255), alpha);
             } end function random
 
-            function red() const -> int {
-                return r;
+            function red(const self&) -> int {
+                return self.r;
             } end function red
 
-            function green() const -> int {
-                return g;
+            function green(const self&) -> int {
+                return self.g;
             } end function green
 
-            function blue() const -> int {
-                return b;
+            function blue(const self&) -> int {
+                return self.b;
             } end function blue
 
-            function alpha() const -> int {
-                return a;
+            function alpha(const self&) -> int {
+                return self.a;
             } end function alpha
 
-            function red_unit() const -> float {
-                return static_cast<float>(r) / 255.0;
+            function red_unit(const self&) -> float {
+                return static_cast<float>(self.r) / 255.0;
             } end function red_unit
 
-            function green_unit() const -> float {
-                return static_cast<float>(g) / 255.0;
+            function green_unit(const self&) -> float {
+                return static_cast<float>(self.g) / 255.0;
             } end function green_unit
 
-            function blue_unit() const -> float {
-                return static_cast<float>(b) / 255.0;
+            function blue_unit(const self&) -> float {
+                return static_cast<float>(self.b) / 255.0;
             } end function blue_unit
 
-            function alpha_unit() const -> float {
-                return static_cast<float>(a) / 255.0;
+            function alpha_unit(const self&) -> float {
+                return static_cast<float>(self.a) / 255.0;
             } end function alpha_unit
 
-            function packed() const -> long int {
-                return static_cast<long int>(r) * 16777216 + static_cast<long int>(g) * 65536 + static_cast<long int>(b) * 256 + static_cast<long int>(a);
+            function packed(const self&) -> long int {
+                return static_cast<long int>(self.r) * 16777216 + static_cast<long int>(self.g) * 65536 + static_cast<long int>(self.b) * 256 + static_cast<long int>(self.a);
             } end function packed
 
-            function to_hex(bool: include_alpha = false) -> string {
-                string: out = "#" + detail::hex_pair(r) + detail::hex_pair(g) + detail::hex_pair(b);
+            function to_hex(self&, bool: include_alpha = false) -> string {
+                string: out = "#" + detail::hex_pair(self.r) + detail::hex_pair(self.g) + detail::hex_pair(self.b);
                 if (include_alpha) then {
-                    out = out + detail::hex_pair(a);
+                    out = out + detail::hex_pair(self.a);
                 }
                 return out;
             } end function to_hex
 
-            function to_string() const -> string {
-                if (a == 255) then {
-                    return static_cast<string>(`rgb(${r}, ${g}, ${b})`);
+            function to_string(const self&) -> string {
+                if (self.a == 255) then {
+                    return static_cast<string>(`rgb(${self.r}, ${self.g}, ${self.b})`);
                 }
-                return static_cast<string>(`rgba(${r}, ${g}, ${b}, ${a})`);
+                return static_cast<string>(`rgba(${self.r}, ${self.g}, ${self.b}, ${self.a})`);
             } end function to_string
 
-            function to_hsl() const -> HSL {
-                const float: rr = red_unit();
-                const float: gg = green_unit();
-                const float: bb = blue_unit();
+            function to_hsl(const self&) -> HSL {
+                const float: rr = self.red_unit();
+                const float: gg = self.green_unit();
+                const float: bb = self.blue_unit();
                 const float: hi = detail::max3(rr, gg, bb);
                 const float: lo = detail::min3(rr, gg, bb);
                 const float: l = (hi + lo) / 2.0;
                 if (hi == lo) then {
-                    return HSL(0.0, 0.0, l, alpha_unit());
+                    return HSL(0.0, 0.0, l, self.alpha_unit());
                 }
                 const float: dd = hi - lo;
                 const float: s = l > 0.5 ? dd / (2.0 - hi - lo) : dd / (hi + lo);
@@ -347,19 +348,19 @@ namespace std {
                 } else then {
                     h = (rr - gg) / dd + 4.0;
                 }
-                return HSL(h * 60.0, s, l, alpha_unit());
+                return HSL(h * 60.0, s, l, self.alpha_unit());
             } end function to_hsl
 
-            function to_hsv() const -> HSV {
-                const float: rr = red_unit();
-                const float: gg = green_unit();
-                const float: bb = blue_unit();
+            function to_hsv(const self&) -> HSV {
+                const float: rr = self.red_unit();
+                const float: gg = self.green_unit();
+                const float: bb = self.blue_unit();
                 const float: hi = detail::max3(rr, gg, bb);
                 const float: lo = detail::min3(rr, gg, bb);
                 const float: dd = hi - lo;
                 const float: s = hi == 0.0 ? 0.0 : dd / hi;
                 if (dd == 0.0) then {
-                    return HSV(0.0, s, hi, alpha_unit());
+                    return HSV(0.0, s, hi, self.alpha_unit());
                 }
                 float: h = 0.0;
                 if (hi == rr) then {
@@ -369,163 +370,163 @@ namespace std {
                 } else then {
                     h = (rr - gg) / dd + 4.0;
                 }
-                return HSV(h * 60.0, s, hi, alpha_unit());
+                return HSV(h * 60.0, s, hi, self.alpha_unit());
             } end function to_hsv
 
-            function hue() const -> float {
-                return to_hsl().hue;
+            function hue(const self&) -> float {
+                return self.to_hsl().hue;
             } end function hue
 
-            function saturation() const -> float {
-                return to_hsl().saturation;
+            function saturation(const self&) -> float {
+                return self.to_hsl().saturation;
             } end function saturation
 
-            function lightness() const -> float {
-                return to_hsl().lightness;
+            function lightness(const self&) -> float {
+                return self.to_hsl().lightness;
             } end function lightness
 
-            function brightness() const -> float {
-                return to_hsv().value;
+            function brightness(const self&) -> float {
+                return self.to_hsv().value;
             } end function brightness
 
-            function luminance() const -> float {
-                return 0.2126 * detail::to_linear(red_unit()) + 0.7152 * detail::to_linear(green_unit()) + 0.0722 * detail::to_linear(blue_unit());
+            function luminance(const self&) -> float {
+                return 0.2126 * detail::to_linear(self.red_unit()) + 0.7152 * detail::to_linear(self.green_unit()) + 0.0722 * detail::to_linear(self.blue_unit());
             } end function luminance
 
-            function contrast_ratio(const Color&: other) const -> float {
-                const float: x = luminance() + 0.05;
+            function contrast_ratio(const self&, const Color&: other) -> float {
+                const float: x = self.luminance() + 0.05;
                 const float: y = other.luminance() + 0.05;
                 return x > y ? x / y : y / x;
             } end function contrast_ratio
 
-            function is_dark() const -> bool {
-                return luminance() < 0.179;
+            function is_dark(const self&) -> bool {
+                return self.luminance() < 0.179;
             } end function is_dark
 
-            function is_light() const -> bool {
-                return !is_dark();
+            function is_light(const self&) -> bool {
+                return !self.is_dark();
             } end function is_light
 
-            function is_opaque() const -> bool {
-                return a == 255;
+            function is_opaque(const self&) -> bool {
+                return self.a == 255;
             } end function is_opaque
 
-            function is_transparent() const -> bool {
-                return a == 0;
+            function is_transparent(const self&) -> bool {
+                return self.a == 0;
             } end function is_transparent
 
-            function with_red(long int: v) const -> Color {
-                return Color(v, g, b, a);
+            function with_red(const self&, long int: v) -> Color {
+                return Color(v, self.g, self.b, self.a);
             } end function with_red
 
-            function with_green(long int: v) const -> Color {
-                return Color(r, v, b, a);
+            function with_green(const self&, long int: v) -> Color {
+                return Color(self.r, v, self.b, self.a);
             } end function with_green
 
-            function with_blue(long int: v) const -> Color {
-                return Color(r, g, v, a);
+            function with_blue(const self&, long int: v) -> Color {
+                return Color(self.r, self.g, v, self.a);
             } end function with_blue
 
-            function with_alpha(long int: v) const -> Color {
-                return Color(r, g, b, v);
+            function with_alpha(const self&, long int: v) -> Color {
+                return Color(self.r, self.g, self.b, v);
             } end function with_alpha
 
-            function with_opacity(float: unit) const -> Color {
-                return Color(r, g, b, detail::channel_of(unit));
+            function with_opacity(const self&, float: unit) -> Color {
+                return Color(self.r, self.g, self.b, detail::channel_of(unit));
             } end function with_opacity
 
-            function lerp(const Color&: other, float: t) const -> Color {
+            function lerp(const self&, const Color&: other, float: t) -> Color {
                 const float: k = detail::clamp_unit(t);
-                return Color(static_cast<long int>(std::math::floor(static_cast<float>(r) + (static_cast<float>(other.r) - static_cast<float>(r)) * k + 0.5)),
-                             static_cast<long int>(std::math::floor(static_cast<float>(g) + (static_cast<float>(other.g) - static_cast<float>(g)) * k + 0.5)),
-                             static_cast<long int>(std::math::floor(static_cast<float>(b) + (static_cast<float>(other.b) - static_cast<float>(b)) * k + 0.5)),
-                             static_cast<long int>(std::math::floor(static_cast<float>(a) + (static_cast<float>(other.a) - static_cast<float>(a)) * k + 0.5)));
+                return Color(static_cast<long int>(std::math::floor(static_cast<float>(self.r) + (static_cast<float>(other.r) - static_cast<float>(self.r)) * k + 0.5)),
+                             static_cast<long int>(std::math::floor(static_cast<float>(self.g) + (static_cast<float>(other.g) - static_cast<float>(self.g)) * k + 0.5)),
+                             static_cast<long int>(std::math::floor(static_cast<float>(self.b) + (static_cast<float>(other.b) - static_cast<float>(self.b)) * k + 0.5)),
+                             static_cast<long int>(std::math::floor(static_cast<float>(self.a) + (static_cast<float>(other.a) - static_cast<float>(self.a)) * k + 0.5)));
             } end function lerp
 
-            function mix(const Color&: other, float: t = 0.5) const -> Color {
-                return lerp(other, t);
+            function mix(const self&, const Color&: other, float: t = 0.5) -> Color {
+                return self.lerp(other, t);
             } end function mix
 
-            function lighten(float: amount) const -> Color {
-                const HSL: c = to_hsl();
+            function lighten(const self&, float: amount) -> Color {
+                const HSL: c = self.to_hsl();
                 return Color::from_hsl(c.hue, c.saturation, c.lightness + amount, c.alpha);
             } end function lighten
 
-            function darken(float: amount) const -> Color {
-                const HSL: c = to_hsl();
+            function darken(const self&, float: amount) -> Color {
+                const HSL: c = self.to_hsl();
                 return Color::from_hsl(c.hue, c.saturation, c.lightness - amount, c.alpha);
             } end function darken
 
-            function saturate(float: amount) const -> Color {
-                const HSL: c = to_hsl();
+            function saturate(const self&, float: amount) -> Color {
+                const HSL: c = self.to_hsl();
                 return Color::from_hsl(c.hue, c.saturation + amount, c.lightness, c.alpha);
             } end function saturate
 
-            function desaturate(float: amount) const -> Color {
-                const HSL: c = to_hsl();
+            function desaturate(const self&, float: amount) -> Color {
+                const HSL: c = self.to_hsl();
                 return Color::from_hsl(c.hue, c.saturation - amount, c.lightness, c.alpha);
             } end function desaturate
 
-            function rotate_hue(float: degrees) const -> Color {
-                const HSL: c = to_hsl();
+            function rotate_hue(const self&, float: degrees) -> Color {
+                const HSL: c = self.to_hsl();
                 return Color::from_hsl(c.hue + degrees, c.saturation, c.lightness, c.alpha);
             } end function rotate_hue
 
-            function complement() const -> Color {
-                return rotate_hue(180.0);
+            function complement(const self&) -> Color {
+                return self.rotate_hue(180.0);
             } end function complement
 
-            function grayscale() const -> Color {
-                const long int: v = static_cast<long int>(std::math::floor(0.299 * static_cast<float>(r) + 0.587 * static_cast<float>(g) + 0.114 * static_cast<float>(b) + 0.5));
-                return Color(v, v, v, a);
+            function grayscale(const self&) -> Color {
+                const long int: v = static_cast<long int>(std::math::floor(0.299 * static_cast<float>(self.r) + 0.587 * static_cast<float>(self.g) + 0.114 * static_cast<float>(self.b) + 0.5));
+                return Color(v, v, v, self.a);
             } end function grayscale
 
-            function inverted() const -> Color {
-                return Color(255 - r, 255 - g, 255 - b, a);
+            function inverted(const self&) -> Color {
+                return Color(255 - self.r, 255 - self.g, 255 - self.b, self.a);
             } end function inverted
 
-            function blend_over(const Color&: background) const -> Color {
-                const float: sa = alpha_unit();
+            function blend_over(const self&, const Color&: background) -> Color {
+                const float: sa = self.alpha_unit();
                 const float: da = background.alpha_unit();
                 const float: oa = sa + da * (1.0 - sa);
                 if (oa <= 0.0) then {
                     return Color(0, 0, 0, 0);
                 }
-                const float: rr = (red_unit() * sa + background.red_unit() * da * (1.0 - sa)) / oa;
-                const float: gg = (green_unit() * sa + background.green_unit() * da * (1.0 - sa)) / oa;
-                const float: bb = (blue_unit() * sa + background.blue_unit() * da * (1.0 - sa)) / oa;
+                const float: rr = (self.red_unit() * sa + background.red_unit() * da * (1.0 - sa)) / oa;
+                const float: gg = (self.green_unit() * sa + background.green_unit() * da * (1.0 - sa)) / oa;
+                const float: bb = (self.blue_unit() * sa + background.blue_unit() * da * (1.0 - sa)) / oa;
                 return Color::from_unit(rr, gg, bb, oa);
             } end function blend_over
 
-            function premultiplied() const -> Color {
-                return Color((static_cast<long int>(r) * a + 127) / 255, (static_cast<long int>(g) * a + 127) / 255, (static_cast<long int>(b) * a + 127) / 255, a);
+            function premultiplied(const self&) -> Color {
+                return Color((static_cast<long int>(self.r) * self.a + 127) / 255, (static_cast<long int>(self.g) * self.a + 127) / 255, (static_cast<long int>(self.b) * self.a + 127) / 255, self.a);
             } end function premultiplied
 
-            function distance(const Color&: other) const -> float {
-                const float: dr = static_cast<float>(r - other.r);
-                const float: dg = static_cast<float>(g - other.g);
-                const float: db = static_cast<float>(b - other.b);
+            function distance(const self&, const Color&: other) -> float {
+                const float: dr = static_cast<float>(self.r - other.r);
+                const float: dg = static_cast<float>(self.g - other.g);
+                const float: db = static_cast<float>(self.b - other.b);
                 return std::math::sqrt(dr * dr + dg * dg + db * db);
             } end function distance
 
-            operator(==) function(const Color&: o) const -> bool {
-                return r == o.r && g == o.g && b == o.b && a == o.a;
+            operator(==) function(const self&, const Color&: o) -> bool {
+                return self.r == o.r && self.g == o.g && self.b == o.b && self.a == o.a;
             }
 
-            operator(!=) function(const Color&: o) const -> bool {
-                return !(r == o.r && g == o.g && b == o.b && a == o.a);
+            operator(!=) function(const self&, const Color&: o) -> bool {
+                return !(self.r == o.r && self.g == o.g && self.b == o.b && self.a == o.a);
             }
 
-            operator(+) function(const Color&: o) const -> Color {
-                return Color(r + o.r, g + o.g, b + o.b, a);
+            operator(+) function(const self&, const Color&: o) -> Color {
+                return Color(self.r + o.r, self.g + o.g, self.b + o.b, self.a);
             }
 
-            operator(-) function(const Color&: o) const -> Color {
-                return Color(r - o.r, g - o.g, b - o.b, a);
+            operator(-) function(const self&, const Color&: o) -> Color {
+                return Color(self.r - o.r, self.g - o.g, self.b - o.b, self.a);
             }
 
-            operator(*) function(float: k) const -> Color {
-                return Color::from_unit(red_unit() * k, green_unit() * k, blue_unit() * k, alpha_unit());
+            operator(*) function(const self&, float: k) -> Color {
+                return Color::from_unit(self.red_unit() * k, self.green_unit() * k, self.blue_unit() * k, self.alpha_unit());
             }
         } end struct Color
 
@@ -1159,3 +1160,4 @@ namespace std {
         } end function lerp
     } end namespace colors
 } end namespace std
+} end safe

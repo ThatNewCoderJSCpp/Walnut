@@ -1,5 +1,6 @@
 import module.collections
 
+safe(compile) {
 namespace std {
     namespace errors {
         class statistics_error {
@@ -8,8 +9,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class statistics_error
     } end namespace errors
@@ -653,8 +654,8 @@ namespace std {
             T: median;
             T: q3;
 
-            function interquartile_range() const -> T {
-                return q3 - q1;
+            function interquartile_range(const self&) -> T {
+                return self.q3 - self.q1;
             } end function interquartile_range
         } end struct Quartiles
 
@@ -666,12 +667,12 @@ namespace std {
             T: q3;
             T: maximum;
 
-            function range() const -> T {
-                return maximum - minimum;
+            function range(const self&) -> T {
+                return self.maximum - self.minimum;
             } end function range
 
-            function interquartile_range() const -> T {
-                return q3 - q1;
+            function interquartile_range(const self&) -> T {
+                return self.q3 - self.q1;
             } end function interquartile_range
         } end struct FiveNumberSummary
 
@@ -686,12 +687,12 @@ namespace std {
             T: intercept_standard_error;
             long int: size = 0;
 
-            function predict(const T&: x) const -> T {
-                return intercept + slope * x;
+            function predict(const self&, const T&: x) -> T {
+                return self.intercept + self.slope * x;
             } end function predict
 
-            function residual(const T&: x, const T&: y) const -> T {
-                return y - predict(x);
+            function residual(const self&, const T&: x, const T&: y) -> T {
+                return y - self.predict(x);
             } end function residual
         } end struct LinearRegression
 
@@ -707,16 +708,16 @@ namespace std {
             Tail: tail = Tail::two;
             std::collections::Vector<Condition>: conditions;
 
-            function reject(const T&: alpha) const -> bool {
-                return p_value < alpha;
+            function reject(const self&, const T&: alpha) -> bool {
+                return self.p_value < alpha;
             } end function reject
 
-            function fail_to_reject(const T&: alpha) const -> bool {
-                return !reject(alpha);
+            function fail_to_reject(const self&, const T&: alpha) -> bool {
+                return !self.reject(alpha);
             } end function fail_to_reject
 
-            function conditions_met() const -> bool {
-                for (const Condition&: c in conditions) {
+            function conditions_met(const self&) -> bool {
+                for (const Condition&: c in self.conditions) {
                     if (!c.met) then {
                         return false;
                     }
@@ -724,8 +725,8 @@ namespace std {
                 return true;
             } end function conditions_met
 
-            function to_string() const -> string {
-                return static_cast<string>(`${name}: statistic ${std::core::to_string(statistic)}, p-value ${std::core::to_string(p_value)}`);
+            function to_string(const self&) -> string {
+                return static_cast<string>(`${self.name}: statistic ${std::core::to_string(self.statistic)}, p-value ${std::core::to_string(self.p_value)}`);
             } end function to_string
         } end struct TestResult
 
@@ -742,16 +743,16 @@ namespace std {
             T: degrees_of_freedom;
             std::collections::Vector<Condition>: conditions;
 
-            function contains(const T&: value) const -> bool {
-                return value >= lower && value <= upper;
+            function contains(const self&, const T&: value) -> bool {
+                return value >= self.lower && value <= self.upper;
             } end function contains
 
-            function width() const -> T {
-                return upper - lower;
+            function width(const self&) -> T {
+                return self.upper - self.lower;
             } end function width
 
-            function conditions_met() const -> bool {
-                for (const Condition&: c in conditions) {
+            function conditions_met(const self&) -> bool {
+                for (const Condition&: c in self.conditions) {
                     if (!c.met) then {
                         return false;
                     }
@@ -759,8 +760,8 @@ namespace std {
                 return true;
             } end function conditions_met
 
-            function to_string() const -> string {
-                return static_cast<string>(`${name}: (${std::core::to_string(lower)}, ${std::core::to_string(upper)})`);
+            function to_string(const self&) -> string {
+                return static_cast<string>(`${self.name}: (${std::core::to_string(self.lower)}, ${std::core::to_string(self.upper)})`);
             } end function to_string
         } end struct ConfidenceInterval
 
@@ -775,17 +776,17 @@ namespace std {
 
             constructor(long int: success_count, long int: sample_size, long int: population_size) : successes = success_count, size = sample_size, population = population_size { }
 
-            function with_population(long int: population_size) const -> Proportion {
-                return Proportion(successes, size, population_size);
+            function with_population(const self&, long int: population_size) -> Proportion {
+                return Proportion(self.successes, self.size, population_size);
             } end function with_population
 
-            function failures() const -> long int {
-                return size - successes;
+            function failures(const self&) -> long int {
+                return self.size - self.successes;
             } end function failures
 
             template <typename T = float>
-            function value() const -> T {
-                return static_cast<T>(successes) / static_cast<T>(size);
+            function value(const self&) -> T {
+                return static_cast<T>(self.successes) / static_cast<T>(self.size);
             } end function value
         } end struct Proportion
 
@@ -1536,3 +1537,4 @@ namespace std {
         } end function complement
     } end namespace statistics
 } end namespace std
+} end safe

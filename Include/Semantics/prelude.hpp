@@ -8,6 +8,7 @@ namespace walnut {
 namespace semantics {
 
 Scope* prelude_scope();
+void reset_prelude_scope();
 
 } // namespace semantics
 } // namespace walnut

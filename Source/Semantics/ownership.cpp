@@ -80,9 +80,11 @@ void OwnershipChecker::find(nodes::ASTNode* n) {
     const bool record = n->kind == K::RecordDeclaration;
     if (function_like) ++m_function_depth;
     if (record) ++m_record_depth;
+    if (record) m_records.push_back(static_cast<const nodes::RecordDeclaration*>(n));
     nodes::for_each_child(n, [this](nodes::ASTNode* c) { find(c); });
     if (function_like) --m_function_depth;
     if (record) --m_record_depth;
+    if (record) m_records.pop_back();
 }
 
 void OwnershipChecker::check_function(const nodes::ASTNode* fn, nodes::FunctionParameters* params, nodes::ASTNode* body, const parser_types::TypeInfo* ret) {
@@ -1084,6 +1086,24 @@ Symbol* OwnershipChecker::stored_target(nodes::ASTNode* e) {
 void OwnershipChecker::store(nodes::ASTNode* place, nodes::ASTNode* value, bool into_container, std::uint32_t line) {
     Symbol* target = stored_target(value);
     if (!target) return;
+
+    if (!into_container && value && value->kind == K::Identifier) {
+        Var* source = var(symbol_of(value));
+        const Symbol* dest = nullptr;
+        if (place && place->kind == K::Identifier) dest = static_cast<nodes::Identifier*>(place)->resolved;
+        else if (place && place->kind == K::MemberAccessExpression) dest = static_cast<nodes::MemberAccessExpression*>(place)->resolved;
+        if (source && source->array && dest && dest->decl && dest->decl->kind == K::ArrayDeclaration) return;
+        if (source && source->array && (!dest || !dest->decl) && place && place->kind == K::MemberAccessExpression && !m_records.empty()) {
+            auto* m = static_cast<nodes::MemberAccessExpression*>(place);
+            const bool on_self = is_this(m->m_object) || (m->m_object && m->m_object->kind == K::DereferenceExpression && is_this(static_cast<const nodes::DereferenceExpression*>(m->m_object)->operand));
+            if (!m->is_scope() && on_self) {
+                for (const nodes::RecordDeclaration::Member& member : m_records.back()->get_members()) {
+                    if (member.node && member.node->kind == K::ArrayDeclaration && static_cast<const nodes::ArrayDeclaration*>(member.node)->get_name() == m->m_member) return;
+                }
+            }
+        }
+    }
+
     std::string path;
     bool local = false;
     Symbol* root = holder_root(place, path, local);

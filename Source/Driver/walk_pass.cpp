@@ -38,6 +38,7 @@ void WalkPass::run(const FrontPass& front) {
         ScopedFile _f(m_reporter, unit->file);
         ScopedFile _w(m_warnings, unit->file);
         semantics::TypeWalker walker(m_types, m_reporter, m_warnings, unit->root, &m_inst, &throws);
+        walker.set_safety_policy(m_policy);
         walker.run(unit->ast);
         walker.type_pending_instances();
     }
@@ -254,8 +255,9 @@ void WalkPass::check_externs(const FrontPass& front) {
 
         if (found.empty() && skipped_hidden) {
             fail(e.decl, what + " is defined in another file, but it is hidden there, so only that file can use it");
+        } else if (found.empty() && m_allow_unresolved && m_allow_unresolved(FileId(e.decl->file_id))) {
         } else if (found.empty()) {
-            fail(e.decl, what + " has no matching definition in any Walnut file being compiled; pass the file that defines it too (walnut run main.wal other.wal)");
+            fail(e.decl, what + " has no matching definition in any Walnut file being compiled; pass the file that defines it too (walnut run main.wal other.wal), or link the object file or library that has it");
         } else if (found.size() > 1) {
             fail(e.decl, what + " matches " + std::to_string(found.size()) + " definitions; it must match exactly one");
         } else {

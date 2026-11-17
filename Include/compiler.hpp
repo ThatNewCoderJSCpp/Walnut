@@ -66,6 +66,9 @@ private:
     std::vector<std::pair<std::string, std::string>> m_defines;
     std::vector<std::string> m_extra_inputs;
     std::function<std::vector<std::string>(bool)> m_native_args;
+    std::function<bool(FileId)> m_allow_unresolved;
+    bool m_verify_library = false;
+    semantics::SafetyPolicy m_safety_policy;
 
 public:
     struct AnalyzedUnit {
@@ -191,6 +194,54 @@ public:
     CompilerPipeline& suppress_warnings() { warnings.set_enabled(false); return *this; }
     CompilerPipeline& add_input(std::string path) { m_extra_inputs.push_back(std::move(path)); return *this; }
     CompilerPipeline& set_native_header_args(std::function<std::vector<std::string>(bool)> provider) { m_native_args = std::move(provider); return *this; }
+    CompilerPipeline& allow_unresolved_externs(std::function<bool(FileId)> allowed) { m_allow_unresolved = std::move(allowed); return *this; }
+    CompilerPipeline& verify_library(bool on = true) { m_verify_library = on; return *this; }
+
+    struct PreprocessedFile {
+        FileId                                 file = INVALID_FILE;
+        std::vector<tokenizing::Token>         tokens;
+        std::vector<preprocessing::FileMark>   marks;
+    };
+
+    std::vector<PreprocessedFile> preprocess_only() {
+        std::vector<PreprocessedFile> out;
+        std::vector<FileId> roots;
+        auto main_id = sources.load(input_file);
+
+        if (!main_id) {
+            reporter.report(ErrorPhase::Lexer, INVALID_FILE, "Could not open input file: " + input_file);
+            reporter.flush();
+            return out;
+        }
+
+        roots.push_back(*main_id);
+
+        for (const std::string& extra : m_extra_inputs) {
+            auto extra_id = sources.load(extra);
+            if (!extra_id) { reporter.report(ErrorPhase::Loader, INVALID_FILE, 0, "Could not open input file: " + extra); continue; }
+            roots.push_back(*extra_id);
+        }
+
+        preprocessing::Preprocessor pp(sources, reporter, warnings, ast_arena);
+        for (const auto& dir : m_include_dirs) pp.add_include_dir(dir);
+        for (const auto& [name, value] : m_defines) pp.define(name, value);
+        if (m_native_args) pp.set_native_args(m_native_args);
+
+        for (FileId root : roots) {
+            reporter.set_current_file(root);
+            warnings.set_current_file(root);
+            tokenizing::TokenStream stream = pp.preprocess(root);
+            PreprocessedFile f;
+            f.file = root;
+            f.tokens.assign(stream.begin(), stream.end());
+            f.marks = pp.file_marks();
+            out.push_back(std::move(f));
+        }
+
+        reporter.flush();
+        warnings.flush();
+        return out;
+    }
     CompilerPipeline& set_input_text(std::string text) { sources.add_virtual(std::filesystem::path(input_file).lexically_normal().generic_string(), std::move(text)); return *this; }
     std::optional<FileId> load_input() { return sources.load(input_file); }
     bool had_front_end_errors() const { return front_end_failed(); }
@@ -210,13 +261,21 @@ private:
         definitions.run(front);
 
         driver::WalkPass walker(reporter, warnings, types, ast_arena, instantiator);
+        if (m_allow_unresolved) walker.allow_unresolved_externs(m_allow_unresolved);
+        m_safety_policy.eager_members = m_verify_library;
+        m_safety_policy.quiet = nullptr;
+        if (!m_verify_library) {
+            const SourceManager* sm = &sources;
+            m_safety_policy.quiet = [sm](FileId f) { return f < sm->file_count() && sm->absolute_path(f).rfind(SourceManager::LIBRARY_ROOT, 0) == 0; };
+        }
+        walker.set_safety_policy(&m_safety_policy);
         walker.run(front);
 
-        if (!reporter.count(ErrorPhase::Semantic)) {
+        if (!reporter.count(ErrorPhase::Semantic) || m_verify_library) {
             semantics::OwnershipChecker ownership(reporter, warnings);
             for (const AnalyzedUnit& u : m_units) {
                 if (!u.ast) continue;
-                if (sources.absolute_path(u.file).rfind(SourceManager::LIBRARY_ROOT, 0) == 0) continue;
+                if (!m_verify_library && sources.absolute_path(u.file).rfind(SourceManager::LIBRARY_ROOT, 0) == 0) continue;
                 ownership.run(u.file, u.ast, m_ownership);
             }
         }
@@ -276,6 +335,7 @@ private:
 public:
     void compile() {
         ScopedTimer _total("Total runtime", m_report_timing);
+        semantics::reset_prelude_scope();
 
         auto main_id = sources.load(input_file);
 

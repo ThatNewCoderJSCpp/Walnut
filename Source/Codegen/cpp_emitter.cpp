@@ -26,20 +26,29 @@ CppEmitter::CppEmitter(semantics::TypeContext& types, semantics::Instantiator& i
 bool CppEmitter::emit(const std::vector<CodegenUnit>& units, std::ostream& out) {
     collect(units);
     if (m_failed) return false;
-    if (!m_main_fn && m_script.empty()) {
-        fail_at(nullptr, "program has no entry point: define 'function main() -> int' or write top-level statements");
-        return false;
-    }
+    if (!check_library_entry()) return false;
+    plan_inits();
 
-    std::ostringstream records, protos, globals, defs, init, native_decls, native_wrappers, equality;
+    std::ostringstream records, protos, globals_extern, globals, defs, init, native_decls, native_wrappers, equality, externs;
     m_track_globals = true;
     emit_records(records);
     emit_prototypes(protos);
+    emit_walnut_externs(externs);
     emit_native_externs(native_decls, native_wrappers);
     emit_definitions(defs);
     finish_global_usage();
-    emit_globals(globals);
-    emit_init(init);
+    emit_globals(globals_extern, true);
+
+    for (FileId f : m_own_init_files) {
+        emit_global_definitions(globals, [f](const nodes::ASTNode* n) { return n->file_id == f; });
+        emit_file_init(init, f);
+    }
+
+    if (!per_file_inits()) {
+        emit_global_definitions(globals, [this](const nodes::ASTNode* n) { return !has_own_init(FileId(n->file_id)); });
+        emit_init(init);
+    }
+
     emit_equality_helpers(equality);
     if (m_failed) return false;
 
@@ -52,14 +61,116 @@ bool CppEmitter::emit(const std::vector<CodegenUnit>& units, std::ostream& out) 
     out << m_consts.str() << (m_consts.str().empty() ? "" : "\n");
     out << records.str();
     out << protos.str() << "\n";
+    out << externs.str();
     out << equality.str();
     out << native_wrappers.str();
+    out << globals_extern.str() << "\n";
+    out << init_declarations();
     out << globals.str() << "\n";
     out << defs.str();
     out << init.str();
     out << "} // namespace wlu\n\n";
-    out << main_function_code();
+    if (has_entry_point() || link.output == LinkOptions::Output::Program) out << main_function_code();
     return !m_failed;
+}
+
+bool CppEmitter::check_library_entry() {
+    if (link.output == LinkOptions::Output::Program) {
+        if (!has_entry_point()) {
+            fail_at(nullptr, "program has no entry point: define 'function main() -> int' or write top-level statements");
+            return false;
+        }
+        return true;
+    }
+
+    if (link.output == LinkOptions::Output::Library && has_entry_point()) {
+        const nodes::ASTNode* at = m_main_fn ? m_main_fn->decl : m_script_statements.front();
+        fail_at(at, "a library can't have 'main' or top-level statements; build it as a program, or with -c for an object file");
+        return false;
+    }
+
+    return true;
+}
+
+void CppEmitter::note_file(std::uint32_t file) {
+    if (file == static_cast<std::uint32_t>(-1)) return;
+    if (std::find(m_file_order.begin(), m_file_order.end(), FileId(file)) == m_file_order.end()) m_file_order.push_back(FileId(file));
+}
+
+void CppEmitter::plan_inits() {
+    m_file_order.clear();
+    m_own_init_files.clear();
+    m_prebuilt_init_files.clear();
+
+    for (nodes::ASTNode* n : m_script) note_file(n->file_id);
+
+    for (const FuncInfo& f : m_functions) {
+        if (f.inst || (f.owner && f.owner->env)) continue;
+        note_file(f.decl->file_id);
+    }
+
+    for (const RecordInfo* r : m_record_order) {
+        if (!r->env) note_file(r->decl->file_id);
+    }
+
+    for (const nodes::EnumDeclaration* e : m_enum_decls) note_file(e->file_id);
+
+    auto header = [this](FileId f) {
+        if (!source_path) return false;
+        const std::string path = source_path(f);
+        return path.size() >= 5 && path.compare(path.size() - 5, 5, ".walh") == 0;
+    };
+
+    std::stable_partition(m_file_order.begin(), m_file_order.end(), header);
+
+    for (FileId f : m_file_order) {
+        if (is_prebuilt_file(f)) m_prebuilt_init_files.push_back(f);
+        else if (per_file_inits() || (link.own_init && link.own_init(f))) m_own_init_files.push_back(f);
+    }
+}
+
+bool CppEmitter::header_shared(std::uint32_t file) const {
+    if (!link.shared_definitions || link.output == LinkOptions::Output::Program || !source_path || file == static_cast<std::uint32_t>(-1)) return false;
+    const std::string path = source_path(FileId(file));
+    return path.size() >= 5 && path.compare(path.size() - 5, 5, ".walh") == 0;
+}
+
+std::string CppEmitter::file_init_name(FileId file) {
+    return "walnut_init_" + file_key_of(file);
+}
+
+std::string CppEmitter::init_declarations() {
+    std::string out;
+    std::set<std::string> seen;
+
+    for (const std::vector<FileId>* list : { &m_prebuilt_init_files, &m_own_init_files }) {
+        for (FileId f : *list) {
+            const std::string name = file_init_name(f);
+            if (seen.insert(name).second) out += "void " + name + "();\n";
+        }
+    }
+
+    if (!out.empty()) out += "\n";
+    return out;
+}
+
+void CppEmitter::emit_walnut_externs(std::ostream& os) {
+    std::set<std::string> seen;
+
+    for (const Sym* s : m_walnut_externs) {
+        const std::string line = function_header(FuncInfo{ s->decl, const_cast<Sym*>(s), nullptr, nullptr }, false, false) + ";";
+        if (seen.insert(line).second) os << line << "\n";
+    }
+
+    for (nodes::VariableDeclaration* v : m_walnut_extern_vars) {
+        Type* t = declared_type(v);
+        std::string line;
+        if (t && t->is_reference()) line = "extern " + cpp_type(static_cast<semantics::ReferenceType*>(t)->referent(), v) + "* " + global_var_name(v->symbol) + ";";
+        else line = "extern walnut_rt::late<" + cpp_type(m_types.strip_cv(value_type(t)), v) + "> " + global_var_name(v->symbol) + ";";
+        if (seen.insert(line).second) os << line << "\n";
+    }
+
+    if (!seen.empty()) os << "\n";
 }
 
 std::string CppEmitter::main_function_code() {
@@ -199,12 +310,10 @@ auto CppEmitter::callable_params(const FuncInfo& f) -> const std::vector<const n
 bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram& out) {
     collect(units);
     if (m_failed) return false;
-    if (!m_main_fn && m_script.empty()) {
-        fail_at(nullptr, "program has no entry point: define 'function main() -> int' or write top-level statements");
-        return false;
-    }
+    if (!check_library_entry()) return false;
+    plan_inits();
 
-    std::ostringstream records, protos, globals_extern, globals, header_defs, init, native_decls, native_wrappers, equality;
+    std::ostringstream records, protos, globals_extern, header_defs, init, native_decls, native_wrappers, equality, externs;
     std::vector<std::pair<std::uint32_t, std::ostringstream>> groups;
 
     auto group_for = [&](std::uint32_t file) -> std::ostringstream& {
@@ -216,6 +325,7 @@ bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram&
     m_track_globals = true;
     emit_records(records);
     emit_prototypes(protos);
+    emit_walnut_externs(externs);
     emit_native_externs(native_decls, native_wrappers);
     for (RecordInfo* r : m_record_order) emit_record_definitions(group_for(r->decl->file_id), r);
 
@@ -226,9 +336,19 @@ bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram&
 
     finish_global_usage();
     emit_globals(globals_extern, true);
-    emit_globals(globals);
+    std::ostringstream definitions;
 
-    emit_init(init);
+    for (FileId f : m_own_init_files) {
+        std::ostream& g = group_for(f);
+        emit_global_definitions(g, [f](const nodes::ASTNode* n) { return n->file_id == f; });
+        emit_file_init(g, f);
+    }
+
+    if (!per_file_inits()) {
+        emit_global_definitions(definitions, [this](const nodes::ASTNode* n) { return !has_own_init(FileId(n->file_id)); });
+        emit_init(init);
+    }
+
     emit_equality_helpers(equality);
     if (m_failed) return false;
 
@@ -242,10 +362,12 @@ bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram&
     h << m_consts.str() << (m_consts.str().empty() ? "" : "\n");
     h << records.str();
     h << protos.str() << "\n";
+    h << externs.str();
     h << equality.str();
     h << native_wrappers.str();
     h << globals_extern.str() << "\n";
-    h << "void walnut_init();\n\n";
+    h << "void walnut_init();\n";
+    h << init_declarations() << "\n";
     h << header_defs.str();
     h << "} // namespace wlu\n\n#endif // WALNUT_PROGRAM_HPP\n";
     out.header = h.str();
@@ -254,6 +376,8 @@ bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram&
     std::size_t index = 0;
 
     for (auto& g : groups) {
+        const std::string body = g.second.str();
+        if (body.empty()) continue;
         std::string stem = "unit";
 
         if (source_path && g.first != static_cast<std::uint32_t>(-1)) {
@@ -262,17 +386,14 @@ bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram&
             if (stem.empty()) stem = "unit";
         }
 
-        out.sources.emplace_back(std::to_string(index++) + "_" + stem + ".cpp", prelude + g.second.str() + "} // namespace wlu\n");
+        out.sources.emplace_back(std::to_string(index++) + "_" + stem + ".cpp", prelude + body + "} // namespace wlu\n");
     }
 
-    std::string definitions;
-    {
-        std::istringstream lines(globals.str());
-        std::string line;
-        while (std::getline(lines, line)) if (line.rfind("inline ", 0) != 0) definitions += line + "\n";
+    if (!per_file_inits()) {
+        const std::string tail = has_entry_point() || link.output == LinkOptions::Output::Program ? main_function_code() : std::string();
+        out.sources.emplace_back("main.cpp", prelude + definitions.str() + "\n" + init.str() + "} // namespace wlu\n\n" + tail);
     }
 
-    out.sources.emplace_back("main.cpp", prelude + definitions + "\n" + init.str() + "} // namespace wlu\n\n" + main_function_code());
     return !m_failed;
 }
 
@@ -293,9 +414,22 @@ void CppEmitter::collect_record(nodes::RecordDeclaration* rd, Inst* inst, Inst* 
     info->sym  = sym;
     info->inst = inst;
     info->env  = inst ? inst : env;
-    info->cname = unique_global(std::string("R_") + sanitize(qualified_name(sym)) + (inst ? "_" + mangle_args(inst->args) : ""));
+    const std::string base = std::string("R_") + sanitize(qualified_name(sym)) + (inst ? "_" + mangle_args(inst->args) : "");
+
+    if (is_pinned_file(rd->file_id)) {
+        info->cname = fixed_global(base + (!inst && env ? "_E" + mangle_args(env->args) : std::string()), sym, rd->file_id, rd);
+
+        if (auto copy = m_pinned_records.find(info->cname); copy != m_pinned_records.end()) {
+            m_record_by_sym[sym] = copy->second;
+            return;
+        }
+    } else {
+        info->cname = unique_global(base);
+    }
+
     info->native = rd->m_native;
     RecordInfo* raw = info.get();
+    if (is_pinned_file(rd->file_id)) m_pinned_records[raw->cname] = raw;
     m_records.push_back(std::move(info));
     m_record_by_sym[sym] = raw;
 
@@ -336,9 +470,11 @@ void CppEmitter::collect_decl(nodes::ASTNode* n, bool top_level) {
             auto* f = static_cast<nodes::FunctionDeclaration*>(n);
             if (f->has_body() && f->symbol) {
                 m_functions.push_back(FuncInfo{ n, f->symbol, nullptr, nullptr });
-                if (f->get_name() == "main" && top_level && !m_main_fn) m_main_fn = f->symbol;
+                if (f->get_name() == "main" && top_level && !m_main_fn && !is_prebuilt_file(n->file_id)) m_main_fn = f->symbol;
             } else if (f->symbol && f->get_modifiers().is_native_extern()) {
                 m_native_externs.push_back(f->symbol);
+            } else if (f->symbol && is_walnut_extern(f->symbol)) {
+                m_walnut_externs.push_back(f->symbol);
             }
             break;
         }
@@ -365,6 +501,7 @@ void CppEmitter::collect_decl(nodes::ASTNode* n, bool top_level) {
 
         case K::NativeCodeBlock: {
             auto* b = static_cast<nodes::NativeCodeBlock*>(n);
+            if (is_prebuilt_file(b->file_id)) break;
             if (std::find(m_native_code_seen.begin(), m_native_code_seen.end(), b->code.data()) != m_native_code_seen.end()) break;
             m_native_code_seen.push_back(b->code.data());
             std::string path = path_of_text ? path_of_text(b->code.data()) : std::string();
@@ -375,7 +512,11 @@ void CppEmitter::collect_decl(nodes::ASTNode* n, bool top_level) {
 
         case K::VariableDeclaration:
         case K::ArrayDeclaration:
-            if (n->kind == K::VariableDeclaration && static_cast<nodes::VariableDeclaration*>(n)->get_type_info().modifiers.has(RM::Extern)) break;
+            if (n->kind == K::VariableDeclaration && static_cast<nodes::VariableDeclaration*>(n)->get_type_info().modifiers.has(RM::Extern)) {
+                auto* v = static_cast<nodes::VariableDeclaration*>(n);
+                if (v->symbol && is_walnut_extern(v->symbol)) m_walnut_extern_vars.push_back(v);
+                break;
+            }
             m_global_decls.push_back(n);
             m_script.push_back(n);
             if (prunable_global(n)) m_prunable.insert(static_cast<nodes::VariableDeclaration*>(n)->symbol);
@@ -391,7 +532,10 @@ void CppEmitter::collect_decl(nodes::ASTNode* n, bool top_level) {
             break;
 
         default:
-            if (top_level) m_script.push_back(n);
+            if (top_level) {
+                m_script.push_back(n);
+                if (!is_prebuilt_file(n->file_id)) m_script_statements.push_back(n);
+            }
             else unsupported(n, "a statement inside a namespace");
             break;
     }
@@ -723,7 +867,14 @@ std::string CppEmitter::function_name(const Sym* fn) {
 
     std::string name = base + "_" + signature_mangle(fn);
     if (I && I->sym == fn) name += "_I_" + mangle_args(I->args);
-    if (!owner_record_of(const_cast<Sym*>(fn))) name = unique_global(name);
+
+    if (!owner_record_of(const_cast<Sym*>(fn))) {
+        const std::uint32_t file = fn->decl ? fn->decl->file_id : static_cast<std::uint32_t>(-1);
+        const bool instance = I && I->sym == fn;
+        if (is_walnut_extern(fn) || (is_pinned_file(file) && !instance)) name = fixed_global(name, fn, file, fn->decl);
+        else name = unique_global(name);
+    }
+
     m_name_cache[fn] = name;
     return name;
 }
@@ -731,16 +882,78 @@ std::string CppEmitter::function_name(const Sym* fn) {
 std::string CppEmitter::global_var_name(const Sym* s) {
     if (m_track_globals && s) m_used_globals.insert(s);
     if (auto it = m_name_cache.find(s); it != m_name_cache.end()) return it->second;
-    std::string n = unique_global("g_" + sanitize(qualified_name(s)));
+    const std::uint32_t file = s && s->decl ? s->decl->file_id : static_cast<std::uint32_t>(-1);
+    const std::string base = "g_" + sanitize(qualified_name(s));
+    std::string n = is_walnut_extern(s) || is_pinned_file(file) ? fixed_global(base, s, file, s->decl) : unique_global(base);
     m_name_cache[s] = n;
     return n;
 }
 
 std::string CppEmitter::enum_name(const Sym* s) {
     if (auto it = m_name_cache.find(s); it != m_name_cache.end()) return it->second;
-    std::string n = unique_global("E_" + sanitize(qualified_name(s)));
+    const std::uint32_t file = s && s->decl ? s->decl->file_id : static_cast<std::uint32_t>(-1);
+    const std::string base = "E_" + sanitize(qualified_name(s));
+    std::string n = is_pinned_file(file) ? fixed_global(base, s, file, s->decl) : unique_global(base);
     m_name_cache[s] = n;
     return n;
+}
+
+std::string CppEmitter::file_key_of(std::uint32_t file) {
+    if (auto it = m_file_keys.find(FileId(file)); it != m_file_keys.end()) return it->second;
+    std::string key = link.file_key ? link.file_key(FileId(file)) : std::string();
+    if (key.empty()) key = "f" + std::to_string(file);
+    m_file_keys[FileId(file)] = key;
+    return key;
+}
+
+bool CppEmitter::file_scoped(const Sym* s) {
+    for (const Sym* cur = s; cur; ) {
+        if (cur->visibility == semantics::Visibility::Hidden) return true;
+        const semantics::Scope* sc = cur->owner;
+        while (sc && !sc->owner_symbol) sc = sc->parent;
+        cur = sc ? sc->owner_symbol : nullptr;
+    }
+    return false;
+}
+
+bool CppEmitter::inside_function(const Sym* s) {
+    for (const semantics::Scope* sc = s ? s->owner : nullptr; sc; sc = sc->parent) {
+        if (sc->kind == semantics::Scope::Kind::Function) return true;
+    }
+    return false;
+}
+
+std::string CppEmitter::fixed_global(const std::string& base, const Sym* s, std::uint32_t file, const nodes::ASTNode* at) {
+    std::string name = base;
+    const bool local = s && inside_function(s);
+    const bool scoped = s && file != static_cast<std::uint32_t>(-1) && (local || file_scoped(s));
+
+    if (scoped) {
+        name += "_P" + file_key_of(file);
+        if (local) name += "_L" + std::to_string(at ? at->line : 0);
+        const std::pair<std::string, std::size_t> origin{ file_key_of(file), at ? at->line : 0 };
+        auto [it, fresh] = m_fixed_origin.emplace(name, origin);
+        if (!fresh && it->second != origin) return unique_global(name);
+    }
+
+    m_used_global_names.insert(name);
+    return name;
+}
+
+bool CppEmitter::is_walnut_extern(const Sym* s) const {
+    if (!s || s->extern_target || !s->decl) return false;
+
+    if (s->decl->kind == K::FunctionDeclaration) {
+        auto* f = static_cast<const nodes::FunctionDeclaration*>(s->decl);
+        return !f->has_body() && f->get_modifiers().has(RM::Extern) && !f->get_modifiers().is_native_extern() && f->native_name.empty();
+    }
+
+    if (s->decl->kind == K::VariableDeclaration) {
+        auto* v = static_cast<const nodes::VariableDeclaration*>(s->decl);
+        return v->get_type_info().modifiers.has(RM::Extern) && v->symbol == s;
+    }
+
+    return false;
 }
 
 auto CppEmitter::value_type(Type* t) -> Type* {
@@ -1217,7 +1430,7 @@ bool CppEmitter::needs_volatile_access(const nodes::ASTNode* e) {
 
 std::string CppEmitter::expr(nodes::ASTNode* e) {
     const bool saved_checked = m_checked_arith;
-    if (e) m_checked_arith = nodes::in_safe_code(e);
+    if (e) m_checked_arith = nodes::in_runtime_checked_code(e);
     std::string s = expr_unwrapped(e);
     m_checked_arith = saved_checked;
     if (needs_volatile_access(e)) return "walnut_rt::volatile_access(" + s + ")";
@@ -1249,6 +1462,7 @@ std::string CppEmitter::expr_unwrapped(nodes::ASTNode* e) {
         case K::DereferenceExpression: {
             auto* d = static_cast<nodes::DereferenceExpression*>(e);
             if (d->resolved) return call_operator_symbol(d->resolved, { d->operand }, e);
+            if (d->operand && d->operand->kind == K::Literal && static_cast<nodes::Literal*>(d->operand)->token_kind == tokenizing::Token::Kind::ThisKeyword) return "(*this)";
             return "(*walnut_rt::safety::checked(" + expr(d->operand) + "))";
         }
 
@@ -1907,7 +2121,14 @@ auto CppEmitter::qualifier_record(const nodes::MemberAccessExpression* m) -> Rec
 }
 
 std::string CppEmitter::member_object(nodes::MemberAccessExpression* m) {
-    if (!m->is_arrow()) return expr(m->m_object) + ".";
+    if (!m->is_arrow()) {
+        const nodes::ASTNode* o = m->m_object;
+        if (o && o->kind == K::DereferenceExpression && !static_cast<const nodes::DereferenceExpression*>(o)->resolved) {
+            const nodes::ASTNode* t = static_cast<const nodes::DereferenceExpression*>(o)->operand;
+            if (t && t->kind == K::Literal && static_cast<const nodes::Literal*>(t)->token_kind == tokenizing::Token::Kind::ThisKeyword) return "this->";
+        }
+        return expr(m->m_object) + ".";
+    }
     std::string code = expr(m->m_object);
     for (Sym* op : m->arrow_ops) code = "(" + code + ")." + function_name(op) + "()";
     return "walnut_rt::safety::checked(" + code + ")->";
@@ -3067,7 +3288,9 @@ void CppEmitter::add_native_headers(const modifiers::RawModifiers& mods, std::ui
             const std::string path = full.generic_string();
 
             if (!is_native_header(classify_file(path))) {
-                if (std::find(m_native_files.begin(), m_native_files.end(), path) == m_native_files.end()) m_native_files.push_back(path);
+                const FileKind kind = classify_file(path);
+                const bool compiled_in = is_prebuilt_file(file_id) && (kind == FileKind::CSource || kind == FileKind::CppSource || kind == FileKind::Object);
+                if (!compiled_in && std::find(m_native_files.begin(), m_native_files.end(), path) == m_native_files.end()) m_native_files.push_back(path);
                 continue;
             }
 
@@ -3259,7 +3482,35 @@ std::string CppEmitter::function_header(const FuncInfo& f, bool qualified, bool 
     return out;
 }
 
+bool CppEmitter::skips_function_definition(const FuncInfo& f) {
+    if (f.inst || (f.owner && f.owner->env)) return false;
+    return is_prebuilt_file(f.decl->file_id) && !needs_header_body(f);
+}
+
+bool CppEmitter::shares_function_definition(const FuncInfo& f) const {
+    if (!link.shared_definitions) return false;
+    if (f.inst || (f.owner && f.owner->env)) return true;
+    if (link.output == LinkOptions::Output::Program || !source_path || f.decl->file_id == static_cast<std::uint32_t>(-1)) return false;
+    const std::string path = source_path(FileId(f.decl->file_id));
+    return path.size() >= 5 && path.compare(path.size() - 5, 5, ".walh") == 0;
+}
+
+bool CppEmitter::shares_record_definition(const RecordInfo* r) const {
+    if (!link.shared_definitions) return false;
+    if (r->env) return true;
+    if (link.output == LinkOptions::Output::Program || !source_path || r->decl->file_id == static_cast<std::uint32_t>(-1)) return false;
+    const std::string path = source_path(FileId(r->decl->file_id));
+    return path.size() >= 5 && path.compare(path.size() - 5, 5, ".walh") == 0;
+}
+
+bool CppEmitter::claim_definition(const std::string& name) {
+    return m_emitted_definitions.insert(name).second;
+}
+
 void CppEmitter::emit_function_body(std::ostream& os, const FuncInfo& f) {
+    if (skips_function_definition(f)) return;
+    if (!claim_definition((f.owner ? f.owner->cname + "::" : std::string()) + function_name(f.sym))) return;
+    const bool shared = !needs_header_body(f) && shares_function_definition(f);
     EnvScope outer(m_types, outer_env(f));
     EnvScope env(m_types, f.inst ? &f.inst->env : nullptr);
     RecordInfo* saved_rec = m_current_record;
@@ -3270,7 +3521,7 @@ void CppEmitter::emit_function_body(std::ostream& os, const FuncInfo& f) {
     if (f.decl->kind == K::FunctionDeclaration) body = static_cast<nodes::FunctionDeclaration*>(f.decl)->get_body();
     else body = static_cast<nodes::OperatorFunctionDeclaration*>(f.decl)->m_body;
     line_marker(os, f.decl);
-    os << function_header(f, true, false) << " ";
+    os << (shared ? "WALNUT_SHARED_DEF " : "") << function_header(f, true, false) << " ";
     m_indent = 0;
     const bool async = decl_is_async(f.decl);
     if (async && f.sym == m_main_fn) fail_at(f.decl, "'main' cannot be async");
@@ -3755,14 +4006,17 @@ void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
     EnvScope env(m_types, r->env ? &r->env->env : nullptr);
     RecordInfo* saved = m_current_record;
     m_current_record = r;
+    const bool prebuilt = !r->env && is_prebuilt_file(r->decl->file_id);
+    m_def_prefix = shares_record_definition(r) ? "WALNUT_SHARED_DEF " : "";
 
-    if (r->native) {
+    if (prebuilt) {
+    } else if (r->native) {
         for (const auto& member : r->decl->get_members()) {
             if (!member.node || member.node->kind != K::ConstructorDeclaration) continue;
             auto* c = static_cast<nodes::ConstructorDeclaration*>(member.node);
             if (!c->m_body) continue;
             line_marker(os, c);
-            os << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ") : native() ";
+            os << m_def_prefix << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ") : native() ";
             Type* saved_ret = m_current_return;
             m_current_return = m_types.void_();
             m_indent = 0;
@@ -3774,35 +4028,38 @@ void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
         }
 
         m_current_record = saved;
+        m_def_prefix.clear();
         return;
-    }
+    } else {
+        emit_lazy_definitions(os, r);
 
-    emit_lazy_definitions(os, r);
+        for (const auto& member : r->decl->get_members()) {
+            nodes::ASTNode* n = member.node;
+            if (!n) continue;
 
-    for (const auto& member : r->decl->get_members()) {
-        nodes::ASTNode* n = member.node;
-        if (!n) continue;
-
-        if (n->kind == K::ConstructorDeclaration) {
-            auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
-            if (c->m_special != nodes::ConstructorDeclaration::Special::None) continue;
-            emit_constructor_definition(os, r, c);
-        } else if (n->kind == K::DestructorDeclaration) {
-            auto* d = static_cast<nodes::DestructorDeclaration*>(n);
-            using SP = nodes::DestructorDeclaration::Special;
-            if (d->m_special != SP::None) continue;
-            line_marker(os, d);
-            os << r->cname << "::~" << r->cname << "() noexcept(false) ";
-            Type* saved_ret = m_current_return;
-            m_current_return = m_types.void_();
-            m_indent = 0;
-            block(os, d->m_body);
-            m_current_return = saved_ret;
-            os << "\n";
-            line_reset(os);
-            os << "\n";
+            if (n->kind == K::ConstructorDeclaration) {
+                auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
+                if (c->m_special != nodes::ConstructorDeclaration::Special::None) continue;
+                emit_constructor_definition(os, r, c);
+            } else if (n->kind == K::DestructorDeclaration) {
+                auto* d = static_cast<nodes::DestructorDeclaration*>(n);
+                using SP = nodes::DestructorDeclaration::Special;
+                if (d->m_special != SP::None) continue;
+                line_marker(os, d);
+                os << m_def_prefix << r->cname << "::~" << r->cname << "() noexcept(false) ";
+                Type* saved_ret = m_current_return;
+                m_current_return = m_types.void_();
+                m_indent = 0;
+                block(os, d->m_body);
+                m_current_return = saved_ret;
+                os << "\n";
+                line_reset(os);
+                os << "\n";
+            }
         }
     }
+
+    m_def_prefix = link.shared_definitions ? "WALNUT_SHARED_DEF " : "";
 
     for (Inst* I : m_ctor_insts) {
         if (owner_record_of(I->sym) != r) continue;
@@ -3818,6 +4075,7 @@ void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
         }
     }
 
+    m_def_prefix.clear();
     m_current_record = saved;
 }
 
@@ -3840,7 +4098,7 @@ int CppEmitter::ctor_instance_self_kind(Inst* I) {
 
 void CppEmitter::emit_constructor_definition(std::ostream& os, RecordInfo* r, nodes::ConstructorDeclaration* c) {
     line_marker(os, c);
-    os << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ")";
+    os << m_def_prefix << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ")";
     std::vector<std::string> inits;
 
     for (nodes::ASTNode* init : c->get_init_list()) {
@@ -3956,15 +4214,61 @@ std::string CppEmitter::direct_init_args(nodes::ASTNode* init, Type* t, const no
 std::string CppEmitter::binding_global(const nodes::VariableDeclaration* v) {
     auto it = m_binding_globals.find(v);
     if (it != m_binding_globals.end()) return it->second;
-    std::string name = unique_global("g_bind");
+    std::string name = is_pinned_file(v->file_id) ? fixed_global("g_bind_P" + file_key_of(v->file_id) + "_L" + std::to_string(v->line), nullptr, v->file_id, v) : unique_global("g_bind");
     m_binding_globals[v] = name;
     return name;
+}
+
+void CppEmitter::emit_global_definitions(std::ostream& os, const std::function<bool(const nodes::ASTNode*)>& keep) {
+    const std::function<bool(const nodes::ASTNode*)> saved = m_global_filter;
+    m_global_filter = [&](const nodes::ASTNode* n) { return !is_prebuilt_file(n->file_id) && (!keep || keep(n)); };
+    std::ostringstream full;
+    emit_globals(full, false);
+    m_global_filter = saved;
+    std::istringstream lines(full.str());
+    std::string line;
+    std::uint32_t only_file = static_cast<std::uint32_t>(-1);
+    bool one_file = true;
+    for (nodes::ASTNode* n : m_global_decls) {
+        if (is_prebuilt_file(n->file_id) || (keep && !keep(n))) continue;
+        if (only_file == static_cast<std::uint32_t>(-1)) only_file = n->file_id;
+        else if (only_file != n->file_id) one_file = false;
+    }
+    m_globals_inline = one_file && header_shared(only_file);
+
+    while (std::getline(lines, line)) {
+        if (line.rfind("inline ", 0) == 0) continue;
+        std::string name = line;
+        const std::size_t semi = name.find_first_of("=;");
+        if (semi != std::string::npos) name = name.substr(0, semi);
+        while (!name.empty() && name.back() == ' ') name.pop_back();
+        const std::size_t space = name.find_last_of(" *&");
+        if (space != std::string::npos) name = name.substr(space + 1);
+        if (!name.empty() && !claim_definition("global " + name)) continue;
+        if (m_globals_inline) {
+            std::size_t at = 0;
+            while (line.compare(at, 8, "alignas(") == 0) {
+                int depth = 0;
+                std::size_t i = at;
+                for (; i < line.size(); ++i) {
+                    if (line[i] == '(') ++depth;
+                    if (line[i] == ')' && --depth == 0) break;
+                }
+                at = std::min(line.size(), i + 2);
+            }
+            line.insert(at, "inline ");
+        }
+        os << line << "\n";
+    }
 }
 
 void CppEmitter::emit_globals(std::ostream& os, bool as_extern) {
     if (as_extern) {
         std::ostringstream full;
+        const std::function<bool(const nodes::ASTNode*)> saved = m_global_filter;
+        m_global_filter = nullptr;
         emit_globals(full, false);
+        m_global_filter = saved;
         std::istringstream lines(full.str());
         std::string line;
 
@@ -3991,6 +4295,8 @@ void CppEmitter::emit_globals(std::ostream& os, bool as_extern) {
     }
 
     for (nodes::ASTNode* n : m_global_decls) {
+        if (m_global_filter && !m_global_filter(n)) continue;
+
         if (n->kind == K::VariableDeclaration) {
             auto* v = static_cast<nodes::VariableDeclaration*>(n);
 
@@ -4157,7 +4463,7 @@ std::string CppEmitter::equality_helper(Type* t, const nodes::ASTNode* at) {
     }
 
     if (auto it = m_equality_names.find(r); it != m_equality_names.end()) return it->second;
-    const std::string name = unique_global("eq_" + r->cname);
+    const std::string name = is_pinned_file(r->decl->file_id) ? fixed_global("eq_" + r->cname, nullptr, r->decl->file_id, r->decl) : unique_global("eq_" + r->cname);
     m_equality_names[r] = name;
     m_equality_queue.push_back(r);
     return name;
@@ -4262,13 +4568,13 @@ void CppEmitter::emit_lazy_definitions(std::ostream& os, RecordInfo* r) {
         const std::string ct = cpp_type(t, v);
         const std::string n = local_name(v->get_name());
         const std::string label = "\"" + std::string(v->get_name()) + "\"";
-        os << ct << "& " << r->cname << "::lz_" << n << "() const { return " << n << ".get([this]() -> " << ct << " { return const_cast<" << r->cname << "*>(this)->lz_make_" << n << "(); }, " << label << "); }\n";
-        os << ct << "& " << r->cname << "::lz_set_" << n << "(" << ct << " walnut_value) const { return " << n << ".set(std::move(walnut_value), " << label << "); }\n";
+        os << m_def_prefix << ct << "& " << r->cname << "::lz_" << n << "() const { return " << n << ".get([this]() -> " << ct << " { return const_cast<" << r->cname << "*>(this)->lz_make_" << n << "(); }, " << label << "); }\n";
+        os << m_def_prefix << ct << "& " << r->cname << "::lz_set_" << n << "(" << ct << " walnut_value) const { return " << n << ".set(std::move(walnut_value), " << label << "); }\n";
         line_marker(os, v);
         Type* saved_ret = m_current_return;
         m_current_return = t;
         m_indent = 0;
-        os << ct << " " << r->cname << "::lz_make_" << n << "() {\n    return " << conv(v->m_initializer, t, v) << ";\n}\n";
+        os << m_def_prefix << ct << " " << r->cname << "::lz_make_" << n << "() {\n    return " << conv(v->m_initializer, t, v) << ";\n}\n";
         m_current_return = saved_ret;
         line_reset(os);
         os << "\n";
@@ -4281,6 +4587,7 @@ bool CppEmitter::prunable_global(nodes::ASTNode* n) const {
     if (!v->symbol || v->is_structured_binding()) return false;
     const auto& mods = v->get_type_info().modifiers;
     if (!mods.has(RM::Const) && !mods.has(RM::Constexpr)) return false;
+    if (link.output != LinkOptions::Output::Program && !is_prebuilt_file(v->file_id)) return false;
     return source_path(FileId(v->file_id)).rfind(SourceManager::LIBRARY_ROOT, 0) == 0;
 }
 
@@ -4327,13 +4634,7 @@ void CppEmitter::emit_definitions(std::ostream& os) {
     for (const FuncInfo& f : m_functions) emit_function_body(os, f);
 }
 
-void CppEmitter::emit_init(std::ostream& os) {
-    os << "void walnut_init() {\n";
-    m_indent = 1;
-    RecordInfo* saved = m_current_record;
-    m_current_record = nullptr;
-    m_current_return = m_types.void_();
-
+std::vector<nodes::ASTNode*> CppEmitter::init_nodes_of(const std::function<bool(const nodes::ASTNode*)>& keep) {
     std::vector<nodes::ASTNode*> ordered;
     ordered.reserve(m_script.size());
     auto from_header = [this](const nodes::ASTNode* n) {
@@ -4341,12 +4642,58 @@ void CppEmitter::emit_init(std::ostream& os) {
         const std::string path = source_path(FileId(n->file_id));
         return path.size() >= 5 && path.compare(path.size() - 5, 5, ".walh") == 0;
     };
+    auto wanted = [&](const nodes::ASTNode* n) { return !is_prebuilt_file(n->file_id) && (!keep || keep(n)); };
     for (nodes::ASTNode* n : m_script)
-        if ((n->kind == K::VariableDeclaration || n->kind == K::ArrayDeclaration) && from_header(n)) ordered.push_back(n);
+        if (wanted(n) && (n->kind == K::VariableDeclaration || n->kind == K::ArrayDeclaration) && from_header(n)) ordered.push_back(n);
     for (nodes::ASTNode* n : m_script)
-        if (!((n->kind == K::VariableDeclaration || n->kind == K::ArrayDeclaration) && from_header(n))) ordered.push_back(n);
+        if (wanted(n) && !((n->kind == K::VariableDeclaration || n->kind == K::ArrayDeclaration) && from_header(n))) ordered.push_back(n);
+    return ordered;
+}
 
-    for (nodes::ASTNode* n : ordered) {
+void CppEmitter::emit_init(std::ostream& os) {
+    os << "void walnut_init() {\n";
+    std::set<std::string> called;
+    for (FileId f : m_file_order) {
+        if (!is_prebuilt_file(f) && !has_own_init(f)) continue;
+        const std::string name = file_init_name(f);
+        if (called.insert(name).second) os << "    " << name << "();\n";
+    }
+    os << "    walnut_rt::run_registered_inits();\n";
+    emit_init_nodes(os, init_nodes_of([this](const nodes::ASTNode* n) { return !has_own_init(FileId(n->file_id)); }));
+    os << "}\n";
+    line_reset(os);
+    os << "\n";
+}
+
+void CppEmitter::emit_file_init(std::ostream& os, FileId file) {
+    const std::string name = file_init_name(file);
+    if (!claim_definition("init " + name)) return;
+    os << (header_shared(file) ? "WALNUT_SHARED_DEF " : "") << "void " << name << "() {\n";
+    os << "    static bool walnut_started = false;\n";
+    os << "    if (walnut_started) return;\n";
+    os << "    walnut_started = true;\n";
+    std::set<std::string> called{ name };
+
+    for (FileId before : m_file_order) {
+        if (before == file) break;
+        if (!is_prebuilt_file(before) && !has_own_init(before)) continue;
+        const std::string dep = file_init_name(before);
+        if (called.insert(dep).second) os << "    " << dep << "();\n";
+    }
+
+    emit_init_nodes(os, init_nodes_of([file](const nodes::ASTNode* n) { return n->file_id == file; }));
+    os << "}\n";
+    line_reset(os);
+    os << "static const bool walnut_registered_" << file_key_of(file) << " = walnut_rt::register_init(&" << name << ");\n\n";
+}
+
+void CppEmitter::emit_init_nodes(std::ostream& os, const std::vector<nodes::ASTNode*>& nodes) {
+    m_indent = 1;
+    RecordInfo* saved = m_current_record;
+    m_current_record = nullptr;
+    m_current_return = m_types.void_();
+
+    for (nodes::ASTNode* n : nodes) {
         if (n->kind == K::VariableDeclaration) {
             auto* v = static_cast<nodes::VariableDeclaration*>(n);
 
@@ -4363,6 +4710,7 @@ void CppEmitter::emit_init(std::ostream& os) {
             }
 
             if (!v->symbol || is_closure_global(v->symbol) || inline_variable(v) || pruned_global(v->symbol)) continue;
+            if (is_pinned_file(v->file_id) && !claim_definition("init-var " + global_var_name(v->symbol))) continue;
             Type* t = declared_type(v);
 
             if (t && t->is_reference()) {
@@ -4377,6 +4725,7 @@ void CppEmitter::emit_init(std::ostream& os) {
         } else if (n->kind == K::ArrayDeclaration) {
             auto* a = static_cast<nodes::ArrayDeclaration*>(n);
             if (!a->symbol) continue;
+            if (is_pinned_file(a->file_id) && !claim_definition("init-var " + global_var_name(a->symbol))) continue;
             Type* t = array_decl_type(a);
             const std::string ai = array_init(a, t);
             os << pad() << global_var_name(a->symbol) << ".init(" << (!ai.empty() && ai[0] == '{' ? cpp_type(t, a) + ai : ai) << ");\n";
@@ -4387,9 +4736,6 @@ void CppEmitter::emit_init(std::ostream& os) {
 
     m_current_record = saved;
     m_indent = 0;
-    os << "}\n";
-    line_reset(os);
-    os << "\n";
 }
 
 } // namespace codegen

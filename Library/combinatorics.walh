@@ -1,6 +1,7 @@
 import module.collections
 import module.math
 
+safe(compile) {
 namespace std {
     namespace errors {
         class combinatorics_error {
@@ -9,8 +10,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class combinatorics_error
     } end namespace errors
@@ -280,3 +281,4 @@ namespace std {
         } end function complement
     } end namespace combinatorics
 } end namespace std
+} end safe

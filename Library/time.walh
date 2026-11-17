@@ -1,5 +1,6 @@
 import module.collections
 
+safe(compile) {
 namespace std {
     namespace errors {
         class time_error {
@@ -8,8 +9,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class time_error
     } end namespace errors
@@ -23,10 +24,10 @@ namespace std {
             extern "C++" from "<walnut_time.hpp>" {
                 class Parsed as "walnut_rt::clock::Parsed" {
                 public:
-                    function ok() const -> bool as "walnut_rt::clock::parsed_ok";
-                    function error() const -> string as "walnut_rt::clock::parsed_error";
-                    function has_offset() const -> bool as "walnut_rt::clock::parsed_has_offset";
-                    function field(long int: which) const -> long int as "walnut_rt::clock::parsed_field";
+                    function ok(const self&) -> bool as "walnut_rt::clock::parsed_ok";
+                    function error(const self&) -> string as "walnut_rt::clock::parsed_error";
+                    function has_offset(const self&) -> bool as "walnut_rt::clock::parsed_has_offset";
+                    function field(const self&, long int: which) -> long int as "walnut_rt::clock::parsed_field";
                 } end class Parsed
 
                 class Native as "walnut_rt::clock::api" {
@@ -228,11 +229,11 @@ namespace std {
             long int: seconds = 0;
             long int: nanoseconds = 0;
 
-            function to_string() const -> string {
-                string: out = negative ? "-" : "";
-                out += detail::pad(hours, 2) + ":" + detail::pad(minutes, 2) + ":" + detail::pad(seconds, 2);
-                if (nanoseconds != 0) then {
-                    string: frac = detail::pad(nanoseconds, 9);
+            function to_string(const self&) -> string {
+                string: out = self.negative ? "-" : "";
+                out += detail::pad(self.hours, 2) + ":" + detail::pad(self.minutes, 2) + ":" + detail::pad(self.seconds, 2);
+                if (self.nanoseconds != 0) then {
+                    string: frac = detail::pad(self.nanoseconds, 9);
                     while (frac.size() > 0 && frac.substr(frac.size() - 1, 1) == "0") {
                         frac = frac.substr(0, frac.size() - 1);
                     }
@@ -261,93 +262,93 @@ namespace std {
                 return Duration(-9223372036854775807 - 1);
             } end function min
 
-            function total_nanoseconds() const -> long int {
-                return nanos;
+            function total_nanoseconds(const self&) -> long int {
+                return self.nanos;
             } end function total_nanoseconds
 
-            function total_microseconds() const -> long int {
-                return nanos / detail::ns_per_us;
+            function total_microseconds(const self&) -> long int {
+                return self.nanos / detail::ns_per_us;
             } end function total_microseconds
 
-            function total_milliseconds() const -> long int {
-                return nanos / detail::ns_per_ms;
+            function total_milliseconds(const self&) -> long int {
+                return self.nanos / detail::ns_per_ms;
             } end function total_milliseconds
 
-            function total_seconds() const -> long int {
-                return nanos / detail::ns_per_second;
+            function total_seconds(const self&) -> long int {
+                return self.nanos / detail::ns_per_second;
             } end function total_seconds
 
-            function total_minutes() const -> long int {
-                return nanos / detail::ns_per_minute;
+            function total_minutes(const self&) -> long int {
+                return self.nanos / detail::ns_per_minute;
             } end function total_minutes
 
-            function total_hours() const -> long int {
-                return nanos / detail::ns_per_hour;
+            function total_hours(const self&) -> long int {
+                return self.nanos / detail::ns_per_hour;
             } end function total_hours
 
-            function total_days() const -> long int {
-                return nanos / detail::ns_per_day;
+            function total_days(const self&) -> long int {
+                return self.nanos / detail::ns_per_day;
             } end function total_days
 
-            function total_weeks() const -> long int {
-                return nanos / (7 * detail::ns_per_day);
+            function total_weeks(const self&) -> long int {
+                return self.nanos / (7 * detail::ns_per_day);
             } end function total_weeks
 
-            function as_seconds() const -> float {
-                return static_cast<float>(nanos) / static_cast<float>(detail::ns_per_second);
+            function as_seconds(const self&) -> float {
+                return static_cast<float>(self.nanos) / static_cast<float>(detail::ns_per_second);
             } end function as_seconds
 
-            function as_milliseconds() const -> float {
-                return static_cast<float>(nanos) / static_cast<float>(detail::ns_per_ms);
+            function as_milliseconds(const self&) -> float {
+                return static_cast<float>(self.nanos) / static_cast<float>(detail::ns_per_ms);
             } end function as_milliseconds
 
-            function as_microseconds() const -> float {
-                return static_cast<float>(nanos) / static_cast<float>(detail::ns_per_us);
+            function as_microseconds(const self&) -> float {
+                return static_cast<float>(self.nanos) / static_cast<float>(detail::ns_per_us);
             } end function as_microseconds
 
-            function as_minutes() const -> float {
-                return static_cast<float>(nanos) / static_cast<float>(detail::ns_per_minute);
+            function as_minutes(const self&) -> float {
+                return static_cast<float>(self.nanos) / static_cast<float>(detail::ns_per_minute);
             } end function as_minutes
 
-            function as_hours() const -> float {
-                return static_cast<float>(nanos) / static_cast<float>(detail::ns_per_hour);
+            function as_hours(const self&) -> float {
+                return static_cast<float>(self.nanos) / static_cast<float>(detail::ns_per_hour);
             } end function as_hours
 
-            function as_days() const -> float {
-                return static_cast<float>(nanos) / static_cast<float>(detail::ns_per_day);
+            function as_days(const self&) -> float {
+                return static_cast<float>(self.nanos) / static_cast<float>(detail::ns_per_day);
             } end function as_days
 
-            function is_zero() const -> bool {
-                return nanos == 0;
+            function is_zero(const self&) -> bool {
+                return self.nanos == 0;
             } end function is_zero
 
-            function is_negative() const -> bool {
-                return nanos < 0;
+            function is_negative(const self&) -> bool {
+                return self.nanos < 0;
             } end function is_negative
 
-            function is_positive() const -> bool {
-                return nanos > 0;
+            function is_positive(const self&) -> bool {
+                return self.nanos > 0;
             } end function is_positive
 
-            function abs() const -> Duration {
-                return Duration(nanos < 0 ? -nanos : nanos);
+            function abs(const self&) -> Duration {
+                return Duration(self.nanos < 0 ? -self.nanos : self.nanos);
             } end function abs
 
-            function floor_to(const Duration&: unit) const -> Duration {
+            function floor_to(const self&, const Duration&: unit) -> Duration {
                 if (unit.nanos <= 0) then {
                     throw std::errors::time_error("floor_to() needs a positive unit");
                 }
-                return Duration(detail::floor_div(nanos, unit.nanos) * unit.nanos);
+                return Duration(detail::floor_div(self.nanos, unit.nanos) * unit.nanos);
             } end function floor_to
 
-            function ceil_to(const Duration&: unit) const -> Duration {
-                const Duration: floored = floor_to(unit);
-                return floored.nanos == nanos ? floored : Duration(floored.nanos + unit.nanos);
+            function ceil_to(const self&, const Duration&: unit) -> Duration {
+                const Duration: floored = self.floor_to(unit);
+                return floored.nanos == self.nanos ? floored : Duration(floored.nanos + unit.nanos);
             } end function ceil_to
 
-            function round_to(const Duration&: unit) const -> Duration {
-                const Duration: floored = floor_to(unit);
-                const long int: below = nanos - floored.nanos;
+            function round_to(const self&, const Duration&: unit) -> Duration {
+                const Duration: floored = self.floor_to(unit);
+                const long int: below = self.nanos - floored.nanos;
                 const long int: above = unit.nanos - below;
                 if (below < above) then {
                     return floored;
@@ -355,13 +356,13 @@ namespace std {
                 if (above < below) then {
                     return Duration(floored.nanos + unit.nanos);
                 }
-                return detail::floor_mod(detail::floor_div(nanos, unit.nanos), 2) == 0 ? floored : Duration(floored.nanos + unit.nanos);
+                return detail::floor_mod(detail::floor_div(self.nanos, unit.nanos), 2) == 0 ? floored : Duration(floored.nanos + unit.nanos);
             } end function round_to
 
-            function split() const -> HoursMinutesSeconds {
+            function split(const self&) -> HoursMinutesSeconds {
                 HoursMinutesSeconds: out;
-                out.negative = nanos < 0;
-                const long int: mag = nanos < 0 ? -nanos : nanos;
+                out.negative = self.nanos < 0;
+                const long int: mag = self.nanos < 0 ? -self.nanos : self.nanos;
                 out.hours = mag / detail::ns_per_hour;
                 out.minutes = (mag / detail::ns_per_minute) % 60;
                 out.seconds = (mag / detail::ns_per_second) % 60;
@@ -369,100 +370,100 @@ namespace std {
                 return out;
             } end function split
 
-            operator(+) function(const Duration&: o) const -> Duration {
-                return Duration(nanos + o.nanos);
+            operator(+) function(const self&, const Duration&: o) -> Duration {
+                return Duration(self.nanos + o.nanos);
             }
 
-            operator(-) function(const Duration&: o) const -> Duration {
-                return Duration(nanos - o.nanos);
+            operator(-) function(const self&, const Duration&: o) -> Duration {
+                return Duration(self.nanos - o.nanos);
             }
 
-            operator(-) function() const -> Duration {
-                return Duration(-nanos);
+            operator(-) function(const self&) -> Duration {
+                return Duration(-self.nanos);
             }
 
-            operator(*) function(long int: k) const -> Duration {
-                return Duration(nanos * k);
+            operator(*) function(const self&, long int: k) -> Duration {
+                return Duration(self.nanos * k);
             }
 
-            operator(*) function(float: k) const -> Duration {
-                return Duration(static_cast<long int>(static_cast<float>(nanos) * k));
+            operator(*) function(const self&, float: k) -> Duration {
+                return Duration(static_cast<long int>(static_cast<float>(self.nanos) * k));
             }
 
-            operator(/) function(long int: k) const -> Duration {
+            operator(/) function(const self&, long int: k) -> Duration {
                 if (k == 0) then {
                     throw std::errors::time_error("a Duration divided by 0");
                 }
-                return Duration(nanos / k);
+                return Duration(self.nanos / k);
             }
 
-            operator(/) function(const Duration&: o) const -> long int {
+            operator(/) function(const self&, const Duration&: o) -> long int {
                 if (o.nanos == 0) then {
                     throw std::errors::time_error("a Duration divided by a zero Duration");
                 }
-                return nanos / o.nanos;
+                return self.nanos / o.nanos;
             }
 
-            operator(%) function(const Duration&: o) const -> Duration {
+            operator(%) function(const self&, const Duration&: o) -> Duration {
                 if (o.nanos == 0) then {
                     throw std::errors::time_error("a Duration modulo a zero Duration");
                 }
-                return Duration(nanos % o.nanos);
+                return Duration(self.nanos % o.nanos);
             }
 
-            function ratio(const Duration&: o) const -> float {
-                return static_cast<float>(nanos) / static_cast<float>(o.nanos);
+            function ratio(const self&, const Duration&: o) -> float {
+                return static_cast<float>(self.nanos) / static_cast<float>(o.nanos);
             } end function ratio
 
-            operator(+=) function(const Duration&: o) -> Duration& {
-                nanos += o.nanos;
+            operator(+=) function(self&, const Duration&: o) -> Duration& {
+                self.nanos += o.nanos;
                 return *this;
             }
 
-            operator(-=) function(const Duration&: o) -> Duration& {
-                nanos -= o.nanos;
+            operator(-=) function(self&, const Duration&: o) -> Duration& {
+                self.nanos -= o.nanos;
                 return *this;
             }
 
-            operator(*=) function(long int: k) -> Duration& {
-                nanos *= k;
+            operator(*=) function(self&, long int: k) -> Duration& {
+                self.nanos *= k;
                 return *this;
             }
 
-            operator(/=) function(long int: k) -> Duration& {
-                nanos /= k;
+            operator(/=) function(self&, long int: k) -> Duration& {
+                self.nanos /= k;
                 return *this;
             }
 
-            operator(==) function(const Duration&: o) const -> bool {
-                return nanos == o.nanos;
+            operator(==) function(const self&, const Duration&: o) -> bool {
+                return self.nanos == o.nanos;
             }
 
-            operator(!=) function(const Duration&: o) const -> bool {
-                return nanos != o.nanos;
+            operator(!=) function(const self&, const Duration&: o) -> bool {
+                return self.nanos != o.nanos;
             }
 
-            operator(<) function(const Duration&: o) const -> bool {
-                return nanos < o.nanos;
+            operator(<) function(const self&, const Duration&: o) -> bool {
+                return self.nanos < o.nanos;
             }
 
-            operator(<=) function(const Duration&: o) const -> bool {
-                return nanos <= o.nanos;
+            operator(<=) function(const self&, const Duration&: o) -> bool {
+                return self.nanos <= o.nanos;
             }
 
-            operator(>) function(const Duration&: o) const -> bool {
-                return nanos > o.nanos;
+            operator(>) function(const self&, const Duration&: o) -> bool {
+                return self.nanos > o.nanos;
             }
 
-            operator(>=) function(const Duration&: o) const -> bool {
-                return nanos >= o.nanos;
+            operator(>=) function(const self&, const Duration&: o) -> bool {
+                return self.nanos >= o.nanos;
             }
 
-            function to_string() const -> string {
-                if (nanos == 0) then {
+            function to_string(const self&) -> string {
+                if (self.nanos == 0) then {
                     return "0s";
                 }
-                const HoursMinutesSeconds: s = split();
+                const HoursMinutesSeconds: s = self.split();
                 string: out = s.negative ? "-" : "";
                 const long int: days = s.hours / 24;
                 const long int: hours = s.hours % 24;
@@ -489,8 +490,8 @@ namespace std {
                 return out.substr(0, out.size() - 1);
             } end function to_string
 
-            function to_iso_string() const -> string {
-                const HoursMinutesSeconds: s = split();
+            function to_iso_string(const self&) -> string {
+                const HoursMinutesSeconds: s = self.split();
                 string: out = s.negative ? "-P" : "P";
                 const long int: days = s.hours / 24;
                 const long int: hours = s.hours % 24;
@@ -575,8 +576,8 @@ namespace std {
             long int: week = 1;
             Weekday: weekday = Weekday::monday;
 
-            function to_string() const -> string {
-                return std::core::to_string(year) + "-W" + detail::pad(week, 2) + "-" + std::core::to_string(weekday_number(weekday));
+            function to_string(const self&) -> string {
+                return std::core::to_string(self.year) + "-W" + detail::pad(self.week, 2) + "-" + std::core::to_string(weekday_number(self.weekday));
             } end function to_string
         } end struct IsoWeek
 
@@ -589,7 +590,7 @@ namespace std {
                 if (!is_valid_date(year, month, day)) then {
                     throw std::errors::time_error(static_cast<string>(`${year}-${month}-${day} isn't a real calendar date`));
                 }
-                days_since_epoch = detail::days_from_civil(year, month, day);
+                self.days_since_epoch = detail::days_from_civil(year, month, day);
             }
 
             constructor(long int: year, Month: month, long int: day) {
@@ -597,7 +598,7 @@ namespace std {
                 if (!is_valid_date(year, m, day)) then {
                     throw std::errors::time_error(static_cast<string>(`${year}-${m}-${day} isn't a real calendar date`));
                 }
-                days_since_epoch = detail::days_from_civil(year, m, day);
+                self.days_since_epoch = detail::days_from_civil(year, m, day);
             }
 
             static function from_days(long int: days) -> Date {
@@ -660,178 +661,178 @@ namespace std {
                 return Date(p.field(0), p.field(1), p.field(2));
             } end function parse
 
-            function days() const -> long int {
-                return days_since_epoch;
+            function days(const self&) -> long int {
+                return self.days_since_epoch;
             } end function days
 
-            function year() const -> long int {
-                return detail::year_from_days(days_since_epoch);
+            function year(const self&) -> long int {
+                return detail::year_from_days(self.days_since_epoch);
             } end function year
 
-            function month() const -> long int {
-                return detail::month_from_days(days_since_epoch);
+            function month(const self&) -> long int {
+                return detail::month_from_days(self.days_since_epoch);
             } end function month
 
-            function month_enum() const -> Month {
-                return month_of(month());
+            function month_enum(const self&) -> Month {
+                return month_of(self.month());
             } end function month_enum
 
-            function day() const -> long int {
-                return detail::day_from_days(days_since_epoch);
+            function day(const self&) -> long int {
+                return detail::day_from_days(self.days_since_epoch);
             } end function day
 
-            function weekday() const -> Weekday {
-                return detail::weekday_from_days(days_since_epoch);
+            function weekday(const self&) -> Weekday {
+                return detail::weekday_from_days(self.days_since_epoch);
             } end function weekday
 
-            function day_of_year() const -> long int {
-                return days_since_epoch - detail::days_from_civil(year(), 1, 1) + 1;
+            function day_of_year(const self&) -> long int {
+                return self.days_since_epoch - detail::days_from_civil(self.year(), 1, 1) + 1;
             } end function day_of_year
 
-            function quarter() const -> long int {
-                return (month() - 1) / 3 + 1;
+            function quarter(const self&) -> long int {
+                return (self.month() - 1) / 3 + 1;
             } end function quarter
 
-            function iso_week() const -> IsoWeek {
-                const long int: thursday = days_since_epoch + 3 - static_cast<long int>(weekday());
+            function iso_week(const self&) -> IsoWeek {
+                const long int: thursday = self.days_since_epoch + 3 - static_cast<long int>(self.weekday());
                 const long int: y = detail::year_from_days(thursday);
                 IsoWeek: out;
                 out.year = y;
                 out.week = (thursday - detail::days_from_civil(y, 1, 1)) / 7 + 1;
-                out.weekday = weekday();
+                out.weekday = self.weekday();
                 return out;
             } end function iso_week
 
-            function is_leap_year() const -> bool {
-                return std::time::is_leap_year(year());
+            function is_leap_year(const self&) -> bool {
+                return std::time::is_leap_year(self.year());
             } end function is_leap_year
 
-            function days_in_month() const -> long int {
-                return std::time::days_in_month(year(), month());
+            function days_in_month(const self&) -> long int {
+                return std::time::days_in_month(self.year(), self.month());
             } end function days_in_month
 
-            function days_in_year() const -> long int {
-                return std::time::days_in_year(year());
+            function days_in_year(const self&) -> long int {
+                return std::time::days_in_year(self.year());
             } end function days_in_year
 
-            function is_weekend() const -> bool {
-                return std::time::is_weekend(weekday());
+            function is_weekend(const self&) -> bool {
+                return std::time::is_weekend(self.weekday());
             } end function is_weekend
 
-            function first_of_month() const -> Date {
-                return Date(year(), month(), 1);
+            function first_of_month(const self&) -> Date {
+                return Date(self.year(), self.month(), 1);
             } end function first_of_month
 
-            function last_of_month() const -> Date {
-                return Date(year(), month(), days_in_month());
+            function last_of_month(const self&) -> Date {
+                return Date(self.year(), self.month(), self.days_in_month());
             } end function last_of_month
 
-            function first_of_year() const -> Date {
-                return Date(year(), 1, 1);
+            function first_of_year(const self&) -> Date {
+                return Date(self.year(), 1, 1);
             } end function first_of_year
 
-            function last_of_year() const -> Date {
-                return Date(year(), 12, 31);
+            function last_of_year(const self&) -> Date {
+                return Date(self.year(), 12, 31);
             } end function last_of_year
 
-            function add_days(long int: count) const -> Date {
-                return from_days(days_since_epoch + count);
+            function add_days(const self&, long int: count) -> Date {
+                return from_days(self.days_since_epoch + count);
             } end function add_days
 
-            function add_weeks(long int: count) const -> Date {
-                return from_days(days_since_epoch + count * 7);
+            function add_weeks(const self&, long int: count) -> Date {
+                return from_days(self.days_since_epoch + count * 7);
             } end function add_weeks
 
-            function add_months(long int: count) const -> Date {
-                const long int: total = year() * 12 + (month() - 1) + count;
+            function add_months(const self&, long int: count) -> Date {
+                const long int: total = self.year() * 12 + (self.month() - 1) + count;
                 const long int: y = detail::floor_div(total, 12);
                 const long int: m = detail::floor_mod(total, 12) + 1;
                 const long int: last = std::time::days_in_month(y, m);
-                return Date(y, m, day() < last ? day() : last);
+                return Date(y, m, self.day() < last ? self.day() : last);
             } end function add_months
 
-            function add_years(long int: count) const -> Date {
-                return add_months(count * 12);
+            function add_years(const self&, long int: count) -> Date {
+                return self.add_months(count * 12);
             } end function add_years
 
-            function next(Weekday: target) const -> Date {
-                const long int: ahead = detail::floor_mod(static_cast<long int>(target) - static_cast<long int>(weekday()), 7);
-                return add_days(ahead == 0 ? 7 : ahead);
+            function next(const self&, Weekday: target) -> Date {
+                const long int: ahead = detail::floor_mod(static_cast<long int>(target) - static_cast<long int>(self.weekday()), 7);
+                return self.add_days(ahead == 0 ? 7 : ahead);
             } end function next
 
-            function previous(Weekday: target) const -> Date {
-                const long int: back = detail::floor_mod(static_cast<long int>(weekday()) - static_cast<long int>(target), 7);
-                return add_days(back == 0 ? -7 : -back);
+            function previous(const self&, Weekday: target) -> Date {
+                const long int: back = detail::floor_mod(static_cast<long int>(self.weekday()) - static_cast<long int>(target), 7);
+                return self.add_days(back == 0 ? -7 : -back);
             } end function previous
 
-            function days_until(const Date&: other) const -> long int {
-                return other.days_since_epoch - days_since_epoch;
+            function days_until(const self&, const Date&: other) -> long int {
+                return other.days_since_epoch - self.days_since_epoch;
             } end function days_until
 
-            function years_until(const Date&: other) const -> long int {
-                long int: years = other.year() - year();
-                if (years > 0 && (other.month() < month() || (other.month() == month() && other.day() < day()))) then {
+            function years_until(const self&, const Date&: other) -> long int {
+                long int: years = other.year() - self.year();
+                if (years > 0 && (other.month() < self.month() || (other.month() == self.month() && other.day() < self.day()))) then {
                     years--;
-                } else if (years < 0 && (other.month() > month() || (other.month() == month() && other.day() > day()))) then {
+                } else if (years < 0 && (other.month() > self.month() || (other.month() == self.month() && other.day() > self.day()))) then {
                     years++;
                 }
                 return years;
             } end function years_until
 
-            operator(+) function(const Duration&: d) const -> Date {
-                return add_days(d.total_days());
+            operator(+) function(const self&, const Duration&: d) -> Date {
+                return self.add_days(d.total_days());
             }
 
-            operator(-) function(const Duration&: d) const -> Date {
-                return add_days(-d.total_days());
+            operator(-) function(const self&, const Duration&: d) -> Date {
+                return self.add_days(-d.total_days());
             }
 
-            operator(-) function(const Date&: o) const -> Duration {
-                return std::time::days(days_since_epoch - o.days_since_epoch);
+            operator(-) function(const self&, const Date&: o) -> Duration {
+                return std::time::days(self.days_since_epoch - o.days_since_epoch);
             }
 
-            operator(++) function() -> Date& {
-                days_since_epoch++;
+            operator(++) function(self&) -> Date& {
+                self.days_since_epoch++;
                 return *this;
             }
 
-            operator(--) function() -> Date& {
-                days_since_epoch--;
+            operator(--) function(self&) -> Date& {
+                self.days_since_epoch--;
                 return *this;
             }
 
-            operator(==) function(const Date&: o) const -> bool {
-                return days_since_epoch == o.days_since_epoch;
+            operator(==) function(const self&, const Date&: o) -> bool {
+                return self.days_since_epoch == o.days_since_epoch;
             }
 
-            operator(!=) function(const Date&: o) const -> bool {
-                return days_since_epoch != o.days_since_epoch;
+            operator(!=) function(const self&, const Date&: o) -> bool {
+                return self.days_since_epoch != o.days_since_epoch;
             }
 
-            operator(<) function(const Date&: o) const -> bool {
-                return days_since_epoch < o.days_since_epoch;
+            operator(<) function(const self&, const Date&: o) -> bool {
+                return self.days_since_epoch < o.days_since_epoch;
             }
 
-            operator(<=) function(const Date&: o) const -> bool {
-                return days_since_epoch <= o.days_since_epoch;
+            operator(<=) function(const self&, const Date&: o) -> bool {
+                return self.days_since_epoch <= o.days_since_epoch;
             }
 
-            operator(>) function(const Date&: o) const -> bool {
-                return days_since_epoch > o.days_since_epoch;
+            operator(>) function(const self&, const Date&: o) -> bool {
+                return self.days_since_epoch > o.days_since_epoch;
             }
 
-            operator(>=) function(const Date&: o) const -> bool {
-                return days_since_epoch >= o.days_since_epoch;
+            operator(>=) function(const self&, const Date&: o) -> bool {
+                return self.days_since_epoch >= o.days_since_epoch;
             }
 
-            function format(const string&: pattern) const -> string {
-                return detail::Native::format(pattern, year(), month(), day(), 0, 0, 0, 0, 0, "UTC");
+            function format(const self&, const string&: pattern) -> string {
+                return detail::Native::format(pattern, self.year(), self.month(), self.day(), 0, 0, 0, 0, 0, "UTC");
             } end function format
 
-            function to_string() const -> string {
-                const long int: y = year();
+            function to_string(const self&) -> string {
+                const long int: y = self.year();
                 const string: ys = (y >= 0 && y <= 9999) ? detail::pad(y, 4) : std::core::to_string(y);
-                return ys + "-" + detail::pad(month(), 2) + "-" + detail::pad(day(), 2);
+                return ys + "-" + detail::pad(self.month(), 2) + "-" + detail::pad(self.day(), 2);
             } end function to_string
         } end struct Date
 
@@ -841,15 +842,15 @@ namespace std {
             constructor() { }
 
             constructor(long int: hour, long int: minute) {
-                nanos_since_midnight = detail::time_nanos(hour, minute, 0, 0);
+                self.nanos_since_midnight = detail::time_nanos(hour, minute, 0, 0);
             }
 
             constructor(long int: hour, long int: minute, long int: second) {
-                nanos_since_midnight = detail::time_nanos(hour, minute, second, 0);
+                self.nanos_since_midnight = detail::time_nanos(hour, minute, second, 0);
             }
 
             constructor(long int: hour, long int: minute, long int: second, long int: nanosecond) {
-                nanos_since_midnight = detail::time_nanos(hour, minute, second, nanosecond);
+                self.nanos_since_midnight = detail::time_nanos(hour, minute, second, nanosecond);
             }
 
             static function from_nanoseconds(long int: nanos) -> TimeOfDay {
@@ -874,93 +875,93 @@ namespace std {
                 return TimeOfDay(p.field(3), p.field(4), p.field(5), p.field(6));
             } end function parse
 
-            function hour() const -> long int {
-                return nanos_since_midnight / detail::ns_per_hour;
+            function hour(const self&) -> long int {
+                return self.nanos_since_midnight / detail::ns_per_hour;
             } end function hour
 
-            function minute() const -> long int {
-                return (nanos_since_midnight / detail::ns_per_minute) % 60;
+            function minute(const self&) -> long int {
+                return (self.nanos_since_midnight / detail::ns_per_minute) % 60;
             } end function minute
 
-            function second() const -> long int {
-                return (nanos_since_midnight / detail::ns_per_second) % 60;
+            function second(const self&) -> long int {
+                return (self.nanos_since_midnight / detail::ns_per_second) % 60;
             } end function second
 
-            function millisecond() const -> long int {
-                return (nanos_since_midnight / detail::ns_per_ms) % 1000;
+            function millisecond(const self&) -> long int {
+                return (self.nanos_since_midnight / detail::ns_per_ms) % 1000;
             } end function millisecond
 
-            function microsecond() const -> long int {
-                return (nanos_since_midnight / detail::ns_per_us) % 1000000;
+            function microsecond(const self&) -> long int {
+                return (self.nanos_since_midnight / detail::ns_per_us) % 1000000;
             } end function microsecond
 
-            function nanosecond() const -> long int {
-                return nanos_since_midnight % detail::ns_per_second;
+            function nanosecond(const self&) -> long int {
+                return self.nanos_since_midnight % detail::ns_per_second;
             } end function nanosecond
 
-            function hour12() const -> long int {
-                return make12(hour());
+            function hour12(const self&) -> long int {
+                return make12(self.hour());
             } end function hour12
 
-            function is_am() const -> bool {
-                return std::time::is_am(hour());
+            function is_am(const self&) -> bool {
+                return std::time::is_am(self.hour());
             } end function is_am
 
-            function is_pm() const -> bool {
-                return std::time::is_pm(hour());
+            function is_pm(const self&) -> bool {
+                return std::time::is_pm(self.hour());
             } end function is_pm
 
-            function since_midnight() const -> Duration {
-                return Duration(nanos_since_midnight);
+            function since_midnight(const self&) -> Duration {
+                return Duration(self.nanos_since_midnight);
             } end function since_midnight
 
-            function until_midnight() const -> Duration {
-                return Duration(detail::ns_per_day - nanos_since_midnight);
+            function until_midnight(const self&) -> Duration {
+                return Duration(detail::ns_per_day - self.nanos_since_midnight);
             } end function until_midnight
 
-            operator(+) function(const Duration&: d) const -> TimeOfDay {
-                return from_nanoseconds(nanos_since_midnight + d.nanos);
+            operator(+) function(const self&, const Duration&: d) -> TimeOfDay {
+                return from_nanoseconds(self.nanos_since_midnight + d.nanos);
             }
 
-            operator(-) function(const Duration&: d) const -> TimeOfDay {
-                return from_nanoseconds(nanos_since_midnight - d.nanos);
+            operator(-) function(const self&, const Duration&: d) -> TimeOfDay {
+                return from_nanoseconds(self.nanos_since_midnight - d.nanos);
             }
 
-            operator(-) function(const TimeOfDay&: o) const -> Duration {
-                return Duration(nanos_since_midnight - o.nanos_since_midnight);
+            operator(-) function(const self&, const TimeOfDay&: o) -> Duration {
+                return Duration(self.nanos_since_midnight - o.nanos_since_midnight);
             }
 
-            operator(==) function(const TimeOfDay&: o) const -> bool {
-                return nanos_since_midnight == o.nanos_since_midnight;
+            operator(==) function(const self&, const TimeOfDay&: o) -> bool {
+                return self.nanos_since_midnight == o.nanos_since_midnight;
             }
 
-            operator(!=) function(const TimeOfDay&: o) const -> bool {
-                return nanos_since_midnight != o.nanos_since_midnight;
+            operator(!=) function(const self&, const TimeOfDay&: o) -> bool {
+                return self.nanos_since_midnight != o.nanos_since_midnight;
             }
 
-            operator(<) function(const TimeOfDay&: o) const -> bool {
-                return nanos_since_midnight < o.nanos_since_midnight;
+            operator(<) function(const self&, const TimeOfDay&: o) -> bool {
+                return self.nanos_since_midnight < o.nanos_since_midnight;
             }
 
-            operator(<=) function(const TimeOfDay&: o) const -> bool {
-                return nanos_since_midnight <= o.nanos_since_midnight;
+            operator(<=) function(const self&, const TimeOfDay&: o) -> bool {
+                return self.nanos_since_midnight <= o.nanos_since_midnight;
             }
 
-            operator(>) function(const TimeOfDay&: o) const -> bool {
-                return nanos_since_midnight > o.nanos_since_midnight;
+            operator(>) function(const self&, const TimeOfDay&: o) -> bool {
+                return self.nanos_since_midnight > o.nanos_since_midnight;
             }
 
-            operator(>=) function(const TimeOfDay&: o) const -> bool {
-                return nanos_since_midnight >= o.nanos_since_midnight;
+            operator(>=) function(const self&, const TimeOfDay&: o) -> bool {
+                return self.nanos_since_midnight >= o.nanos_since_midnight;
             }
 
-            function format(const string&: pattern) const -> string {
-                return detail::Native::format(pattern, 1970, 1, 1, hour(), minute(), second(), nanosecond(), 0, "UTC");
+            function format(const self&, const string&: pattern) -> string {
+                return detail::Native::format(pattern, 1970, 1, 1, self.hour(), self.minute(), self.second(), self.nanosecond(), 0, "UTC");
             } end function format
 
-            function to_string() const -> string {
-                string: out = detail::pad(hour(), 2) + ":" + detail::pad(minute(), 2) + ":" + detail::pad(second(), 2);
-                const long int: ns = nanosecond();
+            function to_string(const self&) -> string {
+                string: out = detail::pad(self.hour(), 2) + ":" + detail::pad(self.minute(), 2) + ":" + detail::pad(self.second(), 2);
+                const long int: ns = self.nanosecond();
                 if (ns != 0) then {
                     string: frac = detail::pad(ns, 9);
                     while (frac.substr(frac.size() - 1, 1) == "0") {
@@ -981,22 +982,22 @@ namespace std {
             constructor(const Date&: date, const TimeOfDay&: time = TimeOfDay()) : day_count = date.days_since_epoch, nanos_of_day = time.nanos_since_midnight { }
 
             constructor(long int: year, long int: month, long int: day) {
-                day_count = Date(year, month, day).days_since_epoch;
+                self.day_count = Date(year, month, day).days_since_epoch;
             }
 
             constructor(long int: year, long int: month, long int: day, long int: hour, long int: minute) {
-                day_count = Date(year, month, day).days_since_epoch;
-                nanos_of_day = detail::time_nanos(hour, minute, 0, 0);
+                self.day_count = Date(year, month, day).days_since_epoch;
+                self.nanos_of_day = detail::time_nanos(hour, minute, 0, 0);
             }
 
             constructor(long int: year, long int: month, long int: day, long int: hour, long int: minute, long int: second) {
-                day_count = Date(year, month, day).days_since_epoch;
-                nanos_of_day = detail::time_nanos(hour, minute, second, 0);
+                self.day_count = Date(year, month, day).days_since_epoch;
+                self.nanos_of_day = detail::time_nanos(hour, minute, second, 0);
             }
 
             constructor(long int: year, long int: month, long int: day, long int: hour, long int: minute, long int: second, long int: nanosecond) {
-                day_count = Date(year, month, day).days_since_epoch;
-                nanos_of_day = detail::time_nanos(hour, minute, second, nanosecond);
+                self.day_count = Date(year, month, day).days_since_epoch;
+                self.nanos_of_day = detail::time_nanos(hour, minute, second, nanosecond);
             }
 
             static function from_unix_nanoseconds(long int: nanos) -> DateTime {
@@ -1057,175 +1058,175 @@ namespace std {
                 throw std::errors::time_error(static_cast<string>(`can't read '${input}' as an ISO 8601 date and time`));
             } end function from_iso_string
 
-            function date() const -> Date {
-                return Date::from_days(day_count);
+            function date(const self&) -> Date {
+                return Date::from_days(self.day_count);
             } end function date
 
-            function time() const -> TimeOfDay {
-                return TimeOfDay::from_nanoseconds(nanos_of_day);
+            function time(const self&) -> TimeOfDay {
+                return TimeOfDay::from_nanoseconds(self.nanos_of_day);
             } end function time
 
-            function year() const -> long int {
-                return date().year();
+            function year(const self&) -> long int {
+                return self.date().year();
             } end function year
 
-            function month() const -> long int {
-                return date().month();
+            function month(const self&) -> long int {
+                return self.date().month();
             } end function month
 
-            function day() const -> long int {
-                return date().day();
+            function day(const self&) -> long int {
+                return self.date().day();
             } end function day
 
-            function weekday() const -> Weekday {
-                return date().weekday();
+            function weekday(const self&) -> Weekday {
+                return self.date().weekday();
             } end function weekday
 
-            function hour() const -> long int {
-                return time().hour();
+            function hour(const self&) -> long int {
+                return self.time().hour();
             } end function hour
 
-            function minute() const -> long int {
-                return time().minute();
+            function minute(const self&) -> long int {
+                return self.time().minute();
             } end function minute
 
-            function second() const -> long int {
-                return time().second();
+            function second(const self&) -> long int {
+                return self.time().second();
             } end function second
 
-            function millisecond() const -> long int {
-                return time().millisecond();
+            function millisecond(const self&) -> long int {
+                return self.time().millisecond();
             } end function millisecond
 
-            function nanosecond() const -> long int {
-                return time().nanosecond();
+            function nanosecond(const self&) -> long int {
+                return self.time().nanosecond();
             } end function nanosecond
 
-            function day_of_year() const -> long int {
-                return date().day_of_year();
+            function day_of_year(const self&) -> long int {
+                return self.date().day_of_year();
             } end function day_of_year
 
-            function unix_seconds() const -> long int {
-                return day_count * 86400 + detail::floor_div(nanos_of_day, detail::ns_per_second);
+            function unix_seconds(const self&) -> long int {
+                return self.day_count * 86400 + detail::floor_div(self.nanos_of_day, detail::ns_per_second);
             } end function unix_seconds
 
-            function unix_milliseconds() const -> long int {
-                return day_count * 86400000 + detail::floor_div(nanos_of_day, detail::ns_per_ms);
+            function unix_milliseconds(const self&) -> long int {
+                return self.day_count * 86400000 + detail::floor_div(self.nanos_of_day, detail::ns_per_ms);
             } end function unix_milliseconds
 
-            function unix_nanoseconds() const -> long int {
-                return day_count * detail::ns_per_day + nanos_of_day;
+            function unix_nanoseconds(const self&) -> long int {
+                return self.day_count * detail::ns_per_day + self.nanos_of_day;
             } end function unix_nanoseconds
 
-            function since_epoch() const -> Duration {
-                return Duration(unix_nanoseconds());
+            function since_epoch(const self&) -> Duration {
+                return Duration(self.unix_nanoseconds());
             } end function since_epoch
 
-            function add_months(long int: count) const -> DateTime {
-                return DateTime(date().add_months(count), time());
+            function add_months(const self&, long int: count) -> DateTime {
+                return DateTime(self.date().add_months(count), self.time());
             } end function add_months
 
-            function add_years(long int: count) const -> DateTime {
-                return DateTime(date().add_years(count), time());
+            function add_years(const self&, long int: count) -> DateTime {
+                return DateTime(self.date().add_years(count), self.time());
             } end function add_years
 
-            function start_of_day() const -> DateTime {
-                return DateTime(date());
+            function start_of_day(const self&) -> DateTime {
+                return DateTime(self.date());
             } end function start_of_day
 
-            function to_local() const -> DateTime {
-                return *this + seconds(detail::Native::local_offset(unix_seconds()));
+            function to_local(const self&) -> DateTime {
+                return *this + seconds(detail::Native::local_offset(self.unix_seconds()));
             } end function to_local
 
-            function to_utc_from_local() const -> DateTime {
-                return *this - seconds(detail::Native::local_offset(unix_seconds()));
+            function to_utc_from_local(const self&) -> DateTime {
+                return *this - seconds(detail::Native::local_offset(self.unix_seconds()));
             } end function to_utc_from_local
 
-            function tai_offset() const -> Duration {
-                return seconds(detail::Native::tai_minus_utc(unix_seconds()));
+            function tai_offset(const self&) -> Duration {
+                return seconds(detail::Native::tai_minus_utc(self.unix_seconds()));
             } end function tai_offset
 
-            function gps_offset() const -> Duration {
-                return seconds(detail::Native::gps_minus_utc(unix_seconds()));
+            function gps_offset(const self&) -> Duration {
+                return seconds(detail::Native::gps_minus_utc(self.unix_seconds()));
             } end function gps_offset
 
-            function to_tai() const -> DateTime {
-                return *this + tai_offset();
+            function to_tai(const self&) -> DateTime {
+                return *this + self.tai_offset();
             } end function to_tai
 
-            function to_gps() const -> DateTime {
-                return *this + gps_offset();
+            function to_gps(const self&) -> DateTime {
+                return *this + self.gps_offset();
             } end function to_gps
 
-            function has_leap_second() const -> bool {
-                return detail::Native::leap_second_day(unix_seconds());
+            function has_leap_second(const self&) -> bool {
+                return detail::Native::leap_second_day(self.unix_seconds());
             } end function has_leap_second
 
-            operator(+) function(const Duration&: d) const -> DateTime {
-                return from_unix_nanoseconds(unix_nanoseconds() + d.nanos);
+            operator(+) function(const self&, const Duration&: d) -> DateTime {
+                return from_unix_nanoseconds(self.unix_nanoseconds() + d.nanos);
             }
 
-            operator(-) function(const Duration&: d) const -> DateTime {
-                return from_unix_nanoseconds(unix_nanoseconds() - d.nanos);
+            operator(-) function(const self&, const Duration&: d) -> DateTime {
+                return from_unix_nanoseconds(self.unix_nanoseconds() - d.nanos);
             }
 
-            operator(-) function(const DateTime&: o) const -> Duration {
-                return Duration((day_count - o.day_count) * detail::ns_per_day + (nanos_of_day - o.nanos_of_day));
+            operator(-) function(const self&, const DateTime&: o) -> Duration {
+                return Duration((self.day_count - o.day_count) * detail::ns_per_day + (self.nanos_of_day - o.nanos_of_day));
             }
 
-            operator(+=) function(const Duration&: d) -> DateTime& {
+            operator(+=) function(self&, const Duration&: d) -> DateTime& {
                 *this = *this + d;
                 return *this;
             }
 
-            operator(-=) function(const Duration&: d) -> DateTime& {
+            operator(-=) function(self&, const Duration&: d) -> DateTime& {
                 *this = *this - d;
                 return *this;
             }
 
-            operator(==) function(const DateTime&: o) const -> bool {
-                return day_count == o.day_count && nanos_of_day == o.nanos_of_day;
+            operator(==) function(const self&, const DateTime&: o) -> bool {
+                return self.day_count == o.day_count && self.nanos_of_day == o.nanos_of_day;
             }
 
-            operator(!=) function(const DateTime&: o) const -> bool {
+            operator(!=) function(const self&, const DateTime&: o) -> bool {
                 return !(*this == o);
             }
 
-            operator(<) function(const DateTime&: o) const -> bool {
-                return day_count < o.day_count || (day_count == o.day_count && nanos_of_day < o.nanos_of_day);
+            operator(<) function(const self&, const DateTime&: o) -> bool {
+                return self.day_count < o.day_count || (self.day_count == o.day_count && self.nanos_of_day < o.nanos_of_day);
             }
 
-            operator(<=) function(const DateTime&: o) const -> bool {
+            operator(<=) function(const self&, const DateTime&: o) -> bool {
                 return !(o < *this);
             }
 
-            operator(>) function(const DateTime&: o) const -> bool {
+            operator(>) function(const self&, const DateTime&: o) -> bool {
                 return o < *this;
             }
 
-            operator(>=) function(const DateTime&: o) const -> bool {
+            operator(>=) function(const self&, const DateTime&: o) -> bool {
                 return !(*this < o);
             }
 
-            function format(const string&: pattern, long int: offset_seconds = 0, const string&: zone = "UTC") const -> string {
-                const Date: d = date();
-                const TimeOfDay: t = time();
+            function format(const self&, const string&: pattern, long int: offset_seconds = 0, const string&: zone = "UTC") -> string {
+                const Date: d = self.date();
+                const TimeOfDay: t = self.time();
                 return detail::Native::format(pattern, d.year(), d.month(), d.day(), t.hour(), t.minute(), t.second(), t.nanosecond(), offset_seconds, zone);
             } end function format
 
-            function to_iso_string() const -> string {
-                const long int: ms = time().millisecond();
-                if (time().nanosecond() == 0) then {
-                    return format("%Y-%m-%dT%H:%M:%SZ");
+            function to_iso_string(const self&) -> string {
+                const long int: ms = self.time().millisecond();
+                if (self.time().nanosecond() == 0) then {
+                    return self.format("%Y-%m-%dT%H:%M:%SZ");
                 }
-                if (time().nanosecond() == ms * detail::ns_per_ms) then {
-                    return format("%Y-%m-%dT%H:%M:%S.%LZ");
+                if (self.time().nanosecond() == ms * detail::ns_per_ms) then {
+                    return self.format("%Y-%m-%dT%H:%M:%S.%LZ");
                 }
-                return format("%Y-%m-%dT%H:%M:%S.%NZ");
+                return self.format("%Y-%m-%dT%H:%M:%S.%NZ");
             } end function to_iso_string
 
-            function to_string() const -> string {
-                return date().to_string() + " " + time().to_string();
+            function to_string(const self&) -> string {
+                return self.date().to_string() + " " + self.time().to_string();
             } end function to_string
         } end struct DateTime
 
@@ -1248,41 +1249,41 @@ namespace std {
                 return ZonedDateTime(local_time - seconds(offset), offset, zone_name);
             } end function from_local
 
-            function local() const -> DateTime {
-                return utc + seconds(offset_seconds);
+            function local(const self&) -> DateTime {
+                return self.utc + seconds(self.offset_seconds);
             } end function local
 
-            function offset() const -> Duration {
-                return seconds(offset_seconds);
+            function offset(const self&) -> Duration {
+                return seconds(self.offset_seconds);
             } end function offset
 
-            function with_offset(long int: offset, const string&: zone_name = "") const -> ZonedDateTime {
-                return ZonedDateTime(utc, offset, zone_name);
+            function with_offset(const self&, long int: offset, const string&: zone_name = "") -> ZonedDateTime {
+                return ZonedDateTime(self.utc, offset, zone_name);
             } end function with_offset
 
-            function offset_string() const -> string {
-                const long int: mag = offset_seconds < 0 ? -offset_seconds : offset_seconds;
-                return (offset_seconds < 0 ? "-" : "+") + detail::pad(mag / 3600, 2) + ":" + detail::pad((mag / 60) % 60, 2);
+            function offset_string(const self&) -> string {
+                const long int: mag = self.offset_seconds < 0 ? -self.offset_seconds : self.offset_seconds;
+                return (self.offset_seconds < 0 ? "-" : "+") + detail::pad(mag / 3600, 2) + ":" + detail::pad((mag / 60) % 60, 2);
             } end function offset_string
 
-            function format(const string&: pattern) const -> string {
-                return local().format(pattern, offset_seconds, zone);
+            function format(const self&, const string&: pattern) -> string {
+                return self.local().format(pattern, self.offset_seconds, self.zone);
             } end function format
 
-            function to_iso_string() const -> string {
-                return local().format("%Y-%m-%dT%H:%M:%S") + offset_string();
+            function to_iso_string(const self&) -> string {
+                return self.local().format("%Y-%m-%dT%H:%M:%S") + self.offset_string();
             } end function to_iso_string
 
-            function to_string() const -> string {
-                return local().to_string() + " " + offset_string() + (zone == "" ? "" : " " + zone);
+            function to_string(const self&) -> string {
+                return self.local().to_string() + " " + self.offset_string() + (self.zone == "" ? "" : " " + self.zone);
             } end function to_string
 
-            operator(==) function(const ZonedDateTime&: o) const -> bool {
-                return utc == o.utc;
+            operator(==) function(const self&, const ZonedDateTime&: o) -> bool {
+                return self.utc == o.utc;
             }
 
-            operator(<) function(const ZonedDateTime&: o) const -> bool {
-                return utc < o.utc;
+            operator(<) function(const self&, const ZonedDateTime&: o) -> bool {
+                return self.utc < o.utc;
             }
         } end struct ZonedDateTime
 
@@ -1303,48 +1304,48 @@ namespace std {
                 return out;
             } end function now
 
-            function elapsed() const -> Duration {
-                return Duration(detail::Native::steady_nanos() - ticks);
+            function elapsed(const self&) -> Duration {
+                return Duration(detail::Native::steady_nanos() - self.ticks);
             } end function elapsed
 
-            function since(const Instant&: earlier) const -> Duration {
-                return Duration(ticks - earlier.ticks);
+            function since(const self&, const Instant&: earlier) -> Duration {
+                return Duration(self.ticks - earlier.ticks);
             } end function since
 
-            operator(+) function(const Duration&: d) const -> Instant {
+            operator(+) function(const self&, const Duration&: d) -> Instant {
                 Instant: out;
-                out.ticks = ticks + d.nanos;
+                out.ticks = self.ticks + d.nanos;
                 return out;
             }
 
-            operator(-) function(const Duration&: d) const -> Instant {
+            operator(-) function(const self&, const Duration&: d) -> Instant {
                 Instant: out;
-                out.ticks = ticks - d.nanos;
+                out.ticks = self.ticks - d.nanos;
                 return out;
             }
 
-            operator(-) function(const Instant&: o) const -> Duration {
-                return Duration(ticks - o.ticks);
+            operator(-) function(const self&, const Instant&: o) -> Duration {
+                return Duration(self.ticks - o.ticks);
             }
 
-            operator(==) function(const Instant&: o) const -> bool {
-                return ticks == o.ticks;
+            operator(==) function(const self&, const Instant&: o) -> bool {
+                return self.ticks == o.ticks;
             }
 
-            operator(<) function(const Instant&: o) const -> bool {
-                return ticks < o.ticks;
+            operator(<) function(const self&, const Instant&: o) -> bool {
+                return self.ticks < o.ticks;
             }
 
-            operator(<=) function(const Instant&: o) const -> bool {
-                return ticks <= o.ticks;
+            operator(<=) function(const self&, const Instant&: o) -> bool {
+                return self.ticks <= o.ticks;
             }
 
-            operator(>) function(const Instant&: o) const -> bool {
-                return ticks > o.ticks;
+            operator(>) function(const self&, const Instant&: o) -> bool {
+                return self.ticks > o.ticks;
             }
 
-            operator(>=) function(const Instant&: o) const -> bool {
-                return ticks >= o.ticks;
+            operator(>=) function(const self&, const Instant&: o) -> bool {
+                return self.ticks >= o.ticks;
             }
         } end struct Instant
 
@@ -1391,57 +1392,57 @@ namespace std {
                 return out;
             } end function started
 
-            function start() -> void {
-                if (!running) then {
-                    started_at = detail::Native::steady_nanos();
-                    running = true;
+            function start(self&) -> void {
+                if (!self.running) then {
+                    self.started_at = detail::Native::steady_nanos();
+                    self.running = true;
                 }
             } end function start
 
-            function stop() -> Duration {
-                if (running) then {
-                    banked += detail::Native::steady_nanos() - started_at;
-                    running = false;
+            function stop(self&) -> Duration {
+                if (self.running) then {
+                    self.banked += detail::Native::steady_nanos() - self.started_at;
+                    self.running = false;
                 }
-                return elapsed();
+                return self.elapsed();
             } end function stop
 
-            function reset() -> void {
-                banked = 0;
-                running = false;
-                lap_times.clear();
-                last_lap = 0;
+            function reset(self&) -> void {
+                self.banked = 0;
+                self.running = false;
+                self.lap_times.clear();
+                self.last_lap = 0;
             } end function reset
 
-            function restart() -> Duration {
-                const Duration: total = elapsed();
-                reset();
-                start();
+            function restart(self&) -> Duration {
+                const Duration: total = self.elapsed();
+                self.reset();
+                self.start();
                 return total;
             } end function restart
 
-            function is_running() const -> bool {
-                return running;
+            function is_running(const self&) -> bool {
+                return self.running;
             } end function is_running
 
-            function elapsed() const -> Duration {
-                return Duration(banked + (running ? detail::Native::steady_nanos() - started_at : 0));
+            function elapsed(const self&) -> Duration {
+                return Duration(self.banked + (self.running ? detail::Native::steady_nanos() - self.started_at : 0));
             } end function elapsed
 
-            function lap() -> Duration {
-                const long int: now = elapsed().nanos;
-                const Duration: piece = Duration(now - last_lap);
-                last_lap = now;
-                lap_times.push_back(piece);
+            function lap(self&) -> Duration {
+                const long int: now = self.elapsed().nanos;
+                const Duration: piece = Duration(now - self.last_lap);
+                self.last_lap = now;
+                self.lap_times.push_back(piece);
                 return piece;
             } end function lap
 
-            function laps() const -> const std::collections::Vector<Duration>& {
-                return lap_times;
+            function laps(const self&) -> const std::collections::Vector<Duration>& {
+                return self.lap_times;
             } end function laps
 
-            function to_string() const -> string {
-                return elapsed().to_string();
+            function to_string(const self&) -> string {
+                return self.elapsed().to_string();
             } end function to_string
         } end class Stopwatch
 
@@ -1456,62 +1457,62 @@ namespace std {
 
             constructor(const Duration&: total) : length = total { }
 
-            function start() -> void {
-                if (!running) then {
-                    started_at = detail::Native::steady_nanos();
-                    running = true;
+            function start(self&) -> void {
+                if (!self.running) then {
+                    self.started_at = detail::Native::steady_nanos();
+                    self.running = true;
                 }
             } end function start
 
-            function pause() -> void {
-                if (running) then {
-                    banked += detail::Native::steady_nanos() - started_at;
-                    running = false;
+            function pause(self&) -> void {
+                if (self.running) then {
+                    self.banked += detail::Native::steady_nanos() - self.started_at;
+                    self.running = false;
                 }
             } end function pause
 
-            function reset() -> void {
-                banked = 0;
-                running = false;
+            function reset(self&) -> void {
+                self.banked = 0;
+                self.running = false;
             } end function reset
 
-            function reset(const Duration&: total) -> void {
-                length = total;
-                reset();
+            function reset(self&, const Duration&: total) -> void {
+                self.length = total;
+                self.reset();
             } end function reset
 
-            function is_running() const -> bool {
-                return running;
+            function is_running(const self&) -> bool {
+                return self.running;
             } end function is_running
 
-            function elapsed() const -> Duration {
-                return Duration(banked + (running ? detail::Native::steady_nanos() - started_at : 0));
+            function elapsed(const self&) -> Duration {
+                return Duration(self.banked + (self.running ? detail::Native::steady_nanos() - self.started_at : 0));
             } end function elapsed
 
-            function remaining() const -> Duration {
-                const Duration: left = length - elapsed();
+            function remaining(const self&) -> Duration {
+                const Duration: left = self.length - self.elapsed();
                 return left.is_negative() ? Duration::zero() : left;
             } end function remaining
 
-            function expired() const -> bool {
-                return remaining().is_zero();
+            function expired(const self&) -> bool {
+                return self.remaining().is_zero();
             } end function expired
 
-            function progress() const -> float {
-                if (length.nanos <= 0) then {
+            function progress(const self&) -> float {
+                if (self.length.nanos <= 0) then {
                     return 1.0;
                 }
-                const float: p = elapsed().ratio(length);
+                const float: p = self.elapsed().ratio(self.length);
                 return p > 1.0 ? 1.0 : p;
             } end function progress
 
-            function duration() const -> Duration {
-                return length;
+            function duration(const self&) -> Duration {
+                return self.length;
             } end function duration
 
-            function wait_until_done() -> void {
-                start();
-                const Duration: left = remaining();
+            function wait_until_done(self&) -> void {
+                self.start();
+                const Duration: left = self.remaining();
                 if (left.is_positive()) then {
                     sleep(left);
                 }
@@ -1528,37 +1529,37 @@ namespace std {
                 if (every.nanos <= 0) then {
                     throw std::errors::time_error("a RepeatingTimer needs a positive period");
                 }
-                next_tick = detail::Native::steady_nanos() + every.nanos;
+                self.next_tick = detail::Native::steady_nanos() + every.nanos;
             }
 
-            function ready() -> bool {
+            function ready(self&) -> bool {
                 const long int: now = detail::Native::steady_nanos();
-                if (now < next_tick) then {
+                if (now < self.next_tick) then {
                     return false;
                 }
-                count++;
-                next_tick += period.nanos;
-                if (next_tick <= now) then {
-                    const long int: behind = (now - next_tick) / period.nanos + 1;
-                    next_tick += behind * period.nanos;
+                self.count++;
+                self.next_tick += self.period.nanos;
+                if (self.next_tick <= now) then {
+                    const long int: behind = (now - self.next_tick) / self.period.nanos + 1;
+                    self.next_tick += behind * self.period.nanos;
                 }
                 return true;
             } end function ready
 
-            function wait_for_next() -> void {
-                const long int: left = next_tick - detail::Native::steady_nanos();
+            function wait_for_next(self&) -> void {
+                const long int: left = self.next_tick - detail::Native::steady_nanos();
                 if (left > 0) then {
                     detail::Native::sleep_nanos(left);
                 }
-                ready();
+                self.ready();
             } end function wait_for_next
 
-            function ticks() const -> long int {
-                return count;
+            function ticks(const self&) -> long int {
+                return self.count;
             } end function ticks
 
-            function until_next() const -> Duration {
-                const long int: left = next_tick - detail::Native::steady_nanos();
+            function until_next(const self&) -> Duration {
+                const long int: left = self.next_tick - detail::Native::steady_nanos();
                 return Duration(left > 0 ? left : 0);
             } end function until_next
         } end class RepeatingTimer
@@ -1572,46 +1573,46 @@ namespace std {
 
         public:
             constructor() {
-                last = detail::Native::steady_nanos();
-                first = last;
+                self.last = detail::Native::steady_nanos();
+                self.first = self.last;
             }
 
-            function tick() -> Duration {
+            function tick(self&) -> Duration {
                 const long int: now = detail::Native::steady_nanos();
-                last_delta = Duration(now - last);
-                last = now;
-                frame_count++;
-                const float: dt = last_delta.as_seconds();
-                smoothed = frame_count == 1 ? dt : smoothed * 0.9 + dt * 0.1;
-                return last_delta;
+                self.last_delta = Duration(now - self.last);
+                self.last = now;
+                self.frame_count++;
+                const float: dt = self.last_delta.as_seconds();
+                self.smoothed = self.frame_count == 1 ? dt : self.smoothed * 0.9 + dt * 0.1;
+                return self.last_delta;
             } end function tick
 
-            function delta() const -> Duration {
-                return last_delta;
+            function delta(const self&) -> Duration {
+                return self.last_delta;
             } end function delta
 
-            function delta_seconds() const -> float {
-                return last_delta.as_seconds();
+            function delta_seconds(const self&) -> float {
+                return self.last_delta.as_seconds();
             } end function delta_seconds
 
-            function frames() const -> long int {
-                return frame_count;
+            function frames(const self&) -> long int {
+                return self.frame_count;
             } end function frames
 
-            function fps() const -> float {
-                return smoothed > 0.0 ? 1.0 / smoothed : 0.0;
+            function fps(const self&) -> float {
+                return self.smoothed > 0.0 ? 1.0 / self.smoothed : 0.0;
             } end function fps
 
-            function total() const -> Duration {
-                return Duration(last - first);
+            function total(const self&) -> Duration {
+                return Duration(self.last - self.first);
             } end function total
 
-            function limit(float: target_fps) -> void {
+            function limit(self&, float: target_fps) -> void {
                 if (target_fps <= 0.0) then {
                     return;
                 }
                 const long int: frame = static_cast<long int>(1000000000.0 / target_fps);
-                const long int: spent = detail::Native::steady_nanos() - last;
+                const long int: spent = detail::Native::steady_nanos() - self.last;
                 if (spent < frame) then {
                     detail::Native::precise_wait_nanos(frame - spent);
                 }
@@ -1619,3 +1620,4 @@ namespace std {
         } end class FrameClock
     } end namespace time
 } end namespace std
+} end safe

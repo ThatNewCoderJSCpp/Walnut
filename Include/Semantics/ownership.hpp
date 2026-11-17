@@ -107,6 +107,7 @@ private:
     bool             m_here_safe = false;
     std::size_t      m_function_depth = 0;
     std::size_t      m_record_depth = 0;
+    std::vector<const nodes::RecordDeclaration*> m_records;
     std::uint32_t    m_next_heap = 0;
     std::set<std::tuple<FileId, std::uint32_t, std::string>> m_seen;
     std::size_t      m_errors = 0;

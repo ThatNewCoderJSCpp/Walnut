@@ -41,6 +41,12 @@
 #define WALNUT_FORCE_INLINE inline
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define WALNUT_SHARED_DEF inline __attribute__((used))
+#else
+#define WALNUT_SHARED_DEF inline
+#endif
+
 namespace walnut_rt {
 
 namespace mp = fizmo::multiprecision;
@@ -2429,6 +2435,28 @@ public:
 private:
     std::shared_ptr<const init_list_store<T>> m_store;
 };
+
+inline std::vector<void (*)()>& init_registry() {
+    static std::vector<void (*)()> registry;
+    return registry;
+}
+
+inline bool& init_registry_started() {
+    static bool started = false;
+    return started;
+}
+
+inline bool register_init(void (*fn)()) {
+    if (init_registry_started()) fn();
+    else init_registry().push_back(fn);
+    return true;
+}
+
+inline void run_registered_inits() {
+    init_registry_started() = true;
+    std::vector<void (*)()>& registry = init_registry();
+    for (std::size_t i = 0; i < registry.size(); ++i) registry[i]();
+}
 
 template <typename F>
 inline int run_program(F&& body) {

@@ -25,18 +25,26 @@ nodes::BlockStatement* Parser::parse_program() {
 void Parser::mark_safety(nodes::ASTNode* n, std::uint8_t inherited) {
     if (!n) return;
     std::uint8_t context = inherited;
-    if (n->safety == nodes::SafetySafe) context = n->safety;
+    if (n->safety != nodes::SafetyNone) context = n->safety;
     else n->safety = inherited;
     nodes::for_each_child(n, [this, context](nodes::ASTNode* c) { mark_safety(c, context); });
 }
 
 nodes::ASTNode* Parser::parse_safety_region(bool declaration_level, bool list_level, bool injected_candidate, bool nested_hoist, nodes::TemplateDeclaration* owner_template) {
     using K = tokenizing::Token::Kind;
-    const K next = lookahead(1).kind();
+    std::size_t skip = 1;
+    std::uint8_t level = nodes::SafetySafe;
+
+    if (lookahead(1).kind() == K::LeftParen && lookahead(2).kind() == K::Identifier && lookahead(2).lexeme() == "compile" && lookahead(3).kind() == K::RightParen) {
+        skip = 4;
+        level = nodes::SafetyCompile;
+    }
+
+    const K next = lookahead(skip).kind();
 
     if (next == K::LeftCurly) {
         if (declaration_level) {
-            advance();
+            for (std::size_t i = 0; i < skip; ++i) advance();
             const tokenizing::Token open = current_token();
             advance();
             nodes::BlockStatement* holder = make<nodes::BlockStatement>();
@@ -51,32 +59,32 @@ nodes::ASTNode* Parser::parse_safety_region(bool declaration_level, bool list_le
             advance();
 
             if (holder->statements.empty()) throw ParserError::empty_block(reporter, open, "safe");
-            for (nodes::ASTNode* d : holder->statements) if (d) d->safety = nodes::SafetySafe;
+            for (nodes::ASTNode* d : holder->statements) if (d && d->safety == nodes::SafetyNone) d->safety = level;
             for (std::size_t i = 1; i < holder->statements.size(); ++i) m_spliced.push_back(holder->statements[i]);
             return holder->statements[0];
         }
 
-        advance();
+        for (std::size_t i = 0; i < skip; ++i) advance();
         nodes::ASTNode* block = parse_block();
-        if (block) block->safety = nodes::SafetySafe;
+        if (block) block->safety = level;
         return block;
     }
 
-    const bool declaration_follows = lookahead(1).is_one_of(
+    const bool declaration_follows = lookahead(skip).is_one_of(
         K::ClassKeyword, K::StructKeyword, K::UnionKeyword, K::FunctionKeyword, K::NamespaceKeyword, K::TemplateKeyword,
         K::OperatorKeyword, K::StaticKeyword, K::InlineKeyword, K::ConstexprKeyword, K::HiddenKeyword, K::LocalKeyword,
         K::GlobalKeyword, K::HoistKeyword, K::VirtualKeyword, K::FriendKeyword
     );
     if (!declaration_follows) return nullptr;
 
-    advance();
+    for (std::size_t i = 0; i < skip; ++i) advance();
     m_declaration_level  = declaration_level;
     m_list_level         = list_level;
     m_injected_candidate = injected_candidate;
     m_nested_hoist       = nested_hoist;
     m_pending_template   = owner_template;
     nodes::ASTNode* decl = parse_statement();
-    if (decl) decl->safety = nodes::SafetySafe;
+    if (decl && decl->safety == nodes::SafetyNone) decl->safety = level;
     return decl;
 }
 

@@ -1,5 +1,6 @@
 import module.collections
 
+safe(compile) {
 namespace std {
     namespace regex {
         constexpr long int: ignore_case = 1;
@@ -12,65 +13,65 @@ namespace std {
             class Match as "walnut_rt::rx::match" {
             public:
                 constructor();
-                function found() const -> bool;
-                function value() const -> string;
-                function group(long int: index) const -> string;
-                function named(const string&: name) const -> string;
-                function has_group(long int: index) const -> bool;
-                function has_named(const string&: name) const -> bool;
-                function group_count() const -> long int;
-                function start() const -> long int;
-                function stop() const -> long int;
-                function length() const -> long int;
-                function group_start(long int: index) const -> long int;
-                function group_stop(long int: index) const -> long int;
-                function before() const -> string;
-                function after() const -> string;
+                function found(const self&) -> bool;
+                function value(const self&) -> string;
+                function group(const self&, long int: index) -> string;
+                function named(const self&, const string&: name) -> string;
+                function has_group(const self&, long int: index) -> bool;
+                function has_named(const self&, const string&: name) -> bool;
+                function group_count(const self&) -> long int;
+                function start(const self&) -> long int;
+                function stop(const self&) -> long int;
+                function length(const self&) -> long int;
+                function group_start(const self&, long int: index) -> long int;
+                function group_stop(const self&, long int: index) -> long int;
+                function before(const self&) -> string;
+                function after(const self&) -> string;
 
                 operator(bool) function() const explicit {
-                    return found();
+                    return self.found();
                 }
             } end class Match
 
             class Regex as "walnut_rt::rx::regex" {
-                function collect(const string&: subject, std::collections::Vector<Match>&: out) const -> void;
-                function split_into(const string&: subject, std::collections::Vector<string>&: out) const -> void;
+                function collect(const self&, const string&: subject, std::collections::Vector<Match>&: out) -> void;
+                function split_into(const self&, const string&: subject, std::collections::Vector<string>&: out) -> void;
 
             public:
                 constructor();
                 constructor(const string&: pattern);
                 constructor(const string&: pattern, long int: flags);
 
-                function ok() const -> bool;
-                function error() const -> string;
-                function error_position() const -> long int;
-                function pattern() const -> string;
-                function group_count() const -> long int;
-                function gave_up() const -> bool;
-                function set_step_limit(long int: steps) -> void;
+                function ok(const self&) -> bool;
+                function error(const self&) -> string;
+                function error_position(const self&) -> long int;
+                function pattern(const self&) -> string;
+                function group_count(const self&) -> long int;
+                function gave_up(const self&) -> bool;
+                function set_step_limit(self&, long int: steps) -> void;
 
-                function matches(const string&: subject) const -> bool;
-                function contains(const string&: subject) const -> bool;
-                function whole(const string&: subject) const -> Match;
-                function search(const string&: subject) const -> Match;
-                function search_from(const string&: subject, long int: start) const -> Match;
-                function match_at(const string&: subject, long int: position) const -> Match;
-                function count(const string&: subject) const -> long int;
-                function replace(const string&: subject, const string&: replacement) const -> string;
-                function replace_first(const string&: subject, const string&: replacement) const -> string;
-                function replace_count(const string&: subject, const string&: replacement, long int: limit) const -> string;
-                function explain() const -> string;
+                function matches(const self&, const string&: subject) -> bool;
+                function contains(const self&, const string&: subject) -> bool;
+                function whole(const self&, const string&: subject) -> Match;
+                function search(const self&, const string&: subject) -> Match;
+                function search_from(const self&, const string&: subject, long int: start) -> Match;
+                function match_at(const self&, const string&: subject, long int: position) -> Match;
+                function count(const self&, const string&: subject) -> long int;
+                function replace(const self&, const string&: subject, const string&: replacement) -> string;
+                function replace_first(const self&, const string&: subject, const string&: replacement) -> string;
+                function replace_count(const self&, const string&: subject, const string&: replacement, long int: limit) -> string;
+                function explain(const self&) -> string;
                 static function escape(const string&: literal) -> string;
 
-                function find_all(const string&: subject) const -> std::collections::Vector<Match> {
+                function find_all(const self&, const string&: subject) -> std::collections::Vector<Match> {
                     std::collections::Vector<Match>: out;
-                    collect(subject, out);
+                    self.collect(subject, out);
                     return out;
                 } end function find_all
 
-                function split(const string&: subject) const -> std::collections::Vector<string> {
+                function split(const self&, const string&: subject) -> std::collections::Vector<string> {
                     std::collections::Vector<string>: out;
-                    split_into(subject, out);
+                    self.split_into(subject, out);
                     return out;
                 } end function split
             } end class Regex
@@ -96,51 +97,51 @@ namespace std {
                 static function word_characters() -> CharSet;
                 static function ascii() -> CharSet;
 
-                function allow(const string&: chars) -> CharSet&;
-                function disable(const string&: chars) -> CharSet&;
-                function allow_char(char: c) -> CharSet&;
-                function disable_char(char: c) -> CharSet&;
-                function allow_range(char: first, char: last) -> CharSet&;
-                function disable_range(char: first, char: last) -> CharSet&;
-                function allow_set(const CharSet&: other) -> CharSet&;
-                function disable_set(const CharSet&: other) -> CharSet&;
-                function allow_digits() -> CharSet&;
-                function disable_digits() -> CharSet&;
-                function allow_numbers() -> CharSet&;
-                function disable_numbers() -> CharSet&;
-                function allow_letters() -> CharSet&;
-                function disable_letters() -> CharSet&;
-                function allow_uppercase() -> CharSet&;
-                function disable_uppercase() -> CharSet&;
-                function allow_lowercase() -> CharSet&;
-                function disable_lowercase() -> CharSet&;
-                function allow_spaces() -> CharSet&;
-                function disable_spaces() -> CharSet&;
-                function allow_newlines() -> CharSet&;
-                function disable_newlines() -> CharSet&;
-                function allow_punctuation() -> CharSet&;
-                function disable_punctuation() -> CharSet&;
-                function disable_punctuation_except(const string&: keep) -> CharSet&;
-                function allow_symbols() -> CharSet&;
-                function disable_symbols() -> CharSet&;
-                function disable_symbols_except(const string&: keep) -> CharSet&;
-                function allow_special() -> CharSet&;
-                function disable_special() -> CharSet&;
-                function disable_special_except(const string&: keep) -> CharSet&;
-                function allow_emoji() -> CharSet&;
-                function disable_emoji() -> CharSet&;
-                function allow_control() -> CharSet&;
-                function disable_control() -> CharSet&;
-                function only_ascii() -> CharSet&;
-                function allow_hex_digits() -> CharSet&;
+                function allow(self&, const string&: chars) -> CharSet&;
+                function disable(self&, const string&: chars) -> CharSet&;
+                function allow_char(self&, char: c) -> CharSet&;
+                function disable_char(self&, char: c) -> CharSet&;
+                function allow_range(self&, char: first, char: last) -> CharSet&;
+                function disable_range(self&, char: first, char: last) -> CharSet&;
+                function allow_set(self&, const CharSet&: other) -> CharSet&;
+                function disable_set(self&, const CharSet&: other) -> CharSet&;
+                function allow_digits(self&) -> CharSet&;
+                function disable_digits(self&) -> CharSet&;
+                function allow_numbers(self&) -> CharSet&;
+                function disable_numbers(self&) -> CharSet&;
+                function allow_letters(self&) -> CharSet&;
+                function disable_letters(self&) -> CharSet&;
+                function allow_uppercase(self&) -> CharSet&;
+                function disable_uppercase(self&) -> CharSet&;
+                function allow_lowercase(self&) -> CharSet&;
+                function disable_lowercase(self&) -> CharSet&;
+                function allow_spaces(self&) -> CharSet&;
+                function disable_spaces(self&) -> CharSet&;
+                function allow_newlines(self&) -> CharSet&;
+                function disable_newlines(self&) -> CharSet&;
+                function allow_punctuation(self&) -> CharSet&;
+                function disable_punctuation(self&) -> CharSet&;
+                function disable_punctuation_except(self&, const string&: keep) -> CharSet&;
+                function allow_symbols(self&) -> CharSet&;
+                function disable_symbols(self&) -> CharSet&;
+                function disable_symbols_except(self&, const string&: keep) -> CharSet&;
+                function allow_special(self&) -> CharSet&;
+                function disable_special(self&) -> CharSet&;
+                function disable_special_except(self&, const string&: keep) -> CharSet&;
+                function allow_emoji(self&) -> CharSet&;
+                function disable_emoji(self&) -> CharSet&;
+                function allow_control(self&) -> CharSet&;
+                function disable_control(self&) -> CharSet&;
+                function only_ascii(self&) -> CharSet&;
+                function allow_hex_digits(self&) -> CharSet&;
 
-                function contains(char: c) const -> bool;
-                function accepts(const string&: subject) const -> bool;
-                function first_rejected(const string&: subject) const -> long int;
-                function filter(const string&: subject) const -> string;
-                function inverted() const -> CharSet;
-                function to_regex() const -> string;
-                function describe() const -> string;
+                function contains(const self&, char: c) -> bool;
+                function accepts(const self&, const string&: subject) -> bool;
+                function first_rejected(const self&, const string&: subject) -> long int;
+                function filter(const self&, const string&: subject) -> string;
+                function inverted(const self&) -> CharSet;
+                function to_regex(const self&) -> string;
+                function describe(const self&) -> string;
             } end class CharSet
 
             class Pattern as "walnut_rt::rx::pattern" {
@@ -175,32 +176,32 @@ namespace std {
                 static function email() -> Pattern;
                 static function word() -> Pattern;
 
-                function and_then(const Pattern&: next) const -> Pattern;
-                function and_then_literal(const string&: words) const -> Pattern;
-                function or_else(const Pattern&: other) const -> Pattern;
-                function optional() const -> Pattern;
-                function one_or_more() const -> Pattern;
-                function zero_or_more() const -> Pattern;
-                function times(long int: n) const -> Pattern;
-                function times_between(long int: min, long int: max) const -> Pattern;
-                function at_least(long int: n) const -> Pattern;
-                function at_most(long int: n) const -> Pattern;
-                function as_few_as_possible() const -> Pattern;
-                function no_backtracking() const -> Pattern;
-                function capture() const -> Pattern;
-                function capture_as(const string&: name) const -> Pattern;
-                function group() const -> Pattern;
-                function followed_by(const Pattern&: next) const -> Pattern;
-                function not_followed_by(const Pattern&: next) const -> Pattern;
-                function preceded_by(const Pattern&: before) const -> Pattern;
-                function not_preceded_by(const Pattern&: before) const -> Pattern;
-                function whole() const -> Pattern;
+                function and_then(const self&, const Pattern&: next) -> Pattern;
+                function and_then_literal(const self&, const string&: words) -> Pattern;
+                function or_else(const self&, const Pattern&: other) -> Pattern;
+                function optional(const self&) -> Pattern;
+                function one_or_more(const self&) -> Pattern;
+                function zero_or_more(const self&) -> Pattern;
+                function times(const self&, long int: n) -> Pattern;
+                function times_between(const self&, long int: min, long int: max) -> Pattern;
+                function at_least(const self&, long int: n) -> Pattern;
+                function at_most(const self&, long int: n) -> Pattern;
+                function as_few_as_possible(const self&) -> Pattern;
+                function no_backtracking(const self&) -> Pattern;
+                function capture(const self&) -> Pattern;
+                function capture_as(const self&, const string&: name) -> Pattern;
+                function group(const self&) -> Pattern;
+                function followed_by(const self&, const Pattern&: next) -> Pattern;
+                function not_followed_by(const self&, const Pattern&: next) -> Pattern;
+                function preceded_by(const self&, const Pattern&: before) -> Pattern;
+                function not_preceded_by(const self&, const Pattern&: before) -> Pattern;
+                function whole(const self&) -> Pattern;
 
-                function to_regex() const -> string;
-                function compile() const -> Regex;
-                function compile_with(long int: flags) const -> Regex;
-                function matches(const string&: subject) const -> bool;
-                function explain() const -> string;
+                function to_regex(const self&) -> string;
+                function compile(const self&) -> Regex;
+                function compile_with(const self&, long int: flags) -> Regex;
+                function matches(const self&, const string&: subject) -> bool;
+                function explain(const self&) -> string;
             } end class Pattern
         } end extern
 
@@ -221,3 +222,4 @@ namespace std {
         } end function explain
     } end namespace regex
 } end namespace std
+} end safe

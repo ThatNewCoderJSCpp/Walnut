@@ -17,6 +17,7 @@ void Preprocessor::define(std::string name, std::string value) {
 
 tokenizing::TokenStream Preprocessor::preprocess(FileId main) {
     m_out.clear();
+    m_marks.clear();
     m_out.reserve(m_sm.size(main) / 5 + 64);
     m_pragma_once.clear();
     m_cond.clear();
@@ -40,6 +41,7 @@ void Preprocessor::run_file(FileId file, unsigned int depth) {
     if (classify_file(m_sm.absolute_path(file)) == FileKind::WalnutHeader) m_pragma_once.insert(file);
     const FileId prev_file = m_cur_file;
     m_cur_file = file;
+    m_marks.push_back(FileMark{ m_out.size(), file, true });
     m_sm.lex(file, m_reporter);
     const Token* toks = m_sm.cached_tokens(file);
     const std::size_t n = m_sm.cached_token_count(file);
@@ -70,6 +72,7 @@ void Preprocessor::run_file(FileId file, unsigned int depth) {
         m_cond.resize(cond_base);
     }
 
+    m_marks.push_back(FileMark{ m_out.size(), file, false });
     m_cur_file = prev_file;
 }
 

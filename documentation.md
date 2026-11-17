@@ -3675,7 +3675,7 @@ A `.walh` file is a Walnut header. It holds declarations and their definitions t
 - Several files of one program can each include the same header. Each gets its own copy, and nothing has to be linked.
 - A header can also be imported, like a `.wal` file (`import "shapes.walh" as shapes`).
 - Module files found by name are headers (see [Modules by name](#modules-by-name)).
-- A header can't be passed to `walnut` on the command line; include or import it from a `.wal` file.
+- A header can't be passed to `walnut` on the command line to build a program; include or import it from a `.wal` file. It can be compiled into an object file or a library with `-c`, `--static` or `--shared`, so programs that include it don't compile its code again (see [Libraries and object files](#libraries-and-object-files)).
 
 ### Exporting
 
@@ -3780,6 +3780,84 @@ extern {
 ```
 
 `extern` also reaches `local` declarations in other files, but not `hidden` ones.
+
+When the defining file isn't being compiled, the definition can come from an object file or library instead: `walnut run main.wal util.o` links `util.o`, made earlier with `walnut build -c util.wal`. An `extern` with no definition among the Walnut files is allowed when the program links object files or libraries, and the linker reports it if none of them has it.
+
+### Libraries and object files
+
+`walnut build` makes a program by default. Three options make something to link instead:
+
+| Option | Makes | Default name |
+|---|---|---|
+| `-c` | One object file | `util.o` for `util.wal` |
+| `--static` (or `--lib`) | A static library | `libshapes.a` for `shapes.walh` |
+| `--shared` | A shared library | `libshapes.so` on Linux, `libshapes.dylib` on macOS, `shapes.dll` and its import library `libshapes.dll.a` on Windows |
+
+```
+walnut build --static shapes.walh
+walnut build --shared shapes.walh -o out/libshapes.so
+walnut build -c util.wal
+```
+
+- The inputs can be `.wal` and `.walh` files, and C and C++ files as for a program. Their compiled code goes into the output; C and C++ libraries given with `-l` or on the command line are remembered, and linked into programs that use the library.
+- A library can't have `main` or top-level statements. An object file made with `-c` can, and is then the program's entry point when it's linked.
+- The standard library modules aren't put into a static library or an object file; each program links its own (see [The precompiled standard library](#the-precompiled-standard-library)). A shared library holds the modules it uses, since it has to work on its own.
+
+**The `.walnut` file.** Each output gets a small text file next to it with the same name and `.walnut` instead of its extension (`libshapes.walnut`, `util.walnut`). It records which Walnut files were compiled in (by a hash of their contents), which `walnut` built them and with which safety options and `-D` macros, which standard library modules they use, and what else has to be linked. Keep it next to the library.
+
+**Using a library.** A program uses the compiled code instead of compiling the library's Walnut code again in two ways:
+- Link it: `walnut run main.wal shapes/libshapes.a`, or `-L shapes -l shapes`.
+- Include or import a header that sits in the same folder as the library and its `.walnut` file. Walnut finds the library and links it, so nothing has to be named on the command line:
+
+```
+shapes/
+    shapes.walh
+    libshapes.a
+    libshapes.walnut
+```
+
+```walnut
+#include "shapes/shapes.walh"
+
+function main() -> int {
+    return shapes::seven() - 7;
+} end function main
+```
+
+For every included or imported file, Walnut compares the file with the hashes in the `.walnut` file. When it matches, the program only declares that file's functions, classes and globals, and their code comes from the library. When it doesn't match, because the header was edited after the library was built, the file is compiled from source as usual. Files named on the command line are always compiled from source.
+
+- Templates, `inline` functions, and functions with function parameters are compiled into each program that uses them, so a library can use its templates with the program's own types. When a template is used with the same arguments in a library and in the program, the linker keeps one copy.
+- A library's global variables are set up before `main` runs, in the order their files were included, the same way as when they're compiled from source.
+- A header's global variables exist once in a library or object file and in every program that uses it, however many files include the header. (A program compiled from source gives each file that includes the header its own copy, as described in [Header files](#header-files).)
+- A library only fits programs built by the same version of `walnut`, for the same kind of computer, with the same [safety checks](#safety-checks) and `-D` macros (both change the code that's generated). For a library that doesn't fit, `walnut` prints a warning and compiles its Walnut code from source instead, which works when its headers hold the code. A library built from `.wal` files whose code isn't in its headers has to be built again.
+- `walnut build a.o b.o -o program` links object files and libraries without any `.wal` file; one of them has to hold `main`.
+
+**Shared libraries at run time.** A program linked with a shared library needs to find it when it starts:
+- On Linux and macOS, `walnut` records the library's folder and the program's own folder in the program (its rpath), so it runs from where it was built, and also when the library is copied next to it.
+- On Windows a DLL has to be next to the `.exe` or on `PATH`. `walnut build` copies the DLLs the program uses next to it, and `walnut run` adds their folders to `PATH`.
+- `--lib-dir <folder>` keeps them out of the program's folder: `walnut build` copies the shared libraries into that folder next to the program, and makes the program look there. On Linux and macOS this is an rpath of `$ORIGIN/<folder>` (`@executable_path/<folder>` on macOS). On Windows the folder becomes a private assembly: it gets a `<folder>.manifest` listing the DLLs, and the program gets a manifest that names the folder, which Windows reads before it loads the DLLs. This needs `windres` (or `llvm-windres`) next to the C++ compiler, which `walnut init`'s compiler has. The folder name can only use letters, digits, `.`, `_` and `-`.
+
+```
+walnut build game.wal -o dist/game --lib-dir libs
+```
+
+```
+dist/
+    game.exe
+    libs/
+        libs.manifest
+        physics.dll
+```
+
+- fizmo is linked statically, and on Windows the compiler from `walnut init` links the C++ runtime statically too, so the only DLLs a Walnut program needs there are the ones you link yourself.
+
+### The precompiled standard library
+
+With `build` and `run`, the standard library modules a program uses are compiled once and kept in the [build cache](#the-command-line), one module at a time, for each C++ compiler and set of options. Later programs that use the same modules only compile their own code, so building a new program, or one whose classes or signatures changed, is several times faster. The first program to use a module pays for compiling it.
+
+- `walnut library --precompile` compiles all of them ahead of time, for example right after installing `walnut`, so even the first program doesn't wait for them. It takes the options that change the compiled code, such as `--cxx`, `-O3`, `-g` or `--check-bounds`, and precompiles the modules for that combination.
+- `--no-prebuilt-std` compiles the modules with the program instead, as before.
+- `--keep-cpp`, `--debug-cpp`, `--line-map` and `--no-cache` always compile them with the program, so the generated C++ is complete.
 
 ## Calling C and C++
 
@@ -4120,6 +4198,7 @@ This prints `42`.
 | `safe namespace name { ... } end namespace name` | Everything in the namespace |
 | `safe { ... } end safe` | Every declaration inside, at file or namespace level; use it to make a whole file safe |
 | `safe { ... }` inside a function | The statements in the block |
+| `safe(compile)` in place of `safe`, in any of the forms above | The same code, checked by every rule that works while compiling, but without the runtime overflow check (see below) |
 
 `safe` is only special in these places, so it can still be used as a name elsewhere. Lambdas and nested functions follow the code around them.
 
@@ -4127,7 +4206,7 @@ Code that isn't marked `safe` can already do anything, so there is no `unsafe` k
 
 **The rules.** Breaking one is a compile error that says what to do instead.
 
-- **Methods name their object.** Every method that isn't `static` takes a [receiver](#receivers), and fields and methods are reached through `self` or `this->`.
+- **Methods name their object.** Every method that isn't `static` takes a [receiver](#receivers), conversion operators included (`operator(bool) function(const self&)`), and fields and methods are reached through `self` or `this->`, in constructors too. In a class template this is checked where the template is written, so a method that is missing its receiver is reported even if no program uses it yet.
 - **Raw pointers only where the compiler can follow them.** `*p` and `p->x` work when `p` is a local pointer variable that holds memory from `new` made in the same function and not deleted yet, or the address of a local variable that still exists. On any other pointer (a parameter, a global, a field, the result of a call) they are errors, and so are `p[i]`, pointer arithmetic, and `++`/`--` on a pointer. `this->x` and `self` are fine, and so are references, `std::memory::UniquePtr` and `SharedPtr` (`make_unique`, `make_shared`), `std::optional::Optional`, and the containers in `std::collections`. Taking an address with `&x` is allowed, and the pointer can be passed on.
 - **`new` and `delete` are tracked.** Memory from `new` has to end up in exactly one place on every path through the function: deleted once, returned, moved away with `std::core::move`, or stored in a field or container (`self.p = q;`, `list.push_back(q)`). Passing the pointer to a function only lends it, so the memory still has to be deleted afterwards. These are errors:
   - memory from `new` that is never deleted, or deleted on only some paths (`if (c) then { delete p; }`)
@@ -4161,6 +4240,26 @@ function main() -> int {
 ```
 
 Here `got` is `9`. Writing `*(&both[0] + 1)` inside `second` would be two errors, one for the arithmetic and one for reading through the pointer; `read_second` isn't marked `safe`, so it may do both.
+
+**Only the compile-time rules: `safe(compile)`.** Integer overflow is the one rule that costs something while the program runs. `safe(compile)` follows every other rule, with the same errors, but its integers overflow the way they do in ordinary code: to `inf`, or to 0 for an unsigned result below zero (and with `--check-overflow` they stop the program, as everywhere else). It's for code that should be checked as carefully as `safe` code but must keep its ordinary behavior and speed, which is how the standard library uses it.
+
+```walnut
+import module.io
+
+safe(compile) function doubled(int: a) -> int {
+    return a * 2;
+} end function doubled
+
+function main() -> int {
+    safe(compile) {
+        int: big = 2147483647;
+        std::io::println(doubled(big) * 2147483647 * 4);
+    }
+    return 0;
+} end function main
+```
+
+This prints `∞`; with `safe` in place of `safe(compile)` the program would stop with an overflow error instead. A `safe` or `safe(compile)` mark on a function or class inside a `safe(compile)` region keeps its own meaning, so `safe function` inside one still checks overflow.
 
 ```walnut
 import module.io as io
@@ -4197,7 +4296,24 @@ function main() -> int {
 
 - A `safe { }` block inside an ordinary function follows all the rules, including the tracking of `new`, `delete` and moves. The compiler follows the whole function, so it reports a problem when either part of it is in the block: memory from `new` made in the block that is never deleted, a value moved or deleted in the block and used later, or a use in the block of something moved or deleted before it.
 - The `--safe` command-line option is a different thing: it turns on the runtime checks for the whole program (see [Safety checks](#safety-checks)). The two work well together.
-- The library's own files are never checked as safe code, so safe code can use any module.
+- Safe code can use any module. Calling a library function from safe code is always allowed, whether or not the function itself is safe.
+
+**The standard library is safe code.** Every module of the standard library is written inside `safe(compile)` regions, so it follows the same rules as your safe code (methods with receivers, `self.` for members, no raw pointer tricks outside the parts listed below, tracked `new` and `delete`) while its runtime behavior is exactly that of ordinary code: overflow still becomes `inf`, and nothing is checked while the program runs that wasn't before.
+
+The parts that can't be safe, because they are built directly on raw pointers, are left outside the regions, the way your own code would put them in a function that isn't marked `safe`. All of them can still be called from safe code:
+
+| Module | Left outside the safe regions |
+|---|---|
+| `algorithms` | The algorithms that step through an iterator range themselves with `++`, `[]` or pointer arithmetic (`find`, `copy`, `fill`, `transform`, `merge`, the heap functions, the searches and so on), since the iterators are usually raw pointers. The ones that only call other algorithms, and the versions that take a whole container, are safe |
+| `collections` | `Vector`, `DynamicArray`, `SmallVector`, `Span`, `LinkedList`, `Deque`, `UnorderedMap`, `Map`, `Set`, `OrderedMap`, `DefaultMap`, `Cache`, `Trie`, `TrieMap` and `WhereQuery`, which keep raw pointers to their storage or hand them out (`find` returns a pointer), and the tree and hashing helpers under them. `Stack`, `Queue`, `PriorityQueue`, `UnorderedSet`, `OrderedSet`, `Counter` and the rest are safe |
+| `io` | `ios_base`, `ios`, `ostream`, `istream`, `iostream`, `spanbuf` and `syncbuf`, which hold a pointer to their buffer |
+| `iterators` | The pointer, index, linked-node, tree and sparse-slot iterators, and the buffer `zip` uses |
+| `linalg` | One helper that gives the end pointer of a fixed-size vector |
+| `memory` | `UniquePtr`, `SharedPtr`, `WeakPtr`, `EnableSharedFromThis` and their reference counting |
+| `optional` | The `?.` and `?` helpers for raw pointers and pointer-like objects |
+| `threading` | The spin lock guard |
+
+`walnut library --verify` checks all of this: it runs the safe-code rules over every module, including the methods no program calls, checks that every method of every class template has its receiver, and reports any problem. A template's code is checked in full once it's used with real types, so `walnut library --verify programs.wal` also checks the templates the way those programs use them, such as a sort over raw pointers or a collection of a particular type. In a normal build, problems inside the library are never reported, so a library template used with an unusual type can't stop your program from compiling.
 
 ## The command line
 
@@ -4205,18 +4321,18 @@ function main() -> int {
 walnut <command> [options] <main.wal> [more.wal ...] [C/C++ files] [-- program arguments]
 ```
 
-The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cxx`), object files (`.o`, `.obj`) and libraries (`.a`, `.so`, `.dylib`, `.lib`, `.dll`). Anything else is an error, including `.walh` headers and C or C++ headers, which are included instead.
+The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cxx`), object files (`.o`, `.obj`) and libraries (`.a`, `.so`, `.dylib`, `.lib`, `.dll`). Anything else is an error, including C or C++ headers, which are included instead, and `.walh` headers, except when they're built into a library with `-c`, `--static` or `--shared`.
 
 | Command | Does |
 |---|---|
 | `check` | Reports errors and warnings without building |
-| `emit` | Prints the generated C++ (or writes it with `-o`) |
-| `build` | Builds an executable |
+| `emit` | Prints the generated C++ (or writes it with `-o`); with `-E`, `-S`, `--llvm-ir` or `--preprocessed-cpp`, the preprocessed Walnut source, the assembly, the LLVM IR or the preprocessed C++ instead (see [Looking at the generated code](#looking-at-the-generated-code)) |
+| `build` | Builds an executable without running it; with `-c`, `--static` or `--shared`, an object file or a library (see [Libraries and object files](#libraries-and-object-files)) |
 | `run` | Builds the program and runs it |
 | `clean` | Deletes the build cache |
 | `highlight` | Prints what each name and operator in the file is, and its errors and warnings, as JSON for editors. With `--stdin`, the file's text comes from standard input. It also takes a `.walh` file. The format is in [the VS Code extension's README](Tools/vscode-walnut/README.md#the-highlight-command) |
 | `complete` | With `--at LINE:COL` (from 1, the column in bytes), prints what can be typed at that spot as JSON, for editors' autocomplete. After `.` or `->` it lists the members of the value's type, after `::` what's inside the namespace, class or enum, and otherwise every name in scope there (locals declared further down are left out). It works on unfinished code, so the line being typed doesn't have to compile. The answer is `{"start": column, "mode": "member" \| "scope" \| "name" \| "none", "items": [{"label", "kind", "detail"}]}`, where `start` is the byte column (from 0) where the word being completed starts and `detail` is a type or signature. Also takes `--stdin` and `.walh` files |
-| `library` | Lists the library files built into `walnut`. `walnut library io.walh` prints one, and `walnut library --extract <dir>` writes them all into a folder, so an editor can open them |
+| `library` | Lists the library files built into `walnut`. `walnut library io.walh` prints one, and `walnut library --extract <dir>` writes them all into a folder, so an editor can open them. `walnut library --precompile` compiles every module into the build cache ahead of time (see [The precompiled standard library](#the-precompiled-standard-library)). `walnut library --verify [programs.wal]` checks the library's safe code (see [Safe code](#safe-code)) |
 | `init` | Sets up a C++ compiler: on Windows it downloads a pinned compiler matching this `walnut` into `%LOCALAPPDATA%\walnut\toolchain` (checked with SHA-256), on Linux it installs `g++` with the package manager, on macOS it opens Apple's Command Line Tools installer. `--yes` doesn't ask, `--force` downloads on Windows even when another compiler is on `PATH`, `--status` shows the compiler in use, `--print-compiler` prints just its path, `--remove` deletes the download. The compiler is picked from `--cxx`, then `WALNUT_CXX`, then the `walnut init` download, then `c++` on `PATH` |
 | `help`, `-h`, `--help` | Shows the usage |
 
@@ -4227,11 +4343,23 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `-I <dir>` | Folder for `#include` |
 | `-D <name>[=value]` | Defines a macro |
 | `-M <dir>`, `--module-dir <dir>` | Folder searched by `import module.<name>` |
-| `-L <dir>`, `-l <lib>` | Library folder and library for native code |
+| `-L <dir>`, `-l <lib>` | Library folder and library to link: a Walnut library, or one for native code |
+| `-c` | Makes an object file instead of a program |
+| `--static`, `--lib` | Makes a static library |
+| `--shared` | Makes a shared library |
+| `--lib-dir <folder>` | Puts the shared libraries the program uses into this folder next to it, and makes the program find them there |
+| `--no-prebuilt-std` | Compiles the standard library modules with the program instead of using their [precompiled copies](#the-precompiled-standard-library) |
 | `--cxx <compiler>` | The C++ compiler to use |
 | `--cxx-flag <flag>` | Passes a flag to the C++ compiler |
 | `--runtime <dir>` | Where the Walnut runtime is |
 | `--keep-cpp` | Keeps the generated C++ next to the program (builds without the cache) |
+| `-S`, `--asm` | With `emit` or `build`: the assembly instead of C++ or a program |
+| `--llvm-ir` | With `emit` or `build`: the LLVM IR (needs clang) |
+| `-E`, `--preprocessed` | With `emit` or `build`: the Walnut source after the [preprocessor](#the-preprocessor) |
+| `--preprocessed-cpp` | With `emit` or `build`: the generated C++ with every header pasted in |
+| `--asm-syntax intel\|att` | Assembly syntax on x86 |
+| `-fverbose-asm` | Lets the C++ compiler comment the assembly |
+| `--asm-function <name>` | Only the assembly or IR of the functions with this name (repeatable) |
 | `-u`, `--unbuffered` | Makes the program flush `cout` and `clog` after every write, like `python -u` (setting `WALNUT_UNBUFFERED=1` when it runs does the same) |
 | `--no-cache` | Builds from scratch in a temporary folder, without the build cache |
 | `--random-seed <text>` | Makes `std::random` calls in `constexpr` code give the same values every build (also `WALNUT_RANDOM_SEED`); without it they're new each build, from the operating system's secure random source. See [random](Documentation/Library/random.md#while-compiling) |
@@ -4356,18 +4484,72 @@ A call that matches no overload lists the candidates and why each one doesn't fi
 
 **The build cache.** `build` and `run` keep what they compile in a cache, so a build only redoes the work for what changed:
 - The C++ for each Walnut file is compiled separately, several at once, and each compiled file is kept. A file whose generated C++ is unchanged isn't compiled again. Changing a function's body only recompiles its own file; changing what other files see (a signature, a class, a global) recompiles every file.
-- The runtime header is precompiled once for each compiler and set of options.
+- The runtime header is precompiled once for each compiler and set of options, and so is each [standard library module](#the-precompiled-standard-library).
 - C and C++ files named with `from` or on the command line, and `code` blocks, are kept too, and are recompiled when they or the headers they include change.
 - The finished program is kept, so building or running an unchanged program only takes the time to check it.
 - Nothing has to be set up: there are no build files, and headers never need compiling by hand.
 - The cache is in `~/.cache/walnut` (`%LOCALAPPDATA%\walnut\cache` on Windows), or in the folder named by `WALNUT_CACHE_DIR`. Entries that haven't been used for 30 days are deleted, and `walnut clean` deletes everything.
 - `--keep-cpp`, `--debug-cpp`, `--line-map` and `--no-cache` build the old way, as a single C++ file in a temporary folder.
 
+### Looking at the generated code
+
+`walnut emit` prints the C++ that Walnut generates. These options print something else instead:
+
+| Option | Prints | `build` writes |
+|---|---|---|
+| `-E`, `--preprocessed` | The Walnut source after the [preprocessor](#the-preprocessor) | `<input>.pp.wal` |
+| `-S`, `--asm` | Assembly | `<input>.s` |
+| `--llvm-ir` | LLVM IR, between the C++ and the assembly; needs clang (`--cxx clang++`) | `<input>.ll` |
+| `--preprocessed-cpp` | The generated C++ with the runtime header and everything it includes pasted in | `<input>.ii` |
+
+**`-E`** shows what the preprocessor did, like `cc -E` does for C: each `#include` is replaced by the file's contents between `// begin <file>` and `// end <file>` comments, macros are expanded, `#define` and the other directives are gone, and so are the lines of `#if` branches that weren't taken. The output is Walnut that compiles to the same program. Lines keep their indentation and stay on the lines they were on; comments and spacing that doesn't matter are dropped, and code a macro produced is spaced out evenly. `import`s stay as they are, since they aren't part of the preprocessor. It doesn't need a C++ compiler, and with several `.wal` files each one is printed in turn.
+
+```walnut
+#define SQUARE(x) ((x) * (x))
+
+function main() -> int {
+#ifdef DEBUG
+    return SQUARE(2);
+#else
+    return SQUARE(3);
+#endif
+} end function main
+```
+
+`walnut emit -E main.wal` prints:
+
+```
+// main.wal
+function main() -> int {
+
+    return ((3) * (3));
+
+} end function main
+```
+
+The other three show what the C++ compiler makes from the generated C++:
+
+```
+walnut emit -S game.wal                      # assembly to the terminal
+walnut build -S -O3 game.wal                 # writes game.s
+walnut emit --llvm-ir --cxx clang++ game.wal
+walnut emit -S --asm-function shapes::area --asm-function main game.wal
+```
+
+- The code is compiled the way a build would compile it, so `-O0` to `-O3`, `-g`, the safety checks and `--cxx-flag` all change what you see.
+- The standard library's own functions are left out, since they're [precompiled](#the-precompiled-standard-library) and not part of the program's code; templates from it that the program uses are still there. `--no-prebuilt-std` puts the whole library in. Code from [Walnut libraries](#libraries-and-object-files) the program links is left out the same way, and `code` blocks and C/C++ files aren't compiled at all.
+- `--asm-syntax intel` gives Intel syntax (`mov rax, rdi`) instead of AT&T (`movq %rdi, %rax`), which is the compiler's default. It only applies to x86.
+- `-fverbose-asm` has the compiler add comments that name the variables each instruction uses and quote the C++ lines.
+- `--asm-function <name>` prints only the functions with that name, each under a comment with its Walnut name and its C++ name. The name can be `main`, `area`, `shapes::area`, `Rect::area` or `Rect::Rect` (a constructor); every overload and template instance with that name is printed. Give it more than once for several functions. When nothing has the name, `walnut` lists the program's functions. A function that's been inlined everywhere it's called has no code of its own, so it can be missing at `-O2` and `-O3`; `-O0` keeps every function.
+- They work with `-c`, `--static` and `--shared` too, which show the code a library gets.
+- `--preprocessed-cpp` is for looking into the runtime header; `-E` is the one for your own macros.
+
 **Environment variables**
 - `WALNUT_CXX`: the C++ compiler
 - `WALNUT_RUNTIME_DIR`: the runtime folder
 - `WALNUT_MODULE_PATH`: extra module folders
 - `WALNUT_CACHE_DIR`: where the build cache is kept
+- `WALNUT_AR`: the archiver `--static` uses (default: `ar` or `llvm-ar` next to the C++ compiler, or on `PATH`)
 - `WALNUT_LIBCLANG`: the libclang library used to read C and C++ headers
 
 ## Left out on purpose

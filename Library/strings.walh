@@ -1,5 +1,6 @@
 import module.collections
 
+safe(compile) {
 namespace std {
     namespace strings {
         namespace detail {
@@ -785,7 +786,7 @@ namespace std {
         function sorted(const S&: s) -> S {
             S: out = s;
             std::collections::Vector<char>: cs = chars(s);
-            std::algorithms::sort(cs.data(), cs.data() + cs.size());
+            cs.sort();
             out = static_cast<S>("");
             for (char: c in cs) {
                 out += c;
@@ -843,3 +844,4 @@ namespace std {
 
     } end namespace strings
 } end namespace std
+} end safe

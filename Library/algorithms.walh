@@ -2,6 +2,7 @@ import module.random
 
 namespace std {
     namespace algorithms {
+        safe(compile) {
         template <typename It>
         struct Range {
             It: first;
@@ -11,20 +12,22 @@ namespace std {
 
             constructor(It: a, It: b) : first = a, last = b { }
 
-            function begin() const -> It {
-                return first;
+            function begin(const self&) -> It {
+                return self.first;
             } end function begin
 
-            function end() const -> It {
-                return last;
+            function end(const self&) -> It {
+                return self.last;
             } end function end
 
-            function empty() const -> bool {
-                return !(first != last);
+            function empty(const self&) -> bool {
+                return !(self.first != self.last);
             } end function empty
         } end struct Range
+        } end safe
 
         namespace detail {
+            safe(compile) {
             template <typename T>
             function swap_values(T&: a, T&: b) -> void {
                 auto: held = std::core::move(a);
@@ -39,6 +42,7 @@ namespace std {
                 }
                 return depth + 4;
             } end function depth_limit
+            } end safe
 
             template <typename It, typename E>
             function sift_down(It: first, long int: root, long int: count, const std::Compare<E>&: comp) -> void {
@@ -204,6 +208,7 @@ namespace std {
                 }
             } end function merge_rec
 
+            safe(compile) {
             template <typename It, typename E>
             function select(It: first, long int: lo, long int: hi, long int: k, const std::Compare<E>&: comp) -> void {
                 long int: a = lo;
@@ -222,6 +227,7 @@ namespace std {
                 }
                 insertion(first, a, b, comp);
             } end function select
+            } end safe
 
             template <typename It, typename E>
             function quick(It: first, long int: lo, long int: hi, const std::Compare<E>&: comp) -> void {
@@ -288,10 +294,12 @@ namespace std {
             return it - n;
         } end function prev
 
+        safe(compile) {
         template <typename It>
         function iter_swap(It: a, It: b) -> void {
             detail::swap_values(*a, *b);
         } end function iter_swap
+        } end safe
 
         template <typename It, typename E>
         function for_each(It: first, It: last, std::Action<E>: func) -> std::Action<E> {
@@ -409,6 +417,7 @@ namespace std {
             return -1;
         } end function index_if
 
+        safe(compile) {
         template <typename It, typename T>
         function contains(It: first, It: last, const T&: value) -> bool {
             return find(first, last, value) != last;
@@ -418,6 +427,7 @@ namespace std {
         function contains_if(It: first, It: last, std::Predicate<E>: pred) -> bool {
             return find_if(first, last, pred) != last;
         } end function contains_if
+        } end safe
 
         template <typename It, typename E>
         function all_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
@@ -429,6 +439,7 @@ namespace std {
             return true;
         } end function all_of
 
+        safe(compile) {
         template <typename It, typename E>
         function any_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
             return find_if(first, last, pred) != last;
@@ -438,6 +449,7 @@ namespace std {
         function none_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
             return find_if(first, last, pred) == last;
         } end function none_of
+        } end safe
 
         template <typename It>
         function adjacent_find(It: first, It: last) -> It {
@@ -589,6 +601,7 @@ namespace std {
             return true;
         } end function starts_with
 
+        safe(compile) {
         template <typename A, typename B>
         function ends_with(A: first, A: last, B: s_first, B: s_last) -> bool {
             const long int: n = distance(first, last);
@@ -598,6 +611,7 @@ namespace std {
             }
             return equal(next(first, n - m), last, s_first, s_last);
         } end function ends_with
+        } end safe
 
         template <typename A, typename B>
         function lexicographical_compare(A: first, A: last, B: o_first, B: o_last) -> bool {
@@ -633,11 +647,13 @@ namespace std {
             return best;
         } end function min_element
 
+        safe(compile) {
         template <typename It>
         function min_element(It: first, It: last) -> It {
             using V = std::traits::decay<typeof(*first)>;
             return min_element(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function min_element
+        } end safe
 
         template <typename It, typename E>
         function max_element(It: first, It: last, std::Compare<E>: comp) -> It {
@@ -656,6 +672,7 @@ namespace std {
             return best;
         } end function max_element
 
+        safe(compile) {
         template <typename It>
         function max_element(It: first, It: last) -> It {
             using V = std::traits::decay<typeof(*first)>;
@@ -671,6 +688,7 @@ namespace std {
         function minmax_element(It: first, It: last) -> Range<It> {
             return Range<It>(min_element(first, last), max_element(first, last));
         } end function minmax_element
+        } end safe
 
         template <typename It, typename T>
         function accumulate(It: first, It: last, T: init) -> T {
@@ -690,6 +708,7 @@ namespace std {
             return total;
         } end function accumulate
 
+        safe(compile) {
         template <typename It, typename T>
         function reduce(It: first, It: last, T: init) -> T {
             return accumulate(first, last, init);
@@ -699,6 +718,7 @@ namespace std {
         function reduce(It: first, It: last, T: init, std::Combine<T, E>: op) -> T {
             return accumulate(first, last, init, op);
         } end function reduce
+        } end safe
 
         template <typename It, typename Out>
         function prefix_sum(It: first, It: last, Out: out) -> Out {
@@ -846,11 +866,13 @@ namespace std {
             return out;
         } end function remove_if
 
+        safe(compile) {
         template <typename It, typename T>
         function remove(It: first, It: last, const T&: value) -> It {
             using V = std::traits::decay<typeof(*first)>;
             return remove_if(first, last, [&value](const V&: x) -> bool { return x == value; });
         } end function remove
+        } end safe
 
         template <typename It, typename E>
         function unique(It: first, It: last, function(const E&, const E&) -> bool: same) -> It {
@@ -873,11 +895,13 @@ namespace std {
             return out;
         } end function unique
 
+        safe(compile) {
         template <typename It>
         function unique(It: first, It: last) -> It {
             using V = std::traits::decay<typeof(*first)>;
             return unique(first, last, [](const V&: a, const V&: b) -> bool { return a == b; });
         } end function unique
+        } end safe
 
         template <typename It>
         function reverse(It: first, It: last) -> void {
@@ -895,6 +919,7 @@ namespace std {
             }
         } end function reverse
 
+        safe(compile) {
         template <typename It>
         function rotate(It: first, It: middle, It: last) -> It {
             if (first == middle) then {
@@ -930,6 +955,7 @@ namespace std {
             }
             rotate_left(first, last, size - ((n % size) + size) % size);
         } end function rotate_right
+        } end safe
 
         template <typename A, typename B>
         function swap_ranges(A: first, A: last, B: other) -> B {
@@ -1030,6 +1056,7 @@ namespace std {
             return last;
         } end function is_sorted_until
 
+        safe(compile) {
         template <typename It>
         function is_sorted_until(It: first, It: last) -> It {
             using V = std::traits::decay<typeof(*first)>;
@@ -1045,6 +1072,7 @@ namespace std {
         function is_sorted(It: first, It: last) -> bool {
             return is_sorted_until(first, last) == last;
         } end function is_sorted
+        } end safe
 
         template <typename It, typename E>
         function sort(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1055,6 +1083,7 @@ namespace std {
             detail::intro(first, 0, n, detail::depth_limit(n), comp);
         } end function sort
 
+        safe(compile) {
         template <typename It>
         function sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
@@ -1072,6 +1101,7 @@ namespace std {
             using V = std::traits::decay<typeof(*first)>;
             sort(first, last, [&key](const V&: a, const V&: b) -> bool { return key(a) < key(b); });
         } end function sort_by
+        } end safe
 
         template <typename It, typename E>
         function stable_sort(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1085,6 +1115,7 @@ namespace std {
             delete[] buffer;
         } end function stable_sort
 
+        safe(compile) {
         template <typename It>
         function stable_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
@@ -1106,39 +1137,46 @@ namespace std {
         function merge_sort(It: first, It: last) -> void {
             stable_sort(first, last);
         } end function merge_sort
+        } end safe
 
         template <typename It, typename E>
         function quick_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             detail::quick(first, 0, static_cast<long int>(last - first), comp);
         } end function quick_sort
 
+        safe(compile) {
         template <typename It>
         function quick_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             quick_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function quick_sort
+        } end safe
 
         template <typename It, typename E>
         function heap_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             detail::heap(first, static_cast<long int>(last - first), comp);
         } end function heap_sort
 
+        safe(compile) {
         template <typename It>
         function heap_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             heap_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function heap_sort
+        } end safe
 
         template <typename It, typename E>
         function insertion_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             detail::insertion(first, 0, static_cast<long int>(last - first), comp);
         } end function insertion_sort
 
+        safe(compile) {
         template <typename It>
         function insertion_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             insertion_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function insertion_sort
+        } end safe
 
         template <typename It, typename E>
         function selection_sort(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1156,11 +1194,13 @@ namespace std {
             }
         } end function selection_sort
 
+        safe(compile) {
         template <typename It>
         function selection_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             selection_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function selection_sort
+        } end safe
 
         template <typename It, typename E>
         function bubble_sort(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1177,11 +1217,13 @@ namespace std {
             }
         } end function bubble_sort
 
+        safe(compile) {
         template <typename It>
         function bubble_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             bubble_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function bubble_sort
+        } end safe
 
         template <typename It, typename E>
         function cocktail_sort(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1214,11 +1256,13 @@ namespace std {
             }
         } end function cocktail_sort
 
+        safe(compile) {
         template <typename It>
         function cocktail_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             cocktail_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function cocktail_sort
+        } end safe
 
         template <typename It, typename E>
         function gnome_sort(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1234,11 +1278,13 @@ namespace std {
             }
         } end function gnome_sort
 
+        safe(compile) {
         template <typename It>
         function gnome_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             gnome_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function gnome_sort
+        } end safe
 
         template <typename It, typename E>
         function shell_sort(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1261,11 +1307,13 @@ namespace std {
             }
         } end function shell_sort
 
+        safe(compile) {
         template <typename It>
         function shell_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             shell_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function shell_sort
+        } end safe
 
         template <typename It>
         function counting_sort(It: first, It: last, bool: descending = false) -> void {
@@ -1394,11 +1442,13 @@ namespace std {
             }
         } end function partial_sort
 
+        safe(compile) {
         template <typename It>
         function partial_sort(It: first, It: middle, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             partial_sort(first, middle, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function partial_sort
+        } end safe
 
         template <typename It, typename E>
         function nth_element(It: first, It: nth, It: last, std::Compare<E>: comp) -> void {
@@ -1410,22 +1460,26 @@ namespace std {
             detail::select(first, 0, n, k, comp);
         } end function nth_element
 
+        safe(compile) {
         template <typename It>
         function nth_element(It: first, It: nth, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             nth_element(first, nth, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function nth_element
+        } end safe
 
         template <typename It, typename E>
         function make_heap(It: first, It: last, std::Compare<E>: comp) -> void {
             detail::heapify(first, static_cast<long int>(last - first), comp);
         } end function make_heap
 
+        safe(compile) {
         template <typename It>
         function make_heap(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             make_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function make_heap
+        } end safe
 
         template <typename It, typename E>
         function push_heap(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1435,11 +1489,13 @@ namespace std {
             }
         } end function push_heap
 
+        safe(compile) {
         template <typename It>
         function push_heap(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             push_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function push_heap
+        } end safe
 
         template <typename It, typename E>
         function pop_heap(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1450,11 +1506,13 @@ namespace std {
             }
         } end function pop_heap
 
+        safe(compile) {
         template <typename It>
         function pop_heap(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             pop_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function pop_heap
+        } end safe
 
         template <typename It, typename E>
         function sort_heap(It: first, It: last, std::Compare<E>: comp) -> void {
@@ -1464,11 +1522,13 @@ namespace std {
             }
         } end function sort_heap
 
+        safe(compile) {
         template <typename It>
         function sort_heap(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             sort_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function sort_heap
+        } end safe
 
         template <typename It, typename E>
         function is_heap(It: first, It: last, std::Compare<E>: comp) -> bool {
@@ -1481,11 +1541,13 @@ namespace std {
             return true;
         } end function is_heap
 
+        safe(compile) {
         template <typename It>
         function is_heap(It: first, It: last) -> bool {
             using V = std::traits::decay<typeof(*first)>;
             return is_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function is_heap
+        } end safe
 
         template <typename It, typename T, typename E>
         function lower_bound(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
@@ -1502,11 +1564,13 @@ namespace std {
             return first + lo;
         } end function lower_bound
 
+        safe(compile) {
         template <typename It, typename T>
         function lower_bound(It: first, It: last, const T&: value) -> It {
             using V = std::traits::decay<typeof(*first)>;
             return lower_bound(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function lower_bound
+        } end safe
 
         template <typename It, typename T, typename E>
         function upper_bound(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
@@ -1523,6 +1587,7 @@ namespace std {
             return first + lo;
         } end function upper_bound
 
+        safe(compile) {
         template <typename It, typename T>
         function upper_bound(It: first, It: last, const T&: value) -> It {
             using V = std::traits::decay<typeof(*first)>;
@@ -1565,6 +1630,7 @@ namespace std {
             using V = std::traits::decay<typeof(*first)>;
             return binary_find(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function binary_find
+        } end safe
 
         template <typename It, typename T, typename E>
         function exponential_search(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
@@ -1585,11 +1651,13 @@ namespace std {
             return last;
         } end function exponential_search
 
+        safe(compile) {
         template <typename It, typename T>
         function exponential_search(It: first, It: last, const T&: value) -> It {
             using V = std::traits::decay<typeof(*first)>;
             return exponential_search(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function exponential_search
+        } end safe
 
         template <typename It, typename T>
         requires std::traits::is_arithmetic<T>
@@ -1660,11 +1728,13 @@ namespace std {
             return last;
         } end function fibonacci_search
 
+        safe(compile) {
         template <typename It, typename T>
         function fibonacci_search(It: first, It: last, const T&: value) -> It {
             using V = std::traits::decay<typeof(*first)>;
             return fibonacci_search(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function fibonacci_search
+        } end safe
 
         template <typename A, typename B, typename Out, typename E>
         function merge(A: first, A: last, B: o_first, B: o_last, Out: out, std::Compare<E>: comp) -> Out {
@@ -1694,11 +1764,13 @@ namespace std {
             return o;
         } end function merge
 
+        safe(compile) {
         template <typename A, typename B, typename Out>
         function merge(A: first, A: last, B: o_first, B: o_last, Out: out) -> Out {
             using V = std::traits::decay<typeof(*first)>;
             return merge(first, last, o_first, o_last, out, [](const V&: x, const V&: y) -> bool { return x < y; });
         } end function merge
+        } end safe
 
         template <typename It, typename E>
         function inplace_merge(It: first, It: middle, It: last, std::Compare<E>: comp) -> void {
@@ -1713,11 +1785,13 @@ namespace std {
             delete[] buffer;
         } end function inplace_merge
 
+        safe(compile) {
         template <typename It>
         function inplace_merge(It: first, It: middle, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             inplace_merge(first, middle, last, [](const V&: a, const V&: b) -> bool { return a < b; });
         } end function inplace_merge
+        } end safe
 
         template <typename A, typename B, typename Out>
         function set_union(A: first, A: last, B: o_first, B: o_last, Out: out) -> Out {
@@ -1800,6 +1874,7 @@ namespace std {
             return true;
         } end function includes
 
+        safe(compile) {
         template <typename C>
         requires std::concepts::iterable<C>
         function sort(C&&: items) -> void {
@@ -1889,5 +1964,7 @@ namespace std {
         function for_each(C&&: items, std::Action<E>: func) -> std::Action<E> {
             return for_each(items.begin(), items.end(), func);
         } end function for_each
+        } end safe
+
     } end namespace algorithms
 } end namespace std

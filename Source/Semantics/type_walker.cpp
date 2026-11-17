@@ -472,6 +472,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
             for (nodes::RecordDeclaration::Member m : r->get_members()) build(m.node);
             m_current = saved;
             if (r->is_union()) check_union(r);
+            check_template_receivers(r);
 
             for (const nodes::RecordDeclaration::Member& m : r->get_members()) {
                 if (!m.node || m.node->kind != K::FunctionDeclaration) continue;
@@ -553,7 +554,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
         }
 
         case K::TemplateDeclaration:
-            // Generic bodies are typed at instantiation
+            check_template_receivers(static_cast<nodes::TemplateDeclaration*>(node)->m_declaration);
             break;
 
         case K::ReturnStatement: {
@@ -1109,10 +1110,12 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                     std::vector<Type*> args;
                     for (nodes::ASTNode* a : c->m_arguments) { walk_expr(a); args.push_back(type_of(a)); }
                     assign_typed(e, type_builtin_method(c, args), VC::RValue);
+                    check_safe_expression(m);
                     break;
                 } else {
                     SiteGuard callee_guard(m_site, m);
                     finish_member_access(m, true);
+                    check_safe_expression(m);
                 }
             } else {
                 walk_expr(c->m_callee);
@@ -3683,6 +3686,7 @@ bool TypeWalker::defer_member_body(nodes::ASTNode* node, Symbol* sym, bool has_b
         if (node_used) *node_used = true;
         return false;
     }
+    if (m_policy && m_policy->eager_members) eager = true;
     if (eager || !(has_body || native) || !sym || !m_inst || node == m_force_node) return false;
     if (!is_member_function(sym) || m_requested.count(sym)) return false;
     Instantiator::Instantiation* I = m_inst->owning(sym);
@@ -4009,9 +4013,13 @@ bool TypeWalker::is_object_member(const Symbol* s) {
 }
 
 void TypeWalker::mark_safe_subtree(nodes::ASTNode* n) {
+    mark_safe_subtree(n, nodes::SafetySafe);
+}
+
+void TypeWalker::mark_safe_subtree(nodes::ASTNode* n, std::uint8_t level) {
     if (!n) return;
-    n->safety = nodes::SafetySafe;
-    nodes::for_each_child(n, [](nodes::ASTNode* c) { mark_safe_subtree(c); });
+    n->safety = level;
+    nodes::for_each_child(n, [level](nodes::ASTNode* c) { mark_safe_subtree(c, level); });
 }
 
 TypeWalker::SelfRules TypeWalker::enter_self_rules(nodes::ASTNode* fn, Symbol* sym, nodes::FunctionParameters* params, bool special) {
@@ -4027,7 +4035,7 @@ TypeWalker::SelfRules TypeWalker::enter_self_rules(nodes::ASTNode* fn, Symbol* s
     const bool hoisted = (fn->kind == K::FunctionDeclaration && static_cast<nodes::FunctionDeclaration*>(fn)->hoisted_friend)
                       || (fn->kind == K::OperatorFunctionDeclaration && static_cast<nodes::OperatorFunctionDeclaration*>(fn)->hoisted_friend);
     const bool member = rec && !hoisted;
-    if (member && nodes::in_safe_code(rec) && fn->safety == nodes::SafetyNone) mark_safe_subtree(fn);
+    if (member && nodes::in_safe_code(rec) && fn->safety == nodes::SafetyNone) mark_safe_subtree(fn, rec->safety);
 
     const bool is_static = fn->kind == K::FunctionDeclaration && static_cast<nodes::FunctionDeclaration*>(fn)->get_modifiers().has(modifiers::RawModifiers::Static);
     const bool has_receiver = params && params->has_receiver();
@@ -4044,7 +4052,7 @@ TypeWalker::SelfRules TypeWalker::enter_self_rules(nodes::ASTNode* fn, Symbol* s
         }
     }
 
-    if (member && (nodes::in_safe_code(fn) || nodes::in_safe_code(rec))) {
+    if (member && !rec->m_native && (nodes::in_safe_code(fn) || nodes::in_safe_code(rec))) {
         m_explicit_self = true;
         if (!special && !has_receiver && !is_static) {
             const std::string name = sym ? std::string(sym->name) : std::string("this method");
@@ -4085,8 +4093,37 @@ void TypeWalker::check_bare_member(nodes::Identifier* id) {
     }
 }
 
+void TypeWalker::check_template_receivers(nodes::ASTNode* decl) {
+    if (!decl || decl->kind != K::RecordDeclaration) return;
+    auto* rec = static_cast<nodes::RecordDeclaration*>(decl);
+    if (!nodes::in_safe_code(rec) || rec->m_native) return;
+
+    for (const nodes::RecordDeclaration::Member& m : rec->get_members()) {
+        nodes::ASTNode* n = m.node;
+        if (n && n->kind == K::TemplateDeclaration) n = static_cast<nodes::TemplateDeclaration*>(n)->m_declaration;
+        if (!n) continue;
+
+        if (n->kind == K::RecordDeclaration) {
+            check_template_receivers(n);
+        } else if (n->kind == K::FunctionDeclaration) {
+            auto* fd = static_cast<nodes::FunctionDeclaration*>(n);
+            if (fd->hoisted_friend || fd->get_modifiers().has(modifiers::RawModifiers::Static)) continue;
+            if (fd->get_parameters() && fd->get_parameters()->has_receiver()) continue;
+            const std::string name(fd->get_name());
+            safety_error(fd, fd->line, "in safe code a method says how it uses its object: add a receiver as the first parameter of '" + name + "', as in '" + name + "(const self&)' to read it, '" + name + "(self&)' to change it, or '" + name + "(self)' to work on a copy; or make it 'static'");
+        } else if (n->kind == K::OperatorFunctionDeclaration) {
+            auto* op = static_cast<nodes::OperatorFunctionDeclaration*>(n);
+            if (op->hoisted_friend) continue;
+            if (op->get_parameters() && op->get_parameters()->has_receiver()) continue;
+            const std::string name = op->symbol ? std::string(op->symbol->name) : std::string("this operator");
+            safety_error(op, op->line, "in safe code a method says how it uses its object: add a receiver as the first parameter of '" + name + "', as in '" + name + "(const self&)' to read it, '" + name + "(self&)' to change it, or '" + name + "(self)' to work on a copy; or make it 'static'");
+        }
+    }
+}
+
 void TypeWalker::safety_error(const nodes::ASTNode* at, std::uint32_t line, const std::string& message) {
     const FileId file = file_of(at);
+    if (m_policy && m_policy->quiet && m_policy->quiet(file)) return;
     const std::string key = std::to_string(file) + ":" + std::to_string(line) + ":" + message;
     if (!m_safety_seen.insert(key).second) return;
     SemanticError::emit(m_reporter, file, line, "Safety", message);

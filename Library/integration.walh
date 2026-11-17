@@ -2,6 +2,7 @@ import module.math
 import module.constants
 import module.symbolic
 
+safe(compile) {
 namespace std {
     namespace errors {
         class integration_error {
@@ -10,8 +11,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class integration_error
     } end namespace errors
@@ -454,3 +455,4 @@ namespace std {
         } end function gauss_legendre
     } end namespace integration
 } end namespace std
+} end safe

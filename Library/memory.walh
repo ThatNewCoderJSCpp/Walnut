@@ -1,6 +1,7 @@
 import module.collections
 
 namespace std {
+    safe(compile) {
     namespace errors {
         class arena_error {
         public:
@@ -8,8 +9,8 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class arena_error
 
@@ -19,13 +20,15 @@ namespace std {
 
             constructor(const string&: m) : message = m { }
 
-            function what() const -> string {
-                return message;
+            function what(const self&) -> string {
+                return self.message;
             } end function what
         } end class pointer_error
     } end namespace errors
+    } end safe
 
     namespace memory {
+        safe(compile) {
         namespace detail {
             extern "C++" from "<walnut_memory.hpp>" {
                 class ArenaHandle as "walnut_rt::mem::arena" {
@@ -34,19 +37,19 @@ namespace std {
                     constructor(long int: block_size) explicit;
                     constructor(long int: block_size, long int: max_block_size, bool: thread_safe);
 
-                    function reset() -> void;
-                    function shrink_to_fit() -> void;
-                    function reserve(long int: bytes) -> void;
-                    function bytes_used() const -> long int;
-                    function bytes_reserved() const -> long int;
-                    function object_count() const -> long int;
-                    function handle_count() const -> long int;
-                    function block_count() const -> long int;
-                    function generation() const -> long int;
-                    function block_size() const -> long int;
-                    function max_block_size() const -> long int;
-                    function thread_safe() const -> bool;
-                    function same(const ArenaHandle&: other) const -> bool;
+                    function reset(self&) -> void;
+                    function shrink_to_fit(self&) -> void;
+                    function reserve(self&, long int: bytes) -> void;
+                    function bytes_used(const self&) -> long int;
+                    function bytes_reserved(const self&) -> long int;
+                    function object_count(const self&) -> long int;
+                    function handle_count(const self&) -> long int;
+                    function block_count(const self&) -> long int;
+                    function generation(const self&) -> long int;
+                    function block_size(const self&) -> long int;
+                    function max_block_size(const self&) -> long int;
+                    function thread_safe(const self&) -> bool;
+                    function same(const self&, const ArenaHandle&: other) -> bool;
                 } end class ArenaHandle
             } end extern
         } end namespace detail
@@ -220,110 +223,112 @@ namespace std {
             constructor(long int: block_size, long int: max_block_size, bool: thread_safe) : handle(check_size(block_size, "the block size"), check_size(max_block_size, "the largest block size"), thread_safe) { }
 
             template <typename T>
-            function make() -> ArenaPtr<T> {
-                return ArenaPtr<T>::create(handle);
+            function make(self&) -> ArenaPtr<T> {
+                return ArenaPtr<T>::create(self.handle);
             } end function make
 
             template <typename T>
-            function make(const T&: value) -> ArenaPtr<T> {
-                return ArenaPtr<T>::create(handle, value);
+            function make(self&, const T&: value) -> ArenaPtr<T> {
+                return ArenaPtr<T>::create(self.handle, value);
             } end function make
 
             template <typename T>
-            function make_array(long int: count) -> ArenaArray<T> {
+            function make_array(self&, long int: count) -> ArenaArray<T> {
                 check_count(count);
-                return ArenaArray<T>::create(handle, count);
+                return ArenaArray<T>::create(self.handle, count);
             } end function make_array
 
             template <typename T>
-            function make_array(long int: count, const T&: fill) -> ArenaArray<T> {
+            function make_array(self&, long int: count, const T&: fill) -> ArenaArray<T> {
                 check_count(count);
-                return ArenaArray<T>::create(handle, count, fill);
+                return ArenaArray<T>::create(self.handle, count, fill);
             } end function make_array
 
             template <typename T>
-            function make_array(const std::collections::Vector<T>&: values) -> ArenaArray<T> {
-                return ArenaArray<T>::create(handle, values);
+            function make_array(self&, const std::collections::Vector<T>&: values) -> ArenaArray<T> {
+                return ArenaArray<T>::create(self.handle, values);
             } end function make_array
 
             template <typename T>
-            function owns(const ArenaPtr<T>&: p) const -> bool {
-                return ArenaPtr<T>::belongs(handle, p);
+            function owns(const self&, const ArenaPtr<T>&: p) -> bool {
+                return ArenaPtr<T>::belongs(self.handle, p);
             } end function owns
 
-            function reset() -> void {
-                handle.reset();
+            function reset(self&) -> void {
+                self.handle.reset();
             } end function reset
 
-            function clear() -> void {
-                handle.reset();
+            function clear(self&) -> void {
+                self.handle.reset();
             } end function clear
 
-            function shrink_to_fit() -> void {
-                handle.shrink_to_fit();
+            function shrink_to_fit(self&) -> void {
+                self.handle.shrink_to_fit();
             } end function shrink_to_fit
 
-            function reserve(long int: bytes) -> void {
+            function reserve(self&, long int: bytes) -> void {
                 if (bytes < 0) then {
                     throw std::errors::arena_error(static_cast<string>(`Arena: can't reserve ${bytes} bytes`));
                 }
-                handle.reserve(bytes);
+                self.handle.reserve(bytes);
             } end function reserve
 
-            function bytes_used() const -> long int {
-                return handle.bytes_used();
+            function bytes_used(const self&) -> long int {
+                return self.handle.bytes_used();
             } end function bytes_used
 
-            function bytes_reserved() const -> long int {
-                return handle.bytes_reserved();
+            function bytes_reserved(const self&) -> long int {
+                return self.handle.bytes_reserved();
             } end function bytes_reserved
 
-            function object_count() const -> long int {
-                return handle.object_count();
+            function object_count(const self&) -> long int {
+                return self.handle.object_count();
             } end function object_count
 
-            function handle_count() const -> long int {
-                return handle.handle_count();
+            function handle_count(const self&) -> long int {
+                return self.handle.handle_count();
             } end function handle_count
 
-            function block_count() const -> long int {
-                return handle.block_count();
+            function block_count(const self&) -> long int {
+                return self.handle.block_count();
             } end function block_count
 
-            function generation() const -> long int {
-                return handle.generation();
+            function generation(const self&) -> long int {
+                return self.handle.generation();
             } end function generation
 
-            function block_size() const -> long int {
-                return handle.block_size();
+            function block_size(const self&) -> long int {
+                return self.handle.block_size();
             } end function block_size
 
-            function max_block_size() const -> long int {
-                return handle.max_block_size();
+            function max_block_size(const self&) -> long int {
+                return self.handle.max_block_size();
             } end function max_block_size
 
-            function thread_safe() const -> bool {
-                return handle.thread_safe();
+            function thread_safe(const self&) -> bool {
+                return self.handle.thread_safe();
             } end function thread_safe
 
-            operator(==) function(const Arena&: other) const -> bool {
-                return handle.same(other.handle);
+            operator(==) function(const self&, const Arena&: other) -> bool {
+                return self.handle.same(other.handle);
             }
         } end class Arena
+        } end safe
 
         namespace detail {
+            safe(compile) {
             extern "C++" from "<walnut_memory.hpp>" {
                 class Counts as "walnut_rt::mem::counts" {
                 public:
                     constructor();
                     constructor(const Counts&: other) = delete;
-                    function add_strong() noexcept -> void;
-                    function release_strong() noexcept -> bool;
-                    function add_weak() noexcept -> void;
-                    function release_weak() noexcept -> bool;
-                    function try_add_strong() noexcept -> bool;
-                    function strong_count() const noexcept -> long int;
-                    function weak_count() const noexcept -> long int;
+                    function add_strong(self&) noexcept -> void;
+                    function release_strong(self&) noexcept -> bool;
+                    function add_weak(self&) noexcept -> void;
+                    function release_weak(self&) noexcept -> bool;
+                    function try_add_strong(self&) noexcept -> bool;
+                    function strong_count(const self&) noexcept -> long int;
+                    function weak_count(const self&) noexcept -> long int;
                 } end class Counts
             } end extern
 
@@ -331,7 +336,7 @@ namespace std {
             public:
                 Counts: counts;
 
-                function destroy() virtual noexcept -> void {
+                function destroy(self&) virtual noexcept -> void {
                 } end function destroy
             } end class Block
 
@@ -342,11 +347,12 @@ namespace std {
 
                 constructor(T*: p) : object = p { }
 
-                function destroy() override noexcept -> void {
-                    delete object;
-                    object = nullptr;
+                function destroy(self&) override noexcept -> void {
+                    delete self.object;
+                    self.object = nullptr;
                 } end function destroy
             } end class BlockFor
+            } end safe
 
             function release_strong(Block*: block) noexcept -> void {
                 if (block == nullptr) then {
@@ -374,7 +380,7 @@ namespace std {
 
                 constructor(const SharedHook&: other) { }
 
-                operator(=) function(const SharedHook&: other) -> SharedHook& {
+                operator(=) function(self&, const SharedHook&: other) -> SharedHook& {
                     return self;
                 }
 
@@ -382,18 +388,20 @@ namespace std {
                     release_weak(hook_block);
                 }
 
-                function hook_attach(Block*: block) noexcept -> void {
-                    if (hook_block == nullptr || hook_block->counts.strong_count() == 0) then {
-                        release_weak(hook_block);
-                        hook_block = block;
+                function hook_attach(self&, Block*: block) noexcept -> void {
+                    if (self.hook_block == nullptr || self.hook_block->counts.strong_count() == 0) then {
+                        release_weak(self.hook_block);
+                        self.hook_block = block;
                         block->counts.add_weak();
                     }
                 } end function hook_attach
             } end class SharedHook
 
+            safe(compile) {
             function empty_pointer(const string&: kind) -> std::errors::pointer_error {
                 return std::errors::pointer_error(kind + " is empty");
             } end function empty_pointer
+            } end safe
         } end namespace detail
 
         template <typename T>
@@ -418,88 +426,90 @@ namespace std {
                 delete ptr;
             }
 
-            operator(=) function(const UniquePtr&: other) -> UniquePtr& = delete;
+            operator(=) function(self&, const UniquePtr&: other) -> UniquePtr& = delete;
 
-            operator(=) function(UniquePtr&&: other) noexcept -> UniquePtr& {
+            operator(=) function(self&, UniquePtr&&: other) noexcept -> UniquePtr& {
                 if (&other != this) then {
-                    reset(other.release());
+                    self.reset(other.release());
                 }
                 return self;
             }
 
             template <typename U>
             requires std::traits::is_base_of<U, T>
-            operator(UniquePtr<U>) function() && {
-                return UniquePtr<U>(static_cast<U*>(release()));
+            operator(UniquePtr<U>) function(self&&) {
+                return UniquePtr<U>(static_cast<U*>(self.release()));
             }
 
-            function get() const noexcept -> T* {
-                return ptr;
+            function get(const self&) noexcept -> T* {
+                return self.ptr;
             } end function get
 
-            function release() noexcept -> T* {
-                T*: p = ptr;
-                ptr = nullptr;
+            function release(self&) noexcept -> T* {
+                T*: p = self.ptr;
+                self.ptr = nullptr;
                 return p;
             } end function release
 
-            function reset() -> void {
-                T*: old = ptr;
-                ptr = nullptr;
+            function reset(self&) -> void {
+                T*: old = self.ptr;
+                self.ptr = nullptr;
                 delete old;
             } end function reset
 
-            function reset(T*: p) -> void {
-                T*: old = ptr;
-                ptr = p;
+            function reset(self&, T*: p) -> void {
+                T*: old = self.ptr;
+                self.ptr = p;
                 if (old != p) then {
                     delete old;
                 }
             } end function reset
 
-            function swap(UniquePtr&: other) noexcept -> void {
-                T*: p = ptr;
-                ptr = other.ptr;
+            function swap(self&, UniquePtr&: other) noexcept -> void {
+                T*: p = self.ptr;
+                self.ptr = other.ptr;
                 other.ptr = p;
             } end function swap
 
-            function valid() const noexcept -> bool {
-                return ptr != nullptr;
+            function valid(const self&) noexcept -> bool {
+                return self.ptr != nullptr;
             } end function valid
 
-            function empty() const noexcept -> bool {
-                return ptr == nullptr;
+            function empty(const self&) noexcept -> bool {
+                return self.ptr == nullptr;
             } end function empty
 
-            function value() const -> T& {
-                if (ptr == nullptr) then {
+            function value(const self&) -> T& {
+                if (self.ptr == nullptr) then {
                     throw detail::empty_pointer("UniquePtr");
                 }
-                return *ptr;
+                return *self.ptr;
             } end function value
 
             operator(bool) function() const explicit {
                 return ptr != nullptr;
             }
 
-            operator(*) function() const -> T& {
-                return value();
+            operator(*) function(const self&) -> T& {
+                return self.value();
             }
 
-            operator(->) function() const -> T* {
-                if (ptr == nullptr) then {
+            operator(->) function(const self&) -> T* {
+                if (self.ptr == nullptr) then {
                     throw detail::empty_pointer("UniquePtr");
                 }
-                return ptr;
+                return self.ptr;
             }
 
-            operator(==) function(const UniquePtr&: other) const -> bool {
-                return ptr == other.ptr;
+            operator(==) function(const self&, const UniquePtr&: other) -> bool {
+                return self.ptr == other.ptr;
             }
         } end class UniquePtr
 
+        safe(compile) {
         template <typename T>
         class WeakPtr;
+        } end safe
 
         template <typename T>
         class SharedPtr {
@@ -521,14 +531,14 @@ namespace std {
                 }
             }
 
-            function adopt(T*: p) -> void {
+            function adopt(self&, T*: p) -> void {
                 if (p == nullptr) then {
                     return;
                 }
-                ptr = p;
-                block = new detail::BlockFor<T>(p);
+                self.ptr = p;
+                self.block = new detail::BlockFor<T>(p);
                 if constexpr (std::traits::is_base_of<detail::SharedHook, T>) then {
-                    p->hook_attach(block);
+                    p->hook_attach(self.block);
                 }
             } end function adopt
 
@@ -565,17 +575,17 @@ namespace std {
                 detail::release_strong(block);
             }
 
-            operator(=) function(const SharedPtr&: other) -> SharedPtr& {
+            operator(=) function(self&, const SharedPtr&: other) -> SharedPtr& {
                 SharedPtr: copy = other;
-                swap(copy);
+                self.swap(copy);
                 return self;
             }
 
-            operator(=) function(SharedPtr&&: other) noexcept -> SharedPtr& {
+            operator(=) function(self&, SharedPtr&&: other) noexcept -> SharedPtr& {
                 if (&other != this) then {
-                    detail::release_strong(block);
-                    ptr = other.ptr;
-                    block = other.block;
+                    detail::release_strong(self.block);
+                    self.ptr = other.ptr;
+                    self.block = other.block;
                     other.ptr = nullptr;
                     other.block = nullptr;
                 }
@@ -584,90 +594,90 @@ namespace std {
 
             template <typename U>
             requires std::traits::is_base_of<U, T>
-            operator(SharedPtr<U>) function() const {
-                return SharedPtr<U>(static_cast<U*>(ptr), block, true);
+            operator(SharedPtr<U>) function(const self&) {
+                return SharedPtr<U>(static_cast<U*>(self.ptr), self.block, true);
             }
 
             operator(WeakPtr<T>) function() const {
                 return WeakPtr<T>(self);
             }
 
-            function get() const noexcept -> T* {
-                return ptr;
+            function get(const self&) noexcept -> T* {
+                return self.ptr;
             } end function get
 
-            function reset() -> void {
+            function reset(self&) -> void {
                 SharedPtr: none;
-                swap(none);
+                self.swap(none);
             } end function reset
 
-            function reset(T*: p) -> void {
+            function reset(self&, T*: p) -> void {
                 SharedPtr: fresh(p);
-                swap(fresh);
+                self.swap(fresh);
             } end function reset
 
-            function swap(SharedPtr&: other) noexcept -> void {
-                T*: p = ptr;
-                ptr = other.ptr;
+            function swap(self&, SharedPtr&: other) noexcept -> void {
+                T*: p = self.ptr;
+                self.ptr = other.ptr;
                 other.ptr = p;
-                detail::Block*: b = block;
-                block = other.block;
+                detail::Block*: b = self.block;
+                self.block = other.block;
                 other.block = b;
             } end function swap
 
-            function use_count() const noexcept -> long int {
-                if (block == nullptr) then {
+            function use_count(const self&) noexcept -> long int {
+                if (self.block == nullptr) then {
                     return 0;
                 }
-                return block->counts.strong_count();
+                return self.block->counts.strong_count();
             } end function use_count
 
-            function unique() const noexcept -> bool {
-                return use_count() == 1;
+            function unique(const self&) noexcept -> bool {
+                return self.use_count() == 1;
             } end function unique
 
-            function valid() const noexcept -> bool {
-                return ptr != nullptr;
+            function valid(const self&) noexcept -> bool {
+                return self.ptr != nullptr;
             } end function valid
 
-            function empty() const noexcept -> bool {
-                return ptr == nullptr;
+            function empty(const self&) noexcept -> bool {
+                return self.ptr == nullptr;
             } end function empty
 
             template <typename U>
-            function owner_before(const SharedPtr<U>&: other) const noexcept -> bool {
-                return reinterpret_cast<long int>(block) < reinterpret_cast<long int>(other.block);
+            function owner_before(const self&, const SharedPtr<U>&: other) noexcept -> bool {
+                return reinterpret_cast<long int>(self.block) < reinterpret_cast<long int>(other.block);
             } end function owner_before
 
             template <typename U>
-            function same_owner(const SharedPtr<U>&: other) const noexcept -> bool {
-                return block == other.block;
+            function same_owner(const self&, const SharedPtr<U>&: other) noexcept -> bool {
+                return self.block == other.block;
             } end function same_owner
 
-            function value() const -> T& {
-                if (ptr == nullptr) then {
+            function value(const self&) -> T& {
+                if (self.ptr == nullptr) then {
                     throw detail::empty_pointer("SharedPtr");
                 }
-                return *ptr;
+                return *self.ptr;
             } end function value
 
             operator(bool) function() const explicit {
                 return ptr != nullptr;
             }
 
-            operator(*) function() const -> T& {
-                return value();
+            operator(*) function(const self&) -> T& {
+                return self.value();
             }
 
-            operator(->) function() const -> T* {
-                if (ptr == nullptr) then {
+            operator(->) function(const self&) -> T* {
+                if (self.ptr == nullptr) then {
                     throw detail::empty_pointer("SharedPtr");
                 }
-                return ptr;
+                return self.ptr;
             }
 
-            operator(==) function(const SharedPtr&: other) const -> bool {
-                return ptr == other.ptr;
+            operator(==) function(const self&, const SharedPtr&: other) -> bool {
+                return self.ptr == other.ptr;
             }
         } end class SharedPtr
 
@@ -703,17 +713,17 @@ namespace std {
                 detail::release_weak(block);
             }
 
-            operator(=) function(const WeakPtr&: other) -> WeakPtr& {
+            operator(=) function(self&, const WeakPtr&: other) -> WeakPtr& {
                 WeakPtr: copy = other;
-                swap(copy);
+                self.swap(copy);
                 return self;
             }
 
-            operator(=) function(WeakPtr&&: other) noexcept -> WeakPtr& {
+            operator(=) function(self&, WeakPtr&&: other) noexcept -> WeakPtr& {
                 if (&other != this) then {
-                    detail::release_weak(block);
-                    ptr = other.ptr;
-                    block = other.block;
+                    detail::release_weak(self.block);
+                    self.ptr = other.ptr;
+                    self.block = other.block;
                     other.ptr = nullptr;
                     other.block = nullptr;
                 }
@@ -722,46 +732,46 @@ namespace std {
 
             template <typename U>
             requires std::traits::is_base_of<U, T>
-            operator(WeakPtr<U>) function() const {
+            operator(WeakPtr<U>) function(const self&) {
                 WeakPtr<U>: out;
-                out.ptr = static_cast<U*>(ptr);
-                out.block = block;
-                if (block != nullptr) then {
-                    block->counts.add_weak();
+                out.ptr = static_cast<U*>(self.ptr);
+                out.block = self.block;
+                if (self.block != nullptr) then {
+                    self.block->counts.add_weak();
                 }
                 return out;
             }
 
-            function lock() const noexcept -> SharedPtr<T> {
-                if (block != nullptr && block->counts.try_add_strong()) then {
-                    return SharedPtr<T>(ptr, block, false);
+            function lock(const self&) noexcept -> SharedPtr<T> {
+                if (self.block != nullptr && self.block->counts.try_add_strong()) then {
+                    return SharedPtr<T>(self.ptr, self.block, false);
                 }
                 return SharedPtr<T>();
             } end function lock
 
-            function expired() const noexcept -> bool {
-                return block == nullptr || block->counts.strong_count() == 0;
+            function expired(const self&) noexcept -> bool {
+                return self.block == nullptr || self.block->counts.strong_count() == 0;
             } end function expired
 
-            function use_count() const noexcept -> long int {
-                if (block == nullptr) then {
+            function use_count(const self&) noexcept -> long int {
+                if (self.block == nullptr) then {
                     return 0;
                 }
-                return block->counts.strong_count();
+                return self.block->counts.strong_count();
             } end function use_count
 
-            function reset() noexcept -> void {
-                detail::release_weak(block);
-                block = nullptr;
-                ptr = nullptr;
+            function reset(self&) noexcept -> void {
+                detail::release_weak(self.block);
+                self.block = nullptr;
+                self.ptr = nullptr;
             } end function reset
 
-            function swap(WeakPtr&: other) noexcept -> void {
-                T*: p = ptr;
-                ptr = other.ptr;
+            function swap(self&, WeakPtr&: other) noexcept -> void {
+                T*: p = self.ptr;
+                self.ptr = other.ptr;
                 other.ptr = p;
-                detail::Block*: b = block;
-                block = other.block;
+                detail::Block*: b = self.block;
+                self.block = other.block;
                 other.block = b;
             } end function swap
         } end class WeakPtr
@@ -769,21 +779,22 @@ namespace std {
         template <typename T>
         class EnableSharedFromThis inherits detail::SharedHook {
         public:
-            function shared_from_this() -> SharedPtr<T> {
-                if (hook_block == nullptr || !hook_block->counts.try_add_strong()) then {
+            function shared_from_this(self&) -> SharedPtr<T> {
+                if (self.hook_block == nullptr || !self.hook_block->counts.try_add_strong()) then {
                     throw std::errors::pointer_error("shared_from_this() was called on an object that no SharedPtr owns");
                 }
-                return SharedPtr<T>(static_cast<T*>(this), hook_block, false);
+                return SharedPtr<T>(static_cast<T*>(this), self.hook_block, false);
             } end function shared_from_this
 
-            function weak_from_this() -> WeakPtr<T> {
-                if (hook_block == nullptr || hook_block->counts.strong_count() == 0) then {
+            function weak_from_this(self&) -> WeakPtr<T> {
+                if (self.hook_block == nullptr || self.hook_block->counts.strong_count() == 0) then {
                     return WeakPtr<T>();
                 }
-                return WeakPtr<T>(shared_from_this());
+                return WeakPtr<T>(self.shared_from_this());
             } end function weak_from_this
         } end class EnableSharedFromThis
 
+        safe(compile) {
         template <typename T, typename... Ts>
         function make_unique(Ts&&...: args) -> UniquePtr<T> {
             return UniquePtr<T>(new T(std::core::forward<Ts>(args)...));
@@ -855,5 +866,6 @@ namespace std {
         function allocation_report() -> string {
             return detail::Tracker::allocation_report();
         } end function allocation_report
+        } end safe
     } end namespace memory
 } end namespace std

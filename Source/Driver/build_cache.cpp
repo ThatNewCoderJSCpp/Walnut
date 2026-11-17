@@ -191,7 +191,7 @@ void prune(const fs::path& root, int max_age_days) {
     { std::ofstream m(marker); }
     const auto limit = std::chrono::hours(24) * max_age_days;
 
-    for (const char* sub : { "obj", "exe", "pch" }) {
+    for (const char* sub : { "obj", "exe", "pch", "std" }) {
         const fs::path dir = root / sub;
         if (!fs::is_directory(dir, ec)) continue;
         std::vector<fs::path> doomed;

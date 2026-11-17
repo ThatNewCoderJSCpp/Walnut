@@ -1,3 +1,4 @@
+safe(compile) {
 namespace std {
     namespace math {
         extern "C++" from "<walnut_math.hpp>" {
@@ -11,32 +12,32 @@ namespace std {
                 constructor(long double: value) as "walnut_rt::math::big_from";
                 constructor(long long double: value) as "walnut_rt::math::big_from";
                 constructor(const string&: digits) explicit as "walnut_rt::math::parse_big";
-                function to_string() const -> string;
-                function to_string(long int: digits) const -> string as "walnut_rt::math::big_to_string";
-                function is_zero() const -> bool;
-                function is_negative() const -> bool;
-                function is_positive() const -> bool;
-                function is_integer() const -> bool;
-                function is_finite() const -> bool;
-                function is_infinite() const -> bool;
-                function is_nan() const -> bool;
-                function sign() const -> int;
-                function abs() const -> BigFloat;
-                operator(-) function() const -> BigFloat;
-                operator(+) function(const BigFloat&: other) const -> BigFloat;
-                operator(-) function(const BigFloat&: other) const -> BigFloat;
-                operator(*) function(const BigFloat&: other) const -> BigFloat;
-                operator(/) function(const BigFloat&: other) const -> BigFloat;
-                operator(==) function(const BigFloat&: other) const -> bool;
-                operator(!=) function(const BigFloat&: other) const -> bool;
-                operator(<) function(const BigFloat&: other) const -> bool;
-                operator(>) function(const BigFloat&: other) const -> bool;
-                operator(<=) function(const BigFloat&: other) const -> bool;
-                operator(>=) function(const BigFloat&: other) const -> bool;
-                operator(+=) function(const BigFloat&: other) -> BigFloat&;
-                operator(-=) function(const BigFloat&: other) -> BigFloat&;
-                operator(*=) function(const BigFloat&: other) -> BigFloat&;
-                operator(/=) function(const BigFloat&: other) -> BigFloat&;
+                function to_string(const self&) -> string;
+                function to_string(const self&, long int: digits) -> string as "walnut_rt::math::big_to_string";
+                function is_zero(const self&) -> bool;
+                function is_negative(const self&) -> bool;
+                function is_positive(const self&) -> bool;
+                function is_integer(const self&) -> bool;
+                function is_finite(const self&) -> bool;
+                function is_infinite(const self&) -> bool;
+                function is_nan(const self&) -> bool;
+                function sign(const self&) -> int;
+                function abs(const self&) -> BigFloat;
+                operator(-) function(const self&) -> BigFloat;
+                operator(+) function(const self&, const BigFloat&: other) -> BigFloat;
+                operator(-) function(const self&, const BigFloat&: other) -> BigFloat;
+                operator(*) function(const self&, const BigFloat&: other) -> BigFloat;
+                operator(/) function(const self&, const BigFloat&: other) -> BigFloat;
+                operator(==) function(const self&, const BigFloat&: other) -> bool;
+                operator(!=) function(const self&, const BigFloat&: other) -> bool;
+                operator(<) function(const self&, const BigFloat&: other) -> bool;
+                operator(>) function(const self&, const BigFloat&: other) -> bool;
+                operator(<=) function(const self&, const BigFloat&: other) -> bool;
+                operator(>=) function(const self&, const BigFloat&: other) -> bool;
+                operator(+=) function(self&, const BigFloat&: other) -> BigFloat&;
+                operator(-=) function(self&, const BigFloat&: other) -> BigFloat&;
+                operator(*=) function(self&, const BigFloat&: other) -> BigFloat&;
+                operator(/=) function(self&, const BigFloat&: other) -> BigFloat&;
                 operator(short short float) function() const explicit;
                 operator(short float) function() const explicit;
                 operator(float) function() const explicit;
@@ -56,28 +57,28 @@ namespace std {
                 constructor(float: real, float: imaginary) as "walnut_rt::math::big_complex_of";
                 static function i() -> BigComplex;
                 static function polar(const BigFloat&: magnitude, const BigFloat&: angle) -> BigComplex as "walnut_rt::math::big_polar";
-                function real() const -> BigFloat;
-                function imaginary() const -> BigFloat;
-                function magnitude() const -> BigFloat as "walnut_rt::math::big_magnitude";
-                function argument() const -> BigFloat as "walnut_rt::math::big_argument";
-                function conjugate() const -> BigComplex;
-                function to_string() const -> string;
-                function to_string(long int: digits) const -> string as "walnut_rt::math::big_complex_to_string";
-                function is_zero() const -> bool;
-                function is_real() const -> bool;
-                function is_imaginary() const -> bool;
-                function is_finite() const -> bool;
-                operator(-) function() const -> BigComplex;
-                operator(+) function(const BigComplex&: other) const -> BigComplex;
-                operator(-) function(const BigComplex&: other) const -> BigComplex;
-                operator(*) function(const BigComplex&: other) const -> BigComplex;
-                operator(/) function(const BigComplex&: other) const -> BigComplex;
-                operator(==) function(const BigComplex&: other) const -> bool;
-                operator(!=) function(const BigComplex&: other) const -> bool;
-                operator(+=) function(const BigComplex&: other) -> BigComplex&;
-                operator(-=) function(const BigComplex&: other) -> BigComplex&;
-                operator(*=) function(const BigComplex&: other) -> BigComplex&;
-                operator(/=) function(const BigComplex&: other) -> BigComplex&;
+                function real(const self&) -> BigFloat;
+                function imaginary(const self&) -> BigFloat;
+                function magnitude(const self&) -> BigFloat as "walnut_rt::math::big_magnitude";
+                function argument(const self&) -> BigFloat as "walnut_rt::math::big_argument";
+                function conjugate(const self&) -> BigComplex;
+                function to_string(const self&) -> string;
+                function to_string(const self&, long int: digits) -> string as "walnut_rt::math::big_complex_to_string";
+                function is_zero(const self&) -> bool;
+                function is_real(const self&) -> bool;
+                function is_imaginary(const self&) -> bool;
+                function is_finite(const self&) -> bool;
+                operator(-) function(const self&) -> BigComplex;
+                operator(+) function(const self&, const BigComplex&: other) -> BigComplex;
+                operator(-) function(const self&, const BigComplex&: other) -> BigComplex;
+                operator(*) function(const self&, const BigComplex&: other) -> BigComplex;
+                operator(/) function(const self&, const BigComplex&: other) -> BigComplex;
+                operator(==) function(const self&, const BigComplex&: other) -> bool;
+                operator(!=) function(const self&, const BigComplex&: other) -> bool;
+                operator(+=) function(self&, const BigComplex&: other) -> BigComplex&;
+                operator(-=) function(self&, const BigComplex&: other) -> BigComplex&;
+                operator(*=) function(self&, const BigComplex&: other) -> BigComplex&;
+                operator(/=) function(self&, const BigComplex&: other) -> BigComplex&;
             } end class BigComplex
 
             template <typename T>
@@ -2884,3 +2885,4 @@ namespace std {
         } end namespace extend
     } end namespace traits
 } end namespace std
+} end safe

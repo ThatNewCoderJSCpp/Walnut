@@ -1,3 +1,4 @@
+safe(compile) {
 namespace std {
     namespace input {
         enum Key { unknown, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, num0, num1, num2, num3, num4, num5, num6, num7, num8, num9, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17, f18, f19, f20, f21, f22, f23, f24, escape, enter, tab, backspace, space, minus, equals, left_bracket, right_bracket, backslash, semicolon, quote, grave, comma, period, slash, non_us_backslash, caps_lock, scroll_lock, num_lock, print_screen, pause, insert, delete_key, home, end_key, page_up, page_down, left_arrow, right_arrow, up_arrow, down_arrow, numpad0, numpad1, numpad2, numpad3, numpad4, numpad5, numpad6, numpad7, numpad8, numpad9, numpad_divide, numpad_multiply, numpad_subtract, numpad_add, numpad_enter, numpad_decimal, numpad_equals, left_shift, right_shift, left_control, right_control, left_alt, right_alt, left_meta, right_meta, menu, volume_mute, volume_down, volume_up, media_play_pause, media_stop, media_next, media_previous, browser_back, browser_forward }
@@ -30,54 +31,54 @@ namespace std {
 
             constructor(long int: raw) : bits = raw { }
 
-            function shift() const -> bool {
-                return (bits / modifier::shift) % 2 == 1;
+            function shift(const self&) -> bool {
+                return (self.bits / modifier::shift) % 2 == 1;
             } end function shift
 
-            function control() const -> bool {
-                return (bits / modifier::control) % 2 == 1;
+            function control(const self&) -> bool {
+                return (self.bits / modifier::control) % 2 == 1;
             } end function control
 
-            function alt() const -> bool {
-                return (bits / modifier::alt) % 2 == 1;
+            function alt(const self&) -> bool {
+                return (self.bits / modifier::alt) % 2 == 1;
             } end function alt
 
-            function meta() const -> bool {
-                return (bits / modifier::meta) % 2 == 1;
+            function meta(const self&) -> bool {
+                return (self.bits / modifier::meta) % 2 == 1;
             } end function meta
 
-            function caps_lock() const -> bool {
-                return (bits / modifier::caps_lock) % 2 == 1;
+            function caps_lock(const self&) -> bool {
+                return (self.bits / modifier::caps_lock) % 2 == 1;
             } end function caps_lock
 
-            function num_lock() const -> bool {
-                return (bits / modifier::num_lock) % 2 == 1;
+            function num_lock(const self&) -> bool {
+                return (self.bits / modifier::num_lock) % 2 == 1;
             } end function num_lock
 
-            function alt_gr() const -> bool {
-                return (bits / modifier::alt_gr) % 2 == 1;
+            function alt_gr(const self&) -> bool {
+                return (self.bits / modifier::alt_gr) % 2 == 1;
             } end function alt_gr
 
-            function has(long int: flag) const -> bool {
-                return flag != 0 && (bits / flag) % 2 == 1;
+            function has(const self&, long int: flag) -> bool {
+                return flag != 0 && (self.bits / flag) % 2 == 1;
             } end function has
 
-            function none() const -> bool {
-                return bits == 0;
+            function none(const self&) -> bool {
+                return self.bits == 0;
             } end function none
 
-            function to_string() const -> string {
+            function to_string(const self&) -> string {
                 string: out = "";
-                if (control()) then {
+                if (self.control()) then {
                     out = out + "Ctrl+";
                 }
-                if (shift()) then {
+                if (self.shift()) then {
                     out = out + "Shift+";
                 }
-                if (alt()) then {
+                if (self.alt()) then {
                     out = out + "Alt+";
                 }
-                if (meta()) then {
+                if (self.meta()) then {
                     out = out + "Meta+";
                 }
                 if (out.length() > 0) then {
@@ -179,3 +180,4 @@ namespace std {
         } end function modifier_of
     } end namespace input
 } end namespace std
+} end safe

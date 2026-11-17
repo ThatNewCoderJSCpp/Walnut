@@ -3,6 +3,8 @@
 
 #include "front_pass.hpp"
 
+#include <functional>
+
 #include "../Common/error_reporter.hpp"
 #include "../Semantics/type_impl.hpp"
 #include "../Semantics/type_walker.hpp"
@@ -23,6 +25,8 @@ public:
     WalkPass& operator=(const WalkPass&) = delete;
 
     void run(const FrontPass& front);
+    void allow_unresolved_externs(std::function<bool(FileId)> allowed) { m_allow_unresolved = std::move(allowed); }
+    void set_safety_policy(const semantics::SafetyPolicy* policy) { m_policy = policy; }
 
 private:
     void check_inline_cycles(const FrontPass& front);
@@ -41,6 +45,8 @@ private:
     semantics::ScopeBuilder    m_scopes;
     semantics::NameResolver    m_resolver;
     semantics::Instantiator&   m_inst;
+    std::function<bool(FileId)> m_allow_unresolved;
+    const semantics::SafetyPolicy* m_policy = nullptr;
 };
 
 } // namespace driver

@@ -1,5 +1,6 @@
 import module.math
 
+safe(compile) {
 namespace std {
     namespace units {
         template <int L, int M, int T, int I, int K, int N, int J, int A>
@@ -154,33 +155,33 @@ namespace std {
             float: scale = 1.0;
             float: offset = 0.0;
 
-            function to_base(float: x) const -> float {
-                return x * scale + offset;
+            function to_base(const self&, float: x) -> float {
+                return x * self.scale + self.offset;
             } end function to_base
 
-            function from_base(float: b) const -> float {
-                return (b - offset) / scale;
+            function from_base(const self&, float: b) -> float {
+                return (b - self.offset) / self.scale;
             } end function from_base
 
-            function has_offset() const -> bool {
-                return offset != 0.0;
+            function has_offset(const self&) -> bool {
+                return self.offset != 0.0;
             } end function has_offset
 
-            function as_generic() const -> Unit<L, M, T, I, K, N, J, A> {
-                return Unit<L, M, T, I, K, N, J, A>{scale, offset};
+            function as_generic(const self&) -> Unit<L, M, T, I, K, N, J, A> {
+                return Unit<L, M, T, I, K, N, J, A>{self.scale, self.offset};
             } end function as_generic
 
             template <int P>
-            function pow() const -> Unit<L * P, M * P, T * P, I * P, K * P, N * P, J * P, A * P, detail::pow_kind<Q, P>> {
+            function pow(const self&) -> Unit<L * P, M * P, T * P, I * P, K * P, N * P, J * P, A * P, detail::pow_kind<Q, P>> {
                 static_assert(!Q::is_affine || P == 1, "std::units: a temperature point (celsius, fahrenheit...) can't be raised to a power; use a temperature interval unit or kelvin");
                 float: s = 1.0;
                 if (P >= 0) then {
                     for (int: i = 0; i < P; i++) {
-                        s = s * scale;
+                        s = s * self.scale;
                     }
                 } else then {
                     for (int: i = 0; i < -P; i++) {
-                        s = s / scale;
+                        s = s / self.scale;
                     }
                 }
                 return Unit<L * P, M * P, T * P, I * P, K * P, N * P, J * P, A * P, detail::pow_kind<Q, P>>{s, 0.0};
@@ -192,8 +193,8 @@ namespace std {
 
             template <typename Q2>
             requires (!std::traits::is_same<Q, Q2> && detail::implicit_kind<Q, Q2>)
-            operator(Unit<L, M, T, I, K, N, J, A, Q2>) function() const {
-                return Unit<L, M, T, I, K, N, J, A, Q2>{scale, offset};
+            operator(Unit<L, M, T, I, K, N, J, A, Q2>) function(const self&) {
+                return Unit<L, M, T, I, K, N, J, A, Q2>{self.scale, self.offset};
             }
         } end struct Unit
 
@@ -205,15 +206,15 @@ namespace std {
             using dims = Dims<L, M, T, I, K, N, J, A>;
             float: scale = 1.0;
 
-            function to_base(float: x) const -> float {
-                return 1.0 / (x * scale);
+            function to_base(const self&, float: x) -> float {
+                return 1.0 / (x * self.scale);
             } end function to_base
 
-            function from_base(float: b) const -> float {
-                return 1.0 / (b * scale);
+            function from_base(const self&, float: b) -> float {
+                return 1.0 / (b * self.scale);
             } end function from_base
 
-            function has_offset() const -> bool {
+            function has_offset(const self&) -> bool {
                 return false;
             } end function has_offset
 
@@ -223,8 +224,8 @@ namespace std {
 
             template <typename Q2>
             requires (!std::traits::is_same<Q, Q2> && detail::implicit_kind<Q, Q2>)
-            operator(ReciprocalUnit<L, M, T, I, K, N, J, A, Q2>) function() const {
-                return ReciprocalUnit<L, M, T, I, K, N, J, A, Q2>{scale};
+            operator(ReciprocalUnit<L, M, T, I, K, N, J, A, Q2>) function(const self&) {
+                return ReciprocalUnit<L, M, T, I, K, N, J, A, Q2>{self.scale};
             }
         } end struct ReciprocalUnit
 
@@ -324,32 +325,32 @@ namespace std {
             float: base = 0.0;
 
             template <typename U>
-            function value_in(const U&: u) const -> float {
+            function value_in(const self&, const U&: u) -> float {
                 static_assert(std::traits::is_same<U::dims, Dims<L, M, T, I, K, N, J, A>>, "std::units::Quantity::value_in: the unit has a different dimension");
                 static_assert(detail::kinds_compatible<Q, U::kind_type>, "std::units::Quantity::value_in: the quantity and the unit are different kinds (energy and torque, say); use kind_cast if this is intended");
-                return detail::tidy(u.from_base(base));
+                return detail::tidy(u.from_base(self.base));
             } end function value_in
 
-            function as_generic() const -> Quantity<L, M, T, I, K, N, J, A> {
-                return Quantity<L, M, T, I, K, N, J, A>{base};
+            function as_generic(const self&) -> Quantity<L, M, T, I, K, N, J, A> {
+                return Quantity<L, M, T, I, K, N, J, A>{self.base};
             } end function as_generic
 
             static function dimension_text() -> string {
                 return detail::dimension_text(L, M, T, I, K, N, J, A);
             } end function dimension_text
 
-            function to_string() const -> string {
+            function to_string(const self&) -> string {
                 const string: dims = detail::dimension_text(L, M, T, I, K, N, J, A);
                 if (dims.length() == 0) then {
-                    return static_cast<string>(`${base}`);
+                    return static_cast<string>(`${self.base}`);
                 }
-                return static_cast<string>(`${base} ${dims}`);
+                return static_cast<string>(`${self.base} ${dims}`);
             } end function to_string
 
             template <typename Q2>
             requires (!std::traits::is_same<Q, Q2> && detail::implicit_kind<Q, Q2>)
-            operator(Quantity<L, M, T, I, K, N, J, A, Q2>) function() const {
-                return Quantity<L, M, T, I, K, N, J, A, Q2>{base};
+            operator(Quantity<L, M, T, I, K, N, J, A, Q2>) function(const self&) {
+                return Quantity<L, M, T, I, K, N, J, A, Q2>{self.base};
             }
         } end struct Quantity
 
@@ -2798,3 +2799,4 @@ namespace std {
         } end namespace dosage
     } end namespace units
 } end namespace std
+} end safe
