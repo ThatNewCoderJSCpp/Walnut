@@ -327,7 +327,7 @@ bool CppEmitter::emit_split(const std::vector<CodegenUnit>& units, SplitProgram&
     emit_prototypes(protos);
     emit_walnut_externs(externs);
     emit_native_externs(native_decls, native_wrappers);
-    for (RecordInfo* r : m_record_order) emit_record_definitions(group_for(r->decl->file_id), r);
+    for (RecordInfo* r : m_record_order) emit_record_definitions(group_for(r->decl->file_id), r, link.shared_definitions ? &header_defs : nullptr);
 
     for (const FuncInfo& f : m_functions) {
         if (needs_header_body(f)) emit_function_body(header_defs, f);
@@ -4002,36 +4002,53 @@ void CppEmitter::emit_record(std::ostream& os, RecordInfo* r) {
     m_current_record = saved;
 }
 
-void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
+void CppEmitter::emit_native_constructors(std::ostream& os, RecordInfo* r) {
+    for (const auto& member : r->decl->get_members()) {
+        if (!member.node || member.node->kind != K::ConstructorDeclaration) continue;
+        auto* c = static_cast<nodes::ConstructorDeclaration*>(member.node);
+        if (!c->m_body) continue;
+        line_marker(os, c);
+        os << m_def_prefix << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ") : native() ";
+        Type* saved_ret = m_current_return;
+        m_current_return = m_types.void_();
+        m_indent = 0;
+        block(os, c->m_body);
+        m_current_return = saved_ret;
+        os << "\n";
+        line_reset(os);
+        os << "\n";
+    }
+}
+
+void CppEmitter::emit_destructor_definition(std::ostream& os, RecordInfo* r, nodes::DestructorDeclaration* d) {
+    line_marker(os, d);
+    os << m_def_prefix << r->cname << "::~" << r->cname << "() noexcept(false) ";
+    Type* saved_ret = m_current_return;
+    m_current_return = m_types.void_();
+    m_indent = 0;
+    block(os, d->m_body);
+    m_current_return = saved_ret;
+    os << "\n";
+    line_reset(os);
+    os << "\n";
+}
+
+void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r, std::ostream* shared) {
     EnvScope env(m_types, r->env ? &r->env->env : nullptr);
     RecordInfo* saved = m_current_record;
     m_current_record = r;
     const bool prebuilt = !r->env && is_prebuilt_file(r->decl->file_id);
-    m_def_prefix = shares_record_definition(r) ? "WALNUT_SHARED_DEF " : "";
+    m_def_prefix = shares_record_definition(r) || (prebuilt && shared) ? "WALNUT_SHARED_DEF " : "";
+    std::ostream& special = shared && !m_def_prefix.empty() ? *shared : os;
 
-    if (prebuilt) {
+    if (prebuilt && !shared) {
     } else if (r->native) {
-        for (const auto& member : r->decl->get_members()) {
-            if (!member.node || member.node->kind != K::ConstructorDeclaration) continue;
-            auto* c = static_cast<nodes::ConstructorDeclaration*>(member.node);
-            if (!c->m_body) continue;
-            line_marker(os, c);
-            os << m_def_prefix << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ") : native() ";
-            Type* saved_ret = m_current_return;
-            m_current_return = m_types.void_();
-            m_indent = 0;
-            block(os, c->m_body);
-            m_current_return = saved_ret;
-            os << "\n";
-            line_reset(os);
-            os << "\n";
-        }
-
+        emit_native_constructors(special, r);
         m_current_record = saved;
         m_def_prefix.clear();
         return;
     } else {
-        emit_lazy_definitions(os, r);
+        if (!prebuilt) emit_lazy_definitions(os, r);
 
         for (const auto& member : r->decl->get_members()) {
             nodes::ASTNode* n = member.node;
@@ -4040,26 +4057,18 @@ void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
             if (n->kind == K::ConstructorDeclaration) {
                 auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
                 if (c->m_special != nodes::ConstructorDeclaration::Special::None) continue;
-                emit_constructor_definition(os, r, c);
+                emit_constructor_definition(special, r, c);
             } else if (n->kind == K::DestructorDeclaration) {
                 auto* d = static_cast<nodes::DestructorDeclaration*>(n);
                 using SP = nodes::DestructorDeclaration::Special;
                 if (d->m_special != SP::None) continue;
-                line_marker(os, d);
-                os << m_def_prefix << r->cname << "::~" << r->cname << "() noexcept(false) ";
-                Type* saved_ret = m_current_return;
-                m_current_return = m_types.void_();
-                m_indent = 0;
-                block(os, d->m_body);
-                m_current_return = saved_ret;
-                os << "\n";
-                line_reset(os);
-                os << "\n";
+                emit_destructor_definition(special, r, d);
             }
         }
     }
 
     m_def_prefix = link.shared_definitions ? "WALNUT_SHARED_DEF " : "";
+    std::ostream& instances = shared && link.shared_definitions ? *shared : os;
 
     for (Inst* I : m_ctor_insts) {
         if (owner_record_of(I->sym) != r) continue;
@@ -4071,7 +4080,7 @@ void CppEmitter::emit_record_definitions(std::ostream& os, RecordInfo* r) {
             emit_constructor_definition(os, r, c);
             os << "template " << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ");\n\n";
         } else {
-            emit_constructor_definition(os, r, c);
+            emit_constructor_definition(instances, r, c);
         }
     }
 

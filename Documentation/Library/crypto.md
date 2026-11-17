@@ -89,12 +89,12 @@ import module.crypto
 function main() -> int {
     bool: same = std::crypto::strequal("s3cret-token", "s3cret-token");
     bool: wrong = std::crypto::strequal("s3cret-token", "s3cret-tokem");
-    bool: short = std::crypto::strequal("s3cret-token", "s3cret");
+    bool: shorter = std::crypto::strequal("s3cret-token", "s3cret");
     return 0;
 } end function main
 ```
 
-Here `same` is `true`, and `wrong` and `short` are `false`.
+Here `same` is `true`, and `wrong` and `shorter` are `false`.
 
 ## Checksums
 

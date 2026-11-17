@@ -514,7 +514,9 @@ private:
 
     void emit_record(std::ostream& os, RecordInfo* r);
 
-    void emit_record_definitions(std::ostream& os, RecordInfo* r);
+    void emit_record_definitions(std::ostream& os, RecordInfo* r, std::ostream* shared = nullptr);
+    void emit_destructor_definition(std::ostream& os, RecordInfo* r, nodes::DestructorDeclaration* d);
+    void emit_native_constructors(std::ostream& os, RecordInfo* r);
     void emit_constructor_definition(std::ostream& os, RecordInfo* r, nodes::ConstructorDeclaration* c);
     int  ctor_instance_self_kind(Inst* I);
 

@@ -405,6 +405,8 @@ jobs:
           wineboot --init || true
           wine "$walnut" init --status
           wine "$walnut" run smoke/ok.wal
+          cp .github/scripts/std-smoke.wal smoke/std.wal
+          wine "$walnut" run smoke/std.wal
           cp .github/scripts/audio-smoke.wal smoke/audio.wal
           (cd smoke && FIZMO_AUDIO_BACKEND=null wine "$walnut" run audio.wal)
           cp .github/scripts/video-smoke.wal smoke/video.wal
@@ -502,7 +504,37 @@ jobs:
           path: packages
           merge-multiple: true
 
+      - name: Write the release notes
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          link() { if [ -f "packages/$1" ]; then printf '[%s](%s/%s)' "$2" "$base" "$1"; else printf '%s' "-"; fi; }
+          {
+            echo "## Downloads"
+            echo
+            echo "Pick the line for your system. Every archive has the same contents; [the README](https://github.com/${GITHUB_REPOSITORY}#installing) explains each one and how to set up a compiler with \`walnut init\`."
+            echo
+            echo "| System | Archive | Other formats |"
+            echo "|---|---|---|"
+            for a in x86_64 arm64 i686; do
+              echo "| Linux $a | $(link "Walnut-$v-linux-$a.tar.gz" .tar.gz) | $(link "Walnut-$v-linux-$a.deb" .deb) · $(link "Walnut-$v-linux-$a.rpm" .rpm) · $(link "Walnut-$v-linux-$a.tar.xz" .tar.xz) · $(link "Walnut-$v-linux-$a.zip" .zip) |"
+            done
+            for a in arm64 x86_64; do
+              echo "| macOS $a | $(link "Walnut-$v-macos-$a.tar.gz" .tar.gz) | $(link "Walnut-$v-macos-$a.tar.xz" .tar.xz) · $(link "Walnut-$v-macos-$a.zip" .zip) |"
+            done
+            for p in ucrt64 i686 clangarm64; do
+              case $p in ucrt64) name="Windows x86_64";; i686) name="Windows 32-bit";; clangarm64) name="Windows ARM64";; esac
+              echo "| $name | $(link "Walnut-$v-windows-$p.zip" .zip) | $(link "Walnut-$v-windows-$p.exe" "installer") · $(link "Walnut-$v-windows-$p.7z" .7z) |"
+              echo "| $name, with its C++ compiler | $(link "Walnut-$v-windows-$p-with-compiler.zip" .zip) | $(link "Walnut-$v-windows-$p-with-compiler.exe" "installer") · $(link "Walnut-$v-windows-$p-with-compiler.7z" .7z) |"
+            done
+            echo
+            echo "macOS: Apple silicon Macs (M1 and newer) use arm64, Intel Macs use x86_64. If macOS refuses to open \`walnut\`, run \`xattr -dr com.apple.quarantine\` on the extracted folder."
+          } > release-notes.md
+          cat release-notes.md
+
       - uses: softprops/action-gh-release@v2
         with:
           files: packages/*
+          body_path: release-notes.md
           fail_on_unmatched_files: true

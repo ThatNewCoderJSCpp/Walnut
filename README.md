@@ -11,7 +11,7 @@ function main() -> int {
 } end function main
 ```
 
-Programs reach the screen, files and the rest of the system by calling C or C++ directly, as `puts` does above. The full language is described in [documentation.md](documentation.md). Walnut's library has its own documentation, one page per module, in [Documentation/Library](Documentation/Library/README.md). `core` comes with every program; the other modules, such as `io`, `collections`, `linalg`, `statistics`, `combinatorics`, `units`, `memory`, `graphs`, `windows`, `graphics`, `images`, `audio`, `video`, `ui`, `game`, `time`, `networking` and `crypto`, are imported by name.
+Programs reach the screen, files and the rest of the system through Walnut's library or by calling C or C++ directly, as `puts` does above. The full language is described in [documentation.md](documentation.md). Walnut's library has its own documentation, one page per module, in [Documentation/Library](Documentation/Library/README.md). `core` comes with every program; the other modules, such as `io`, `collections`, `linalg`, `statistics`, `combinatorics`, `units`, `memory`, `graphs`, `windows`, `graphics`, `images`, `audio`, `video`, `ui`, `game`, `time`, `networking` and `crypto`, are imported by name.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ Walnut needs a **C++17 compiler** to build programs, because it compiles to C++.
 |---|---|
 | Linux (x86_64, arm64, i686) | GCC 9 or newer, or Clang 9 or newer, available as `c++`; `walnut init` installs `g++` with your package manager |
 | Windows (x86_64, i686, arm64) | nothing: the `-with-compiler` downloads include llvm-mingw, and for the others `walnut init` downloads it |
-| macOS | Not supported yet (planned) |
+| macOS 11 or newer (Apple silicon and Intel) | Apple's Command Line Tools, which have Clang; `walnut init` opens Apple's installer for them |
 
 Visual Studio's compiler (MSVC) can't be used to build Walnut programs, because Walnut calls the compiler with GCC-style options.
 
@@ -39,8 +39,25 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
    | `Walnut-<version>-windows-ucrt64.zip` | 64-bit Intel/AMD Windows |
    | `Walnut-<version>-windows-i686.zip` | 32-bit Windows |
    | `Walnut-<version>-windows-clangarm64.zip` | ARM Windows |
+   | `Walnut-<version>-macos-arm64.tar.gz` | Macs with Apple silicon (M1 and newer) |
+   | `Walnut-<version>-macos-x86_64.tar.gz` | Intel Macs |
 
-   Each Windows download also comes as `...-with-compiler.zip` (about 200 MB more), which has the C++ compiler inside, so it works offline as soon as it's unpacked and step 4 isn't needed. The smaller download gets the same compiler with `walnut init` the first time it's needed. Walnut for Windows doesn't need MSYS2.
+   Every download comes in a few formats with the same contents. The Releases page only shows the first few files; click **Show all assets** under them to see the rest.
+
+   | System | Formats |
+   |---|---|
+   | Linux | `.tar.gz`, `.tar.xz` and `.zip` to extract anywhere, and `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, openSUSE) packages, which install Walnut into `/opt/walnut` and put `walnut` on your `PATH`, so steps 2 and 3 aren't needed |
+   | Windows | `.zip` and `.7z` to extract anywhere, and an `.exe` installer that puts Walnut in Program Files, can add it to your `PATH`, and comes with an uninstaller |
+   | macOS | `.tar.gz`, `.tar.xz` and `.zip` |
+
+   Each Windows download also comes as `...-with-compiler` (about 200 MB more), which has the C++ compiler inside, so it works offline as soon as it's unpacked and step 4 isn't needed. The smaller download gets the same compiler with `walnut init` the first time it's needed. Walnut for Windows doesn't need MSYS2.
+
+   With a `.deb` or `.rpm` file:
+
+   ```
+   sudo apt install ./Walnut-<version>-linux-x86_64.deb     # Debian, Ubuntu
+   sudo dnf install ./Walnut-<version>-linux-x86_64.rpm     # Fedora
+   ```
 
 2. Extract it anywhere. Keep the folders together: `walnut` finds its runtime and Fizmo next to itself.
 
@@ -54,6 +71,14 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
    ```
 
 3. Add the `bin` folder to your `PATH`.
+
+   On macOS, an archive opened in Finder marks everything inside as downloaded from the internet, and macOS then refuses to run `walnut` because it isn't from the App Store or a registered developer. Clear that mark once, from the folder you extracted:
+
+   ```
+   xattr -dr com.apple.quarantine Walnut-<version>-macos-arm64
+   ```
+
+   An archive extracted with `tar` in the terminal doesn't get the mark.
 
 4. Set up a C++ compiler:
 
@@ -69,6 +94,12 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
    sudo apt install g++          # Debian, Ubuntu
    sudo dnf install gcc-c++      # Fedora
    sudo pacman -S gcc            # Arch
+   ```
+
+   On macOS:
+
+   ```
+   xcode-select --install
    ```
 
    On Windows, Walnut's libraries are built with [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) (Clang with libc++), so programs have to be compiled with llvm-mingw too; other MinGW compilers such as MSYS2's GCC won't link them. Use `walnut init` or the `-with-compiler` download rather than installing one yourself.
@@ -97,8 +128,6 @@ The Windows compilers are pinned, so every Walnut version uses the exact compile
 | `windows-i686` | llvm-mingw 20261020 (Clang 23.1.4), UCRT, 32-bit x86 | about 195 MB |
 | `windows-clangarm64` | llvm-mingw 20261020 (Clang 23.1.4), UCRT, ARM64 | about 185 MB |
 
-Walnut looks for a compiler in this order: `--cxx`, `WALNUT_CXX`, the compiler in a `-with-compiler` download's `toolchain` folder, the one `walnut init` downloaded, then `c++` on `PATH`.
-
 Programs built with the downloaded compiler are linked statically, so the `.exe` runs on other Windows machines without extra DLLs.
 
 If `walnut build` or `walnut run` can't find a compiler and you're at a terminal, Walnut offers to run `walnut init` for you. When it isn't at a terminal (an editor or a script calling it), it explains what's missing and stops instead.
@@ -116,8 +145,9 @@ Walnut picks its compiler in this order:
 
 1. `--cxx <compiler>`
 2. the `WALNUT_CXX` environment variable
-3. the compiler `walnut init` downloaded
-4. `c++` on `PATH`
+3. on Windows, the compiler in a `-with-compiler` download's `toolchain` folder
+4. the compiler `walnut init` downloaded
+5. `c++` on `PATH`
 
 `WALNUT_TOOLCHAIN_DIR` keeps the downloaded compiler somewhere other than the default folder (`%LOCALAPPDATA%\walnut\toolchain` on Windows, `~/.local/share/walnut/toolchain` elsewhere).
 
@@ -131,17 +161,17 @@ walnut <command> [options] <main.wal> [more.wal ...] [C/C++ files] [-- program a
 |---|---|
 | `walnut check main.wal` | Report errors and warnings without building anything |
 | `walnut run main.wal` | Build and run the program |
-| `walnut build main.wal` | Build an executable (named after the input, or `-o <path>`) |
+| `walnut build main.wal` | Build an executable (named after the input, or `-o <path>`); with `-c`, `--static` or `--shared`, an object file or a library instead ([details](#libraries)) |
 | `walnut emit main.wal` | Print the generated C++ (or write it with `-o file.cpp`) |
 | `walnut clean` | Delete the build cache |
 | `walnut init` | Set up a C++ compiler for Walnut ([details](#setting-up-a-compiler)) |
 | `walnut highlight main.wal` | Print what each name and operator is, and the errors, as JSON for editors (`--stdin` reads the text from standard input) |
 | `walnut complete main.wal --at LINE:COL` | Print what can be typed at that spot, as JSON for editors' autocomplete: the members of the value before `.` or `->`, what's inside the namespace, class or enum before `::`, or every name in scope there (locals declared further down are left out). Works on unfinished code; `--stdin` reads the text from standard input |
-| `walnut library` | List the library files built into `walnut`; `walnut library io.walh` prints one and `walnut library --extract <dir>` writes them all to a folder, so editors can open them |
+| `walnut library` | List the library files built into `walnut`; `walnut library io.walh` prints one and `walnut library --extract <dir>` writes them all to a folder, so editors can open them. `walnut library --precompile` compiles the whole standard library into the build cache ahead of time, and `walnut library --verify` checks the standard library's safe code |
 
 Arguments after `--` go to your program: `walnut run main.wal -- input.txt 3`.
 
-`build` and `run` keep what they compile in a cache (`~/.cache/walnut`, or `WALNUT_CACHE_DIR`). Each Walnut file is compiled on its own, several at once, and only files whose generated C++ changed are compiled again; an unchanged program is ready almost at once. There is nothing to set up.
+`build` and `run` keep what they compile in a cache (`~/.cache/walnut`, or `WALNUT_CACHE_DIR`). Each Walnut file is compiled on its own, several at once, and only files whose generated C++ changed are compiled again; an unchanged program is ready almost at once. The standard library's modules are compiled into the cache too, the first time a program imports them, and every later program reuses them; `walnut library --precompile` does that for all of them at once, for example right after installing. There is nothing to set up.
 
 Common options:
 
@@ -157,6 +187,7 @@ Common options:
 | `--cxx-flag <flag>` | Pass an extra flag to the C++ compiler |
 | `--runtime <dir>` | Where the runtime is (also the `WALNUT_RUNTIME_DIR` environment variable) |
 | `--keep-cpp` | Keep the generated C++ next to the executable (builds without the cache) |
+| `--no-prebuilt-std` | Compile the standard library modules with the program instead of using their copies in the cache |
 | `--no-cache` | Build from scratch, without the build cache |
 | `--no-warnings` | Hide warnings |
 | `--warn-unused` | Warn about local variables that are defined but never used in their scope (off unless asked for; names starting with `_` are skipped) |
@@ -175,6 +206,32 @@ Common options:
 | `--safe` | `--checks`, `--leak-check` and `--ownership` together. All of these are off unless asked for; see [Safety checks](documentation.md#safety-checks) |
 
 `walnut --help` lists everything.
+
+### Libraries
+
+`walnut build` can make libraries instead of programs, from `.wal` and `.walh` files:
+
+| Option | Makes |
+|---|---|
+| `-c` | one object file (`<input>.o`) |
+| `--static` (or `--lib`) | a static library (`lib<input>.a`) |
+| `--shared` | a shared library (`lib<input>.so`, `lib<input>.dylib`, or `<input>.dll` with `lib<input>.dll.a`) |
+
+Each one also writes a `.walnut` file next to it; keep the two together. A program that links the library (`-L <dir> -l <name>`, or the file itself on the command line), or that `#include`s a header sitting next to them, uses the compiled code instead of compiling the library's Walnut code again. `--lib-dir <folder>` copies the shared libraries a program uses into a folder next to it and makes the program find them there, so they don't have to sit next to the program. See [Libraries and object files](documentation.md#libraries-and-object-files).
+
+### Looking at the generated code
+
+`walnut emit main.wal` prints the C++ Walnut makes. These show the other stages, with `emit` (to the terminal) or `build` (to a file next to the input):
+
+| Option | Shows |
+|---|---|
+| `-E`, `--preprocessed` | the Walnut source after Walnut's preprocessor (`#include` files pasted in, macros expanded, `#if` branches resolved) |
+| `--preprocessed-cpp` | the generated C++ with everything it includes pasted in |
+| `-S`, `--asm` | the assembly the C++ compiler makes (`--asm-syntax intel` for Intel syntax, `-fverbose-asm` for comments naming the variables) |
+| `--llvm-ir` | LLVM IR (needs Clang as the C++ compiler) |
+| `--asm-function <name>` | only the assembly or IR of that function |
+
+See [Looking at the generated code](documentation.md#looking-at-the-generated-code).
 
 ### Programs with several files
 
@@ -267,6 +324,8 @@ C or C++ code can also be written straight into a `.wal` file, in an `extern "C+
 
 ## Editor support
 
+[Canopy](https://github.com/ThatNewCoderJSCpp/Canopy), a code editor built with Grove, works with Walnut out of the box: it colors, checks and runs `.wal` files with `walnut highlight`, `walnut complete` and `walnut run`.
+
 `Tools/vscode-walnut` is a Visual Studio Code extension that colors Walnut code (`.wal` and `.walh` files), underlines the compiler's errors as you type, and sets up comment toggling and bracket matching. It asks the compiler what each name and operator is with `walnut highlight`, so variables, types and overloaded operators get their exact colors. The colors are in `Tools/vscode-walnut/colors.json`, and saving that file recolors the editor at once. Walnut files get their own icons too; `Tools/icons` has those icons as SVG, PNG and `.ico`, both as plain symbols and as file-document icons. [Its README](Tools/vscode-walnut/README.md) covers installing it from a `.vsix` file, editing the colors, and using the grammar in other editors.
 
 ## A short tour
@@ -342,6 +401,12 @@ The download was interrupted or changed on the way. Walnut deletes a file whose 
 
 **`walnut: runtime header not found`**
 The `runtime` folder isn't next to `bin` any more. Keep the extracted folder together, or point at it with `--runtime <dir>` or `WALNUT_RUNTIME_DIR`.
+
+**macOS says `walnut` can't be opened**
+macOS blocks programs from a download that Finder unpacked. Run `xattr -dr com.apple.quarantine` on the extracted Walnut folder (see [Installing](#installing)).
+
+**`walnut: cannot find the C++ compiler 'c++'` on macOS**
+The Command Line Tools aren't installed. Run `walnut init`, or `xcode-select --install`.
 
 **Linker errors on Windows**
 The compiler isn't llvm-mingw (for example MSYS2's GCC, whose C++ library doesn't match Walnut's). `walnut init --status` shows which compiler Walnut is using, and `walnut init --force` switches to the matching one.

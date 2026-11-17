@@ -1,0 +1,26 @@
+import module.collections
+
+struct Rect {
+    int: w = 0;
+    int: h = 0;
+
+    constructor(int: a, int: b) : w = a, h = b { }
+
+    destructor() { }
+
+    function area(const self&) -> int {
+        return self.w * self.h;
+    } end function area
+} end struct Rect
+
+function main() -> int {
+    Rect: r = Rect(3, 4);
+    std::collections::Stack<int>: s;
+    s.push(r.area());
+    std::collections::UnorderedMap<string, int>: m;
+    m["twelve"] = s.pop();
+    if (m["twelve"] == 12) then {
+        return 0;
+    }
+    return 1;
+} end function main
