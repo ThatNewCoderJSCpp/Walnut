@@ -13,7 +13,8 @@
 #include <cerrno>
 #include <fcntl.h>
 #include <unistd.h>
-#if defined(__linux__)
+#if defined(__linux__) && (!defined(__ANDROID__) || __ANDROID_API__ >= 28)
+#define WALNUT_HAS_GETRANDOM 1
 #include <sys/random.h>
 #endif
 #endif
@@ -32,7 +33,7 @@ void os_random_bytes(void* buffer, std::size_t length) {
 #else
     auto* out = static_cast<unsigned char*>(buffer);
     std::size_t remaining = length;
-#if defined(__linux__)
+#if defined(WALNUT_HAS_GETRANDOM)
     while (remaining > 0) {
         const ssize_t got = ::getrandom(out, remaining, 0);
         if (got < 0) {
