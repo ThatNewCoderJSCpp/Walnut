@@ -21,7 +21,7 @@ void FrontPass::run(const std::unordered_map<FileId, ParsedUnit>& units) {
 }
 
 void FrontPass::hoist_module_functions(nodes::BlockStatement* ast) {
-    std::vector<nodes::ASTNode*>& stmts = ast->statements;
+    auto& stmts = ast->statements;
 
     for (std::size_t i = 0; i < stmts.size(); ++i) {
         if (!stmts[i] || stmts[i]->kind != nodes::ASTNode::Kind::ModuleDeclaration) continue;
@@ -53,7 +53,7 @@ std::string type_text(const parser_types::TypeInfo& t) {
     return os.str();
 }
 
-std::string type_text_in(const parser_types::TypeInfo& t, const std::vector<std::string_view>& owner) {
+std::string type_text_in(const parser_types::TypeInfo& t, Span<std::string_view const> owner) {
     std::string text = type_text(t);
 
     for (std::size_t len = owner.size(); len > 0; --len) {
@@ -69,7 +69,7 @@ std::string type_text_in(const parser_types::TypeInfo& t, const std::vector<std:
     return text;
 }
 
-bool same_signature(nodes::FunctionDeclaration* a, nodes::FunctionDeclaration* b, const std::vector<std::string_view>& owner = {}) {
+bool same_signature(nodes::FunctionDeclaration* a, nodes::FunctionDeclaration* b, Span<std::string_view const> owner = {}) {
     const nodes::FunctionParameters* pa = a->get_parameters();
     const nodes::FunctionParameters* pb = b->get_parameters();
     const std::size_t na = pa ? pa->m_params.size() : 0;
@@ -79,7 +79,7 @@ bool same_signature(nodes::FunctionDeclaration* a, nodes::FunctionDeclaration* b
     return a->qualifiers().has(modifiers::FunctionQualifiers::Const) == b->qualifiers().has(modifiers::FunctionQualifiers::Const);
 }
 
-void collect_classes(const std::vector<nodes::ASTNode*>& stmts, std::vector<std::string_view>& prefix, std::vector<ClassEntry>& out) {
+void collect_classes(Span<nodes::ASTNode* const> stmts, std::vector<std::string_view>& prefix, std::vector<ClassEntry>& out) {
     for (nodes::ASTNode* s : stmts) {
         if (!s) continue;
 
@@ -102,7 +102,7 @@ void collect_classes(const std::vector<nodes::ASTNode*>& stmts, std::vector<std:
     }
 }
 
-std::string joined(const std::vector<std::string_view>& parts, std::size_t count) {
+std::string joined(Span<std::string_view const> parts, std::size_t count) {
     std::string out;
     for (std::size_t i = 0; i < count && i < parts.size(); ++i) { if (i) out += "::"; out += std::string(parts[i]); }
     return out;
@@ -154,14 +154,14 @@ void FrontPass::lower_template_operator(nodes::ASTNode* s) {
     tmpl->m_declaration = fd;
 }
 
-void FrontPass::lower_template_operators(std::vector<nodes::ASTNode*>& stmts) {
+void FrontPass::lower_template_operators(ArenaVector<nodes::ASTNode*>& stmts) {
     for (nodes::ASTNode* s : stmts) lower_template_operator(s);
 }
 
 namespace {
 
-bool attach_special_member(ErrorReporter& m_reporter, nodes::ASTNode* s, std::vector<ClassEntry>& classes, const std::vector<std::string_view>& where) {
-    std::vector<std::string_view>* owner_parts = nullptr;
+bool attach_special_member(ErrorReporter& m_reporter, nodes::ASTNode* s, std::vector<ClassEntry>& classes, Span<std::string_view const> where) {
+    ArenaVector<std::string_view>* owner_parts = nullptr;
     bool owner_global = false;
     const char* what = "constructor";
 
@@ -187,7 +187,7 @@ bool attach_special_member(ErrorReporter& m_reporter, nodes::ASTNode* s, std::ve
         return true;
     }
 
-    const std::vector<std::string_view> qualifier = *owner_parts;
+    const std::vector<std::string_view> qualifier = owner_parts->to_vector();
     const std::string cls = joined(qualifier, qualifier.size());
     ClassEntry* owner = nullptr;
 
@@ -290,7 +290,7 @@ void FrontPass::attach_member_definitions(nodes::BlockStatement* ast) {
     collect_classes(ast->statements, prefix, classes);
     if (classes.empty()) return;
 
-    std::function<void(std::vector<nodes::ASTNode*>&, std::vector<std::string_view>&)> visit = [&](std::vector<nodes::ASTNode*>& stmts, std::vector<std::string_view>& where) {
+    std::function<void(ArenaVector<nodes::ASTNode*>&, std::vector<std::string_view>&)> visit = [&](ArenaVector<nodes::ASTNode*>& stmts, std::vector<std::string_view>& where) {
         for (std::size_t i = 0; i < stmts.size(); ) {
             nodes::ASTNode* s = stmts[i];
 
@@ -313,7 +313,7 @@ void FrontPass::attach_member_definitions(nodes::BlockStatement* ast) {
 
             if (!s || s->kind != NK::FunctionDeclaration) { ++i; continue; }
             auto* def = static_cast<nodes::FunctionDeclaration*>(s);
-            const std::vector<std::string_view>& parts = def->name_parts();
+            const auto& parts = def->name_parts();
             if (parts.size() < 2 || !def->has_body()) { ++i; continue; }
             const std::vector<std::string_view> qualifier(parts.begin(), parts.end() - 1);
             ClassEntry* owner = nullptr;

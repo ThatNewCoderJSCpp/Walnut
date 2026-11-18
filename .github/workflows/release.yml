@@ -125,7 +125,7 @@ jobs:
               echo "::error::walnut init --status found a compiler on a system without one"
               exit 1
             fi
-            DEBIAN_FRONTEND=noninteractive /smoke/Walnut-*/bin/walnut init --yes > /dev/null
+            DEBIAN_FRONTEND=noninteractive /smoke/Walnut-*/bin/walnut init --yes --no-precompile > /dev/null
             /smoke/Walnut-*/bin/walnut init --status
             /smoke/Walnut-*/bin/walnut run /smoke/ok.wal
           '
@@ -222,6 +222,33 @@ jobs:
           unzip -q build/Walnut-*-macos-${{ matrix.arch }}.zip -d smoke-zip
           smoke-zip/Walnut-*/bin/walnut run smoke/ok.wal
 
+      - name: Make the .pkg installer and the disk image
+        run: bash .github/scripts/macos-installers.sh build/Walnut-*-macos-${{ matrix.arch }}.tar.gz macos-${{ matrix.arch }}
+
+      - name: Install, use and uninstall with the .pkg
+        run: |
+          pkgutil --payload-files build/Walnut-*-macos-${{ matrix.arch }}.pkg | grep -x "./usr/local/walnut/bin/walnut"
+          sudo installer -pkg build/Walnut-*-macos-${{ matrix.arch }}.pkg -target /
+          test "$(readlink /usr/local/bin/walnut)" = /usr/local/walnut/bin/walnut
+          cp .github/scripts/std-smoke.wal smoke/std.wal
+          (cd smoke && /usr/local/bin/walnut run std.wal)
+          /usr/local/bin/walnut init --status
+          sudo /usr/local/walnut/uninstall.sh
+          if [ -e /usr/local/walnut ] || [ -e /usr/local/bin/walnut ]; then
+            echo "::error::the uninstaller left Walnut behind"
+            exit 1
+          fi
+
+      - name: Test the disk image
+        run: |
+          mount="$RUNNER_TEMP/walnut-dmg"
+          mkdir -p "$mount"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount" build/Walnut-*-macos-${{ matrix.arch }}.dmg
+          trap 'hdiutil detach "$mount" -force || true' EXIT
+          test -f "$mount/Install Walnut.pkg"
+          test -f "$mount/Read Me.txt"
+          pkgutil --check-signature "$mount/Install Walnut.pkg" || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: walnut-macos-${{ matrix.arch }}
@@ -229,6 +256,203 @@ jobs:
             build/Walnut-*.tar.gz
             build/Walnut-*.tar.xz
             build/Walnut-*.zip
+            build/Walnut-*.pkg
+            build/Walnut-*.dmg
+          compression-level: 0
+          if-no-files-found: error
+
+  android:
+    name: Android ${{ matrix.arch }}
+    needs: version
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            abi: arm64-v8a
+          - arch: x86_64
+            abi: x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build file unzip xz-utils
+
+      - name: Configure
+        run: |
+          ndk="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-}}"
+          if [ ! -f "$ndk/build/cmake/android.toolchain.cmake" ]; then
+            echo "::error::the runner has no Android NDK"
+            exit 1
+          fi
+          echo "NDK=$ndk" >> "$GITHUB_ENV"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWALNUT_PACKAGE=ON -DWALNUT_BUILD_DEBUG_DRIVER=OFF -DFIZMO_TUNE=OFF \
+            -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24 -DANDROID_STL=c++_static \
+            -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON \
+            -DFIZMO_BUILD_SHARED=OFF -DFIZMO_BUILD_SHADER_TOOL=OFF \
+            -DWALNUT_PACKAGE_PLATFORM=android-${{ matrix.arch }}
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Check walnut is an Android program that only needs Android's own libraries
+        run: |
+          file build/walnut
+          file build/walnut | grep -q "Android"
+          "$NDK"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -d build/walnut | tee needed.txt
+          if grep NEEDED needed.txt | grep -vE "\[(libc|libm|libdl|liblog|libandroid|libz)\.so\]"; then
+            echo "::error::walnut needs a library that Android doesn't have"
+            exit 1
+          fi
+
+      - name: Package
+        working-directory: build
+        run: cpack
+
+      - name: Check the package
+        run: |
+          tar -tzf build/Walnut-*-android-${{ matrix.arch }}.tar.gz | grep -E "/bin/walnut$"
+          tar -tzf build/Walnut-*-android-${{ matrix.arch }}.tar.gz | grep -E "/fizmo/walnut-kit.txt$"
+          tar -tzf build/Walnut-*-android-${{ matrix.arch }}.tar.gz | grep -E "/fizmo/lib/libfizmo_core.a$"
+
+      - name: Make the .tar.xz and .zip
+        run: bash .github/scripts/repackage.sh build/Walnut-*-android-${{ matrix.arch }}.tar.gz android-${{ matrix.arch }} "TXZ;ZIP"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walnut-android-${{ matrix.arch }}
+          path: |
+            build/Walnut-*.tar.gz
+            build/Walnut-*.tar.xz
+            build/Walnut-*.zip
+          compression-level: 0
+          if-no-files-found: error
+
+  android-termux:
+    name: Run in Termux ${{ matrix.arch }}
+    needs: android
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            image: termux/termux-docker:x86_64
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            image: termux/termux-docker:aarch64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: walnut-android-${{ matrix.arch }}
+          path: packages
+
+      - name: Build and run programs with walnut in Termux
+        run: |
+          mkdir -p smoke
+          tar -xzf packages/Walnut-*-android-${{ matrix.arch }}.tar.gz -C smoke
+          printf 'function main() -> int {\n    return 0;\n} end function main\n' > smoke/ok.wal
+          cp .github/scripts/std-smoke.wal smoke/std.wal
+          chmod -R a+rwX smoke
+          docker run --rm --privileged -v "$PWD/smoke:/smoke" ${{ matrix.image }} /data/data/com.termux/files/usr/bin/bash -c '
+            set -e
+            export PREFIX=/data/data/com.termux/files/usr HOME=/data/data/com.termux/files/home
+            export PATH="$PREFIX/bin:$PATH" TMPDIR="$PREFIX/tmp"
+            (yes | pkg install -y clang) > /dev/null 2>&1 || (apt-get update && apt-get install -y clang)
+            cp -R /smoke "$HOME/smoke"
+            cd "$HOME/smoke"
+            walnut=$(ls -d "$HOME"/smoke/Walnut-*)/bin/walnut
+            "$walnut" init --status
+            "$walnut" run ok.wal
+            "$walnut" run std.wal
+            echo "walnut works in Termux"
+          '
+
+  android-kit:
+    name: Android kit
+    needs: [android, linux]
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: walnut-android-*
+          path: android
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: walnut-linux-x86_64
+          path: linux
+
+      - name: Make the kit
+        run: |
+          v=$(sed -n 's/^project(walnut VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)
+          kit="Walnut-$v-android-kit"
+          mkdir -p "$kit" unpacked build
+          for pair in arm64:arm64-v8a x86_64:x86_64; do
+            arch=${pair%%:*}
+            abi=${pair#*:}
+            mkdir -p "unpacked/$arch"
+            tar -xzf "android/Walnut-$v-android-$arch.tar.gz" -C "unpacked/$arch"
+            from=$(ls -d unpacked/$arch/Walnut-*)/fizmo
+            mkdir -p "$kit/$abi"
+            cp -R "$from/lib" "$kit/$abi/lib"
+            cp "$from/walnut-kit.txt" "$kit/$abi/"
+          done
+          cat > "$kit/README.md" <<EOF
+          # Walnut $v Android kit
+
+          The libraries Walnut programs link on Android, one folder for each ABI (arm64-v8a and x86_64), built with the Android NDK for Android 7.0 (API 24) and newer. With it, Walnut on Linux, macOS or Windows builds Walnut code for Android with the NDK's compiler:
+
+              walnut build --shared mylib.wal --android arm64-v8a --android-kit $kit --ndk /path/to/android-ndk
+
+          That makes \`libmylib.so\` for an app's \`lib/arm64-v8a\` folder. \`--ndk\` can be left out when ANDROID_NDK_HOME is set, and \`--android-kit\` when WALNUT_ANDROID_KIT is set or this folder is in the Walnut folder as \`android-kit\`. Without \`--shared\`, Walnut builds an Android program that runs with \`adb shell\`.
+          EOF
+          zip -qr "build/$kit.zip" "$kit"
+          echo "KIT=$kit" >> "$GITHUB_ENV"
+
+      - name: Build with the kit
+        run: |
+          mkdir -p smoke
+          tar -xzf linux/Walnut-*-linux-x86_64.tar.gz -C smoke
+          walnut=$(ls -d "$PWD"/smoke/Walnut-*)/bin/walnut
+          ndk="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-}}"
+          cp .github/scripts/std-smoke.wal smoke/std.wal
+          printf 'import module.collections\n\nfunction doubled(int: n) -> int {\n    std::collections::Stack<int>: s;\n    s.push(n);\n    return s.pop() * 2;\n} end function doubled\n' > smoke/mylib.wal
+          (cd smoke && "$walnut" build std.wal -o std-x86_64 --android x86_64 --android-kit "$PWD/../$KIT" --ndk "$ndk")
+          (cd smoke && "$walnut" build mylib.wal --shared --android arm64-v8a --android-kit "$PWD/../$KIT" --ndk "$ndk")
+          file smoke/std-x86_64 | grep -q "Android"
+          file smoke/libmylib.so | grep -q "ARM aarch64"
+
+      - name: Run what the kit built in Termux
+        run: |
+          chmod -R a+rwX smoke
+          docker run --rm --privileged -v "$PWD/smoke:/smoke" termux/termux-docker:x86_64 /data/data/com.termux/files/usr/bin/bash -c '
+            set -e
+            export PREFIX=/data/data/com.termux/files/usr HOME=/data/data/com.termux/files/home
+            export PATH="$PREFIX/bin:$PATH" TMPDIR="$PREFIX/tmp"
+            cp /smoke/std-x86_64 "$HOME/std"
+            chmod +x "$HOME/std"
+            "$HOME/std"
+            echo "the Android program built with the kit works"
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walnut-android-kit
+          path: build/Walnut-*-android-kit.zip
           compression-level: 0
           if-no-files-found: error
 
@@ -387,12 +611,10 @@ jobs:
       - name: Make the package that comes with its compiler
         run: bash .github/scripts/bundle-compiler.sh build/Walnut-*-${{ matrix.platform }}.zip "$BUNDLE_ZIP" "$BUNDLE_URL"
 
-      - name: Make the .7z files and installers
+      - name: Make the .7z file and installer of the plain package
         run: |
           plain=$(ls build/Walnut-*-${{ matrix.platform }}.zip)
-          bundled=$(ls build/Walnut-*-${{ matrix.platform }}-with-compiler.zip)
           bash .github/scripts/repackage.sh "$plain" ${{ matrix.platform }} "7Z;NSIS"
-          bash .github/scripts/repackage.sh "$bundled" ${{ matrix.platform }} "7Z;NSIS" -with-compiler
           ls -l build/Walnut-*
 
       - name: Test the package with its compiler under Wine
@@ -415,7 +637,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: walnut-${{ matrix.platform }}
+          name: stage-windows-${{ matrix.platform }}
           path: |
             build/Walnut-*.zip
             build/Walnut-*.7z
@@ -423,8 +645,8 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
-  windows-native:
-    name: Run on Windows ${{ matrix.platform }}
+  windows-std:
+    name: Precompile the std library on Windows ${{ matrix.platform }}
     needs: windows
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -443,6 +665,93 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          name: stage-windows-${{ matrix.platform }}
+          path: packages
+
+      - name: Precompile the standard library with the bundled compiler
+        run: |
+          $zip = Get-ChildItem packages/*-with-compiler.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath bundled
+          $walnut = (Get-ChildItem bundled -Directory | Select-Object -First 1).FullName + "\bin\walnut.exe"
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+          $env:WALNUT_CACHE_DIR = "$env:RUNNER_TEMP\walnut-cache"
+          & $walnut library --precompile --into std-prebuilt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          (Get-ChildItem std-prebuilt -Recurse -Filter objects.txt).Count
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-std-${{ matrix.platform }}
+          path: std-prebuilt
+          if-no-files-found: error
+
+  windows-package:
+    name: Package Windows ${{ matrix.platform }} with its std library
+    needs: [windows, windows-std]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-ucrt64, windows-i686, windows-clangarm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip unzip p7zip-full nsis
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-windows-${{ matrix.platform }}
+          path: build
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: stage-std-${{ matrix.platform }}
+          path: std-prebuilt
+
+      - name: Put the precompiled std library in the package that comes with its compiler
+        run: |
+          bundled=$(ls build/Walnut-*-${{ matrix.platform }}-with-compiler.zip)
+          bash .github/scripts/add-std-prebuilt.sh "$bundled" std-prebuilt
+          bash .github/scripts/repackage.sh "$bundled" ${{ matrix.platform }} "7Z;NSIS" -with-compiler
+          ls -l build/Walnut-*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walnut-${{ matrix.platform }}
+          path: |
+            build/Walnut-*.zip
+            build/Walnut-*.7z
+            build/Walnut-*.exe
+          compression-level: 0
+          if-no-files-found: error
+
+  windows-native:
+    name: Run on Windows ${{ matrix.platform }}
+    needs: windows-package
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-ucrt64
+            runner: windows-latest
+          - platform: windows-i686
+            runner: windows-latest
+          - platform: windows-clangarm64
+            runner: windows-11-arm
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - uses: actions/download-artifact@v4
+        with:
           name: walnut-${{ matrix.platform }}
           path: packages
 
@@ -458,6 +767,21 @@ jobs:
           & $walnut run ok.wal
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      - name: Check programs use the std library that comes precompiled
+        run: |
+          $walnut = (Get-ChildItem bundled -Directory | Select-Object -First 1).FullName + "\bin\walnut.exe"
+          $root = Split-Path (Split-Path $walnut)
+          if (-not (Test-Path "$root\std-prebuilt")) { Write-Error "the package has no std-prebuilt folder"; exit 1 }
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+          $env:WALNUT_CACHE_DIR = "$env:RUNNER_TEMP\fresh-cache"
+          Copy-Item .github/scripts/std-smoke.wal std-smoke.wal
+          & $walnut run std-smoke.wal
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if ((Test-Path "$env:WALNUT_CACHE_DIR\std") -and (Get-ChildItem "$env:WALNUT_CACHE_DIR\std" -Recurse -Filter *.o)) {
+            Write-Error "walnut compiled the std library again instead of using the precompiled one"
+            exit 1
+          }
+
       - name: Test walnut init with the plain package
         run: |
           $zip = Get-ChildItem packages/*.zip | Where-Object { $_.Name -notlike "*-with-compiler.zip" } | Select-Object -First 1
@@ -466,7 +790,7 @@ jobs:
           Set-Content ok.wal "function main() -> int {`n    return 0;`n} end function main`n"
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
           $env:WALNUT_TOOLCHAIN_DIR = "$env:RUNNER_TEMP\walnut-toolchain"
-          & $walnut init --yes
+          & $walnut init --yes --no-precompile
           if ($LASTEXITCODE -ne 0) { exit 1 }
           & $walnut build ok.wal -o ok-init.exe
           if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -480,6 +804,7 @@ jobs:
           Start-Process -FilePath $exe.FullName -ArgumentList "/S", "/D=$dir" -Wait
           if (-not (Test-Path "$dir\bin\walnut.exe")) { Write-Error "the installer didn't put walnut.exe in $dir\bin"; exit 1 }
           if (-not (Test-Path "$dir\toolchain\walnut-toolchain.txt")) { Write-Error "the installer didn't put the compiler in $dir\toolchain"; exit 1 }
+          if (-not (Test-Path "$dir\std-prebuilt")) { Write-Error "the installer didn't put the precompiled std library in $dir\std-prebuilt"; exit 1 }
           Set-Content ok.wal "function main() -> int {`n    return 0;`n} end function main`n"
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
           & "$dir\bin\walnut.exe" run ok.wal
@@ -496,12 +821,13 @@ jobs:
   publish:
     name: Attach Walnut to the release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, linux-i686, macos, windows, windows-native]
+    needs: [linux, linux-i686, macos, windows-package, windows-native, android, android-kit]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: packages
+          pattern: walnut-*
           merge-multiple: true
 
       - name: Write the release notes
@@ -518,20 +844,38 @@ jobs:
             echo "| System | Archive | Other formats |"
             echo "|---|---|---|"
             for a in x86_64 arm64 i686; do
-              echo "| Linux $a | $(link "Walnut-$v-linux-$a.tar.gz" .tar.gz) | $(link "Walnut-$v-linux-$a.deb" .deb) · $(link "Walnut-$v-linux-$a.rpm" .rpm) · $(link "Walnut-$v-linux-$a.tar.xz" .tar.xz) · $(link "Walnut-$v-linux-$a.zip" .zip) |"
+              if [ -f packages/Walnut-$v-linux-$a.tar.gz ]; then echo "| Linux $a | $(link "Walnut-$v-linux-$a.tar.gz" .tar.gz) | $(link "Walnut-$v-linux-$a.deb" .deb) · $(link "Walnut-$v-linux-$a.rpm" .rpm) · $(link "Walnut-$v-linux-$a.tar.xz" .tar.xz) · $(link "Walnut-$v-linux-$a.zip" .zip) |"; fi
             done
             for a in arm64 x86_64; do
-              echo "| macOS $a | $(link "Walnut-$v-macos-$a.tar.gz" .tar.gz) | $(link "Walnut-$v-macos-$a.tar.xz" .tar.xz) · $(link "Walnut-$v-macos-$a.zip" .zip) |"
+              if [ -f packages/Walnut-$v-macos-$a.tar.gz ]; then echo "| macOS $a | $(link "Walnut-$v-macos-$a.tar.gz" .tar.gz) | $(link "Walnut-$v-macos-$a.pkg" "installer (.pkg)") · $(link "Walnut-$v-macos-$a.dmg" .dmg) · $(link "Walnut-$v-macos-$a.tar.xz" .tar.xz) · $(link "Walnut-$v-macos-$a.zip" .zip) |"; fi
             done
             for p in ucrt64 i686 clangarm64; do
               case $p in ucrt64) name="Windows x86_64";; i686) name="Windows 32-bit";; clangarm64) name="Windows ARM64";; esac
-              echo "| $name | $(link "Walnut-$v-windows-$p.zip" .zip) | $(link "Walnut-$v-windows-$p.exe" "installer") · $(link "Walnut-$v-windows-$p.7z" .7z) |"
-              echo "| $name, with its C++ compiler | $(link "Walnut-$v-windows-$p-with-compiler.zip" .zip) | $(link "Walnut-$v-windows-$p-with-compiler.exe" "installer") · $(link "Walnut-$v-windows-$p-with-compiler.7z" .7z) |"
+              if [ -f packages/Walnut-$v-windows-$p.zip ]; then echo "| $name | $(link "Walnut-$v-windows-$p.zip" .zip) | $(link "Walnut-$v-windows-$p.exe" "installer") · $(link "Walnut-$v-windows-$p.7z" .7z) |"; fi
+              if [ -f packages/Walnut-$v-windows-$p-with-compiler.zip ]; then echo "| $name, with its C++ compiler | $(link "Walnut-$v-windows-$p-with-compiler.zip" .zip) | $(link "Walnut-$v-windows-$p-with-compiler.exe" "installer") · $(link "Walnut-$v-windows-$p-with-compiler.7z" .7z) |"; fi
             done
+            for a in arm64 x86_64; do
+              if [ -f packages/Walnut-$v-android-$a.tar.gz ]; then echo "| Android $a, in Termux | $(link "Walnut-$v-android-$a.tar.gz" .tar.gz) | $(link "Walnut-$v-android-$a.tar.xz" .tar.xz) · $(link "Walnut-$v-android-$a.zip" .zip) |"; fi
+            done
+            if [ -f packages/Walnut-$v-android-kit.zip ]; then echo "| Building for Android from a computer | $(link "Walnut-$v-android-kit.zip" "Android kit (.zip)") | |"; fi
             echo
-            echo "macOS: Apple silicon Macs (M1 and newer) use arm64, Intel Macs use x86_64. If macOS refuses to open \`walnut\`, run \`xattr -dr com.apple.quarantine\` on the extracted folder."
+            echo "macOS: Apple silicon Macs (M1 and newer) use arm64, Intel Macs use x86_64. If macOS refuses to open \`walnut\` or the installer, right-click it and choose Open, or run \`xattr -dr com.apple.quarantine\` on the extracted folder."
+            echo
+            echo "Windows: the \`with its C++ compiler\` downloads also come with the standard library already compiled, so they work offline and even the first program builds quickly. With the others, \`walnut init\` downloads the compiler and precompiles the standard library once. On Linux, macOS and Android, \`walnut init\` sets up a compiler and precompiles the standard library for it too."
+            echo
+            echo "Android: the Termux downloads run Walnut on the phone itself, in [Termux](https://termux.dev); \`walnut init\` installs Clang there. The Android kit lets Walnut on Linux, macOS or Windows build Walnut code for Android apps with the Android NDK (\`walnut build --shared app.wal --android arm64-v8a\`)."
           } > release-notes.md
           cat release-notes.md
+
+      - name: List the packages
+        run: |
+          ls -l packages
+          if ! ls packages/Walnut-*-android-*.tar.gz > /dev/null 2>&1; then
+            echo "::warning::the Android builds failed, so this release has no Termux packages"
+          fi
+          if ! ls packages/Walnut-*-android-kit.zip > /dev/null 2>&1; then
+            echo "::warning::this release has no Android kit"
+          fi
 
       - uses: softprops/action-gh-release@v2
         with:

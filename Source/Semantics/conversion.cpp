@@ -159,6 +159,24 @@ bool is_derived_record(Type* derived, Type* base, TypeContext& ctx) {
     return d && b && d != b && scope_derives_from(d, b);
 }
 
+bool dynamic_object_type(Type* t, TypeContext& ctx) {
+    if (!t) return false;
+    t = ctx.strip_cv(t);
+    if (!t || t->is_dependent() || t->is_error()) return false;
+    switch (t->kind()) {
+        case TypeKind::Record:
+        case TypeKind::Enum:
+        case TypeKind::Pointer:
+        case TypeKind::Variant:
+        case TypeKind::Coroutine:
+            return true;
+        case TypeKind::Array:
+            return static_cast<ArrayType*>(t)->extent().has_value();
+        default:
+            return false;
+    }
+}
+
 bool dynamic_value_type(Type* t, TypeContext& ctx, bool allow_void) {
     if (!t) return false;
     if (t->is_reference()) {
@@ -167,6 +185,7 @@ bool dynamic_value_type(Type* t, TypeContext& ctx, bool allow_void) {
         t = r->referent();
     }
     t = ctx.strip_cv(t);
+    if (dynamic_object_type(t, ctx)) return true;
     if (!t || !t->is_builtin()) return false;
     auto* b = static_cast<BuiltinType*>(t);
     if (b->is_void()) return allow_void;
@@ -272,18 +291,21 @@ ConversionRank rank_conversion(Type* src, Type* dst, TypeContext& ctx) {
 
     if (dst->is_builtin() && static_cast<BuiltinType*>(dst)->is_dynamic()) {
         Type* sv = ctx.strip_cv(src);
+        if (sv->is_builtin() && static_cast<BuiltinType*>(sv)->base() == parser_types::PrimitiveType::BaseKind::StringView) return ConversionRank::UserDefined;
         if (sv->is_builtin() && !static_cast<BuiltinType*>(sv)->is_void()) return ConversionRank::Conversion;
         if (sv->is_null() || sv->is_special_value()) return ConversionRank::Conversion;
         if (sv->is_function() && dynamic_callable(static_cast<FunctionType*>(sv), ctx)) return ConversionRank::Conversion;
+        if (dynamic_object_type(sv, ctx)) return ConversionRank::UserDefined;
     }
 
     if (Type* dvt = ctx.strip_cv(dst); dvt && dvt->kind() == TypeKind::Variant && ctx.strip_cv(src)->kind() != TypeKind::Variant) {
         if (variant_alternative_for(src, static_cast<VariantType*>(dvt), ctx) >= 0) return ConversionRank::Conversion;
     }
 
-    if (src->is_builtin() && static_cast<BuiltinType*>(src)->is_dynamic()) {
+    if (src->is_builtin() && static_cast<BuiltinType*>(src)->is_dynamic() && !(ctx.strip_cv(dst)->is_builtin() && static_cast<BuiltinType*>(ctx.strip_cv(dst))->base() == parser_types::PrimitiveType::BaseKind::StringView)) {
         Type* dv = ctx.strip_cv(dst);
         if (dv->is_builtin() && !static_cast<BuiltinType*>(dv)->is_void()) return ConversionRank::UserDefined;
+        if (dynamic_object_type(dv, ctx)) return ConversionRank::UserDefined;
     }
 
     if (src->is_pointer() && dst->is_pointer()) {

@@ -105,7 +105,7 @@ void FunctionParameters::print(std::ostream& os, std::size_t indent) const {
 ASTNode* FunctionParameters::clone_into(Arena& a) const { auto* c = make_in<FunctionParameters>(a); copy_base_to(c); c->m_params = clone_typed_list(m_params, a); c->receiver = receiver; c->receiver_line = receiver_line; return c; }
 
 FunctionDeclaration::FunctionDeclaration(
-        std::vector<std::string_view> name_parts,
+        ArenaVector<std::string_view> name_parts,
         bool is_global_qualified,
         const parser_types::TypeInfo& return_type,
         const modifiers::RawModifiers& modifiers,
@@ -210,6 +210,23 @@ void FunctionDeclaration::print(std::ostream& os, std::size_t indent) const {
     }
 }
 
+void materialize_body(ASTNode* decl) {
+    if (!decl) return;
+    BodyMaterializer& m = body_materializer();
+    if (m.fn) { m.fn(m.ctx, decl); return; }
+    if (decl->kind == ASTNode::Kind::FunctionDeclaration) {
+        auto* f = static_cast<FunctionDeclaration*>(decl);
+        const ASTNode* src = f->pending_body;
+        f->pending_body = nullptr;
+        f->m_body = clone_pending_body(src, Arena::current());
+    } else if (decl->kind == ASTNode::Kind::OperatorFunctionDeclaration) {
+        auto* f = static_cast<OperatorFunctionDeclaration*>(decl);
+        const ASTNode* src = f->pending_body;
+        f->pending_body = nullptr;
+        f->m_body = clone_pending_body(src, Arena::current());
+    }
+}
+
 ASTNode* FunctionDeclaration::clone_into(Arena& a) const {
     auto* c = make_in<FunctionDeclaration>(
         a, m_name_parts, 
@@ -217,9 +234,10 @@ ASTNode* FunctionDeclaration::clone_into(Arena& a) const {
         m_return_type.clone_into(a),        
         m_modifiers, m_qualifiers, line,
         clone_typed(m_parameters, a), 
-        clone_child(m_body, a)
+        lazy_member_clone_depth() > 0 ? nullptr : clone_child(m_body ? m_body : pending_body, a)
     );
 
+    if (lazy_member_clone_depth() > 0) c->pending_body = m_body ? m_body : pending_body;
     c->m_is_specialization = m_is_specialization;
     c->m_spec_args         = clone_targs(m_spec_args, a);
     c->m_lowered_operator  = m_lowered_operator;
@@ -334,7 +352,7 @@ ASTNode* LambdaExpression::clone_into(Arena& a) const {
 }
 
 OperatorFunctionDeclaration::OperatorFunctionDeclaration(
-        std::vector<tokenizing::Token::Kind> ops,
+        ArenaVector<tokenizing::Token::Kind> ops,
         const parser_types::TypeInfo& return_type,
         const modifiers::RawModifiers& modifiers,
         const modifiers::FunctionQualifiers& qualifiers,
@@ -435,7 +453,7 @@ ASTNode* OperatorFunctionDeclaration::clone_into(Arena& a) const {
             m_qualifiers, 
             line, 
             clone_typed(m_parameters, a), 
-            clone_child(m_body, a)
+            lazy_member_clone_depth() > 0 ? nullptr : clone_child(m_body ? m_body : pending_body, a)
         );
     } else {
         c = make_in<OperatorFunctionDeclaration>(
@@ -446,11 +464,12 @@ ASTNode* OperatorFunctionDeclaration::clone_into(Arena& a) const {
             m_qualifiers, 
             line, 
             clone_typed(m_parameters, a), 
-            clone_child(m_body, a)
+            lazy_member_clone_depth() > 0 ? nullptr : clone_child(m_body ? m_body : pending_body, a)
         );
     }
 
     copy_base_to(c);
+    if (lazy_member_clone_depth() > 0) c->pending_body = m_body ? m_body : pending_body;
     c->overload = overload;
     c->m_deleted = m_deleted;
     c->hoisted_friend = hoisted_friend;

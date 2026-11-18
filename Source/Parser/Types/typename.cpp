@@ -21,6 +21,7 @@ void PrimitiveType::write_to(std::ostream& os) const {
         case BaseKind::Char:    os << "char"; break;
         case BaseKind::String:  os << "string"; break;
         case BaseKind::Text:    os << "text"; break;
+        case BaseKind::StringView: os << "string_view"; break;
         case BaseKind::Void:    os << "void"; break;
         case BaseKind::Auto:    os << "auto"; break;
         case BaseKind::Dynamic: os << "dynamic"; break;

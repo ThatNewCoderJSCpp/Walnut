@@ -23,6 +23,7 @@ const descriptions = {
     'strings': 'String and character literals',
     'escapes': 'Escapes such as \\n inside strings',
     'numbers': 'Number literals',
+    'number suffixes': 'Suffixes that pick a number literal\'s type, such as ll, ss, u and f in 7ULL or 100ss',
     'comments': 'Comments',
     'preprocessor': '#define and the other directives',
     'error underlines': 'The squiggle under errors (changes other languages too)',
@@ -38,7 +39,7 @@ const sample = String.raw`⟦comments|// How each color looks in Walnut code⟧
     ⟦keywords|enum⟧ ⟦types|Color⟧ { ⟦enum members|Red⟧, ⟦enum members|Green⟧ }
 
     ⟦keywords|struct⟧ ⟦types|Vec⟧ {
-        ⟦built-in types|int⟧: ⟦declarations|x⟧ = ⟦numbers|0⟧;
+        ⟦built-in types|int⟧: ⟦declarations|x⟧ = ⟦numbers|0⟧⟦number suffixes|ll⟧;
 
         ⟦keywords|operator⟧(⟦overloaded operators|+⟧) ⟦keywords|function⟧(⟦keywords|const⟧ ⟦types|Vec⟧&: ⟦declarations|o⟧) ⟦keywords|const⟧ ⟦built-in operators|->⟧ ⟦types|Vec⟧ {
             ⟦control keywords|return⟧ ⟦types|Vec⟧{ ⟦self|self⟧.⟦variables|x⟧ ⟦built-in operators|+⟧ ⟦variables|o⟧.⟦variables|x⟧ };

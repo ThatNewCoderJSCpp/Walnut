@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include "../../Lexer/token_macro.hpp"
+#include "../../Common/arena_vector.hpp"
 
 namespace walnut {
 namespace nodes {
@@ -34,7 +35,7 @@ inline bool is_overloadable_operator_token(tokenizing::Token::Kind k) {
 }
 
 OverloadableOperator classify_overloadable_operator(
-    const std::vector<tokenizing::Token::Kind>& t
+    Span<const tokenizing::Token::Kind> t
 );
 
 } // namespace nodes

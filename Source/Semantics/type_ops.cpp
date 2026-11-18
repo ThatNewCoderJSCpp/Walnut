@@ -318,7 +318,7 @@ Type* apply_type_op(TypeContext& ctx, Op op, const std::vector<Type*>& args, std
         case Op::ElementType: {
             Type* v = ctx.strip_cv(unref(t));
             if (v->is_array()) return static_cast<ArrayType*>(v)->element();
-            if (is_base(v, BK::String) || is_base(v, BK::Text)) return ctx.builtin(BK::Char);
+            if (is_base(v, BK::String) || is_base(v, BK::Text) || is_base(v, BK::StringView)) return ctx.builtin(BK::Char);
             error = "element_type needs an array or string type, not '" + text(v) + "'";
             return nullptr;
         }
@@ -331,11 +331,7 @@ Type* apply_type_op(TypeContext& ctx, Op op, const std::vector<Type*>& args, std
                 return nullptr;
             }
 
-            if (nodes::EnumDeclaration* d = enum_decl_of(v)) {
-                if (d->has_underlying_type) return ctx.canonicalize(d->underlying_type);
-            }
-
-            return ctx.builtin(BK::Int);
+            return enum_underlying_type(ctx, v);
         }
 
         case Op::ReturnType: {
@@ -360,12 +356,12 @@ Type* apply_type_op(TypeContext& ctx, Op op, const std::vector<Type*>& args, std
     return t;
 }
 
-bool trait_has_pack(const std::vector<parser_types::TemplateArgument*>& extra) {
+bool trait_has_pack(Span<parser_types::TemplateArgument* const> extra) {
     for (const parser_types::TemplateArgument* x : extra) if (x && x->type.pack_expansion) return true;
     return false;
 }
 
-std::vector<Type*> trait_operands(TypeContext& ctx, const parser_types::TemplateArgument* first, const std::vector<parser_types::TemplateArgument*>& extra) {
+std::vector<Type*> trait_operands(TypeContext& ctx, const parser_types::TemplateArgument* first, Span<parser_types::TemplateArgument* const> extra) {
     std::vector<Type*> out;
     out.push_back(first ? ctx.canonicalize(first->type) : nullptr);
     for (const parser_types::TemplateArgument* x : extra) {
@@ -460,6 +456,7 @@ std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const
             return b->width() - kFloatRankBase;
 
         case Trait::IsText:        return b && b->base() == BK::Text ? 1 : 0;
+        case Trait::IsStringView:  return b && b->base() == BK::StringView ? 1 : 0;
         case Trait::IsStr:         return b && b->base() == BK::String ? 1 : 0;
         case Trait::IsNullPointer: return v->is_null() ? 1 : 0;
         case Trait::IsSpecial:     return v->is_special_value() ? 1 : 0;
@@ -488,6 +485,16 @@ std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const
             return record_has_virtual(s, trait == Trait::IsAbstract, 0) ? 1 : 0;
         }
 
+        case Trait::EnumMin:
+        case Trait::EnumMax:
+        case Trait::EnumBits: {
+            const char* what = trait == Trait::EnumMin ? "enum_min" : trait == Trait::EnumMax ? "enum_max" : "enum_bits";
+            nodes::EnumDeclaration* d = enum_decl_of(v);
+            if (!v->is_enum() || !d) { error = std::string(what) + " needs an enum type, not '" + text(v) + "'"; return std::nullopt; }
+            if (d->values.empty()) { error = std::string(what) + " needs an enum with at least one enumerator, but '" + text(v) + "' has none"; return std::nullopt; }
+            return std::nullopt;
+        }
+
         case Trait::IntegerBits:
             if (!b || b->base() != BK::Int) { error = "integer_bits needs an integer type, not '" + text(v) + "'"; return std::nullopt; }
             return int_bits_of(b);
@@ -511,6 +518,28 @@ std::optional<std::int64_t> eval_type_trait(TypeContext& ctx, Trait trait, const
     }
 
     return std::nullopt;
+}
+
+nodes::EnumDeclaration* enum_declaration_of(Type* t) {
+    return enum_decl_of(t);
+}
+
+Type* enum_underlying_type(TypeContext& ctx, Type* enum_type) {
+    Type* v = enum_type ? ctx.strip_cv(unref(enum_type)) : nullptr;
+    nodes::EnumDeclaration* d = enum_decl_of(v);
+    if (d && d->has_underlying_type) return ctx.strip_cv(ctx.canonicalize(d->underlying_type));
+    return ctx.builtin_ranked(BK::Int, 0, true);
+}
+
+Type* widest_unsigned_int(TypeContext& ctx) {
+    return ctx.builtin_ranked(BK::Int, kMaxIntWidth, true);
+}
+
+unsigned int enum_storage_bits(Type* underlying) {
+    if (!underlying || !underlying->is_builtin()) return 0;
+    auto* b = static_cast<BuiltinType*>(underlying);
+    if (b->base() != BK::Int) return 0;
+    return bit_width_of_rank(b->width());
 }
 
 } // namespace semantics

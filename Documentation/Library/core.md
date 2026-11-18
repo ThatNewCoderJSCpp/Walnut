@@ -16,7 +16,8 @@
 10. [Function types and comparators](#function-types-and-comparators)
 11. [Hardware numbers](#hardware-numbers)
 12. [in, not in and match](#in-not-in-and-match)
-13. [Errors](#errors)
+13. [std::Flags](#stdflags)
+14. [Errors](#errors)
 
 ## std::core::move
 
@@ -308,6 +309,8 @@ Every `bool` trait comes in two parts: the value `std::traits::is_integer<T>` th
 | `float_mantissa_bits<T>`, `float_exponent_bits<T>` | How the bits of a float type are split |
 | `integer_rank<T>`, `float_rank<T>` | The width step of an integer or float type, where `int` and `float` are `0`, each wider type adds one and each narrower one takes one away |
 | `array_extent<T>` | The number of elements of a fixed-size array type |
+| `enum_min<E>`, `enum_max<E>` | The smallest and largest value of an enum's enumerators, in the enum's underlying type |
+| `enum_bits<E>` | Each enumerator's value used as a bit position and put together, so `enum P { A, B, D = 3 }` gives `0b1011`, which is `11`. It's an `unsigned long long integer` (2048 bits), so every enumerator has to be below 2048 |
 
 See [Traits](../../documentation.md#traits) for details, and [Trait overloads](../../documentation.md#trait-overloads) for another way a class of your own can change the answers.
 
@@ -729,6 +732,60 @@ function main() -> int {
 ```
 
 Here `has` and `one_of` are `true`, and `first` is `4`.
+
+## std::Flags
+
+```walnut
+template <typename E>
+class Flags;
+```
+
+`std::Flags<E>` is a set of an enum's values stored as bits, so an enum can be a flag set without writing powers of two or `|`, `&` and `~` by hand. Each enumerator's value is its bit position: write the enum the plain way, `{ Read, Write, Exec }`, and `Read` is bit 0, `Write` bit 1 and `Exec` bit 2.
+
+```walnut
+import module.io
+
+enum Perm { Read, Write, Exec }
+
+function main() -> int {
+    std::Flags<Perm>: p = { Perm::Read, Perm::Exec };
+    p.set(Perm::Write);
+    p.set(Perm::Exec, false);
+    p.toggle(Perm::Read);
+    bool: writes = p.is_on(Perm::Write);
+    bool: safe = p.has_none(Perm::Read, Perm::Exec);
+    std::Flags<Perm>: rest = std::Flags<Perm>::all() - p;
+    std::Flags<Perm>: from_c = std::Flags<Perm>::from_mask(5);
+    for (Perm: x in rest) {
+        std::io::println(x.name());
+    }
+    std::io::println(p.to_string(), " / ", from_c.to_string(), " / ", p.count());
+    return 0;
+} end function main
+```
+
+Here `p` holds only `Write`, `writes` and `safe` are `true`, the loop prints `Read` and `Exec`, and the last line prints `Write / Read | Exec / 1`.
+
+| Member | Does |
+|---|---|
+| `Flags()`, `Flags(e...)`, `= { e, ... }` | No flags, or the flags given |
+| `Flags::from_mask(m)` | Flags from a raw integer, such as one from C code. Bits that no enumerator stands for are dropped |
+| `Flags::all()`, `Flags::none()` | Every enumerator, or nothing |
+| `set(e)`, `set(e, on)`, `clear(e)`, `toggle(e)` | Turn one flag on, on or off, off, or the other way |
+| `set_all()`, `clear_all()`, `toggle_all()` | The same for every enumerator |
+| `is_on(e)`, `is_off(e)` | Whether one flag is on or off |
+| `has_any(...)`, `has_all(...)`, `has_none(...)` | Whether any, all or none of the given flags are on. They take another `Flags` or a list of enumerators, as in `has_any(Perm::Read, Perm::Write)` |
+| `includes(other)`, `is_subset_of(other)` | Whether every flag of `other` is on here, or every flag here is on in `other` |
+| `count()`, `empty()`, `full()` | How many flags are on, whether none are, whether all are |
+| `mask()` | The flags as a raw unsigned integer (`mask_type`), with bit `n` for the enumerator whose value is `n` |
+| `to_string()` | The names of the flags that are on, joined with `" \| "`, such as `"Read \| Exec"` |
+| `for (E: e in flags)` | Goes through the flags that are on, lowest bit first |
+| `\|`, `&`, `^`, `-`, `~` | Union, common flags, flags in exactly one, flags of the left without the right, and every other enumerator. Each side can be a `Flags` or one enumerator |
+| `\|=`, `&=`, `^=`, `-=`, `==`, `!=` | The same, changing the left side, and comparing |
+
+- The flags are kept in hardware words. When the largest enumerator is below 64, that's one word of the smallest size that has a bit for it (8, 16, 32 or 64 bits), so a `Flags` of up to 8 enumerators takes one byte, and `mask_type` is that word's type. From 64 up, `Flags` uses as many 64-bit words as it needs, and `mask_type` is `unsigned long long integer`.
+- Every enumerator has to be at most 2047, or `Flags` gives a compile error. Enums can't have negative enumerators anyway. An enum whose enumerators are already masks, like `{ Read = 1, Write = 2, Exec = 4 }`, isn't meant for `Flags`; it works with `|`, `&` and `^` directly (see [Enums](../../documentation.md#enums)).
+- `std::Flags` is part of `core`, so it needs no `import`. For bits counted by position rather than named by an enum, use [`std::collections::Bitset`](collections.md#bitset).
 
 ## Errors
 

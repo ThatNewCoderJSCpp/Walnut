@@ -1,4 +1,7 @@
 #include "Driver/build_cache.hpp"
+#include "Lexer/keywords.hpp"
+
+#include <cstdio>
 
 #include <chrono>
 #include <cstdlib>
@@ -49,17 +52,27 @@ bool under(const std::string& path, const std::string& dir) {
 } // namespace
 
 std::string hash_text(std::string_view text) {
-    std::ostringstream os;
-    os << std::hex << std::setfill('0') << std::setw(16) << fnv(text, 0xcbf29ce484222325ULL) << std::setw(16) << fnv(text, 0x84222325cbf29ce4ULL ^ text.size());
-    return os.str();
+    char buf[33];
+    std::snprintf(buf, sizeof buf, "%016llx%016llx", static_cast<unsigned long long>(fnv(text, 0xcbf29ce484222325ULL)), static_cast<unsigned long long>(fnv(text, 0x84222325cbf29ce4ULL ^ text.size())));
+    return std::string(buf, 32);
+}
+
+std::string hash_key(std::string_view text) {
+    char buf[33];
+    std::snprintf(buf, sizeof buf, "%016llx%016llx", static_cast<unsigned long long>(walnut::detail::wyhash(text, 0xa0761d6478bd642full)), static_cast<unsigned long long>(walnut::detail::wyhash(text, 0xe7037ed1a0b428dbull ^ text.size())));
+    return std::string(buf, 32);
 }
 
 std::string read_text(const fs::path& p) {
-    std::ifstream in(p, std::ios::binary);
+    std::ifstream in(p, std::ios::binary | std::ios::ate);
     if (!in) return {};
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    return ss.str();
+    const std::streamoff size = in.tellg();
+    if (size <= 0) return {};
+    std::string out(static_cast<std::size_t>(size), '\0');
+    in.seekg(0);
+    in.read(out.data(), size);
+    out.resize(static_cast<std::size_t>(in.gcount()));
+    return out;
 }
 
 fs::path default_cache_root() {

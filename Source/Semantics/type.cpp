@@ -79,6 +79,7 @@ std::string canonical_spelling(parser_types::PrimitiveType::BaseKind base, int w
         case BK::Char:    return "char";
         case BK::String:  return "string";
         case BK::Text:    return "text";
+        case BK::StringView: return "string_view";
         case BK::Void:    return "void";
         case BK::Auto:    return "auto";
         case BK::Dynamic: return "dynamic";

@@ -2,6 +2,7 @@
 #define WALNUT_FLUIDS_HPP
 
 #include "walnut_runtime.hpp"
+#include "fizmo/../../Source/Util Hpp/util_functions.hpp"
 #include "walnut_physics.hpp"
 #include "walnut_graphics.hpp"
 

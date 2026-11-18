@@ -84,7 +84,7 @@ private:
     nodes::TemplateDeclaration*  m_record_template = nullptr;
     std::string_view             m_injected_name;
     nodes::TemplateDeclaration*  m_injected_template = nullptr;
-    const std::vector<parser_types::TemplateArgument*>* m_injected_spec = nullptr;
+    const ArenaVector<parser_types::TemplateArgument*>* m_injected_spec = nullptr;
     bool                         m_native_record_next = false;
     modifiers::RawModifiers      m_native_record_mods;
     int                          m_native_record_depth = 0;
@@ -189,7 +189,7 @@ private:
 
 private:
     std::vector<std::string_view> parse_qualified_name(const char* what, bool* is_global = nullptr);
-    std::string                   join_qualified_name(const std::vector<std::string_view>& parts);
+    std::string                   join_qualified_name(Span<std::string_view const> parts);
     std::string_view              expect_string_literal(const char* what);
     std::string_view              parse_native_name(const char* what);
     nodes::ASTNode*               parse_brace_element();

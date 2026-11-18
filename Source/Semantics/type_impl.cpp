@@ -1,3 +1,4 @@
+#include <array>
 #include "Semantics/type_impl.hpp"
 #include "Parser/nodes.hpp"
 #include "Parser/Nodes/node_children.hpp"
@@ -126,9 +127,9 @@ Type* TypeContext::enum_(Symbol* decl, CV cv) {
 
 Type* TypeContext::record(Symbol* decl, TemplateArgs args, CV cv, bool empty_pack) {
     empty_pack = empty_pack && args.empty();
-    RecordKey key{ decl, args, static_cast<std::uint8_t>(cv.bits() | (empty_pack ? 0x80 : 0)) };
+    RecordKey key{ decl, std::move(args), static_cast<std::uint8_t>(cv.bits() | (empty_pack ? 0x80 : 0)) };
     if (auto it = m_records.find(key); it != m_records.end()) return it->second;
-    Type* t = make_in<RecordType>(m_arena, decl, std::move(args), cv, empty_pack);
+    Type* t = make_in<RecordType>(m_arena, decl, key.args, cv, empty_pack);
     bool dep = false;
 
     for (const TemplateArg& a : static_cast<RecordType*>(t)->args()) {
@@ -145,9 +146,9 @@ Type* TypeContext::function(Type* ret, std::vector<Type*> params, bool is_const,
     for (const FnParamInfo& i : info) if (!i.trivial()) trivial = false;
     if (trivial || info.size() != params.size()) info.clear();
     std::uint8_t flags = std::uint8_t(is_const) | (std::uint8_t(rq) << 1) | (std::uint8_t(is_noexcept) << 3);
-    FuncKey key{ ret, params, flags, info };
+    FuncKey key{ ret, std::move(params), flags, std::move(info) };
     if (auto it = m_functions.find(key); it != m_functions.end()) return it->second;
-    Type* t = make_in<FunctionType>(m_arena, ret, std::move(params), is_const, rq, is_noexcept, std::move(info));
+    Type* t = make_in<FunctionType>(m_arena, ret, key.params, is_const, rq, is_noexcept, key.info);
     bool dep = (ret && ret->is_dependent()) || any_dependent(static_cast<FunctionType*>(t)->params());
     mark_dependent(t, dep);
     m_functions.emplace(std::move(key), t);
@@ -228,6 +229,16 @@ Type* TypeContext::dependent_name(Type* base, std::string_view name) {
 
 Type* TypeContext::with_cv(Type* base, CV cv) {
     if (!base || base->cv() == cv) return base;
+    const std::uint8_t bits = cv.bits();
+    if (bits < 4) {
+        std::array<Type*, 4>& slots = m_cv_cache[base];
+        if (!slots[bits]) slots[bits] = with_cv_uncached(base, cv);
+        return slots[bits];
+    }
+    return with_cv_uncached(base, cv);
+}
+
+Type* TypeContext::with_cv_uncached(Type* base, CV cv) {
 
     switch (base->kind()) {
         case TypeKind::Builtin: {

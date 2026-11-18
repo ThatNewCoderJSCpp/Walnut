@@ -1,6 +1,7 @@
 #ifndef WALNUT_SEMA_TYPE_HPP
 #define WALNUT_SEMA_TYPE_HPP
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -388,6 +389,21 @@ private:
     std::unordered_set<Type*> m_populated;
 };
 
+struct MemoHash {
+    static std::size_t mix(std::size_t h, std::size_t v) noexcept { return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)); }
+    std::size_t operator()(const std::pair<Type*, std::string>& k) const noexcept { return mix(std::hash<const void*>{}(k.first), std::hash<std::string>{}(k.second)); }
+    std::size_t operator()(const std::pair<int, std::vector<Type*>>& k) const noexcept {
+        std::size_t h = static_cast<std::size_t>(k.first);
+        for (Type* t : k.second) h = mix(h, std::hash<const void*>{}(t));
+        return h;
+    }
+    std::size_t operator()(const std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>>& k) const noexcept {
+        std::size_t h = std::hash<const void*>{}(k.first);
+        for (std::uintptr_t v : k.second) h = mix(h, static_cast<std::size_t>(v));
+        return h;
+    }
+};
+
 class TypeContext {
 public:
     explicit TypeContext(Arena& arena) : m_arena(arena), m_consts(arena), m_floats(arena) {}
@@ -395,12 +411,12 @@ public:
     ConstTable&          consts()           { return m_consts; }
     FloatTable&          floats()           { return m_floats; }
 
-    const std::string* intern_string(const std::string& s) {
+    const std::string* intern_string(std::string_view s) {
         auto it = m_string_index.find(s);
         if (it != m_string_index.end()) return it->second;
-        m_strings.push_back(s);
+        m_strings.emplace_back(s);
         const std::string* p = &m_strings.back();
-        m_string_index.emplace(s, p);
+        m_string_index.emplace(std::string_view(*p), p);
         return p;
     }
 
@@ -444,6 +460,7 @@ public:
     Type* type_param(Symbol* param, CV cv = {}); 
     Type* dependent_name(Type* base, std::string_view name);
     Type* with_cv(Type* base, CV cv);
+    Type* with_cv_uncached(Type* base, CV cv);
     Type* canonicalize(const parser_types::TypeInfo& info);
     Type* alias_template_target(Symbol* alias, const parser_types::TypeInfo& info);
     const std::vector<Type*>* find_pack(Symbol* param) const;
@@ -478,9 +495,10 @@ public:
     std::function<Symbol*(nodes::ASTNode*)>            extent_param_hook;
     std::function<Type*(Type*, std::string_view)>      member_type_hook;
     std::function<bool(Type*, std::string_view, TemplateArg&)> member_value_hook;
-    std::map<std::pair<Type*, std::string>, TemplateArg> member_value_memo;
+    std::unordered_map<std::pair<Type*, std::string>, TemplateArg, MemoHash> member_value_memo;
     std::function<std::optional<std::int64_t>(int, const std::vector<Type*>&)> lifecycle_trait_hook;
-    std::map<std::pair<int, std::vector<Type*>>, std::int64_t> lifecycle_trait_memo;
+    std::function<std::optional<std::int64_t>(Symbol*)> enum_value_hook;
+    std::unordered_map<std::pair<int, std::vector<Type*>>, std::int64_t, MemoHash> lifecycle_trait_memo;
     std::function<Type*(Type*, std::string_view, const std::vector<parser_types::TemplateArgument*>&)> member_alias_type_hook;
     std::function<Symbol*(Type*, Type*)>               callable_hook;
     bool                                               overflow_errors = false;
@@ -496,15 +514,16 @@ private:
     FloatTable m_floats;
     std::deque<std::string> m_strings;
     int m_no_type_cache = 0;
-    std::unordered_map<Type*, std::unordered_map<std::uint8_t, Type*>> m_cv_variants;
-    std::unordered_map<std::string, const std::string*> m_string_index;
+    std::unordered_map<Type*, std::array<Type*, 4>> m_cv_variants;
+    std::unordered_map<Type*, std::array<Type*, 4>> m_cv_cache;
+    std::unordered_map<std::string_view, const std::string*> m_string_index;
     Type* m_null = nullptr; 
     Type* m_special = nullptr;
     Type* m_error = nullptr;
     std::vector<const SubstEnv*> m_subst; 
     std::size_t m_dim_evals = 0;
     std::size_t m_computed_evals = 0;
-    std::map<std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>>, Type*> m_computed_cache;
+    std::unordered_map<std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>>, Type*, MemoHash> m_computed_cache;
     bool computed_cache_key(const parser_types::TypeInfo& info, std::pair<const parser_types::TypeInfo*, std::vector<std::uintptr_t>>& key) const;
 
     struct BuiltinKey {

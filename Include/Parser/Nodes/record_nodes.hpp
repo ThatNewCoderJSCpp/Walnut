@@ -21,19 +21,19 @@ struct ConstructorDeclaration : ASTNode {
     enum class Special : std::uint8_t { None = 0, Default, Delete };
 
     FunctionParameters*           m_parameters;
-    std::vector<ASTNode*>         m_init_list;   
+    ArenaVector<ASTNode*>         m_init_list;   
     BlockStatement*               m_body;
     modifiers::RawModifiers       m_modifiers;
     modifiers::FunctionQualifiers m_qualifiers;
     Special                       m_special;
     semantics::Symbol* symbol = nullptr; 
-    std::vector<std::string_view> owner_parts;
+    ArenaVector<std::string_view> owner_parts;
     bool                          owner_global = false;
     std::string_view              native_name;
 
     ConstructorDeclaration(
         FunctionParameters* params,
-        std::vector<ASTNode*> init_list,
+        ArenaVector<ASTNode*> init_list,
         const modifiers::RawModifiers& mods,
         const modifiers::FunctionQualifiers& quals,
         BlockStatement* body,
@@ -55,7 +55,7 @@ struct ConstructorDeclaration : ASTNode {
     const FunctionParameters* get_parameters() const { return m_parameters; }
           FunctionParameters* get_parameters()       { return m_parameters; }
     bool has_parameters() const { return m_parameters && !m_parameters->empty(); }
-    const std::vector<ASTNode*>& get_init_list() const { return m_init_list; }
+    const ArenaVector<ASTNode*>& get_init_list() const { return m_init_list; }
     bool has_init_list() const { return !m_init_list.empty(); }
     const ASTNode* get_body() const { return m_body; }
     ASTNode* get_body() { return m_body; }
@@ -79,7 +79,7 @@ struct DestructorDeclaration : ASTNode {
     modifiers::FunctionQualifiers m_qualifiers;
     Special                       m_special;
     semantics::Symbol* symbol = nullptr; 
-    std::vector<std::string_view> owner_parts;
+    ArenaVector<std::string_view> owner_parts;
     bool                          owner_global = false;
 
     DestructorDeclaration(
@@ -122,13 +122,13 @@ struct RecordDeclaration : ASTNode {
     };
 
     Form                                         m_form;
-    std::vector<std::string_view>                m_name_parts;
+    ArenaVector<std::string_view>                m_name_parts;
     parser_types::TypeInfo                       m_inherits;
-    std::vector<parser_types::TypeInfo>          m_extra_bases;
+    ArenaVector<parser_types::TypeInfo>          m_extra_bases;
     bool                                         m_is_declaration;
     bool                                         m_is_specialization = false;                
-    std::vector<parser_types::TemplateArgument*> m_spec_args; 
-    std::vector<Member>                          m_members;
+    ArenaVector<parser_types::TemplateArgument*> m_spec_args; 
+    ArenaVector<Member>                          m_members;
     parser_types::TemplateArgument*              m_alignment = nullptr;
     modifiers::RawModifiers                      m_mods;
     bool                                         m_native = false;
@@ -144,10 +144,10 @@ struct RecordDeclaration : ASTNode {
     };
 
     std::uint8_t              equality_state = 0;
-    std::vector<EqualityStep> equality_steps;
+    ArenaVector<EqualityStep> equality_steps;
     std::string               equality_failure;
 
-    RecordDeclaration(Form form, std::vector<std::string_view> name_parts, const modifiers::RawModifiers& mods, const parser_types::TypeInfo& inherits, bool is_declaration, std::uint32_t ln)
+    RecordDeclaration(Form form, ArenaVector<std::string_view> name_parts, const modifiers::RawModifiers& mods, const parser_types::TypeInfo& inherits, bool is_declaration, std::uint32_t ln)
 ;
 
     RecordDeclaration(Form form, std::string_view name, const modifiers::RawModifiers& mods, const parser_types::TypeInfo& inherits, bool is_declaration, std::uint32_t ln)
@@ -175,15 +175,15 @@ struct RecordDeclaration : ASTNode {
     const char* form_keyword() const;
 
     std::string_view get_name() const { return m_name_parts.empty() ? "" : m_name_parts.back(); }
-    const std::vector<Member>& get_members() const { return m_members; }
+    const ArenaVector<Member>& get_members() const { return m_members; }
 
-    void set_specialization(std::vector<parser_types::TemplateArgument*> args) {
+    void set_specialization(ArenaVector<parser_types::TemplateArgument*> args) {
         m_is_specialization = true;
         m_spec_args = std::move(args);
     }
 
     bool is_specialization() const { return m_is_specialization; }
-    const std::vector<parser_types::TemplateArgument*>& get_spec_args() const { return m_spec_args; }
+    const ArenaVector<parser_types::TemplateArgument*>& get_spec_args() const { return m_spec_args; }
 
     void set_alignment(parser_types::TemplateArgument* a) { m_alignment = a; }
     const parser_types::TemplateArgument* get_alignment() const { return m_alignment; }

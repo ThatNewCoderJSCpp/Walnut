@@ -12,6 +12,7 @@
 #include "../Types/dependent_types.hpp"
 #include "../modifiers.hpp"
 #include "../../Common/arena_allocator.hpp"
+#include "../../Common/arena_vector.hpp"
 #include "../../Common/foundation.hpp"
 
 namespace walnut {
@@ -157,6 +158,37 @@ const T* node_cast_unchecked(const ASTNode* n) { return static_cast<const T*>(n)
 
 inline ASTNode* clone_child(const ASTNode* n, Arena& a) { return n ? n->clone_into(a) : nullptr; }
 
+struct BodyMaterializer {
+    void (*fn)(void* ctx, ASTNode* decl) = nullptr;
+    void* ctx = nullptr;
+};
+
+BodyMaterializer& body_materializer() noexcept;
+
+int& lazy_member_clone_depth() noexcept;
+
+class LazyMemberClones {
+public:
+    LazyMemberClones() noexcept { ++lazy_member_clone_depth(); }
+    ~LazyMemberClones() { --lazy_member_clone_depth(); }
+    LazyMemberClones(const LazyMemberClones&) = delete;
+    LazyMemberClones& operator=(const LazyMemberClones&) = delete;
+};
+
+class EagerClones {
+    int m_saved;
+
+public:
+    EagerClones() noexcept : m_saved(lazy_member_clone_depth()) { lazy_member_clone_depth() = 0; }
+    ~EagerClones() { lazy_member_clone_depth() = m_saved; }
+    EagerClones(const EagerClones&) = delete;
+    EagerClones& operator=(const EagerClones&) = delete;
+};
+
+void materialize_body(ASTNode* decl);
+
+ASTNode* clone_pending_body(const ASTNode* source, Arena& a);
+
 template <typename Vec>
 inline Vec clone_list(const Vec& src, Arena& a) {
     Vec out; 
@@ -175,10 +207,19 @@ inline std::vector<T*> clone_typed_list(const std::vector<T*>& src, Arena& a) {
     return out;
 }
 
+template <typename T>
+inline ArenaVector<T*> clone_typed_list(const ArenaVector<T*>& src, Arena& a) {
+    ArenaVector<T*> out; out.reserve(src.size());
+    for (const T* n : src) out.push_back(n ? static_cast<T*>(n->clone_into(a)) : nullptr);
+    return out;
+}
+
 parser_types::TemplateArgument* clone_targ(const parser_types::TemplateArgument* t, Arena& a);
 
  std::vector<parser_types::TemplateArgument*>
 clone_targs(const std::vector<parser_types::TemplateArgument*>& src, Arena& a);
+
+ArenaVector<parser_types::TemplateArgument*> clone_targs(const ArenaVector<parser_types::TemplateArgument*>& src, Arena& a);
 
 inline void print_indent(std::ostream& os, std::size_t indent) { for (std::size_t i = 0; i < indent; ++i) os << "    "; }
 

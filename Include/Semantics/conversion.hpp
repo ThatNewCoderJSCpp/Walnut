@@ -21,7 +21,11 @@ enum class ConversionRank : std::uint8_t {
     X(Char, Int,  Explicit) \
     X(Int,  Char, Forbidden) \
     X(String, Text, Explicit) \
-    X(Text, String, Explicit)
+    X(Text, String, Explicit) \
+    X(String, StringView, Implicit) \
+    X(Text, StringView, Implicit) \
+    X(StringView, String, Implicit) \
+    X(StringView, Text, Explicit)
 
 enum class CastMode : std::uint8_t { Forbidden = 0, Explicit, Implicit };
 
@@ -69,6 +73,7 @@ bool is_derived_record(Type* derived, Type* base, TypeContext& ctx);
 
 bool unsized_array_accepts(Type* src, Type* dst, TypeContext& ctx);
 
+bool dynamic_object_type(Type* t, TypeContext& ctx);
 bool dynamic_value_type(Type* t, TypeContext& ctx, bool allow_void);
 
 bool dynamic_callable(FunctionType* f, TypeContext& ctx);

@@ -17,7 +17,7 @@ void for_each_child(ASTNode* n, Fn&& fn) {
         for (auto* c : list) if (c) fn(static_cast<ASTNode*>(c));
     };
 
-    const auto yield_targs = [&](const std::vector<parser_types::TemplateArgument*>& args) {
+    const auto yield_targs = [&](const auto& args) {
         if constexpr (IncludeTemplateArgValues) {
             for (auto* a : args) if (a && a->is_value() && a->value) fn(a->value);
         } else {
@@ -245,14 +245,14 @@ void for_each_child(ASTNode* n, Fn&& fn) {
         case K::FunctionDeclaration: {
             auto* f = static_cast<FunctionDeclaration*>(n);
             yield_params(f->get_parameters());
-            yield(f->get_body());
+            yield(f->peek_body());
             break;
         }
 
         case K::OperatorFunctionDeclaration: {
             auto* f = static_cast<OperatorFunctionDeclaration*>(n);
             yield_params(f->get_parameters());
-            yield(f->get_body());
+            yield(f->peek_body());
             break;
         }
 

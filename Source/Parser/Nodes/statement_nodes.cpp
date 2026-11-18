@@ -93,7 +93,7 @@ ASTNode* IfStatement::clone_into(Arena& a) const {
 }
 
 NamespaceDeclaration::NamespaceDeclaration(
-        std::vector<std::string_view> name_parts,
+        ArenaVector<std::string_view> name_parts,
         BlockStatement* body,
         std::uint32_t ln
 ) : ASTNode(Kind::NamespaceDeclaration, ln)
@@ -491,9 +491,9 @@ ASTNode* EnumDeclaration::clone_into(Arena& a) const {
 
 UsingDeclaration::UsingDeclaration(std::string_view n, const parser_types::TypeInfo& type, std::uint32_t ln) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::Typedef), name(n), aliased_type(type) {}
 
-UsingDeclaration::UsingDeclaration(std::vector<std::string_view> parts, std::uint32_t ln) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::NamespaceDirective), target_parts(std::move(parts)) {}
+UsingDeclaration::UsingDeclaration(ArenaVector<std::string_view> parts, std::uint32_t ln) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::NamespaceDirective), target_parts(std::move(parts)) {}
 
-UsingDeclaration::UsingDeclaration(std::string_view n, std::vector<std::string_view> parts, bool global, std::uint32_t ln) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::NamespaceAlias), name(n), target_parts(std::move(parts)), target_global(global) {}
+UsingDeclaration::UsingDeclaration(std::string_view n, ArenaVector<std::string_view> parts, bool global, std::uint32_t ln) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::NamespaceAlias), name(n), target_parts(std::move(parts)), target_global(global) {}
 
 const char* UsingDeclaration::variant_name() const {
     switch (variant) {
@@ -651,7 +651,7 @@ const char* ImportExportItem::kind_name(Kind k) {
 }
 
 void print_import_export_item(std::ostream& os, const ImportExportItem& it, std::size_t indent) {
-    auto write_qualified = [&os](bool glob, const std::vector<std::string_view>& parts) {
+    auto write_qualified = [&os](bool glob, const auto& parts) {
         if (glob) { os << "::"; }
         for (std::size_t i = 0; i < parts.size(); ++i) { if (i) { os << "::"; } os << parts[i]; }
     };
@@ -688,7 +688,7 @@ void print_import_export_item(std::ostream& os, const ImportExportItem& it, std:
 }
 
 void ImportExportDeclaration::print(std::ostream& os, std::size_t indent) const {
-    auto write_qualified = [&os](bool glob, const std::vector<std::string_view>& parts) {
+    auto write_qualified = [&os](bool glob, const auto& parts) {
         if (glob) os << "::";
 
         for (std::size_t i = 0; i < parts.size(); ++i) {

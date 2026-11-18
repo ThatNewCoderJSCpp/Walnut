@@ -1,13 +1,23 @@
 #include "Semantics/instantiator.hpp"
 #include "Semantics/conversion.hpp"
+#include "Semantics/scope_builder.hpp"
+#include "Semantics/name_resolver.hpp"
 
 namespace walnut {
 namespace semantics {
 
 Instantiator::Instantiator(Arena& arena, TypeContext& types, ErrorReporter& reporter, WarningReporter& warnings) : m_arena(arena), m_types(types), m_reporter(reporter), m_warnings(warnings), m_eval(types)
 {
+    m_previous_materializer = nodes::body_materializer();
+    nodes::body_materializer() = nodes::BodyMaterializer{ [](void* ctx, nodes::ASTNode* d) { static_cast<Instantiator*>(ctx)->materialize_member_body(d); }, this };
     m_types.value_arg_hook  = [this](nodes::ASTNode* e, TemplateArg& out) { return classify_value_arg(e, out); };
     m_types.value_eval_hook = [this](nodes::ASTNode* e, TemplateArg& out) { return eval_value_arg(e, out); };
+    m_types.enum_value_hook = [this](Symbol* s) -> std::optional<std::int64_t> {
+        const ConstValue v = m_eval.enum_constant(s);
+        if (!v.ok() || !v.is_int() || !ConstTable::fits_twos(*v.i, 64, true)) return std::nullopt;
+        const std::uint64_t low = v.i->get_lowest_bits();
+        return v.i->is_negative() ? -static_cast<std::int64_t>(low) : static_cast<std::int64_t>(low);
+    };
     m_eval.env_of = [this](Symbol* s) -> const SubstEnv* {
         Instantiation* I = owning(s);
         return I ? &I->env : nullptr;
@@ -32,7 +42,7 @@ Instantiator::Instantiator(Arena& arena, TypeContext& types, ErrorReporter& repo
     };
     m_types.value_symbol_hook = [this](Symbol* s, TemplateArg& out) { return classify_value_symbol(s, out); };
     m_types.member_type_hook = [this](Type* rec, std::string_view name) -> Type* { return member_type(rec, name); };
-    m_types.member_alias_type_hook = [this](Type* rec, std::string_view name, const std::vector<parser_types::TemplateArgument*>& args) -> Type* {
+    m_types.member_alias_type_hook = [this](Type* rec, std::string_view name, Span<parser_types::TemplateArgument* const> args) -> Type* {
         if (!rec || !rec->is_record()) return nullptr;
         auto* rt = static_cast<RecordType*>(rec);
         Instantiation* I = rt->is_instantiation() ? for_record(rt, nullptr) : nullptr;
@@ -42,7 +52,7 @@ Instantiator::Instantiator(Arena& arena, TypeContext& types, ErrorReporter& repo
         if (!m || m->kind != SymbolKind::TypeAlias || !m->template_decl) return nullptr;
         parser_types::TypeInfo use;
         use.resolved = m;
-        use.template_args = args;
+        use.template_args = args.to_vector();
         if (I) m_types.push_subst(&I->env);
         Type* t = m_types.canonicalize(use);
         if (I) m_types.pop_subst();
@@ -109,7 +119,7 @@ auto Instantiator::instantiate_for_conversion(Symbol* generic, Type* target, nod
 
 auto Instantiator::instantiate_for_call(
     Symbol* generic,
-    const std::vector<parser_types::TemplateArgument*>& explicit_args,
+    Span<parser_types::TemplateArgument* const> explicit_args,
     const std::vector<Type*>& call_args,
     nodes::ASTNode* site,
     const std::vector<bool>* lvalue_args
@@ -264,7 +274,7 @@ auto Instantiator::instantiate_for_call(
     return I;
 }
 
-auto Instantiator::canon_args(const std::vector<parser_types::TemplateArgument*>& written, bool& ok) -> std::vector<Arg> {
+auto Instantiator::canon_args(Span<parser_types::TemplateArgument* const> written, bool& ok) -> std::vector<Arg> {
     std::vector<Arg> out;
     out.reserve(written.size());
     ok = true;
@@ -476,7 +486,12 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
     }
 
     ++m_depth;
-    I->decl = chosen->m_declaration ? chosen->m_declaration->clone_into(m_arena) : nullptr;
+    if (chosen->m_declaration && chosen->m_declaration->kind == K::RecordDeclaration && !m_eager_member_bodies) {
+        nodes::LazyMemberClones lazy;
+        I->decl = chosen->m_declaration->clone_into(m_arena);
+    } else {
+        I->decl = chosen->m_declaration ? chosen->m_declaration->clone_into(m_arena) : nullptr;
+    }
     Scope* parent = chosen->scope;
     if (chosen->has_friend_type) {
         if (Scope* rs = friend_record_scope(chosen, I, site)) {
@@ -515,6 +530,41 @@ auto Instantiator::instantiate_impl(Symbol* generic, std::vector<Arg> args, node
 
     --m_depth;
     return I;
+}
+
+Instantiator::~Instantiator() {
+    nodes::body_materializer() = m_previous_materializer;
+}
+
+void Instantiator::materialize_member_body(nodes::ASTNode* decl) {
+    if (!decl) return;
+    const nodes::ASTNode* source = nullptr;
+    nodes::ASTNode** body = nullptr;
+    Symbol* sym = nullptr;
+    if (decl->kind == nodes::ASTNode::Kind::FunctionDeclaration) {
+        auto* f = static_cast<nodes::FunctionDeclaration*>(decl);
+        source = f->pending_body;
+        f->pending_body = nullptr;
+        body = &f->m_body;
+        sym = f->symbol;
+    } else if (decl->kind == nodes::ASTNode::Kind::OperatorFunctionDeclaration) {
+        auto* f = static_cast<nodes::OperatorFunctionDeclaration*>(decl);
+        source = f->pending_body;
+        f->pending_body = nullptr;
+        body = &f->m_body;
+        sym = f->symbol;
+    }
+    if (!source || !body) return;
+    ++m_lazy_materialized;
+    ArenaScope arena_scope(m_arena);
+    *body = nodes::clone_pending_body(source, m_arena);
+    Scope* fs = sym ? sym->inner_scope : nullptr;
+    if (!fs || !*body) return;
+    AnalysisContext ctx(m_arena, m_reporter);
+    ScopeBuilder scopes(ctx);
+    scopes.build_body_into(*body, fs);
+    NameResolver names(ctx);
+    names.resolve_into(*body, fs);
 }
 
 auto Instantiator::select_specialization(Symbol* generic, const std::vector<Arg>& args, nodes::ASTNode* site, bool quiet) -> SpecMatch {
@@ -1143,7 +1193,7 @@ Symbol* Instantiator::entity_symbol(nodes::ASTNode* d) {
     }
 }
 
-const std::vector<parser_types::TemplateArgument*>* Instantiator::spec_args_of(nodes::TemplateDeclaration* t) {
+const ArenaVector<parser_types::TemplateArgument*>* Instantiator::spec_args_of(nodes::TemplateDeclaration* t) {
     nodes::ASTNode* d = t->m_declaration;
     if (!d) return nullptr;
 
@@ -1161,7 +1211,7 @@ const std::vector<parser_types::TemplateArgument*>* Instantiator::spec_args_of(n
 }
 
 const parser_types::TemplateArgument* Instantiator::trailing_targ_pack(
-    const std::vector<parser_types::TemplateArgument*>& written, std::size_t& fixed_out
+    Span<parser_types::TemplateArgument* const> written, std::size_t& fixed_out
 ) {
     fixed_out = written.size();
     if (written.empty()) return nullptr;
@@ -1171,7 +1221,7 @@ const parser_types::TemplateArgument* Instantiator::trailing_targ_pack(
     return last;
 }
 
-bool Instantiator::pattern_matches(const std::vector<parser_types::TemplateArgument*>& written, std::size_t fixed, const std::vector<Arg>& args, const SubstEnv& env) {
+bool Instantiator::pattern_matches(Span<parser_types::TemplateArgument* const> written, std::size_t fixed, const std::vector<Arg>& args, const SubstEnv& env) {
     for (std::size_t i = 0; i < fixed && i < args.size(); ++i) {
         const parser_types::TemplateArgument* w = written[i];
         if (!w) return false;

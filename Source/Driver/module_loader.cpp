@@ -105,7 +105,7 @@ void ModuleLoader::link_imports(FileId importer, nodes::BlockStatement* ast) {
     }
 }
 
-std::optional<FileId> ModuleLoader::resolve_module(const std::vector<std::string_view>& parts, FileId importer, std::uint32_t line) {
+std::optional<FileId> ModuleLoader::resolve_module(Span<std::string_view const> parts, FileId importer, std::uint32_t line) {
     namespace fs = std::filesystem;
     fs::path rel;
     std::string dotted;

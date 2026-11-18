@@ -299,7 +299,7 @@ void drop_friend(nodes::ASTNode* fn) {
 } // namespace
 
 std::vector<parser_types::TemplateArgument*> Parser::injected_arguments() {
-    if (m_injected_spec && !m_injected_spec->empty()) return nodes::clone_targs(*m_injected_spec, arena);
+    if (m_injected_spec && !m_injected_spec->empty()) return nodes::clone_targs(*m_injected_spec, arena).to_vector();
     std::vector<parser_types::TemplateArgument*> args;
 
     for (nodes::TemplateParameter* p : m_injected_template->m_params) {
@@ -444,7 +444,7 @@ nodes::ASTNode* Parser::parse_record_declaration(const modifiers::RawModifiers& 
         return parts;
     };
 
-    auto join_name = [](const std::vector<std::string_view>& parts) -> std::string {
+    auto join_name = [](Span<std::string_view const> parts) -> std::string {
         std::string out;
 
         for (std::size_t i = 0; i < parts.size(); ++i) {
@@ -536,7 +536,7 @@ nodes::ASTNode* Parser::parse_record_declaration(const modifiers::RawModifiers& 
         Parser& p;
         std::string_view name;
         nodes::TemplateDeclaration* tmpl;
-        const std::vector<parser_types::TemplateArgument*>* spec;
+        const ArenaVector<parser_types::TemplateArgument*>* spec;
         bool active;
         ~InjectedScope() { p.m_injected_name = name; p.m_injected_template = tmpl; p.m_injected_spec = spec; p.m_injected_active = active; }
     } injected_scope{*this, m_injected_name, m_injected_template, m_injected_spec, m_injected_active};

@@ -123,6 +123,7 @@ enum class TypeTrait : std::uint8_t {
     IntegerRank,
     FloatRank,
     IsText,
+    IsStringView,
     IsStr,
     IsNullPointer,
     IsSpecial,
@@ -149,7 +150,10 @@ enum class TypeTrait : std::uint8_t {
     IsConstexprAssignable,
     IsDestructible,
     IsNothrowDestructible,
-    IsHardware
+    IsHardware,
+    EnumMin,
+    EnumMax,
+    EnumBits
 };
 
 struct TypeTraitInfo {
@@ -188,6 +192,7 @@ inline constexpr TypeTraitInfo kTypeTraits[] = {
     { "integer_rank",   TypeTrait::IntegerRank,   1, true, OverloadPolicy::Allowed },
     { "float_rank",     TypeTrait::FloatRank,     1, true, OverloadPolicy::Allowed },
     { "is_text",        TypeTrait::IsText,        1, false, OverloadPolicy::Allowed },
+    { "is_string_view", TypeTrait::IsStringView,  1, false, OverloadPolicy::Allowed },
     { "is_str",         TypeTrait::IsStr,         1, false, OverloadPolicy::Allowed },
     { "is_null_pointer", TypeTrait::IsNullPointer, 1 },
     { "is_special",     TypeTrait::IsSpecial,     1 },
@@ -215,6 +220,9 @@ inline constexpr TypeTraitInfo kTypeTraits[] = {
     { "is_destructible",            TypeTrait::IsDestructible,           1 },
     { "is_nothrow_destructible",    TypeTrait::IsNothrowDestructible,    1 },
     { "is_hardware",                TypeTrait::IsHardware,               1, false, OverloadPolicy::Allowed },
+    { "enum_min",                   TypeTrait::EnumMin,                  1, true },
+    { "enum_max",                   TypeTrait::EnumMax,                  1, true },
+    { "enum_bits",                  TypeTrait::EnumBits,                 1, true },
 };
 
 inline bool is_lifecycle_trait(TypeTrait trait) {

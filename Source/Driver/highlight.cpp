@@ -198,7 +198,7 @@ std::string value_text(const S::ConstValue& v, S::Type* t) {
     return std::string();
 }
 
-std::string joined(const std::vector<std::string_view>& parts) {
+std::string joined(Span<std::string_view const> parts) {
     std::string out;
 
     for (std::size_t i = 0; i < parts.size(); ++i) {
@@ -518,7 +518,7 @@ constexpr KeywordDoc k_keyword_docs[] = {
     { TK::DiscardNodiscardKeyword, "operator", "discard_nodiscard(checked(2));", "Calls a `nodiscard` function while ignoring its result, without the warning." },
     { TK::ElseKeyword, "keyword", "} else if (x > 3) then { ... } else then { ... }", "Adds another branch to an `if`. Every `else` branch needs `then` before its block." },
     { TK::EndKeyword, "keyword", "} end function name", "Closes a named declaration: `end <kind> <name>` for functions, classes, structs, unions and namespaces, with the name matching the opening one, and `end extern` for extern blocks. `if`, loops, `switch`, `enum` and lambdas don't use it." },
-    { TK::EnumKeyword, "keyword", "enum Color { Red, Green = 5, Blue }", "Declares an enum. Enums are always scoped (`Color::Blue`), don't convert to or from integers implicitly, and default to an `int` underlying type, set with `: type`." },
+    { TK::EnumKeyword, "keyword", "enum Color { Red, Green = 5, Blue }", "Declares an enum. Enums are always scoped (`Color::Blue`), don't convert to or from integers implicitly, and default to an `unsigned int` underlying type, set with `: type` to any unsigned integer type, including the hardware ones such as `std::hardware_uint8`. Enumerators can't be negative." },
     { TK::ExportKeyword, "keyword", "export name", "Chooses what other files can import: a single name, `name as other`, `namespace n`, `this` for every global declaration, or `{ ... }` for several." },
     { TK::ExtendsKeyword, "keyword", "class Square extends Shape { ... } end class Square", "Names the base class in a class heading, the same as `inherits`." },
     { TK::ExternKeyword, "keyword", "extern \"C\" function puts(string: line) -> int;", "Declares a function or variable defined in another file, or with `\"C\"`/`\"C++\"` a native function or class. Several declarations can share an `extern { ... } end extern` block." },
@@ -601,6 +601,7 @@ constexpr KeywordDoc k_keyword_docs[] = {
     { TK::ShortDeclaration, "type", "short int: s = 3;", "Makes a number type one step narrower (up to two times): `short int` is 16 bits, `short short int` 8, `short float` 64. A bare `short` means `short int`." },
     { TK::UnsignedDeclaration, "type", "unsigned int: cap = inf;", "Makes any number type unsigned; it goes first, and a bare `unsigned` means `unsigned int`. An unsigned number that would go below zero becomes 0, and one that overflows becomes `inf`." },
     { TK::TextDeclaration, "type", "text: a = `n=${n}`;", "UTF-8 text written with backtick literals, which can interpolate `${expression}`. It works like `string` but is a separate type, so the two don't convert implicitly." },
+    { TK::StringViewDeclaration, "type", "function greet(string_view: name) -> void", "A read-only view of characters owned by a `string` or `text`, with no copy. `string`, `text` and string literals convert to it implicitly, and it converts back to `string` by copying. The text it views must outlive it." },
 };
 
 const KeywordDoc* keyword_doc(TK kind) {
@@ -623,7 +624,7 @@ bool type_word(TK k) {
     switch (k) {
         case TK::UnsignedDeclaration: case TK::ShortDeclaration: case TK::LongDeclaration:
         case TK::IntegerDeclaration: case TK::DecimalDeclaration: case TK::CharacterDeclaration:
-        case TK::BooleanDeclaration: case TK::StringDeclaration: case TK::TextDeclaration:
+        case TK::BooleanDeclaration: case TK::StringDeclaration: case TK::TextDeclaration: case TK::StringViewDeclaration:
         case TK::AutoDeclaration: case TK::DynamicDeclaration: case TK::VoidKeyword:
             return true;
         default:
@@ -639,7 +640,7 @@ std::string bits_text(double bits) {
     return o.str();
 }
 
-std::string builtin_type_doc(const std::vector<std::string_view>& words) {
+std::string builtin_type_doc(Span<std::string_view const> words) {
     bool is_unsigned = false;
     int steps = 0;
     std::string_view base;
@@ -995,7 +996,10 @@ public:
                 break;
         }
 
+        const bool record = n->kind == K::RecordDeclaration;
+        if (record) m_records.push_back(static_cast<N::RecordDeclaration*>(n)->symbol);
         N::for_each_child<true>(n, [this](N::ASTNode* c) { walk(c); });
+        if (record) m_records.pop_back();
     }
 
     std::string json(const ErrorReporter& errors, const WarningReporter& warnings, FileId main, const SourceManager& sources, bool semantic, std::size_t error_limit = static_cast<std::size_t>(-1), std::size_t warning_limit = static_cast<std::size_t>(-1)) const {
@@ -1142,6 +1146,7 @@ private:
     S::ConstEvaluator*                   m_eval = nullptr;
     S::TypeContext*                      m_types = nullptr;
     bool                                 m_in_instantiation = false;
+    std::vector<const S::Symbol*>        m_records;
 
     struct Hover {
         std::uint32_t            len  = 0;
@@ -1807,7 +1812,7 @@ public:
     std::string enum_underlying(const S::Symbol* e) const {
         if (!e || !e->decl || e->decl->kind != K::EnumDeclaration) return "int";
         const auto* d = static_cast<const N::EnumDeclaration*>(e->decl);
-        if (!d->has_underlying_type) return "int";
+        if (!d->has_underlying_type) return "unsigned int";
         const std::string t = type_text(d->underlying_type, m_types);
         return t.empty() ? std::string("int") : t;
     }
@@ -1974,12 +1979,42 @@ public:
         return !t || t->is_dependent();
     }
 
-    static const S::Symbol* dot_member(const N::MemberAccessExpression* m) {
+    const S::Symbol* current_record() const {
+        for (auto it = m_records.rbegin(); it != m_records.rend(); ++it) {
+            if (const S::Symbol* r = follow(*it); r && r->inner_scope) return r;
+        }
+        return nullptr;
+    }
+
+    static bool is_this_literal(const N::ASTNode* o) {
+        return o && o->kind == K::Literal && static_cast<const N::Literal*>(o)->token_kind == tokenizing::Token::Kind::ThisKeyword;
+    }
+
+    bool names_current_object(const N::MemberAccessExpression* m) const {
+        const N::ASTNode* o = m->m_object;
+        if (!o) return false;
+        if (o->kind == K::DereferenceExpression) return is_this_literal(static_cast<const N::DereferenceExpression*>(o)->operand);
+        if (m->m_op == N::MemberAccessExpression::Op::Arrow && is_this_literal(o)) return true;
+        if (o->kind == K::Identifier) {
+            const auto* id = static_cast<const N::Identifier*>(o);
+            return (id->name == "self" || id->name == "this") && !id->resolved;
+        }
+        return false;
+    }
+
+    const S::Symbol* dot_member(const N::MemberAccessExpression* m) const {
         if (m->m_op == N::MemberAccessExpression::Op::Scope || !m->m_object || m->m_member.empty()) return nullptr;
+        if (names_current_object(m)) {
+            const S::Symbol* record = current_record();
+            return record ? record->inner_scope->find_member(m->m_member) : nullptr;
+        }
         const N::ASTNode* o = m->m_object;
         const S::Symbol* object = nullptr;
         if (o->kind == K::Identifier) object = static_cast<const N::Identifier*>(o)->resolved;
-        else if (o->kind == K::MemberAccessExpression) object = static_cast<const N::MemberAccessExpression*>(o)->resolved;
+        else if (o->kind == K::MemberAccessExpression) {
+            const auto* inner = static_cast<const N::MemberAccessExpression*>(o);
+            object = inner->resolved ? inner->resolved : dot_member(inner);
+        }
         object = follow(object);
         if (!object || (object->kind != S::SymbolKind::Variable && object->kind != S::SymbolKind::Parameter) || !object->type) return nullptr;
         const S::Symbol* record = follow(object->type->resolved);
@@ -2133,7 +2168,7 @@ public:
         if (!best.empty()) op_text(at, best);
     }
 
-    void qualifiers(const std::vector<std::string_view>& parts, std::size_t count, const S::Symbol* last) {
+    void qualifiers(Span<std::string_view const> parts, std::size_t count, const S::Symbol* last) {
         last = follow(last);
         const S::Scope* sc = last ? last->owner : nullptr;
 
@@ -2156,7 +2191,7 @@ public:
         }
     }
 
-    void targs(const std::vector<parser_types::TemplateArgument*>& args) {
+    void targs(Span<parser_types::TemplateArgument* const> args) {
         for (parser_types::TemplateArgument* a : args) {
             if (!a) continue;
             if (a->is_type()) type(a->type);
@@ -2167,7 +2202,7 @@ public:
     void type(const parser_types::TypeInfo& t) {
         if (t.type && t.type->is_user_defined()) {
             const auto* u = static_cast<const parser_types::UserDefinedType*>(t.type);
-            const std::vector<std::string_view>& parts = u->parts();
+            const auto& parts = u->parts();
 
             if (!parts.empty() && t.resolved) {
                 use(parts.back(), t.resolved);
@@ -2375,7 +2410,7 @@ S::Type* receiver_type(S::Type* t, S::TypeContext& types, bool arrow) {
     return t;
 }
 
-const S::Scope* resolve_qualifier(const S::Scope* scope, const std::vector<std::string_view>& parts) {
+const S::Scope* resolve_qualifier(const S::Scope* scope, Span<std::string_view const> parts) {
     if (!scope || parts.empty()) return nullptr;
     const S::Symbol* s = follow(scope->resolve(parts[0]));
     for (std::size_t i = 1; s && i < parts.size(); ++i) {

@@ -18,7 +18,7 @@ struct FunctionParameter : ASTNode {
     std::size_t m_variadic_length;
     bool m_is_init_in_decl;
     semantics::Symbol* symbol = nullptr; 
-    std::vector<semantics::Symbol*> pack_symbols;
+    ArenaVector<semantics::Symbol*> pack_symbols;
     bool expanded_pack = false;
     bool m_variadic_exact = false;
     bool is_iterable = false;
@@ -64,7 +64,7 @@ enum class Receiver : std::uint8_t {
 };
 
 struct FunctionParameters : ASTNode {
-    std::vector<FunctionParameter*> m_params;
+    ArenaVector<FunctionParameter*> m_params;
     Receiver receiver = Receiver::None;
     std::uint32_t receiver_line = 0;
 
@@ -135,14 +135,14 @@ struct FunctionParameters : ASTNode {
 };
 
 struct FunctionDeclaration : ASTNode {
-    std::vector<std::string_view> m_name_parts;
+    ArenaVector<std::string_view> m_name_parts;
     bool m_is_global_qualified = false;
     parser_types::TypeInfo m_return_type;
     modifiers::RawModifiers m_modifiers;
     FunctionParameters* m_parameters;
     ASTNode* m_body;
     modifiers::FunctionQualifiers m_qualifiers;
-    std::vector<parser_types::TemplateArgument*> m_spec_args;
+    ArenaVector<parser_types::TemplateArgument*> m_spec_args;
     bool                                         m_is_specialization = false;
     OverloadableOperator                         m_lowered_operator = OverloadableOperator::None;
     RecordDeclaration*                           friend_of = nullptr;
@@ -150,11 +150,12 @@ struct FunctionDeclaration : ASTNode {
     bool                                         lazy_untyped = false;
     bool                                         native_used = false;
     bool                                         variable_template = false;
+    const ASTNode*                               pending_body = nullptr;
     std::string_view                             native_name;
     semantics::Symbol* symbol = nullptr; 
 
     FunctionDeclaration(
-        std::vector<std::string_view> name_parts,
+        ArenaVector<std::string_view> name_parts,
         bool is_global_qualified,
         const parser_types::TypeInfo& return_type,
         const modifiers::RawModifiers& modifiers,
@@ -183,7 +184,7 @@ struct FunctionDeclaration : ASTNode {
         return m_name_parts.empty() ? "" : m_name_parts.back();
     }
 
-    const std::vector<std::string_view>& name_parts() const { return m_name_parts; }
+    const ArenaVector<std::string_view>& name_parts() const { return m_name_parts; }
     bool is_global_qualified() const { return m_is_global_qualified; }
     bool is_qualified() const { return m_name_parts.size() > 1 || m_is_global_qualified; }
 
@@ -195,22 +196,24 @@ struct FunctionDeclaration : ASTNode {
     const FunctionParameters* get_parameters() const { return m_parameters; }
     FunctionParameters* get_parameters() { return m_parameters; }
     bool has_parameters() const { return m_parameters && !m_parameters->empty(); }
-    const ASTNode* get_body() const { return m_body; }
-    ASTNode* get_body() { return m_body; }
-    bool has_body() const { return m_body != nullptr; }
+    const ASTNode* get_body() const { if (pending_body) materialize_body(const_cast<FunctionDeclaration*>(this)); return m_body; }
+    ASTNode* get_body() { if (pending_body) materialize_body(this); return m_body; }
+    ASTNode* peek_body() const { return m_body; }
+    bool has_body() const { return m_body != nullptr || pending_body != nullptr; }
+    bool body_pending() const { return pending_body != nullptr; }
     bool is_specialization() const { return m_is_specialization; }
 
     const modifiers::FunctionQualifiers& qualifiers() const { return m_qualifiers; }
           modifiers::FunctionQualifiers& qualifiers()       { return m_qualifiers; }
 
-    const std::vector<parser_types::TemplateArgument*>& get_spec_args() const { return m_spec_args; }
-          std::vector<parser_types::TemplateArgument*>& get_spec_args()       { return m_spec_args; }
+    const ArenaVector<parser_types::TemplateArgument*>& get_spec_args() const { return m_spec_args; }
+          ArenaVector<parser_types::TemplateArgument*>& get_spec_args()       { return m_spec_args; }
 
     const FunctionParameter* find_parameter(std::string_view name) const {
         return m_parameters ? m_parameters->find_by_name(name) : nullptr;
     }
 
-    void set_specialization(std::vector<parser_types::TemplateArgument*> args) {
+    void set_specialization(ArenaVector<parser_types::TemplateArgument*> args) {
         m_is_specialization = true;
         m_spec_args = std::move(args);
     }
@@ -264,14 +267,14 @@ struct LambdaCaptureItem {
 };
 
 struct LambdaCaptureList : ASTNode {
-    std::vector<LambdaCaptureItem> m_captures;
+    ArenaVector<LambdaCaptureItem> m_captures;
 
     LambdaCaptureList() : ASTNode(Kind::LambdaCaptureList) {}
 
     static bool classof(const ASTNode* n) { return n->kind == Kind::LambdaCaptureList; }
 
     void add(const LambdaCaptureItem& item) { m_captures.push_back(item); }
-    const std::vector<LambdaCaptureItem>& captures() const { return m_captures; }
+    const ArenaVector<LambdaCaptureItem>& captures() const { return m_captures; }
     bool empty() const { return m_captures.empty(); }
     std::size_t size() const { return m_captures.size(); }
 
@@ -290,9 +293,9 @@ struct LambdaExpression : ASTNode {
     ASTNode* m_body;
     semantics::Scope* scope = nullptr;
     LambdaExpression* generic_origin = nullptr;
-    std::vector<LambdaExpression*> specializations;
+    ArenaVector<LambdaExpression*> specializations;
     std::vector<std::vector<semantics::Type*>> spec_keys;
-    std::vector<bool> spec_failed;
+    ArenaVector<bool> spec_failed;
 
     LambdaExpression(
         LambdaCaptureList* captures,
@@ -326,7 +329,7 @@ struct OperatorFunctionDeclaration : ASTNode {
     enum class Form : std::uint8_t { Symbol, Conversion };
 
     Form                                  form;
-    std::vector<tokenizing::Token::Kind>  op_tokens;
+    ArenaVector<tokenizing::Token::Kind>  op_tokens;
     OverloadableOperator                  overload = OverloadableOperator::None;        
     parser_types::TypeInfo                conversion_type;  
 
@@ -336,17 +339,18 @@ struct OperatorFunctionDeclaration : ASTNode {
     FunctionParameters*                   m_parameters;
     ASTNode*                              m_body;
     bool                                  m_deleted = false;
-    std::vector<std::string_view>         owner_parts;
+    ArenaVector<std::string_view>         owner_parts;
     bool                                  owner_global = false;
     RecordDeclaration*                    friend_of = nullptr;
     bool                                  hoisted_friend = false;
     bool                                  lazy_untyped = false;
     bool                                  native_used = false;
+    const ASTNode*                        pending_body = nullptr;
     std::string_view                      native_name;
     semantics::Symbol* symbol = nullptr; 
 
     OperatorFunctionDeclaration(
-        std::vector<tokenizing::Token::Kind> ops,
+        ArenaVector<tokenizing::Token::Kind> ops,
         const parser_types::TypeInfo& return_type,
         const modifiers::RawModifiers& modifiers,
         const modifiers::FunctionQualifiers& qualifiers,
@@ -371,15 +375,17 @@ struct OperatorFunctionDeclaration : ASTNode {
 
     bool is_conversion() const { return form == Form::Conversion; }
     bool is_symbol()     const { return form == Form::Symbol; }
-    const std::vector<tokenizing::Token::Kind>& operator_tokens() const { return op_tokens; }
+    const ArenaVector<tokenizing::Token::Kind>& operator_tokens() const { return op_tokens; }
     const parser_types::TypeInfo& get_conversion_type() const { return conversion_type; }
     const parser_types::TypeInfo& get_return_type() const { return m_return_type; }
     const FunctionParameters* get_parameters() const { return m_parameters; }
           FunctionParameters* get_parameters()       { return m_parameters; }
     bool has_parameters() const { return m_parameters && !m_parameters->empty(); }
-    const ASTNode* get_body() const { return m_body; }
-    ASTNode* get_body() { return m_body; }
-    bool has_body() const { return m_body != nullptr; }
+    const ASTNode* get_body() const { if (pending_body) materialize_body(const_cast<OperatorFunctionDeclaration*>(this)); return m_body; }
+    ASTNode* get_body() { if (pending_body) materialize_body(this); return m_body; }
+    ASTNode* peek_body() const { return m_body; }
+    bool has_body() const { return m_body != nullptr || pending_body != nullptr; }
+    bool body_pending() const { return pending_body != nullptr; }
     bool is_deleted() const { return m_deleted; }
     const modifiers::FunctionQualifiers& qualifiers() const { return m_qualifiers; }
           modifiers::FunctionQualifiers& qualifiers()       { return m_qualifiers; }
@@ -396,7 +402,7 @@ struct TypeQueryOverload : ASTNode {
     bool                                is_trait = false;
     parser_types::TypeOp                op       = parser_types::TypeOp::Typeof;
     parser_types::TypeTrait             trait    = parser_types::TypeTrait::IsSame;
-    std::vector<parser_types::TypeInfo> m_params;
+    ArenaVector<parser_types::TypeInfo> m_params;
     parser_types::TypeInfo              m_return_type;
     ASTNode*                            m_value  = nullptr;
 

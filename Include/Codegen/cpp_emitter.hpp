@@ -12,6 +12,7 @@
 #include "../Parser/nodes.hpp"
 #include "../Lexer/escapes.hpp"
 #include "../Common/error_reporter.hpp"
+#include "code_buffer.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -145,8 +146,8 @@ private:
     bool                                          m_track_globals = false;
     bool                                          m_prune_ready = false;
     std::set<std::string>                         m_used_global_names;
-    std::ostringstream                            m_enums;
-    std::ostringstream                            m_consts;
+    CodeBuffer                                    m_enums;
+    CodeBuffer                                    m_consts;
     std::map<std::string, std::string>            m_const_pool;
     int                                           m_temp = 0;
 
@@ -235,13 +236,18 @@ private:
     static bool is_lazy_field(const Sym* s);
     static bool is_lazy_decl(const nodes::ASTNode* n);
     std::string lazy_prefix(nodes::ASTNode* target);
-    void emit_lazy_fields(std::ostream& os, RecordInfo* r);
-    void emit_lazy_definitions(std::ostream& os, RecordInfo* r);
+    void emit_lazy_fields(CodeBuffer& os, RecordInfo* r);
+    void emit_lazy_definitions(CodeBuffer& os, RecordInfo* r);
     void note_global_uses(nodes::ASTNode* n);
     void finish_global_usage();
     bool pruned_global(const Sym* s) const { return m_prune_ready && s && m_prunable.count(s) && !m_used_globals.count(s); }
 
     std::string enum_name(const Sym* s);
+    Type* enum_base(Type* e);
+    bool is_wide_enum(Type* e);
+    std::string enum_storage_type(Type* e);
+    std::string enum_as_int(const std::string& code, Type* e);
+    std::string int_to_enum(const std::string& code, Type* e, const nodes::ASTNode* at);
 
     static bool is_void(Type* t) {
         return t && t->is_builtin() && static_cast<semantics::BuiltinType*>(t)->is_void();
@@ -260,6 +266,8 @@ private:
     std::string builtin_cpp(semantics::BuiltinType* b, const nodes::ASTNode* at);
 
     std::string cpp_type(Type* t, const nodes::ASTNode* at = nullptr);
+    std::string cpp_type_uncached(Type* t, const nodes::ASTNode* at = nullptr);
+    std::unordered_map<Type*, std::string> m_cpp_type_cache;
 
     static std::string type_text(Type* t) {
         std::ostringstream os;
@@ -282,6 +290,11 @@ private:
     std::string folded_or(nodes::VariableDeclaration* v, Type* t, bool prefer_constant);
 
     std::string conv(nodes::ASTNode* n, Type* to, const nodes::ASTNode* at);
+    bool worth_moving(Type* t);
+    bool plain_int_literal(nodes::ASTNode* n);
+    const semantics::Symbol* record_equality(semantics::RecordType* rt);
+    void collect_last_uses(const nodes::FunctionParameters* params, Span<nodes::ASTNode* const> roots);
+    std::unordered_set<const nodes::ASTNode*> m_last_uses;
 
     std::string pool_constant(const std::string& type, const std::string& text);
 
@@ -310,7 +323,7 @@ private:
 
     std::string constant_value_code(const semantics::ConstValue& v, Type* t, const nodes::ASTNode* at);
     std::string default_code(nodes::ASTNode* def, Type* t, const nodes::ASTNode* at);
-    void function_value_args(const semantics::FunctionType* ft, const std::vector<nodes::ASTNode*>& args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes);
+    void function_value_args(const semantics::FunctionType* ft, Span<nodes::ASTNode* const> args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes);
 
     std::string literal(nodes::Literal* lit);
 
@@ -324,14 +337,14 @@ private:
 
     std::string native_type(Type* t, bool c_linkage);
 
-    void emit_native_externs(std::ostream& decls, std::ostream& wrappers);
+    void emit_native_externs(CodeBuffer& decls, CodeBuffer& wrappers);
     void add_native_headers(const modifiers::RawModifiers& mods, std::uint32_t file_id, std::vector<std::string>& headers);
     std::string native_record_type(RecordInfo* r);
     std::string native_template_name(std::string_view name, RecordInfo* r);
     bool declared_is_param(const parser_types::TypeInfo& info);
     std::string native_args(const nodes::FunctionParameters* ps);
     std::string native_body(const FuncInfo& f, const std::string& native_name);
-    void emit_native_record(std::ostream& os, RecordInfo* r);
+    void emit_native_record(CodeBuffer& os, RecordInfo* r);
 
     static nodes::VariableDeclaration* inline_variable(nodes::ASTNode* decl) {
         if (!decl || decl->kind != nodes::ASTNode::Kind::VariableDeclaration) return nullptr;
@@ -359,7 +372,7 @@ private:
 
     static bool is_string_t(Type* t) {
         auto* b = as_builtin(t);
-        return b && (b->base() == BK::String || b->base() == BK::Text);
+        return b && (b->base() == BK::String || b->base() == BK::Text || b->base() == BK::StringView);
     }
 
     static bool is_char_t(Type* t) {
@@ -380,20 +393,20 @@ private:
 
     std::string arith(TK op, nodes::ASTNode* l, nodes::ASTNode* r, Type* result, const nodes::ASTNode* at);
 
-    std::string call_operator_symbol(Sym* op, const std::vector<nodes::ASTNode*>& operands, const nodes::ASTNode* at);
+    std::string call_operator_symbol(Sym* op, Span<nodes::ASTNode* const> operands, const nodes::ASTNode* at);
 
     std::string pass_arg(nodes::ASTNode* arg, Type* param, const nodes::ASTNode* at);
 
     std::string binary(nodes::BinaryExpression* b);
     std::string equality_helper(Type* t, const nodes::ASTNode* at);
-    void emit_special_members(std::ostream& os, RecordInfo* r, bool polymorphic);
+    void emit_special_members(CodeBuffer& os, RecordInfo* r, bool polymorphic);
     std::string align_prefix(const parser_types::TemplateArgument* a, const std::string& cpp_natural);
     std::string type_test(nodes::CastExpression* c);
     RecordInfo* named_direct_base(RecordInfo* r, std::string_view name);
     RecordInfo* init_record(RecordInfo* r, Sym* target);
     std::string member_object(nodes::MemberAccessExpression* m);
     int self_ref_kind(RecordInfo* r, const nodes::FunctionParameters* ps);
-    void emit_equality_helpers(std::ostream& os);
+    void emit_equality_helpers(CodeBuffer& os);
 
     std::string unary(nodes::UnaryExpression* u);
 
@@ -401,15 +414,15 @@ private:
 
     std::string member_access(nodes::MemberAccessExpression* m);
 
-    void call_arg_parts(Sym* fn, const std::vector<nodes::ASTNode*>& args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes);
+    void call_arg_parts(Sym* fn, Span<nodes::ASTNode* const> args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes);
 
-    void grouped_arg_parts(const std::vector<ParamSlot>& slots, const std::vector<nodes::ASTNode*>& args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes);
+    void grouped_arg_parts(const std::vector<ParamSlot>& slots, Span<nodes::ASTNode* const> args, const nodes::ASTNode* at, std::vector<std::string>& codes, std::vector<int>& classes);
 
-    std::string call_args(Sym* fn, const std::vector<nodes::ASTNode*>& args, const nodes::ASTNode* at);
+    std::string call_args(Sym* fn, Span<nodes::ASTNode* const> args, const nodes::ASTNode* at);
 
-    std::string invoke_with_args(const std::string& target, Sym* fn, const std::vector<nodes::ASTNode*>& args, const nodes::ASTNode* at);
+    std::string invoke_with_args(const std::string& target, Sym* fn, Span<nodes::ASTNode* const> args, const nodes::ASTNode* at);
 
-    std::string aggregate_args(Type* t, const std::vector<nodes::ASTNode*>& els, const nodes::ASTNode* at);
+    std::string aggregate_args(Type* t, Span<nodes::ASTNode* const> els, const nodes::ASTNode* at);
 
     std::string call(nodes::CallExpression* c);
     std::string builtin_method_call(nodes::CallExpression* c);
@@ -433,10 +446,10 @@ private:
 
     static std::string_view loop_label_of(const nodes::ASTNode* s);
     LoopLabel* labelled_loop(std::string_view label);
-    void statement_body(std::ostream& os, nodes::ASTNode* s);
+    void statement_body(CodeBuffer& os, nodes::ASTNode* s);
     RecordInfo* qualifier_record(const nodes::MemberAccessExpression* m);
 
-    void loop_body(std::ostream& os, nodes::ASTNode* body);
+    void loop_body(CodeBuffer& os, nodes::ASTNode* body);
 
     std::string pad() const { return std::string(static_cast<std::size_t>(m_indent) * 4, ' '); }
 
@@ -446,11 +459,11 @@ private:
 
     std::string param_type_list(const nodes::FunctionParameters* ps, const nodes::ASTNode* at);
 
-    void nested_function(std::ostream& os, nodes::FunctionDeclaration* fd);
-    void nested_operator(std::ostream& os, nodes::OperatorFunctionDeclaration* od);
-    void nested_callable(std::ostream& os, nodes::ASTNode* at, Sym* fs, const nodes::FunctionParameters* params, nodes::ASTNode* body, bool async);
+    void nested_function(CodeBuffer& os, nodes::FunctionDeclaration* fd);
+    void nested_operator(CodeBuffer& os, nodes::OperatorFunctionDeclaration* od);
+    void nested_callable(CodeBuffer& os, nodes::ASTNode* at, Sym* fs, const nodes::FunctionParameters* params, nodes::ASTNode* body, bool async);
 
-    void block(std::ostream& os, nodes::ASTNode* b);
+    void block(CodeBuffer& os, nodes::ASTNode* b);
 
     void field_names(RecordInfo* r, std::vector<std::string>& out, int depth = 0);
 
@@ -472,14 +485,14 @@ private:
 
     int fold_condition(nodes::IfBranch* br);
 
-    void if_statement(std::ostream& os, nodes::IfStatement* s);
+    void if_statement(CodeBuffer& os, nodes::IfStatement* s);
 
-    void switch_statement(std::ostream& os, nodes::SwitchStatement* s);
+    void switch_statement(CodeBuffer& os, nodes::SwitchStatement* s);
 
-    void statement(std::ostream& os, nodes::ASTNode* s);
-    void line_marker(std::ostream& os, const nodes::ASTNode* n);
+    void statement(CodeBuffer& os, nodes::ASTNode* s);
+    void line_marker(CodeBuffer& os, const nodes::ASTNode* n);
     static const nodes::ASTNode* located(const nodes::ASTNode* n, int depth);
-    void line_reset(std::ostream& os);
+    void line_reset(CodeBuffer& os);
 
     Type* return_type_of(Sym* fn);
 
@@ -496,13 +509,13 @@ private:
     bool only_called(const nodes::ASTNode* body, std::string_view name);
     void scan_function_values(const std::vector<CodegenUnit>& units);
 
-    void emit_function_body(std::ostream& os, const FuncInfo& f);
+    void emit_function_body(CodeBuffer& os, const FuncInfo& f);
 
     static bool decl_is_async(const nodes::ASTNode* d);
 
     semantics::CoroutineType* generator_of(Type* t);
 
-    void callable_body(std::ostream& os, nodes::ASTNode* body, Type* ret, bool async, const std::string& caps, bool is_main);
+    void callable_body(CodeBuffer& os, nodes::ASTNode* body, Type* ret, bool async, const std::string& caps, bool is_main);
 
     void emit_enums();
 
@@ -512,20 +525,20 @@ private:
         return m_eval.eval(&id);
     }
 
-    void emit_record(std::ostream& os, RecordInfo* r);
+    void emit_record(CodeBuffer& os, RecordInfo* r);
 
-    void emit_record_definitions(std::ostream& os, RecordInfo* r, std::ostream* shared = nullptr);
-    void emit_destructor_definition(std::ostream& os, RecordInfo* r, nodes::DestructorDeclaration* d);
-    void emit_native_constructors(std::ostream& os, RecordInfo* r);
-    void emit_constructor_definition(std::ostream& os, RecordInfo* r, nodes::ConstructorDeclaration* c);
+    void emit_record_definitions(CodeBuffer& os, RecordInfo* r, CodeBuffer* shared = nullptr);
+    void emit_destructor_definition(CodeBuffer& os, RecordInfo* r, nodes::DestructorDeclaration* d);
+    void emit_native_constructors(CodeBuffer& os, RecordInfo* r);
+    void emit_constructor_definition(CodeBuffer& os, RecordInfo* r, nodes::ConstructorDeclaration* c);
     int  ctor_instance_self_kind(Inst* I);
 
-    void emit_records(std::ostream& os) {
+    void emit_records(CodeBuffer& os) {
         emit_enums();
         for (RecordInfo* r : m_record_order) emit_record(os, r);
     }
 
-    void emit_prototypes(std::ostream& os);
+    void emit_prototypes(CodeBuffer& os);
 
     Type* declared_type(nodes::VariableDeclaration* v);
 
@@ -539,14 +552,14 @@ private:
 
     std::string binding_global(const nodes::VariableDeclaration* v);
 
-    void emit_globals(std::ostream& os, bool as_extern = false);
+    void emit_globals(CodeBuffer& os, bool as_extern = false);
     bool needs_header_body(const FuncInfo& f);
     std::string main_function_code();
     std::string new_type_text(const nodes::NewExpression* n, const std::string& cpp);
 
-    void emit_definitions(std::ostream& os);
+    void emit_definitions(CodeBuffer& os);
 
-    void emit_init(std::ostream& os);
+    void emit_init(CodeBuffer& os);
 
     std::vector<nodes::ASTNode*>                  m_script_statements;
     std::vector<FileId>                           m_file_order;
@@ -567,7 +580,7 @@ private:
     bool header_shared(std::uint32_t file) const;
     bool is_prebuilt_file(std::uint32_t file) const { return link.prebuilt && file != static_cast<std::uint32_t>(-1) && link.prebuilt(FileId(file)); }
     bool is_pinned_file(std::uint32_t file) const { return file != static_cast<std::uint32_t>(-1) && ((link.pinned && link.pinned(FileId(file))) || is_prebuilt_file(file)); }
-    std::string file_key_of(std::uint32_t file);
+    const std::string& file_key_of(std::uint32_t file);
     static bool file_scoped(const Sym* s);
     static bool inside_function(const Sym* s);
     std::string fixed_global(const std::string& base, const Sym* s, std::uint32_t file, const nodes::ASTNode* at);
@@ -578,11 +591,11 @@ private:
     bool claim_definition(const std::string& name);
     void note_file(std::uint32_t file);
     void plan_inits();
-    void emit_walnut_externs(std::ostream& os);
-    void emit_init_nodes(std::ostream& os, const std::vector<nodes::ASTNode*>& nodes);
-    void emit_file_init(std::ostream& os, FileId file);
+    void emit_walnut_externs(CodeBuffer& os);
+    void emit_init_nodes(CodeBuffer& os, Span<nodes::ASTNode* const> nodes);
+    void emit_file_init(CodeBuffer& os, FileId file);
     std::vector<nodes::ASTNode*> init_nodes_of(const std::function<bool(const nodes::ASTNode*)>& keep);
-    void emit_global_definitions(std::ostream& os, const std::function<bool(const nodes::ASTNode*)>& keep);
+    void emit_global_definitions(CodeBuffer& os, const std::function<bool(const nodes::ASTNode*)>& keep);
     std::string init_declarations();
     bool check_library_entry();
 };

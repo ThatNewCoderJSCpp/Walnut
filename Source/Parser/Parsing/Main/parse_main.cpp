@@ -336,6 +336,7 @@ nodes::ASTNode* Parser::parse_statement() {
         case tokenizing::Token::Kind::LongDeclaration:
         case tokenizing::Token::Kind::ShortDeclaration:
         case tokenizing::Token::Kind::TextDeclaration:
+        case tokenizing::Token::Kind::StringViewDeclaration:
         case tokenizing::Token::Kind::AutoDeclaration:
         case tokenizing::Token::Kind::DynamicDeclaration:
         case tokenizing::Token::Kind::VariantKeyword:

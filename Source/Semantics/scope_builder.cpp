@@ -435,7 +435,7 @@ void ScopeBuilder::build_variable(nodes::VariableDeclaration* var) {
     walk_expr(var->m_initializer);
 }
 
-void ScopeBuilder::build_callable_scope(Symbol* sym, const nodes::FunctionParameters* params, nodes::ASTNode* body, const std::vector<nodes::ASTNode*>* init_list) {
+void ScopeBuilder::build_callable_scope(Symbol* sym, const nodes::FunctionParameters* params, nodes::ASTNode* body, const ArenaVector<nodes::ASTNode*>* init_list) {
     Scope* fs = push_scope(Scope::Kind::Function);
     if (sym) { sym->inner_scope = fs; }
     declare_parameters(params);
@@ -452,6 +452,20 @@ void ScopeBuilder::build_callable_scope(Symbol* sym, const nodes::FunctionParame
     }
 
     pop_scope();
+}
+
+void ScopeBuilder::build_body_into(nodes::ASTNode* body, Scope* function_scope) {
+    if (!body || !function_scope) return;
+    Scope* saved = m_current;
+    m_current = function_scope;
+    if (body->kind == ASTNode::Kind::BlockStatement) {
+        auto* block = static_cast<nodes::BlockStatement*>(body);
+        block->scope = function_scope;
+        for (ASTNode* s : block->get_statements()) { build(s); }
+    } else {
+        build(body);
+    }
+    m_current = saved;
 }
 
 void ScopeBuilder::declare_parameters(const nodes::FunctionParameters* params) {
@@ -478,7 +492,7 @@ void ScopeBuilder::build_function_body(nodes::FunctionDeclaration* fn, Symbol* s
     if (!fn->has_body()) { return; }
     Scope* saved = m_current;
     if (fn->friend_of && fn->friend_of->scope) { m_current = fn->friend_of->scope; }
-    build_callable_scope(sym, fn->get_parameters(), fn->get_body());
+    build_callable_scope(sym, fn->get_parameters(), fn->peek_body());
     m_current = saved;
 }
 
@@ -494,7 +508,7 @@ void ScopeBuilder::build_operator(nodes::OperatorFunctionDeclaration* op) {
     if (!op->has_body()) { return; }
     Scope* saved = m_current;
     if (op->friend_of && op->friend_of->scope) { m_current = op->friend_of->scope; }
-    build_callable_scope(sym, op->get_parameters(), const_cast<nodes::ASTNode*>(op->get_body()));
+    build_callable_scope(sym, op->get_parameters(), op->peek_body());
     m_current = saved;
 }
 

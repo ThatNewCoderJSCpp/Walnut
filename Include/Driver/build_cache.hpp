@@ -11,6 +11,7 @@ namespace walnut {
 namespace build {
 
 std::string hash_text(std::string_view text);
+std::string hash_key(std::string_view text);
 
 std::string read_text(const std::filesystem::path& p);
 

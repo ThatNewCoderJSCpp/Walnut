@@ -30,6 +30,7 @@
     "strings": "#A6E3A1",
     "escapes": "#F5C2E7",
     "numbers": "#FAB387",
+    "number suffixes": "#FE9E64",
     "comments": {
         "color": "#7F849C",
         "italic": true

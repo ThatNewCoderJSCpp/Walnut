@@ -2,6 +2,7 @@
 #define WALNUT_MATH_HPP
 
 #include "walnut_runtime.hpp"
+#include "fizmo/../../Source/Multiprecision/include.hpp"
 #include "fizmo/../complex.hpp"
 
 #include <cstdint>

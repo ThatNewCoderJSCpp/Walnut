@@ -27,6 +27,7 @@
     "strings": "#A31515",
     "escapes": "#EE0000",
     "numbers": "#098658",
+    "number suffixes": "#C45500",
     "comments": {
         "color": "#008000",
         "italic": true

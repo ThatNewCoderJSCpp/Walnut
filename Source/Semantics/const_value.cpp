@@ -4,10 +4,10 @@ namespace walnut {
 namespace semantics {
 
 const WideInt* ConstTable::intern(const WideInt& v) {
-    if (auto it = m_interned.find(v); it != m_interned.end()) return it->second;
+    if (auto it = m_interned.find(&v); it != m_interned.end()) return *it;
     WideInt* stored = make_in<WideInt>(m_arena);
     *stored = v;
-    m_interned.emplace(v, stored);
+    m_interned.insert(stored);
     return stored;
 }
 
@@ -15,7 +15,7 @@ bool ConstTable::fits(const WideInt& v, unsigned int bit_width, bool is_signed) 
     constexpr std::size_t max_bits = WideInt::bits;
     if (v.is_undefined()) return false;
     if (!is_signed && v.is_negative()) return false;
-    return bit_width >= max_bits || (v.magnitude() >> bit_width).is_zero();
+    return bit_width >= max_bits || v.magnitude().highest_bit() < static_cast<long long>(bit_width);
 }
 
 bool ConstTable::fits(const WideInt& v, unsigned int bit_width, bool is_signed, bool is_hardware) {
@@ -30,18 +30,24 @@ bool ConstTable::fits_twos(const WideInt& v, unsigned int bit_width, bool is_sig
 
     if (!is_signed) {
         if (v.is_negative()) return false;
-        return bit_width >= max_bits || (m >> bit_width).is_zero();     
+        return bit_width >= max_bits || m.highest_bit() < static_cast<long long>(bit_width);
     }
 
     if (bit_width > max_bits) bit_width = max_bits;
-    const Mag limit = Mag(std::uint64_t(1)) << (bit_width - 1);     
-    return v.is_negative() ? (m <= limit) : (m < limit);                         
+    const long long top = m.highest_bit();
+    const long long last = static_cast<long long>(bit_width) - 1;
+    if (top < last) return true;
+    if (top > last) return false;
+    if (!v.is_negative()) return false;
+    const Mag limit = Mag(std::uint64_t(1)) << (bit_width - 1);
+    return m == limit;
 }
 
 std::size_t ConstTable::Hash::operator()(const WideInt& v) const {
-    const auto& m = v.magnitude();
-    std::size_t h = v.is_negative() ? 0x9e3779b9u : 0;          
-    for (std::size_t i = 0; i < WideInt::bits / 64; ++i) h = h * 1000003u ^ static_cast<std::size_t>((m >> (64 * i)).get_lowest_bits());
+    std::uint64_t limbs[fizmo::multiprecision::umag_limbs<WideInt::bits>::count];
+    fizmo::multiprecision::umag_limbs<WideInt::bits>::store(v.magnitude(), limbs);
+    std::size_t h = v.is_negative() ? 0x9e3779b9u : 0;
+    for (std::uint64_t limb : limbs) h = h * 1000003u ^ static_cast<std::size_t>(limb ^ (limb >> 29));
     return h;
 }
 

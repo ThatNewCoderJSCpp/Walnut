@@ -27,6 +27,17 @@ void Arena::destroy_all() {
     destructors_.clear();
 }
 
+bool Arena::try_extend_last(void* ptr, std::size_t old_size, std::size_t new_size) noexcept {
+    if (blocks_.empty()) return false;
+    Block& blk = blocks_.back();
+    if (old_size > blk.used) return false;
+    if (blk.memory + (blk.used - old_size) != static_cast<std::byte*>(ptr)) return false;
+    const std::size_t start = blk.used - old_size;
+    if (start + new_size > blk.capacity) return false;
+    blk.used = start + new_size;
+    return true;
+}
+
 void Arena::shrink_last(void* ptr, std::size_t old_size, std::size_t new_size) noexcept {
     if (new_size >= old_size || blocks_.empty()) return;
     Block& blk = blocks_.back();

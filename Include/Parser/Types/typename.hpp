@@ -62,6 +62,7 @@ public:
         Void,       // void
         Auto,       // auto, automatic
         Dynamic,    // let, var, variable, def, define, any
+        StringView, // string_view, strv
     };
 
 private:
@@ -144,6 +145,10 @@ public:
     
     static PrimitiveType* make_text(Arena& arena) { 
         return make_in<PrimitiveType>(arena, BaseKind::Text); 
+    }
+
+    static PrimitiveType* make_string_view(Arena& arena) {
+        return make_in<PrimitiveType>(arena, BaseKind::StringView);
     }
     
     static PrimitiveType* make_long(Arena& arena, bool is_unsigned = false) { 

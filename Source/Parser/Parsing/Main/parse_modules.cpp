@@ -34,7 +34,7 @@ nodes::ImportExportItem Parser::parse_import_export_item(bool is_import) {
     nodes::ImportExportItem item;
     item.line = current_token().line();
 
-    auto read_qualified = [&](std::vector<std::string_view>& out, bool& glob, const char* ctx) {
+    auto read_qualified = [&](ArenaVector<std::string_view>& out, bool& glob, const char* ctx) {
         glob = match(K::DoubleColon);
 
         if (current_token().kind() != K::Identifier) {

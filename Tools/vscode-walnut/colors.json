@@ -20,6 +20,7 @@
     "strings": "#329600",
     "escapes": "#FF0000",
     "numbers": "#F2F2F2",
+    "number suffixes": "#FF8C00",
     "comments": "#646464",
     "preprocessor": "#FF00EA",
     "error underlines": "#FF0000",

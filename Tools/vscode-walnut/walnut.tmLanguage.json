@@ -144,20 +144,32 @@
         "numbers": {
             "patterns": [
                 {
-                    "name": "constant.numeric.hex.walnut",
-                    "match": "\\b0[xX][0-9A-Fa-f][0-9A-Fa-f_']*[A-Za-z]*\\b"
+                    "match": "\\b(0[xX][0-9A-Fa-f][0-9A-Fa-f_']*)([G-Zg-z][A-Za-z]*)?\\b",
+                    "captures": {
+                        "1": { "name": "constant.numeric.hex.walnut" },
+                        "2": { "name": "constant.numeric.suffix.walnut" }
+                    }
                 },
                 {
-                    "name": "constant.numeric.binary.walnut",
-                    "match": "\\b0[bB][01][01_']*[A-Za-z]*\\b"
+                    "match": "\\b(0[bB][01][01_']*)([A-Za-z]*)\\b",
+                    "captures": {
+                        "1": { "name": "constant.numeric.binary.walnut" },
+                        "2": { "name": "constant.numeric.suffix.walnut" }
+                    }
                 },
                 {
-                    "name": "constant.numeric.octal.walnut",
-                    "match": "\\b0[oO][0-7][0-7_']*[A-Za-z]*\\b"
+                    "match": "\\b(0[oO][0-7][0-7_']*)([A-Za-z]*)\\b",
+                    "captures": {
+                        "1": { "name": "constant.numeric.octal.walnut" },
+                        "2": { "name": "constant.numeric.suffix.walnut" }
+                    }
                 },
                 {
-                    "name": "constant.numeric.decimal.walnut",
-                    "match": "\\b[0-9][0-9_']*(?:\\.[0-9][0-9_']*)?(?:[eE][+-]?[0-9]+)?[A-Za-z]*\\b"
+                    "match": "\\b([0-9][0-9_']*(?:\\.[0-9][0-9_']*)?(?:[eE][+-]?[0-9]+)?)([A-Za-z]*)\\b",
+                    "captures": {
+                        "1": { "name": "constant.numeric.decimal.walnut" },
+                        "2": { "name": "constant.numeric.suffix.walnut" }
+                    }
                 }
             ]
         },
@@ -362,7 +374,7 @@
                 },
                 {
                     "name": "storage.type.primitive.walnut",
-                    "match": "\\b(?:character|unsigned|variable|boolean|decimal|dynamic|floater|integer|special|variant|double|string|array|float|short|auto|bool|char|long|text|void|any|arr|dec|int|str|txt|var|iterable(?=\\s*<))\\b"
+                    "match": "\\b(?:string_view|character|unsigned|variable|boolean|decimal|dynamic|floater|integer|special|variant|double|string|array|float|short|auto|bool|char|long|text|void|any|arr|dec|int|str|strv|txt|var|iterable(?=\\s*<))\\b"
                 },
                 {
                     "name": "constant.language.walnut",

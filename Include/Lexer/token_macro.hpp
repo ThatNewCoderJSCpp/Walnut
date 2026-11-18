@@ -158,7 +158,8 @@ namespace tokenizing {
     X(StringDeclaration, true, "string", "str") \
     X(ShortDeclaration, true, "short") \
     X(UnsignedDeclaration, true, "unsigned") \
-    X(TextDeclaration, true, "text", "txt")
+    X(TextDeclaration, true, "text", "txt") \
+    X(StringViewDeclaration, true, "string_view", "strv")
 
 class Token {
 public:

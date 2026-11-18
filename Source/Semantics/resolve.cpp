@@ -19,7 +19,7 @@ bool visible_at(const Symbol* sym, const nodes::ASTNode* use) {
     return decl->line <= use->line;
 }
 
-Symbol* resolve_qualified(Scope* root, const std::vector<std::string_view>& parts) {
+Symbol* resolve_qualified(Scope* root, Span<std::string_view const> parts) {
     if (!root || parts.empty()) { return nullptr; }
     Scope* cur = root;
 
@@ -106,7 +106,7 @@ bool carries_scope(const Symbol* s) {
     return scope_carrier(s->kind);
 }
 
-Symbol* descend(Scope* start, const std::vector<std::string_view>& parts, std::size_t first) {
+Symbol* descend(Scope* start, Span<std::string_view const> parts, std::size_t first) {
     if (!start || parts.empty()) { return nullptr; }
     Scope* cur = start;
 
@@ -144,7 +144,7 @@ Symbol* resolve_lexical_visible(Scope* from, std::string_view name, const nodes:
 
 std::vector<Symbol*> resolve_path(
     Scope* from, Scope* root,
-    const std::vector<std::string_view>& parts,
+    Span<std::string_view const> parts,
     bool is_global, const nodes::ASTNode* use
 ) {
     std::vector<Symbol*> chain;
@@ -204,11 +204,10 @@ std::string scope_path(const Scope* s) {
 std::string visibility_violation(const Symbol* sym, const Scope* from, const nodes::ASTNode* use) {
     if (!sym || !sym->decl || !use || sym->visibility == Visibility::Global) return {};
     const bool other_file = sym->decl->file_id != use->file_id;
-    const std::string name(sym->name);
 
     if (sym->visibility == Visibility::Local) {
         if (!other_file) return {};
-        return "'" + name + "' is local, so it is never exported and cannot be used through an import from another file";
+        return "'" + std::string(sym->name) + "' is local, so it is never exported and cannot be used through an import from another file";
     }
 
     const Scope* declared_in = sym->kind == SymbolKind::Namespace && sym->inner_scope ? sym->inner_scope : container_of(sym->owner);
@@ -216,7 +215,7 @@ std::string visibility_violation(const Symbol* sym, const Scope* from, const nod
 
     if (is_file_root(declared_in)) {
         if (!other_file) return {};
-        return "'" + name + "' is hidden at the top level of its file, so only that file can use it";
+        return "'" + std::string(sym->name) + "' is hidden at the top level of its file, so only that file can use it";
     }
 
     const Scope* allowed = container_of(declared_in->parent);
@@ -225,12 +224,12 @@ std::string visibility_violation(const Symbol* sym, const Scope* from, const nod
     const std::string where = scope_path(declared_in);
     const std::string around = is_file_root(allowed) ? std::string("its own file") : "'" + scope_path(allowed) + "' and the namespaces inside it";
     if (sym->kind == SymbolKind::Namespace) return "namespace '" + where + "' is hidden, so it can only be used inside " + around;
-    return "'" + name + "' is hidden in '" + where + "', so it can only be used inside " + around;
+    return "'" + std::string(sym->name) + "' is hidden in '" + where + "', so it can only be used inside " + around;
 }
 
 Symbol* resolve_name(
     Scope* from, Scope* root,
-    const std::vector<std::string_view>& parts,
+    Span<std::string_view const> parts,
     bool is_global, const nodes::ASTNode* use
 ) {
     if (parts.empty()) { return nullptr; }

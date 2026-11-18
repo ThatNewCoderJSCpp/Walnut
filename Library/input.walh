@@ -1,183 +1,183 @@
 safe(compile) {
-namespace std {
-    namespace input {
-        enum Key { unknown, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, num0, num1, num2, num3, num4, num5, num6, num7, num8, num9, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17, f18, f19, f20, f21, f22, f23, f24, escape, enter, tab, backspace, space, minus, equals, left_bracket, right_bracket, backslash, semicolon, quote, grave, comma, period, slash, non_us_backslash, caps_lock, scroll_lock, num_lock, print_screen, pause, insert, delete_key, home, end_key, page_up, page_down, left_arrow, right_arrow, up_arrow, down_arrow, numpad0, numpad1, numpad2, numpad3, numpad4, numpad5, numpad6, numpad7, numpad8, numpad9, numpad_divide, numpad_multiply, numpad_subtract, numpad_add, numpad_enter, numpad_decimal, numpad_equals, left_shift, right_shift, left_control, right_control, left_alt, right_alt, left_meta, right_meta, menu, volume_mute, volume_down, volume_up, media_play_pause, media_stop, media_next, media_previous, browser_back, browser_forward }
+    namespace std {
+        namespace input {
+            enum Key { unknown, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, num0, num1, num2, num3, num4, num5, num6, num7, num8, num9, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17, f18, f19, f20, f21, f22, f23, f24, escape, enter, tab, backspace, space, minus, equals, left_bracket, right_bracket, backslash, semicolon, quote, grave, comma, period, slash, non_us_backslash, caps_lock, scroll_lock, num_lock, print_screen, pause, insert, delete_key, home, end_key, page_up, page_down, left_arrow, right_arrow, up_arrow, down_arrow, numpad0, numpad1, numpad2, numpad3, numpad4, numpad5, numpad6, numpad7, numpad8, numpad9, numpad_divide, numpad_multiply, numpad_subtract, numpad_add, numpad_enter, numpad_decimal, numpad_equals, left_shift, right_shift, left_control, right_control, left_alt, right_alt, left_meta, right_meta, menu, volume_mute, volume_down, volume_up, media_play_pause, media_stop, media_next, media_previous, browser_back, browser_forward }
 
-        enum KeyKind { either, logical, physical }
+            enum KeyKind { either, logical, physical }
 
-        enum MouseButton { no_button, left, right, middle, back, forward }
+            enum MouseButton { no_button, left, right, middle, back, forward }
 
-        enum PointerType { mouse, touch, pen }
+            enum PointerType { mouse, touch, pen }
 
-        enum GamepadButton { south, east, west, north, back, guide, start, left_stick, right_stick, left_shoulder, right_shoulder, dpad_up, dpad_down, dpad_left, dpad_right, misc1, paddle1, paddle2, paddle3, paddle4, touchpad }
+            enum GamepadButton { south, east, west, north, back, guide, start, left_stick, right_stick, left_shoulder, right_shoulder, dpad_up, dpad_down, dpad_left, dpad_right, misc1, paddle1, paddle2, paddle3, paddle4, touchpad }
 
-        enum GamepadAxis { left_x, left_y, right_x, right_y, left_trigger, right_trigger }
+            enum GamepadAxis { left_x, left_y, right_x, right_y, left_trigger, right_trigger }
 
-        namespace modifier {
-            constexpr long int: none = 0;
-            constexpr long int: shift = 1;
-            constexpr long int: control = 2;
-            constexpr long int: alt = 4;
-            constexpr long int: meta = 8;
-            constexpr long int: caps_lock = 16;
-            constexpr long int: num_lock = 32;
-            constexpr long int: alt_gr = 64;
-        } end namespace modifier
+            namespace modifier {
+                constexpr long int: none = 0;
+                constexpr long int: shift = 1;
+                constexpr long int: control = 2;
+                constexpr long int: alt = 4;
+                constexpr long int: meta = 8;
+                constexpr long int: caps_lock = 16;
+                constexpr long int: num_lock = 32;
+                constexpr long int: alt_gr = 64;
+            } end namespace modifier
 
-        struct Modifiers {
-            long int: bits = 0;
+            struct Modifiers {
+                long int: bits = 0;
 
-            constructor() { }
+                constructor() { }
 
-            constructor(long int: raw) : bits = raw { }
+                constructor(long int: raw) : bits = raw { }
 
-            function shift(const self&) -> bool {
-                return (self.bits / modifier::shift) % 2 == 1;
-            } end function shift
+                function shift(const self&) -> bool {
+                    return (self.bits / modifier::shift) % 2 == 1;
+                } end function shift
 
-            function control(const self&) -> bool {
-                return (self.bits / modifier::control) % 2 == 1;
-            } end function control
+                function control(const self&) -> bool {
+                    return (self.bits / modifier::control) % 2 == 1;
+                } end function control
 
-            function alt(const self&) -> bool {
-                return (self.bits / modifier::alt) % 2 == 1;
-            } end function alt
+                function alt(const self&) -> bool {
+                    return (self.bits / modifier::alt) % 2 == 1;
+                } end function alt
 
-            function meta(const self&) -> bool {
-                return (self.bits / modifier::meta) % 2 == 1;
-            } end function meta
+                function meta(const self&) -> bool {
+                    return (self.bits / modifier::meta) % 2 == 1;
+                } end function meta
 
-            function caps_lock(const self&) -> bool {
-                return (self.bits / modifier::caps_lock) % 2 == 1;
-            } end function caps_lock
+                function caps_lock(const self&) -> bool {
+                    return (self.bits / modifier::caps_lock) % 2 == 1;
+                } end function caps_lock
 
-            function num_lock(const self&) -> bool {
-                return (self.bits / modifier::num_lock) % 2 == 1;
-            } end function num_lock
+                function num_lock(const self&) -> bool {
+                    return (self.bits / modifier::num_lock) % 2 == 1;
+                } end function num_lock
 
-            function alt_gr(const self&) -> bool {
-                return (self.bits / modifier::alt_gr) % 2 == 1;
-            } end function alt_gr
+                function alt_gr(const self&) -> bool {
+                    return (self.bits / modifier::alt_gr) % 2 == 1;
+                } end function alt_gr
 
-            function has(const self&, long int: flag) -> bool {
-                return flag != 0 && (self.bits / flag) % 2 == 1;
-            } end function has
+                function has(const self&, long int: flag) -> bool {
+                    return flag != 0 && (self.bits / flag) % 2 == 1;
+                } end function has
 
-            function none(const self&) -> bool {
-                return self.bits == 0;
-            } end function none
+                function none(const self&) -> bool {
+                    return self.bits == 0;
+                } end function none
 
-            function to_string(const self&) -> string {
-                string: out = "";
-                if (self.control()) then {
-                    out = out + "Ctrl+";
+                function to_string(const self&) -> string {
+                    string: out = "";
+                    if (self.control()) then {
+                        out = out + "Ctrl+";
+                    }
+                    if (self.shift()) then {
+                        out = out + "Shift+";
+                    }
+                    if (self.alt()) then {
+                        out = out + "Alt+";
+                    }
+                    if (self.meta()) then {
+                        out = out + "Meta+";
+                    }
+                    if (out.length() > 0) then {
+                        return out.substr(0, out.length() - 1);
+                    }
+                    return "none";
+                } end function to_string
+            } end struct Modifiers
+
+            namespace detail {
+                extern "C++" from "<walnut_graphics.hpp>" {
+                    class Native as "walnut_rt::gfx::input_api" {
+                    public:
+                        static function key_name(long int: key) -> string as "walnut_rt::gfx::key_name";
+                        static function key_from_name(const string&: name) -> long int as "walnut_rt::gfx::key_from_name";
+                    } end class Native
+                } end extern
+            } end namespace detail
+
+            function key_name(Key: key) -> string {
+                return detail::Native::key_name(static_cast<long int>(key));
+            } end function key_name
+
+            function key_from_index(long int: index) -> Key {
+                if (index < 0 || index >= 128) then {
+                    return Key::unknown;
                 }
-                if (self.shift()) then {
-                    out = out + "Shift+";
+                return static_cast<Key>(index);
+            } end function key_from_index
+
+            function key_from_name(const string&: name) -> Key {
+                return key_from_index(detail::Native::key_from_name(name));
+            } end function key_from_name
+
+            function is_letter(Key: key) -> bool {
+                return key >= Key::a && key <= Key::z;
+            } end function is_letter
+
+            function is_digit(Key: key) -> bool {
+                return (key >= Key::num0 && key <= Key::num9) || (key >= Key::numpad0 && key <= Key::numpad9);
+            } end function is_digit
+
+            function is_function_key(Key: key) -> bool {
+                return key >= Key::f1 && key <= Key::f24;
+            } end function is_function_key
+
+            function is_arrow(Key: key) -> bool {
+                return key == Key::left_arrow || key == Key::right_arrow || key == Key::up_arrow || key == Key::down_arrow;
+            } end function is_arrow
+
+            function is_modifier(Key: key) -> bool {
+                return key >= Key::left_shift && key <= Key::right_meta;
+            } end function is_modifier
+
+            function key_string(Key: key) -> string {
+                return key_name(key);
+            } end function key_string
+
+            function key_from_string(const string&: name) -> Key {
+                return key_from_name(name);
+            } end function key_from_string
+
+            function key_kind_name(KeyKind: kind) -> string {
+                if (kind == KeyKind::logical) then {
+                    return "Logical";
                 }
-                if (self.alt()) then {
-                    out = out + "Alt+";
+                if (kind == KeyKind::physical) then {
+                    return "Physical";
                 }
-                if (self.meta()) then {
-                    out = out + "Meta+";
+                return "Either";
+            } end function key_kind_name
+
+            function is_numpad(Key: key) -> bool {
+                return key >= Key::numpad0 && key <= Key::numpad_equals;
+            } end function is_numpad
+
+            function is_punctuation(Key: key) -> bool {
+                return key >= Key::minus && key <= Key::non_us_backslash;
+            } end function is_punctuation
+
+            function is_layout_dependent(Key: key) -> bool {
+                return is_letter(key) || (key >= Key::num0 && key <= Key::num9) || is_punctuation(key);
+            } end function is_layout_dependent
+
+            function modifier_of(Key: key) -> long int {
+                if (key == Key::left_shift || key == Key::right_shift) then {
+                    return modifier::shift;
                 }
-                if (out.length() > 0) then {
-                    return out.substr(0, out.length() - 1);
+                if (key == Key::left_control || key == Key::right_control) then {
+                    return modifier::control;
                 }
-                return "none";
-            } end function to_string
-        } end struct Modifiers
-
-        namespace detail {
-            extern "C++" from "<walnut_graphics.hpp>" {
-                class Native as "walnut_rt::gfx::input_api" {
-                public:
-                    static function key_name(long int: key) -> string as "walnut_rt::gfx::key_name";
-                    static function key_from_name(const string&: name) -> long int as "walnut_rt::gfx::key_from_name";
-                } end class Native
-            } end extern
-        } end namespace detail
-
-        function key_name(Key: key) -> string {
-            return detail::Native::key_name(static_cast<long int>(key));
-        } end function key_name
-
-        function key_from_index(long int: index) -> Key {
-            if (index < 0 || index >= 128) then {
-                return Key::unknown;
-            }
-            return static_cast<Key>(index);
-        } end function key_from_index
-
-        function key_from_name(const string&: name) -> Key {
-            return key_from_index(detail::Native::key_from_name(name));
-        } end function key_from_name
-
-        function is_letter(Key: key) -> bool {
-            return key >= Key::a && key <= Key::z;
-        } end function is_letter
-
-        function is_digit(Key: key) -> bool {
-            return (key >= Key::num0 && key <= Key::num9) || (key >= Key::numpad0 && key <= Key::numpad9);
-        } end function is_digit
-
-        function is_function_key(Key: key) -> bool {
-            return key >= Key::f1 && key <= Key::f24;
-        } end function is_function_key
-
-        function is_arrow(Key: key) -> bool {
-            return key == Key::left_arrow || key == Key::right_arrow || key == Key::up_arrow || key == Key::down_arrow;
-        } end function is_arrow
-
-        function is_modifier(Key: key) -> bool {
-            return key >= Key::left_shift && key <= Key::right_meta;
-        } end function is_modifier
-
-        function key_string(Key: key) -> string {
-            return key_name(key);
-        } end function key_string
-
-        function key_from_string(const string&: name) -> Key {
-            return key_from_name(name);
-        } end function key_from_string
-
-        function key_kind_name(KeyKind: kind) -> string {
-            if (kind == KeyKind::logical) then {
-                return "Logical";
-            }
-            if (kind == KeyKind::physical) then {
-                return "Physical";
-            }
-            return "Either";
-        } end function key_kind_name
-
-        function is_numpad(Key: key) -> bool {
-            return key >= Key::numpad0 && key <= Key::numpad_equals;
-        } end function is_numpad
-
-        function is_punctuation(Key: key) -> bool {
-            return key >= Key::minus && key <= Key::non_us_backslash;
-        } end function is_punctuation
-
-        function is_layout_dependent(Key: key) -> bool {
-            return is_letter(key) || (key >= Key::num0 && key <= Key::num9) || is_punctuation(key);
-        } end function is_layout_dependent
-
-        function modifier_of(Key: key) -> long int {
-            if (key == Key::left_shift || key == Key::right_shift) then {
-                return modifier::shift;
-            }
-            if (key == Key::left_control || key == Key::right_control) then {
-                return modifier::control;
-            }
-            if (key == Key::left_alt || key == Key::right_alt) then {
-                return modifier::alt;
-            }
-            if (key == Key::left_meta || key == Key::right_meta) then {
-                return modifier::meta;
-            }
-            return modifier::none;
-        } end function modifier_of
-    } end namespace input
-} end namespace std
+                if (key == Key::left_alt || key == Key::right_alt) then {
+                    return modifier::alt;
+                }
+                if (key == Key::left_meta || key == Key::right_meta) then {
+                    return modifier::meta;
+                }
+                return modifier::none;
+            } end function modifier_of
+        } end namespace input
+    } end namespace std
 } end safe

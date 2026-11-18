@@ -2,14 +2,8 @@
 #define LEXER_HPP
 
 #include <string>
-#include <iomanip>
-#include <iostream>
-#include <fstream>
-#include <sstream>
 #include <cstring>
-#include <unordered_map>
 #include <algorithm>
-#include <filesystem>
 #include <vector>
 #include "token_macro.hpp"
 #include "keywords.hpp"

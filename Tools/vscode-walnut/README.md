@@ -9,6 +9,8 @@ The coloring works in two layers:
 
 `.wal` files get a walnut icon in the explorer and on tabs, and `.walh` (or `.hwal`) headers get the same walnut with an "h" badge, whenever your file icon theme doesn't have its own icon for them. Headers are the separate **Walnut Header** language so they can have their own icon; they're colored, underlined and hovered exactly like `.wal` files.
 
+Every `{ ... }` block folds, whatever its indentation: `safe` and `safe(compile)` blocks, namespaces, classes, functions, `if` and loop bodies, multi-line `/* */` comments, and `// region` ... `// endregion`. The same blocks stay pinned at the top of the editor while you scroll through them (VS Code's sticky scroll), so inside a long `safe(compile) { namespace std { ...` you can always see which blocks you're in.
+
 Without the compiler, the grammar still colors everything; only the exact coloring, the underlines and the hover info are missing.
 
 The compiler only runs when VS Code asks for semantic coloring, which some color themes turn off. If there are no underlines or hovers, add `"editor.semanticHighlighting.enabled": true` to your settings.
@@ -94,6 +96,7 @@ A color is `"#RRGGBB"`, or an object with `"color"` and any of `"bold"`, `"itali
 | `control keywords` | `if`, `for`, `return`, `end` and the other control-flow keywords |
 | `constants` | `true`, `false`, `nullptr` and the other built-in constants |
 | `strings`, `escapes`, `numbers`, `comments`, `preprocessor` | What they say |
+| `number suffixes` | The suffix that picks a number literal's type, such as `ll` in `5ll`, `ss` in `100ss` or `ULL` in `7ULL`; leave it out to use the theme's number color |
 | `error underlines` | The squiggle under the compiler's errors |
 | `warning underlines` | The squiggle under the compiler's warnings |
 | `error lines` | The text of every line that has a compiler error; an object can also give a `"background"` |

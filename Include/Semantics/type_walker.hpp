@@ -434,6 +434,9 @@ private:
     bool constant_fits(nodes::ASTNode* expr, Type* from, Type* to);
 
     void check_binding(nodes::ASTNode* expr, Type* from, Type* to, nodes::ASTNode* site, bool check_rvalue_refs = true);
+    void check_view_source(nodes::ASTNode* expr, Type* from, Type* to, nodes::ASTNode* site, bool returning);
+    bool is_string_view_t(Type* t);
+    Type* owning_string(Type* t);
 
     static std::string_view template_name_of(nodes::TemplateDeclaration* tmpl);
 

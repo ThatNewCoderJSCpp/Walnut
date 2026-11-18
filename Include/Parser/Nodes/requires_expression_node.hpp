@@ -20,7 +20,7 @@ struct RequiresExpression : ASTNode {
     };
 
     FunctionParameters*      m_parameters;   
-    std::vector<Requirement> m_requirements;
+    ArenaVector<Requirement> m_requirements;
     semantics::Scope*        scope = nullptr;   
 
     RequiresExpression(FunctionParameters* params, std::uint32_t ln = 0) : ASTNode(Kind::RequiresExpression, ln), m_parameters(params) {}
@@ -31,8 +31,8 @@ struct RequiresExpression : ASTNode {
     const FunctionParameters* get_parameters() const { return m_parameters; }
     FunctionParameters* get_parameters() { return m_parameters; }
     bool has_parameters() const { return m_parameters && !m_parameters->empty(); }
-    const std::vector<Requirement>& get_requirements() const { return m_requirements; }
-    std::vector<Requirement>& get_requirements() { return m_requirements; }
+    const ArenaVector<Requirement>& get_requirements() const { return m_requirements; }
+    ArenaVector<Requirement>& get_requirements() { return m_requirements; }
 
     void print(std::ostream& os, std::size_t indent) const;
 

@@ -14,7 +14,7 @@ const char* access_name(AccessLevel a) {
 
 ConstructorDeclaration::ConstructorDeclaration(
         FunctionParameters* params,
-        std::vector<ASTNode*> init_list,
+        ArenaVector<ASTNode*> init_list,
         const modifiers::RawModifiers& mods,
         const modifiers::FunctionQualifiers& quals,
         BlockStatement* body,
@@ -127,7 +127,7 @@ ASTNode* DestructorDeclaration::clone_into(Arena& a) const {
     return c;
 }
 
-RecordDeclaration::RecordDeclaration(Form form, std::vector<std::string_view> name_parts, const modifiers::RawModifiers& mods, const parser_types::TypeInfo& inherits, bool is_declaration, std::uint32_t ln) : ASTNode(Kind::RecordDeclaration, ln)
+RecordDeclaration::RecordDeclaration(Form form, ArenaVector<std::string_view> name_parts, const modifiers::RawModifiers& mods, const parser_types::TypeInfo& inherits, bool is_declaration, std::uint32_t ln) : ASTNode(Kind::RecordDeclaration, ln)
         , m_form(form), m_name_parts(std::move(name_parts)), m_mods(mods)
         , m_inherits(inherits), m_is_declaration(is_declaration) {}
 

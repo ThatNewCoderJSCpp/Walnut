@@ -127,6 +127,8 @@ public:
     ConstValue narrow(ConstValue v, nodes::ASTNode* site);
 
 public:
+    ConstValue enum_constant(Symbol* s) { return eval_enum_constant(s); }
+
     struct IntShape {
         unsigned bits = 0;
         bool     is_signed = true;
@@ -219,6 +221,7 @@ private:
     ConstValue eval_impl(nodes::ASTNode* e);
 
     ConstValue eval_literal(nodes::Literal* lit);
+    ConstValue eval_literal_uncached(nodes::Literal* lit);
 
     ConstValue eval_symbol(Symbol* s);
 
@@ -235,6 +238,7 @@ private:
     enum class Flow : std::uint8_t { Normal, Return, Break, Continue, Fail };
 
     std::vector<Frame> m_frames;
+    std::unordered_map<std::string_view, ConstValue> m_literal_cache[5];
     std::unordered_map<const Symbol*, ConstValue> m_symbol_cache;
     ConstValue         m_failure;
     std::size_t        m_steps = 0;

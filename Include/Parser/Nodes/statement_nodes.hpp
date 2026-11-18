@@ -37,9 +37,9 @@ struct VariableDeclaration : ASTNode {
     bool binding_by_ref = false;
     bool direct_init = false;
     bool pack_field = false;
-    std::vector<semantics::Symbol*> pack_elements;
+    ArenaVector<semantics::Symbol*> pack_elements;
     bool template_specialization = false;
-    std::vector<parser_types::TemplateArgument*> spec_args;
+    ArenaVector<parser_types::TemplateArgument*> spec_args;
     bool receiver_copy = false;
     bool synthetic = false;
 
@@ -69,7 +69,7 @@ struct VariableDeclaration : ASTNode {
 };
 
 struct BlockStatement : ASTNode {
-    std::vector<ASTNode*> statements;
+    ArenaVector<ASTNode*> statements;
     semantics::Scope* scope = nullptr;
 
     BlockStatement() : ASTNode(Kind::BlockStatement) {}
@@ -77,7 +77,7 @@ struct BlockStatement : ASTNode {
     static bool classof(const ASTNode* n) { return n->kind == Kind::BlockStatement; }
 
     void add_statement(ASTNode* stmt) { statements.push_back(stmt); }
-    const std::vector<ASTNode*>& get_statements() const { return statements; }
+    const ArenaVector<ASTNode*>& get_statements() const { return statements; }
 
     void print(std::ostream& os, std::size_t indent) const;
 
@@ -104,7 +104,7 @@ struct IfBranch : ASTNode {
 };
 
 struct IfStatement : ASTNode {
-    std::vector<IfBranch*> branches;
+    ArenaVector<IfBranch*> branches;
     ASTNode* else_branch = nullptr;
 
     IfStatement() : ASTNode(Kind::IfStatement) {}
@@ -113,7 +113,7 @@ struct IfStatement : ASTNode {
 
     void add_branch(IfBranch* branch) { branches.push_back(branch); }
     void set_else(ASTNode* else_body) { else_branch = else_body; }
-    const std::vector<IfBranch*>& get_branches() const { return branches; }
+    const ArenaVector<IfBranch*>& get_branches() const { return branches; }
     const ASTNode* get_else() const { return else_branch; }
 
     void print(std::ostream& os, std::size_t indent) const;
@@ -122,13 +122,13 @@ struct IfStatement : ASTNode {
 };
 
 struct NamespaceDeclaration : ASTNode {
-    std::vector<std::string_view> m_name_parts;
+    ArenaVector<std::string_view> m_name_parts;
     BlockStatement* m_body;
     semantics::Symbol* symbol = nullptr; 
     modifiers::RawModifiers m_modifiers;
 
     NamespaceDeclaration(
-        std::vector<std::string_view> name_parts,
+        ArenaVector<std::string_view> name_parts,
         BlockStatement* body,
         std::uint32_t ln
     )
@@ -136,7 +136,7 @@ struct NamespaceDeclaration : ASTNode {
 
     static bool classof(const ASTNode* n) { return n->kind == Kind::NamespaceDeclaration; }
 
-    const std::vector<std::string_view>& name_parts() const { return m_name_parts; }
+    const ArenaVector<std::string_view>& name_parts() const { return m_name_parts; }
     std::string_view simple_name() const { return m_name_parts.empty() ? "" : m_name_parts.back(); }
     bool is_qualified() const { return m_name_parts.size() > 1; }
     const BlockStatement* get_body() const { return m_body; }
@@ -333,7 +333,7 @@ struct DoWhileStatement : ASTNode {
 
 struct SwitchCase : ASTNode {
     ASTNode* value; // nullptr for default case
-    std::vector<ASTNode*> body;
+    ArenaVector<ASTNode*> body;
     bool has_fallthrough;
     semantics::Symbol* symbol = nullptr; 
 
@@ -343,7 +343,7 @@ struct SwitchCase : ASTNode {
 
     bool is_default() const { return value == nullptr; }
     const ASTNode* get_value() const { return value; }
-    const std::vector<ASTNode*>& get_body() const { return body; }
+    const ArenaVector<ASTNode*>& get_body() const { return body; }
     bool falls_through() const { return has_fallthrough; }
 
     void add_statement(ASTNode* stmt) { body.push_back(stmt); }
@@ -356,7 +356,7 @@ struct SwitchCase : ASTNode {
 
 struct SwitchStatement : ASTNode {
     ASTNode* condition;
-    std::vector<SwitchCase*> cases;
+    ArenaVector<SwitchCase*> cases;
     semantics::Scope* scope = nullptr;
 
     SwitchStatement(ASTNode* cond, std::uint32_t ln = 0) : ASTNode(Kind::SwitchStatement, ln), condition(cond) {}
@@ -365,7 +365,7 @@ struct SwitchStatement : ASTNode {
 
     const ASTNode* get_condition() const { return condition; }
     ASTNode* get_condition() { return condition; }
-    const std::vector<SwitchCase*>& get_cases() const { return cases; }
+    const ArenaVector<SwitchCase*>& get_cases() const { return cases; }
     const semantics::Scope* get_scope() const { return scope; }
     semantics::Scope* get_scope() { return scope; }
     void set_scope(semantics::Scope* s) { scope = s; }
@@ -431,7 +431,7 @@ struct EnumDeclaration : ASTNode {
     std::string_view name;
     parser_types::TypeInfo underlying_type; 
     bool has_underlying_type;
-    std::vector<EnumValue*> values;
+    ArenaVector<EnumValue*> values;
     modifiers::RawModifiers m_modifiers;
     semantics::Symbol* symbol = nullptr; 
 
@@ -456,7 +456,7 @@ struct EnumDeclaration : ASTNode {
     std::string_view get_name() const { return name; }
     bool has_type() const { return has_underlying_type; }
     const parser_types::TypeInfo& get_underlying_type() const { return underlying_type; }
-    const std::vector<EnumValue*>& get_values() const { return values; }
+    const ArenaVector<EnumValue*>& get_values() const { return values; }
     const modifiers::RawModifiers& get_modifiers() const { return m_modifiers; }
     modifiers::RawModifiers&       get_modifiers()       { return m_modifiers; }
     void set_modifiers(const modifiers::RawModifiers& m) { m_modifiers = m; }
@@ -475,14 +475,14 @@ struct UsingDeclaration : ASTNode {
     std::string_view name;
     ASTNode* aliased_expr = nullptr;
     parser_types::TypeInfo aliased_type;
-    std::vector<std::string_view> target_parts;
+    ArenaVector<std::string_view> target_parts;
     bool target_global = false;
     semantics::Symbol* symbol = nullptr; 
 
     UsingDeclaration(std::string_view n, ASTNode* expr, std::uint32_t ln = 0) : ASTNode(Kind::UsingDeclaration, ln), variant(Variant::Alias), name(n), aliased_expr(expr) {}
     UsingDeclaration(std::string_view n, const parser_types::TypeInfo& type, std::uint32_t ln = 0);
-    UsingDeclaration(std::vector<std::string_view> parts, std::uint32_t ln = 0);
-    UsingDeclaration(std::string_view n, std::vector<std::string_view> parts, bool global, std::uint32_t ln = 0);
+    UsingDeclaration(ArenaVector<std::string_view> parts, std::uint32_t ln = 0);
+    UsingDeclaration(std::string_view n, ArenaVector<std::string_view> parts, bool global, std::uint32_t ln = 0);
 
     static bool classof(const ASTNode* n) { return n->kind == Kind::UsingDeclaration; }
 
@@ -534,7 +534,7 @@ struct TemplateParameter : ASTNode {
 };
 
 struct TemplateDeclaration : ASTNode {
-    std::vector<TemplateParameter*> m_params;
+    ArenaVector<TemplateParameter*> m_params;
     ASTNode* m_declaration = nullptr;   
     bool m_is_empty_template = false;
     ASTNode* m_requires_clause = nullptr;
@@ -551,7 +551,7 @@ struct TemplateDeclaration : ASTNode {
     void set_declaration(ASTNode* d) { m_declaration = d; }
     void set_empty_template(bool v) { m_is_empty_template = v; }
     void set_requires_clause(ASTNode* c) { m_requires_clause = c; }
-    const std::vector<TemplateParameter*>& params() const { return m_params; }
+    const ArenaVector<TemplateParameter*>& params() const { return m_params; }
     const ASTNode* get_declaration() const { return m_declaration; }
     const ASTNode* get_requires_clause() const { return m_requires_clause; }
     bool has_requires_clause() const { return m_requires_clause != nullptr; }
@@ -566,18 +566,18 @@ struct ImportExportItem {
     enum class Kind : std::uint8_t { Name, Function, Namespace, Module, File, This };
 
     Kind                          kind = Kind::Name;
-    std::vector<std::string_view> target_parts;       
+    ArenaVector<std::string_view> target_parts;       
     std::uint32_t                 line = 0;
     bool                          target_global = false;
     bool                          has_source = false;
     std::string_view              source;             
     bool                          has_alias = false;
-    std::vector<std::string_view> alias_parts;
+    ArenaVector<std::string_view> alias_parts;
     bool                          alias_global = false;
     bool                          is_template = false;
     bool                          from_module_path = false;
     bool                          library_module = false;
-    std::vector<std::string_view> module_parts;
+    ArenaVector<std::string_view> module_parts;
     ASTNode*                      decl = nullptr;      
 
     static const char* kind_name(Kind k);
@@ -590,7 +590,7 @@ struct ImportExportDeclaration : ASTNode {
 
     Direction                      direction;
     bool                           is_block;    
-    std::vector<ImportExportItem>  items;
+    ArenaVector<ImportExportItem>  items;
 
     ImportExportDeclaration(Direction dir, bool block, std::uint32_t ln = 0) : ASTNode(Kind::ImportExportDeclaration, ln), direction(dir), is_block(block) {}
 
@@ -599,7 +599,7 @@ struct ImportExportDeclaration : ASTNode {
     bool is_import() const { return direction == Direction::Import; }
     bool is_export() const { return direction == Direction::Export; }
     void add_item(ImportExportItem item) { items.push_back(std::move(item)); }
-    const std::vector<ImportExportItem>& get_items() const { return items; }
+    const ArenaVector<ImportExportItem>& get_items() const { return items; }
 
     void print(std::ostream& os, std::size_t indent) const;
 
@@ -608,7 +608,7 @@ struct ImportExportDeclaration : ASTNode {
 
 struct ModuleDeclaration : ASTNode {
     std::string_view              name;
-    std::vector<ImportExportItem> items;
+    ArenaVector<ImportExportItem> items;
     semantics::Symbol* symbol = nullptr; 
 
     ModuleDeclaration(std::string_view n, std::uint32_t ln = 0) : ASTNode(Kind::ModuleDeclaration, ln), name(n) {}
@@ -616,7 +616,7 @@ struct ModuleDeclaration : ASTNode {
     static bool classof(const ASTNode* n) { return n->kind == Kind::ModuleDeclaration; }
 
     void add_item(ImportExportItem it) { items.push_back(std::move(it)); }
-    const std::vector<ImportExportItem>& get_items() const { return items; }
+    const ArenaVector<ImportExportItem>& get_items() const { return items; }
     std::string_view get_name() const { return name; }
 
     void print(std::ostream& os, std::size_t indent) const;
@@ -625,7 +625,7 @@ struct ModuleDeclaration : ASTNode {
 };
 
 struct InvalidateStatement : ASTNode {
-    std::vector<ASTNode*> targets;
+    ArenaVector<ASTNode*> targets;
 
     explicit InvalidateStatement(std::uint32_t ln = 0) : ASTNode(Kind::InvalidateStatement, ln) {}
 

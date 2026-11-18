@@ -5,754 +5,754 @@ import module.images
 import module.input
 
 safe(compile) {
-namespace std {
-    namespace errors {
-        class window_error {
-        public:
-            string: message;
-
-            constructor(const string&: m) : message = m { }
-
-            function what(const self&) -> string {
-                return self.message;
-            } end function what
-        } end class window_error
-    } end namespace errors
-
-    namespace windows {
-        using std::colors::Color;
-        using std::images::Image;
-        using std::input::Key;
-        using std::input::KeyKind;
-        using std::input::MouseButton;
-        using std::input::Modifiers;
-        using std::input::PointerType;
-        using std::input::GamepadButton;
-        using std::input::GamepadAxis;
-
-        enum EventType { mouse_move, mouse_click, mouse_release, mouse_scroll, mouse_double_click, key_press, key_release, window_resize, window_close, window_focus, window_blur, window_expose, window_render_request, text_input, text_editing, touch_down, touch_move, touch_up, touch_cancel, pen_down, pen_move, pen_up, gesture, files_dropped, drag_enter, drag_over, drag_leave, window_move, window_minimize, window_maximize, window_restore, dpi_changed, monitors_changed, gamepad_connected, gamepad_disconnected, gamepad_button_down, gamepad_button_up, gamepad_axis_motion, no_event }
-
-        enum Cursor { arrow, ibeam, hand, crosshair, wait, progress, not_allowed, move, resize_horizontal, resize_vertical, resize_nwse, resize_nesw, help }
-
-        enum WindowMode { windowed, borderless, fullscreen }
-
-        struct WindowEvent {
-            EventType: type = EventType::no_event;
-            long int: x = 0;
-            long int: y = 0;
-            long int: dx = 0;
-            long int: dy = 0;
-            MouseButton: button = MouseButton::no_button;
-            Key: key = Key::unknown;
-            Key: logical_key = Key::unknown;
-            Key: physical_key = Key::unknown;
-            long int: scancode = 0;
-            string: key_name = "";
-            Modifiers: modifiers;
-            bool: repeat_press = false;
-            string: text_value = "";
-            float: scroll_x = 0.0;
-            float: scroll_y = 0.0;
-            float: precise_x = 0.0;
-            float: precise_y = 0.0;
-            PointerType: pointer = PointerType::mouse;
-            long int: pointer_id = 0;
-            float: pressure = 0.0;
-            long int: window_x = 0;
-            long int: window_y = 0;
-            float: dpi_scale = 1.0;
-            long int: gamepad = -1;
-            long int: gamepad_button = 0;
-            long int: gamepad_axis = 0;
-            float: axis_value = 0.0;
-            std::collections::Vector<string>: paths;
-
-            constructor() { }
-
-            function width(const self&) -> long int {
-                return self.x;
-            } end function width
-
-            function height(const self&) -> long int {
-                return self.y;
-            } end function height
-
-            function is_key(const self&, Key: k) -> bool {
-                return (self.type == EventType::key_press || self.type == EventType::key_release) && self.key == k;
-            } end function is_key
-
-            function is_key_event(const self&) -> bool {
-                return self.type == EventType::key_press || self.type == EventType::key_release;
-            } end function is_key_event
-
-            function is_physical_key(const self&, Key: k) -> bool {
-                return self.is_key_event() && k != Key::unknown && self.physical_key == k;
-            } end function is_physical_key
-
-            function is_logical_key(const self&, Key: k) -> bool {
-                return self.is_key_event() && k != Key::unknown && self.logical_key == k;
-            } end function is_logical_key
-
-            function is_either_key(const self&, Key: k) -> bool {
-                return self.is_physical_key(k) || self.is_logical_key(k);
-            } end function is_either_key
-
-            function is_key(const self&, Key: k, KeyKind: kind) -> bool {
-                if (kind == KeyKind::physical) then {
-                    return self.is_physical_key(k);
-                }
-                if (kind == KeyKind::logical) then {
-                    return self.is_logical_key(k);
-                }
-                return self.is_either_key(k);
-            } end function is_key
-
-            function key_of(const self&, KeyKind: kind) -> Key {
-                if (kind == KeyKind::physical) then {
-                    return self.physical_key;
-                }
-                if (kind == KeyKind::logical) then {
-                    return self.logical_key;
-                }
-                return self.logical_key != Key::unknown ? self.logical_key : self.physical_key;
-            } end function key_of
-
-            function physical_name(const self&) -> string {
-                return std::input::key_name(self.physical_key);
-            } end function physical_name
-
-            function logical_name(const self&) -> string {
-                return std::input::key_name(self.logical_key);
-            } end function logical_name
-
-            function is_mouse(const self&) -> bool {
-                return self.type == EventType::mouse_move || self.type == EventType::mouse_click || self.type == EventType::mouse_release || self.type == EventType::mouse_scroll || self.type == EventType::mouse_double_click;
-            } end function is_mouse
-
-            function is_keyboard(const self&) -> bool {
-                return self.type == EventType::key_press || self.type == EventType::key_release || self.type == EventType::text_input;
-            } end function is_keyboard
-
-            function to_string(const self&) -> string {
-                return static_cast<string>(`WindowEvent(${static_cast<long int>(self.type)}, x ${self.x}, y ${self.y})`);
-            } end function to_string
-        } end struct WindowEvent
-
-        struct Monitor {
-            string: name = "";
-            long int: x = 0;
-            long int: y = 0;
-            long int: width = 0;
-            long int: height = 0;
-            long int: work_x = 0;
-            long int: work_y = 0;
-            long int: work_width = 0;
-            long int: work_height = 0;
-            float: refresh_rate = 0.0;
-            float: scale = 1.0;
-            float: dpi = 96.0;
-            bool: primary = false;
-
-            constructor() { }
-
-            function to_string(const self&) -> string {
-                return static_cast<string>(`${self.name} (${self.width} by ${self.height} at ${self.x}, ${self.y})`);
-            } end function to_string
-        } end struct Monitor
-
-        namespace detail {
-            extern "C++" from "<walnut_graphics.hpp>" {
-                class NativeEvent as "walnut_rt::gfx::event" {
-                public:
-                    constructor();
-                    function type(const self&) -> long int;
-                    function x(const self&) -> long int;
-                    function y(const self&) -> long int;
-                    function dx(const self&) -> long int;
-                    function dy(const self&) -> long int;
-                    function button(const self&) -> long int;
-                    function key(const self&) -> long int;
-                    function logical_key(const self&) -> long int;
-                    function physical_key(const self&) -> long int;
-                    function scancode(const self&) -> long int;
-                    function key_name(const self&) -> string;
-                    function modifiers(const self&) -> long int;
-                    function repeat(const self&) -> bool;
-                    function typed(const self&) -> string as "text";
-                    function scroll_x(const self&) -> float;
-                    function scroll_y(const self&) -> float;
-                    function fx(const self&) -> float;
-                    function fy(const self&) -> float;
-                    function pressure(const self&) -> float;
-                    function pointer(const self&) -> long int;
-                    function pointer_id(const self&) -> long int;
-                    function window_x(const self&) -> long int;
-                    function window_y(const self&) -> long int;
-                    function dpi_scale(const self&) -> float;
-                    function gamepad(const self&) -> long int;
-                    function gamepad_button(const self&) -> long int;
-                    function gamepad_axis(const self&) -> long int;
-                    function axis_value(const self&) -> float;
-                    function path_count(const self&) -> long int;
-                    function path(const self&, long int: index) -> string;
-                } end class NativeEvent
-
-                class NativeMonitor as "walnut_rt::gfx::monitor" {
-                public:
-                    constructor();
-                    function name(const self&) -> string;
-                    function x(const self&) -> long int;
-                    function y(const self&) -> long int;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function work_x(const self&) -> long int;
-                    function work_y(const self&) -> long int;
-                    function work_width(const self&) -> long int;
-                    function work_height(const self&) -> long int;
-                    function refresh_rate(const self&) -> float;
-                    function scale(const self&) -> float;
-                    function dpi(const self&) -> float;
-                    function primary(const self&) -> bool;
-                } end class NativeMonitor
-
-                class Native as "walnut_rt::gfx::windows_api" {
-                public:
-                    static function monitor_count() -> long int as "walnut_rt::gfx::monitor_count";
-                    static function monitor_at(long int: index) -> NativeMonitor as "walnut_rt::gfx::monitor_at";
-                    static function primary_monitor() -> NativeMonitor as "walnut_rt::gfx::primary_monitor";
-                    static function dialogs_available() -> bool as "walnut_rt::gfx::dialogs_available";
-                    static function open_file(const string&: title, const string&: start, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> string as "walnut_rt::gfx::open_file";
-                    static function open_files(const string&: title, const string&: start, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> std::collections::Vector<string> as "walnut_rt::gfx::open_files";
-                    static function save_file(const string&: title, const string&: start, const string&: name, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> string as "walnut_rt::gfx::save_file";
-                    static function select_folder(const string&: title, const string&: start) -> string as "walnut_rt::gfx::select_folder";
-                    static function message_box(const string&: title, const string&: message, long int: buttons, long int: icon) -> long int as "walnut_rt::gfx::message_box";
-                } end class Native
-            } end extern
-
-            function event_of(const NativeEvent&: n) -> WindowEvent {
-                WindowEvent: e;
-                e.type = static_cast<EventType>(n.type());
-                e.x = n.x();
-                e.y = n.y();
-                e.dx = n.dx();
-                e.dy = n.dy();
-                const long int: b = n.button();
-                e.button = b >= 0 && b <= 5 ? static_cast<MouseButton>(b) : MouseButton::no_button;
-                e.key = std::input::key_from_index(n.key());
-                e.logical_key = std::input::key_from_index(n.logical_key());
-                e.physical_key = std::input::key_from_index(n.physical_key());
-                e.scancode = n.scancode();
-                e.key_name = n.key_name();
-                e.modifiers = Modifiers(n.modifiers());
-                e.repeat_press = n.repeat();
-                e.text_value = n.typed();
-                e.scroll_x = n.scroll_x();
-                e.scroll_y = n.scroll_y();
-                e.precise_x = n.fx();
-                e.precise_y = n.fy();
-                const long int: p = n.pointer();
-                e.pointer = p >= 0 && p <= 2 ? static_cast<PointerType>(p) : PointerType::mouse;
-                e.pointer_id = n.pointer_id();
-                e.pressure = n.pressure();
-                e.window_x = n.window_x();
-                e.window_y = n.window_y();
-                e.dpi_scale = n.dpi_scale();
-                e.gamepad = n.gamepad();
-                e.gamepad_button = n.gamepad_button();
-                e.gamepad_axis = n.gamepad_axis();
-                e.axis_value = n.axis_value();
-                for (long int: k = 0; k < n.path_count(); k++) {
-                    e.paths.push_back(n.path(k));
-                }
-                return e;
-            } end function event_of
-
-            function monitor_of(const NativeMonitor&: n) -> Monitor {
-                Monitor: m;
-                m.name = n.name();
-                m.x = n.x();
-                m.y = n.y();
-                m.width = n.width();
-                m.height = n.height();
-                m.work_x = n.work_x();
-                m.work_y = n.work_y();
-                m.work_width = n.work_width();
-                m.work_height = n.work_height();
-                m.refresh_rate = n.refresh_rate();
-                m.scale = n.scale();
-                m.dpi = n.dpi();
-                m.primary = n.primary();
-                return m;
-            } end function monitor_of
-        } end namespace detail
-
-        extern "C++" from "<walnut_graphics.hpp>" {
-            class Gamepad as "walnut_rt::gfx::gamepad" {
-                function native_button(const self&, long int: b) -> bool as "button";
-                function native_pressed(const self&, long int: b) -> bool as "pressed";
-                function native_released(const self&, long int: b) -> bool as "released";
-                function native_axis(const self&, long int: a) -> float as "axis";
-                function native_raw_axis(const self&, long int: a) -> float as "raw_axis";
-
+    namespace std {
+        namespace errors {
+            class window_error {
             public:
-                constructor();
+                string: message;
 
-                function slot(const self&) -> long int;
-                function connected(const self&) -> bool;
-                function mapped(const self&) -> bool;
-                function name(const self&) -> string;
-                function guid(const self&) -> string;
-                function set_deadzones(self&, float: stick, float: trigger) -> void;
-                function has_rumble(const self&) -> bool;
-                function rumble(self&, float: low_frequency, float: high_frequency, long int: milliseconds) -> bool;
-                function stop_rumble(self&) -> bool;
+                constructor(string: m) : message = m { }
 
-                function button(const self&, GamepadButton: b) -> bool {
-                    return self.native_button(static_cast<long int>(b));
-                } end function button
+                function what(const self&) -> string {
+                    return self.message;
+                } end function what
+            } end class window_error
+        } end namespace errors
 
-                function pressed(const self&, GamepadButton: b) -> bool {
-                    return self.native_pressed(static_cast<long int>(b));
-                } end function pressed
+        namespace windows {
+            using std::colors::Color;
+            using std::images::Image;
+            using std::input::Key;
+            using std::input::KeyKind;
+            using std::input::MouseButton;
+            using std::input::Modifiers;
+            using std::input::PointerType;
+            using std::input::GamepadButton;
+            using std::input::GamepadAxis;
 
-                function released(const self&, GamepadButton: b) -> bool {
-                    return self.native_released(static_cast<long int>(b));
-                } end function released
+            enum EventType { mouse_move, mouse_click, mouse_release, mouse_scroll, mouse_double_click, key_press, key_release, window_resize, window_close, window_focus, window_blur, window_expose, window_render_request, text_input, text_editing, touch_down, touch_move, touch_up, touch_cancel, pen_down, pen_move, pen_up, gesture, files_dropped, drag_enter, drag_over, drag_leave, window_move, window_minimize, window_maximize, window_restore, dpi_changed, monitors_changed, gamepad_connected, gamepad_disconnected, gamepad_button_down, gamepad_button_up, gamepad_axis_motion, no_event }
 
-                function axis(const self&, GamepadAxis: a) -> float {
-                    return self.native_axis(static_cast<long int>(a));
-                } end function axis
+            enum Cursor { arrow, ibeam, hand, crosshair, wait, progress, not_allowed, move, resize_horizontal, resize_vertical, resize_nwse, resize_nesw, help }
 
-                function raw_axis(const self&, GamepadAxis: a) -> float {
-                    return self.native_raw_axis(static_cast<long int>(a));
-                } end function raw_axis
-            } end class Gamepad
+            enum WindowMode { windowed, borderless, fullscreen }
 
-            class Window as "walnut_rt::gfx::window" {
-                function valid(const self&) -> bool;
-                function has_event(const self&) -> bool;
-                function native_next(self&) -> detail::NativeEvent as "next_event";
-                function native_set_background(self&, long int: rgba) -> void as "set_background";
-                function native_background(const self&) -> long int as "background";
-                function native_set_mode(self&, long int: mode, long int: monitor) -> bool as "set_mode";
-                function native_mode(const self&) -> long int as "mode";
-                function native_set_cursor(self&, long int: cursor) -> bool as "set_cursor";
-                function native_set_cursor_image(self&, const Image&: img, long int: hx, long int: hy) -> bool as "set_cursor_image";
-                function native_key_down(const self&, long int: k) -> bool as "key_down";
-                function native_key_pressed(const self&, long int: k) -> bool as "key_pressed";
-                function native_key_released(const self&, long int: k) -> bool as "key_released";
-                function native_key_double_pressed(const self&, long int: k) -> bool as "key_double_pressed";
-                function native_key_held_for(const self&, long int: k) -> float as "key_held_for";
-                function native_logical_key_down(const self&, long int: k) -> bool as "logical_key_down";
-                function native_logical_key_pressed(const self&, long int: k) -> bool as "logical_key_pressed";
-                function native_logical_key_released(const self&, long int: k) -> bool as "logical_key_released";
-                function native_logical_key_double_pressed(const self&, long int: k) -> bool as "logical_key_double_pressed";
-                function native_logical_key_held_for(const self&, long int: k) -> float as "logical_key_held_for";
-                function native_modifiers(const self&) -> long int as "modifiers";
-                function native_mouse_down(const self&, long int: b) -> bool as "mouse_down";
-                function native_mouse_pressed(const self&, long int: b) -> bool as "mouse_pressed";
-                function native_mouse_released(const self&, long int: b) -> bool as "mouse_released";
-                function native_mouse_double_clicked(const self&, long int: b) -> bool as "mouse_double_clicked";
-                function native_gamepad_count(const self&) -> long int as "walnut_rt::gfx::gamepad_count";
-                function native_gamepad_slots(const self&) -> long int as "walnut_rt::gfx::gamepad_slots";
-                function native_gamepad(const self&, long int: slot) -> Gamepad as "walnut_rt::gfx::gamepad_at";
-                function native_primary_gamepad(const self&) -> long int as "walnut_rt::gfx::primary_gamepad";
-                function native_any_gamepad_button(const self&, long int: b) -> bool as "walnut_rt::gfx::any_gamepad_button";
-                function native_add_gamepad_mappings(const self&, const string&: text_value) -> long int as "walnut_rt::gfx::add_gamepad_mappings";
-                function native_load_gamepad_mappings(const self&, const string&: path) -> long int as "walnut_rt::gfx::load_gamepad_mappings";
-
-            public:
-                constructor();
-                constructor(const string&: title, long int: width, long int: height, long int: background);
-
-                static function open(const string&: title, long int: width, long int: height, const Color&: background = Color(0, 0, 0)) -> Window {
-                    if (width <= 0 || height <= 0) then {
-                        throw std::errors::window_error(static_cast<string>(`a window needs a width and height above 0, not ${width} by ${height}`));
-                    }
-                    Window: w = Window(title, width, height, background.packed());
-                    if (!w.valid()) then {
-                        throw std::errors::window_error(static_cast<string>(`can't open the window '${title}'; is a display available?`));
-                    }
-                    return w;
-                } end function open
-
-                function is_open(const self&) -> bool;
-                function poll(self&) -> bool;
-                function close(self&) -> void;
-                function clear_events(self&) -> void;
-
-                function next_event(self&, WindowEvent&: event) -> bool {
-                    if (!self.has_event()) then {
-                        return false;
-                    }
-                    event = detail::event_of(self.native_next());
-                    return true;
-                } end function next_event
-
-                function events(self&) -> std::collections::Vector<WindowEvent> {
-                    std::collections::Vector<WindowEvent>: out;
-                    while (self.has_event()) {
-                        out.push_back(detail::event_of(self.native_next()));
-                    }
-                    return out;
-                } end function events
-
-                function width(const self&) -> long int;
-                function height(const self&) -> long int;
-                function title(const self&) -> string;
-                function set_title(self&, const string&: title) -> void;
-                function set_size(self&, long int: width, long int: height) -> bool;
-                function set_min_size(self&, long int: width, long int: height) -> void;
-                function set_resizable(self&, bool: resizable) -> void;
-                function set_position(self&, long int: x, long int: y) -> bool;
-                function x(const self&) -> long int;
-                function y(const self&) -> long int;
-                function minimize(self&) -> void;
-                function maximize(self&) -> void;
-                function restore(self&) -> void;
-                function focus(self&) -> void;
-                function set_fullscreen(self&, bool: on) -> bool;
-                function fullscreen(const self&) -> bool;
-                function set_borderless(self&, bool: on) -> bool;
-                function dpi_scale(const self&) -> float;
-                function monitor_index(const self&) -> long int;
-                function set_cursor_visible(self&, bool: visible) -> void;
-                function cursor_visible(const self&) -> bool;
-                function set_cursor_locked(self&, bool: locked) -> bool;
-                function cursor_locked(const self&) -> bool;
-                function set_relative_mouse(self&, bool: on) -> bool;
-                function clipboard(self&) -> string;
-                function set_clipboard(self&, const string&: text_value) -> bool;
-                function set_drop_enabled(self&, bool: on) -> void;
-                function start_text_input(self&) -> void;
-                function stop_text_input(self&) -> void;
-                function text_input_active(const self&) -> bool;
-                function typed_text(const self&) -> string;
-                function mouse_x(const self&) -> long int;
-                function mouse_y(const self&) -> long int;
-                function mouse_dx(const self&) -> long int;
-                function mouse_dy(const self&) -> long int;
-                function scroll_x(const self&) -> float;
-                function scroll_y(const self&) -> float;
-
-                function set_background(self&, const Color&: c) -> void {
-                    self.native_set_background(c.packed());
-                } end function set_background
-
-                function background(const self&) -> Color {
-                    return Color::from_packed(self.native_background());
-                } end function background
-
-                function set_mode(self&, WindowMode: mode, long int: monitor = -1) -> bool {
-                    return self.native_set_mode(static_cast<long int>(mode), monitor);
-                } end function set_mode
-
-                function mode(const self&) -> WindowMode {
-                    return static_cast<WindowMode>(self.native_mode());
-                } end function mode
-
-                function set_cursor(self&, Cursor: cursor) -> bool {
-                    return self.native_set_cursor(static_cast<long int>(cursor));
-                } end function set_cursor
-
-                function set_cursor(self&, const Image&: img) -> bool {
-                    return self.native_set_cursor_image(img, 0, 0);
-                } end function set_cursor
-
-                function set_cursor(self&, const Image&: img, long int: hot_x, long int: hot_y) -> bool {
-                    return self.native_set_cursor_image(img, hot_x, hot_y);
-                } end function set_cursor
-
-                function key_down(const self&, Key: k) -> bool {
-                    return self.native_key_down(static_cast<long int>(k));
-                } end function key_down
-
-                function key_pressed(const self&, Key: k) -> bool {
-                    return self.native_key_pressed(static_cast<long int>(k));
-                } end function key_pressed
-
-                function key_released(const self&, Key: k) -> bool {
-                    return self.native_key_released(static_cast<long int>(k));
-                } end function key_released
-
-                function key_double_pressed(const self&, Key: k) -> bool {
-                    return self.native_key_double_pressed(static_cast<long int>(k));
-                } end function key_double_pressed
-
-                function key_held_for(const self&, Key: k) -> float {
-                    return self.native_key_held_for(static_cast<long int>(k));
-                } end function key_held_for
-
-                function logical_key_down(const self&, Key: k) -> bool {
-                    return self.native_logical_key_down(static_cast<long int>(k));
-                } end function logical_key_down
-
-                function logical_key_pressed(const self&, Key: k) -> bool {
-                    return self.native_logical_key_pressed(static_cast<long int>(k));
-                } end function logical_key_pressed
-
-                function logical_key_released(const self&, Key: k) -> bool {
-                    return self.native_logical_key_released(static_cast<long int>(k));
-                } end function logical_key_released
-
-                function logical_key_double_pressed(const self&, Key: k) -> bool {
-                    return self.native_logical_key_double_pressed(static_cast<long int>(k));
-                } end function logical_key_double_pressed
-
-                function logical_key_held_for(const self&, Key: k) -> float {
-                    return self.native_logical_key_held_for(static_cast<long int>(k));
-                } end function logical_key_held_for
-
-                function physical_key_down(const self&, Key: k) -> bool {
-                    return self.native_key_down(static_cast<long int>(k));
-                } end function physical_key_down
-
-                function physical_key_pressed(const self&, Key: k) -> bool {
-                    return self.native_key_pressed(static_cast<long int>(k));
-                } end function physical_key_pressed
-
-                function physical_key_released(const self&, Key: k) -> bool {
-                    return self.native_key_released(static_cast<long int>(k));
-                } end function physical_key_released
-
-                function physical_key_double_pressed(const self&, Key: k) -> bool {
-                    return self.native_key_double_pressed(static_cast<long int>(k));
-                } end function physical_key_double_pressed
-
-                function physical_key_held_for(const self&, Key: k) -> float {
-                    return self.native_key_held_for(static_cast<long int>(k));
-                } end function physical_key_held_for
-
-                function key_down(const self&, Key: k, KeyKind: kind) -> bool {
-                    if (kind == KeyKind::physical) then {
-                        return self.physical_key_down(k);
-                    }
-                    if (kind == KeyKind::logical) then {
-                        return self.logical_key_down(k);
-                    }
-                    return self.physical_key_down(k) || self.logical_key_down(k);
-                } end function key_down
-
-                function key_pressed(const self&, Key: k, KeyKind: kind) -> bool {
-                    if (kind == KeyKind::physical) then {
-                        return self.physical_key_pressed(k);
-                    }
-                    if (kind == KeyKind::logical) then {
-                        return self.logical_key_pressed(k);
-                    }
-                    return self.physical_key_pressed(k) || self.logical_key_pressed(k);
-                } end function key_pressed
-
-                function key_released(const self&, Key: k, KeyKind: kind) -> bool {
-                    if (kind == KeyKind::physical) then {
-                        return self.physical_key_released(k);
-                    }
-                    if (kind == KeyKind::logical) then {
-                        return self.logical_key_released(k);
-                    }
-                    return self.physical_key_released(k) || self.logical_key_released(k);
-                } end function key_released
-
-                function key_double_pressed(const self&, Key: k, KeyKind: kind) -> bool {
-                    if (kind == KeyKind::physical) then {
-                        return self.physical_key_double_pressed(k);
-                    }
-                    if (kind == KeyKind::logical) then {
-                        return self.logical_key_double_pressed(k);
-                    }
-                    return self.physical_key_double_pressed(k) || self.logical_key_double_pressed(k);
-                } end function key_double_pressed
-
-                function key_held_for(const self&, Key: k, KeyKind: kind) -> float {
-                    if (kind == KeyKind::physical) then {
-                        return self.physical_key_held_for(k);
-                    }
-                    if (kind == KeyKind::logical) then {
-                        return self.logical_key_held_for(k);
-                    }
-                    const float: p = self.physical_key_held_for(k);
-                    const float: l = self.logical_key_held_for(k);
-                    return p > l ? p : l;
-                } end function key_held_for
-
-                function modifiers(const self&) -> Modifiers {
-                    return Modifiers(self.native_modifiers());
-                } end function modifiers
-
-                function mouse_down(const self&, MouseButton: b = MouseButton::left) -> bool {
-                    return self.native_mouse_down(static_cast<long int>(b));
-                } end function mouse_down
-
-                function mouse_pressed(const self&, MouseButton: b = MouseButton::left) -> bool {
-                    return self.native_mouse_pressed(static_cast<long int>(b));
-                } end function mouse_pressed
-
-                function mouse_released(const self&, MouseButton: b = MouseButton::left) -> bool {
-                    return self.native_mouse_released(static_cast<long int>(b));
-                } end function mouse_released
-
-                function mouse_double_clicked(const self&, MouseButton: b = MouseButton::left) -> bool {
-                    return self.native_mouse_double_clicked(static_cast<long int>(b));
-                } end function mouse_double_clicked
-
-                function gamepad_count(const self&) -> long int {
-                    return self.native_gamepad_count();
-                } end function gamepad_count
-
-                function gamepad(const self&, long int: slot) -> Gamepad {
-                    if (slot < 0 || slot >= self.native_gamepad_slots()) then {
-                        throw std::errors::window_error(static_cast<string>(`there is no gamepad in slot ${slot}`));
-                    }
-                    return self.native_gamepad(slot);
-                } end function gamepad
-
-                function gamepads(const self&) -> std::collections::Vector<Gamepad> {
-                    std::collections::Vector<Gamepad>: out;
-                    for (long int: k = 0; k < self.native_gamepad_slots(); k++) {
-                        Gamepad: g = self.native_gamepad(k);
-                        if (g.connected()) then {
-                            out.push_back(g);
-                        }
-                    }
-                    return out;
-                } end function gamepads
-
-                function has_gamepad(const self&) -> bool {
-                    return self.native_primary_gamepad() >= 0;
-                } end function has_gamepad
-
-                function primary_gamepad(const self&) -> Gamepad {
-                    const long int: slot = self.native_primary_gamepad();
-                    if (slot < 0) then {
-                        throw std::errors::window_error("no gamepad is connected; check has_gamepad() first");
-                    }
-                    return self.native_gamepad(slot);
-                } end function primary_gamepad
-
-                function any_gamepad_button(const self&, GamepadButton: b) -> bool {
-                    return self.native_any_gamepad_button(static_cast<long int>(b));
-                } end function any_gamepad_button
-
-                function add_gamepad_mappings(const self&, const string&: mappings) -> long int {
-                    return self.native_add_gamepad_mappings(mappings);
-                } end function add_gamepad_mappings
-
-                function load_gamepad_mappings(const self&, const string&: path) -> long int {
-                    return self.native_load_gamepad_mappings(path);
-                } end function load_gamepad_mappings
-            } end class Window
-        } end extern
-
-        function monitors() -> std::collections::Vector<Monitor> {
-            std::collections::Vector<Monitor>: out;
-            const long int: n = detail::Native::monitor_count();
-            for (long int: k = 0; k < n; k++) {
-                out.push_back(detail::monitor_of(detail::Native::monitor_at(k)));
-            }
-            return out;
-        } end function monitors
-
-        function primary_monitor() -> Monitor {
-            return detail::monitor_of(detail::Native::primary_monitor());
-        } end function primary_monitor
-
-        namespace dialogs {
-            enum Buttons { ok, ok_cancel, yes_no, yes_no_cancel, retry_cancel }
-
-            enum Icon { info, warning, error, question }
-
-            enum Answer { ok, cancel, yes, no, retry }
-
-            struct FileFilter {
-                string: name = "";
-                string: patterns = "";
+            struct WindowEvent {
+                EventType: type = EventType::no_event;
+                long int: x = 0;
+                long int: y = 0;
+                long int: dx = 0;
+                long int: dy = 0;
+                MouseButton: button = MouseButton::no_button;
+                Key: key = Key::unknown;
+                Key: logical_key = Key::unknown;
+                Key: physical_key = Key::unknown;
+                long int: scancode = 0;
+                string: key_name = "";
+                Modifiers: modifiers;
+                bool: repeat_press = false;
+                string: text_value = "";
+                float: scroll_x = 0.0;
+                float: scroll_y = 0.0;
+                float: precise_x = 0.0;
+                float: precise_y = 0.0;
+                PointerType: pointer = PointerType::mouse;
+                long int: pointer_id = 0;
+                float: pressure = 0.0;
+                long int: window_x = 0;
+                long int: window_y = 0;
+                float: dpi_scale = 1.0;
+                long int: gamepad = -1;
+                long int: gamepad_button = 0;
+                long int: gamepad_axis = 0;
+                float: axis_value = 0.0;
+                std::collections::Vector<string>: paths;
 
                 constructor() { }
 
-                constructor(const string&: n, const string&: p) : name = n, patterns = p { }
-            } end struct FileFilter
+                function width(const self&) -> long int {
+                    return self.x;
+                } end function width
+
+                function height(const self&) -> long int {
+                    return self.y;
+                } end function height
+
+                function is_key(const self&, Key: k) -> bool {
+                    return (self.type == EventType::key_press || self.type == EventType::key_release) && self.key == k;
+                } end function is_key
+
+                function is_key_event(const self&) -> bool {
+                    return self.type == EventType::key_press || self.type == EventType::key_release;
+                } end function is_key_event
+
+                function is_physical_key(const self&, Key: k) -> bool {
+                    return self.is_key_event() && k != Key::unknown && self.physical_key == k;
+                } end function is_physical_key
+
+                function is_logical_key(const self&, Key: k) -> bool {
+                    return self.is_key_event() && k != Key::unknown && self.logical_key == k;
+                } end function is_logical_key
+
+                function is_either_key(const self&, Key: k) -> bool {
+                    return self.is_physical_key(k) || self.is_logical_key(k);
+                } end function is_either_key
+
+                function is_key(const self&, Key: k, KeyKind: kind) -> bool {
+                    if (kind == KeyKind::physical) then {
+                        return self.is_physical_key(k);
+                    }
+                    if (kind == KeyKind::logical) then {
+                        return self.is_logical_key(k);
+                    }
+                    return self.is_either_key(k);
+                } end function is_key
+
+                function key_of(const self&, KeyKind: kind) -> Key {
+                    if (kind == KeyKind::physical) then {
+                        return self.physical_key;
+                    }
+                    if (kind == KeyKind::logical) then {
+                        return self.logical_key;
+                    }
+                    return self.logical_key != Key::unknown ? self.logical_key : self.physical_key;
+                } end function key_of
+
+                function physical_name(const self&) -> string {
+                    return std::input::key_name(self.physical_key);
+                } end function physical_name
+
+                function logical_name(const self&) -> string {
+                    return std::input::key_name(self.logical_key);
+                } end function logical_name
+
+                function is_mouse(const self&) -> bool {
+                    return self.type == EventType::mouse_move || self.type == EventType::mouse_click || self.type == EventType::mouse_release || self.type == EventType::mouse_scroll || self.type == EventType::mouse_double_click;
+                } end function is_mouse
+
+                function is_keyboard(const self&) -> bool {
+                    return self.type == EventType::key_press || self.type == EventType::key_release || self.type == EventType::text_input;
+                } end function is_keyboard
+
+                function to_string(const self&) -> string {
+                    return static_cast<string>(`WindowEvent(${static_cast<long int>(self.type)}, x ${self.x}, y ${self.y})`);
+                } end function to_string
+            } end struct WindowEvent
+
+            struct Monitor {
+                string: name = "";
+                long int: x = 0;
+                long int: y = 0;
+                long int: width = 0;
+                long int: height = 0;
+                long int: work_x = 0;
+                long int: work_y = 0;
+                long int: work_width = 0;
+                long int: work_height = 0;
+                float: refresh_rate = 0.0;
+                float: scale = 1.0;
+                float: dpi = 96.0;
+                bool: primary = false;
+
+                constructor() { }
+
+                function to_string(const self&) -> string {
+                    return static_cast<string>(`${self.name} (${self.width} by ${self.height} at ${self.x}, ${self.y})`);
+                } end function to_string
+            } end struct Monitor
 
             namespace detail {
-                function names_of(const std::collections::Vector<FileFilter>&: filters) -> std::collections::Vector<string> {
-                    std::collections::Vector<string>: out;
-                    for (const FileFilter&: f in filters) {
-                        out.push_back(f.name);
-                    }
-                    return out;
-                } end function names_of
+                extern "C++" from "<walnut_graphics.hpp>" {
+                    class NativeEvent as "walnut_rt::gfx::event" {
+                    public:
+                        constructor();
+                        function type(const self&) -> long int;
+                        function x(const self&) -> long int;
+                        function y(const self&) -> long int;
+                        function dx(const self&) -> long int;
+                        function dy(const self&) -> long int;
+                        function button(const self&) -> long int;
+                        function key(const self&) -> long int;
+                        function logical_key(const self&) -> long int;
+                        function physical_key(const self&) -> long int;
+                        function scancode(const self&) -> long int;
+                        function key_name(const self&) -> string;
+                        function modifiers(const self&) -> long int;
+                        function repeat(const self&) -> bool;
+                        function typed(const self&) -> string as "text";
+                        function scroll_x(const self&) -> float;
+                        function scroll_y(const self&) -> float;
+                        function fx(const self&) -> float;
+                        function fy(const self&) -> float;
+                        function pressure(const self&) -> float;
+                        function pointer(const self&) -> long int;
+                        function pointer_id(const self&) -> long int;
+                        function window_x(const self&) -> long int;
+                        function window_y(const self&) -> long int;
+                        function dpi_scale(const self&) -> float;
+                        function gamepad(const self&) -> long int;
+                        function gamepad_button(const self&) -> long int;
+                        function gamepad_axis(const self&) -> long int;
+                        function axis_value(const self&) -> float;
+                        function path_count(const self&) -> long int;
+                        function path(const self&, long int: index) -> string;
+                    } end class NativeEvent
 
-                function patterns_of(const std::collections::Vector<FileFilter>&: filters) -> std::collections::Vector<string> {
-                    std::collections::Vector<string>: out;
-                    for (const FileFilter&: f in filters) {
-                        out.push_back(f.patterns);
-                    }
-                    return out;
-                } end function patterns_of
+                    class NativeMonitor as "walnut_rt::gfx::monitor" {
+                    public:
+                        constructor();
+                        function name(const self&) -> string;
+                        function x(const self&) -> long int;
+                        function y(const self&) -> long int;
+                        function width(const self&) -> long int;
+                        function height(const self&) -> long int;
+                        function work_x(const self&) -> long int;
+                        function work_y(const self&) -> long int;
+                        function work_width(const self&) -> long int;
+                        function work_height(const self&) -> long int;
+                        function refresh_rate(const self&) -> float;
+                        function scale(const self&) -> float;
+                        function dpi(const self&) -> float;
+                        function primary(const self&) -> bool;
+                    } end class NativeMonitor
 
-                function some_or_none(const string&: s) -> std::optional::Optional<string> {
-                    if (s.size() == 0) then {
-                        return std::optional::nothing<string>();
+                    class Native as "walnut_rt::gfx::windows_api" {
+                    public:
+                        static function monitor_count() -> long int as "walnut_rt::gfx::monitor_count";
+                        static function monitor_at(long int: index) -> NativeMonitor as "walnut_rt::gfx::monitor_at";
+                        static function primary_monitor() -> NativeMonitor as "walnut_rt::gfx::primary_monitor";
+                        static function dialogs_available() -> bool as "walnut_rt::gfx::dialogs_available";
+                        static function open_file(const string&: title, const string&: start, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> string as "walnut_rt::gfx::open_file";
+                        static function open_files(const string&: title, const string&: start, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> std::collections::Vector<string> as "walnut_rt::gfx::open_files";
+                        static function save_file(const string&: title, const string&: start, const string&: name, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> string as "walnut_rt::gfx::save_file";
+                        static function select_folder(const string&: title, const string&: start) -> string as "walnut_rt::gfx::select_folder";
+                        static function message_box(const string&: title, const string&: message, long int: buttons, long int: icon) -> long int as "walnut_rt::gfx::message_box";
+                    } end class Native
+                } end extern
+
+                function event_of(const NativeEvent&: n) -> WindowEvent {
+                    WindowEvent: e;
+                    e.type = static_cast<EventType>(n.type());
+                    e.x = n.x();
+                    e.y = n.y();
+                    e.dx = n.dx();
+                    e.dy = n.dy();
+                    const long int: b = n.button();
+                    e.button = b >= 0 && b <= 5 ? static_cast<MouseButton>(b) : MouseButton::no_button;
+                    e.key = std::input::key_from_index(n.key());
+                    e.logical_key = std::input::key_from_index(n.logical_key());
+                    e.physical_key = std::input::key_from_index(n.physical_key());
+                    e.scancode = n.scancode();
+                    e.key_name = n.key_name();
+                    e.modifiers = Modifiers(n.modifiers());
+                    e.repeat_press = n.repeat();
+                    e.text_value = n.typed();
+                    e.scroll_x = n.scroll_x();
+                    e.scroll_y = n.scroll_y();
+                    e.precise_x = n.fx();
+                    e.precise_y = n.fy();
+                    const long int: p = n.pointer();
+                    e.pointer = p >= 0 && p <= 2 ? static_cast<PointerType>(p) : PointerType::mouse;
+                    e.pointer_id = n.pointer_id();
+                    e.pressure = n.pressure();
+                    e.window_x = n.window_x();
+                    e.window_y = n.window_y();
+                    e.dpi_scale = n.dpi_scale();
+                    e.gamepad = n.gamepad();
+                    e.gamepad_button = n.gamepad_button();
+                    e.gamepad_axis = n.gamepad_axis();
+                    e.axis_value = n.axis_value();
+                    for (long int: k = 0; k < n.path_count(); k++) {
+                        e.paths.push_back(n.path(k));
                     }
-                    return std::optional::Optional<string>(s);
-                } end function some_or_none
+                    return e;
+                } end function event_of
+
+                function monitor_of(const NativeMonitor&: n) -> Monitor {
+                    Monitor: m;
+                    m.name = n.name();
+                    m.x = n.x();
+                    m.y = n.y();
+                    m.width = n.width();
+                    m.height = n.height();
+                    m.work_x = n.work_x();
+                    m.work_y = n.work_y();
+                    m.work_width = n.work_width();
+                    m.work_height = n.work_height();
+                    m.refresh_rate = n.refresh_rate();
+                    m.scale = n.scale();
+                    m.dpi = n.dpi();
+                    m.primary = n.primary();
+                    return m;
+                } end function monitor_of
             } end namespace detail
 
-            function available() -> bool {
-                return std::windows::detail::Native::dialogs_available();
-            } end function available
+            extern "C++" from "<walnut_graphics.hpp>" {
+                class Gamepad as "walnut_rt::gfx::gamepad" {
+                    function native_button(const self&, long int: b) -> bool as "button";
+                    function native_pressed(const self&, long int: b) -> bool as "pressed";
+                    function native_released(const self&, long int: b) -> bool as "released";
+                    function native_axis(const self&, long int: a) -> float as "axis";
+                    function native_raw_axis(const self&, long int: a) -> float as "raw_axis";
 
-            function message_box(const string&: title, const string&: message, Buttons: buttons = Buttons::ok, Icon: icon = Icon::info) -> Answer {
-                return static_cast<Answer>(std::windows::detail::Native::message_box(title, message, static_cast<long int>(buttons), static_cast<long int>(icon)));
-            } end function message_box
+                public:
+                    constructor();
 
-            function show_info(const string&: title, const string&: message) -> void {
-                message_box(title, message, Buttons::ok, Icon::info);
-            } end function show_info
+                    function slot(const self&) -> long int;
+                    function connected(const self&) -> bool;
+                    function mapped(const self&) -> bool;
+                    function name(const self&) -> string;
+                    function guid(const self&) -> string;
+                    function set_deadzones(self&, float: stick, float: trigger) -> void;
+                    function has_rumble(const self&) -> bool;
+                    function rumble(self&, float: low_frequency, float: high_frequency, long int: milliseconds) -> bool;
+                    function stop_rumble(self&) -> bool;
 
-            function show_warning(const string&: title, const string&: message) -> void {
-                message_box(title, message, Buttons::ok, Icon::warning);
-            } end function show_warning
+                    function button(const self&, GamepadButton: b) -> bool {
+                        return self.native_button(static_cast<long int>(b));
+                    } end function button
 
-            function show_error(const string&: title, const string&: message) -> void {
-                message_box(title, message, Buttons::ok, Icon::error);
-            } end function show_error
+                    function pressed(const self&, GamepadButton: b) -> bool {
+                        return self.native_pressed(static_cast<long int>(b));
+                    } end function pressed
 
-            function ask_yes_no(const string&: title, const string&: message) -> bool {
-                return message_box(title, message, Buttons::yes_no, Icon::question) == Answer::yes;
-            } end function ask_yes_no
+                    function released(const self&, GamepadButton: b) -> bool {
+                        return self.native_released(static_cast<long int>(b));
+                    } end function released
 
-            function open_file(const string&: title, const string&: start, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::optional::Optional<string> {
-                return detail::some_or_none(std::windows::detail::Native::open_file(title, start, detail::names_of(filters), detail::patterns_of(filters)));
-            } end function open_file
+                    function axis(const self&, GamepadAxis: a) -> float {
+                        return self.native_axis(static_cast<long int>(a));
+                    } end function axis
 
-            function open_file(const string&: title = "") -> std::optional::Optional<string> {
-                return open_file(title, "");
-            } end function open_file
+                    function raw_axis(const self&, GamepadAxis: a) -> float {
+                        return self.native_raw_axis(static_cast<long int>(a));
+                    } end function raw_axis
+                } end class Gamepad
 
-            function open_files(const string&: title, const string&: start, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::collections::Vector<string> {
-                return std::windows::detail::Native::open_files(title, start, detail::names_of(filters), detail::patterns_of(filters));
-            } end function open_files
+                class Window as "walnut_rt::gfx::window" {
+                    function valid(const self&) -> bool;
+                    function has_event(const self&) -> bool;
+                    function native_next(self&) -> detail::NativeEvent as "next_event";
+                    function native_set_background(self&, long int: rgba) -> void as "set_background";
+                    function native_background(const self&) -> long int as "background";
+                    function native_set_mode(self&, long int: mode, long int: monitor) -> bool as "set_mode";
+                    function native_mode(const self&) -> long int as "mode";
+                    function native_set_cursor(self&, long int: cursor) -> bool as "set_cursor";
+                    function native_set_cursor_image(self&, const Image&: img, long int: hx, long int: hy) -> bool as "set_cursor_image";
+                    function native_key_down(const self&, long int: k) -> bool as "key_down";
+                    function native_key_pressed(const self&, long int: k) -> bool as "key_pressed";
+                    function native_key_released(const self&, long int: k) -> bool as "key_released";
+                    function native_key_double_pressed(const self&, long int: k) -> bool as "key_double_pressed";
+                    function native_key_held_for(const self&, long int: k) -> float as "key_held_for";
+                    function native_logical_key_down(const self&, long int: k) -> bool as "logical_key_down";
+                    function native_logical_key_pressed(const self&, long int: k) -> bool as "logical_key_pressed";
+                    function native_logical_key_released(const self&, long int: k) -> bool as "logical_key_released";
+                    function native_logical_key_double_pressed(const self&, long int: k) -> bool as "logical_key_double_pressed";
+                    function native_logical_key_held_for(const self&, long int: k) -> float as "logical_key_held_for";
+                    function native_modifiers(const self&) -> long int as "modifiers";
+                    function native_mouse_down(const self&, long int: b) -> bool as "mouse_down";
+                    function native_mouse_pressed(const self&, long int: b) -> bool as "mouse_pressed";
+                    function native_mouse_released(const self&, long int: b) -> bool as "mouse_released";
+                    function native_mouse_double_clicked(const self&, long int: b) -> bool as "mouse_double_clicked";
+                    function native_gamepad_count(const self&) -> long int as "walnut_rt::gfx::gamepad_count";
+                    function native_gamepad_slots(const self&) -> long int as "walnut_rt::gfx::gamepad_slots";
+                    function native_gamepad(const self&, long int: slot) -> Gamepad as "walnut_rt::gfx::gamepad_at";
+                    function native_primary_gamepad(const self&) -> long int as "walnut_rt::gfx::primary_gamepad";
+                    function native_any_gamepad_button(const self&, long int: b) -> bool as "walnut_rt::gfx::any_gamepad_button";
+                    function native_add_gamepad_mappings(const self&, const string&: text_value) -> long int as "walnut_rt::gfx::add_gamepad_mappings";
+                    function native_load_gamepad_mappings(const self&, const string&: path) -> long int as "walnut_rt::gfx::load_gamepad_mappings";
 
-            function open_files(const string&: title = "") -> std::collections::Vector<string> {
-                return open_files(title, "");
-            } end function open_files
+                public:
+                    constructor();
+                    constructor(const string&: title, long int: width, long int: height, long int: background);
 
-            function save_file(const string&: title, const string&: start, const string&: name, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::optional::Optional<string> {
-                return detail::some_or_none(std::windows::detail::Native::save_file(title, start, name, detail::names_of(filters), detail::patterns_of(filters)));
-            } end function save_file
+                    static function open(const string&: title, long int: width, long int: height, const Color&: background = Color(0, 0, 0)) -> Window {
+                        if (width <= 0 || height <= 0) then {
+                            throw std::errors::window_error(static_cast<string>(`a window needs a width and height above 0, not ${width} by ${height}`));
+                        }
+                        Window: w = Window(title, width, height, background.packed());
+                        if (!w.valid()) then {
+                            throw std::errors::window_error(static_cast<string>(`can't open the window '${title}'; is a display available?`));
+                        }
+                        return w;
+                    } end function open
 
-            function save_file(const string&: title = "") -> std::optional::Optional<string> {
-                return save_file(title, "", "");
-            } end function save_file
+                    function is_open(const self&) -> bool;
+                    function poll(self&) -> bool;
+                    function close(self&) -> void;
+                    function clear_events(self&) -> void;
 
-            function select_folder(const string&: title, const string&: start) -> std::optional::Optional<string> {
-                return detail::some_or_none(std::windows::detail::Native::select_folder(title, start));
-            } end function select_folder
+                    function next_event(self&, WindowEvent&: event) -> bool {
+                        if (!self.has_event()) then {
+                            return false;
+                        }
+                        event = detail::event_of(self.native_next());
+                        return true;
+                    } end function next_event
 
-            function select_folder(const string&: title = "") -> std::optional::Optional<string> {
-                return select_folder(title, "");
-            } end function select_folder
-        } end namespace dialogs
-    } end namespace windows
-} end namespace std
+                    function events(self&) -> std::collections::Vector<WindowEvent> {
+                        std::collections::Vector<WindowEvent>: out;
+                        while (self.has_event()) {
+                            out.push_back(detail::event_of(self.native_next()));
+                        }
+                        return out;
+                    } end function events
+
+                    function width(const self&) -> long int;
+                    function height(const self&) -> long int;
+                    function title(const self&) -> string;
+                    function set_title(self&, const string&: title) -> void;
+                    function set_size(self&, long int: width, long int: height) -> bool;
+                    function set_min_size(self&, long int: width, long int: height) -> void;
+                    function set_resizable(self&, bool: resizable) -> void;
+                    function set_position(self&, long int: x, long int: y) -> bool;
+                    function x(const self&) -> long int;
+                    function y(const self&) -> long int;
+                    function minimize(self&) -> void;
+                    function maximize(self&) -> void;
+                    function restore(self&) -> void;
+                    function focus(self&) -> void;
+                    function set_fullscreen(self&, bool: on) -> bool;
+                    function fullscreen(const self&) -> bool;
+                    function set_borderless(self&, bool: on) -> bool;
+                    function dpi_scale(const self&) -> float;
+                    function monitor_index(const self&) -> long int;
+                    function set_cursor_visible(self&, bool: visible) -> void;
+                    function cursor_visible(const self&) -> bool;
+                    function set_cursor_locked(self&, bool: locked) -> bool;
+                    function cursor_locked(const self&) -> bool;
+                    function set_relative_mouse(self&, bool: on) -> bool;
+                    function clipboard(self&) -> string;
+                    function set_clipboard(self&, const string&: text_value) -> bool;
+                    function set_drop_enabled(self&, bool: on) -> void;
+                    function start_text_input(self&) -> void;
+                    function stop_text_input(self&) -> void;
+                    function text_input_active(const self&) -> bool;
+                    function typed_text(const self&) -> string;
+                    function mouse_x(const self&) -> long int;
+                    function mouse_y(const self&) -> long int;
+                    function mouse_dx(const self&) -> long int;
+                    function mouse_dy(const self&) -> long int;
+                    function scroll_x(const self&) -> float;
+                    function scroll_y(const self&) -> float;
+
+                    function set_background(self&, const Color&: c) -> void {
+                        self.native_set_background(c.packed());
+                    } end function set_background
+
+                    function background(const self&) -> Color {
+                        return Color::from_packed(self.native_background());
+                    } end function background
+
+                    function set_mode(self&, WindowMode: mode, long int: monitor = -1) -> bool {
+                        return self.native_set_mode(static_cast<long int>(mode), monitor);
+                    } end function set_mode
+
+                    function mode(const self&) -> WindowMode {
+                        return static_cast<WindowMode>(self.native_mode());
+                    } end function mode
+
+                    function set_cursor(self&, Cursor: cursor) -> bool {
+                        return self.native_set_cursor(static_cast<long int>(cursor));
+                    } end function set_cursor
+
+                    function set_cursor(self&, const Image&: img) -> bool {
+                        return self.native_set_cursor_image(img, 0, 0);
+                    } end function set_cursor
+
+                    function set_cursor(self&, const Image&: img, long int: hot_x, long int: hot_y) -> bool {
+                        return self.native_set_cursor_image(img, hot_x, hot_y);
+                    } end function set_cursor
+
+                    function key_down(const self&, Key: k) -> bool {
+                        return self.native_key_down(static_cast<long int>(k));
+                    } end function key_down
+
+                    function key_pressed(const self&, Key: k) -> bool {
+                        return self.native_key_pressed(static_cast<long int>(k));
+                    } end function key_pressed
+
+                    function key_released(const self&, Key: k) -> bool {
+                        return self.native_key_released(static_cast<long int>(k));
+                    } end function key_released
+
+                    function key_double_pressed(const self&, Key: k) -> bool {
+                        return self.native_key_double_pressed(static_cast<long int>(k));
+                    } end function key_double_pressed
+
+                    function key_held_for(const self&, Key: k) -> float {
+                        return self.native_key_held_for(static_cast<long int>(k));
+                    } end function key_held_for
+
+                    function logical_key_down(const self&, Key: k) -> bool {
+                        return self.native_logical_key_down(static_cast<long int>(k));
+                    } end function logical_key_down
+
+                    function logical_key_pressed(const self&, Key: k) -> bool {
+                        return self.native_logical_key_pressed(static_cast<long int>(k));
+                    } end function logical_key_pressed
+
+                    function logical_key_released(const self&, Key: k) -> bool {
+                        return self.native_logical_key_released(static_cast<long int>(k));
+                    } end function logical_key_released
+
+                    function logical_key_double_pressed(const self&, Key: k) -> bool {
+                        return self.native_logical_key_double_pressed(static_cast<long int>(k));
+                    } end function logical_key_double_pressed
+
+                    function logical_key_held_for(const self&, Key: k) -> float {
+                        return self.native_logical_key_held_for(static_cast<long int>(k));
+                    } end function logical_key_held_for
+
+                    function physical_key_down(const self&, Key: k) -> bool {
+                        return self.native_key_down(static_cast<long int>(k));
+                    } end function physical_key_down
+
+                    function physical_key_pressed(const self&, Key: k) -> bool {
+                        return self.native_key_pressed(static_cast<long int>(k));
+                    } end function physical_key_pressed
+
+                    function physical_key_released(const self&, Key: k) -> bool {
+                        return self.native_key_released(static_cast<long int>(k));
+                    } end function physical_key_released
+
+                    function physical_key_double_pressed(const self&, Key: k) -> bool {
+                        return self.native_key_double_pressed(static_cast<long int>(k));
+                    } end function physical_key_double_pressed
+
+                    function physical_key_held_for(const self&, Key: k) -> float {
+                        return self.native_key_held_for(static_cast<long int>(k));
+                    } end function physical_key_held_for
+
+                    function key_down(const self&, Key: k, KeyKind: kind) -> bool {
+                        if (kind == KeyKind::physical) then {
+                            return self.physical_key_down(k);
+                        }
+                        if (kind == KeyKind::logical) then {
+                            return self.logical_key_down(k);
+                        }
+                        return self.physical_key_down(k) || self.logical_key_down(k);
+                    } end function key_down
+
+                    function key_pressed(const self&, Key: k, KeyKind: kind) -> bool {
+                        if (kind == KeyKind::physical) then {
+                            return self.physical_key_pressed(k);
+                        }
+                        if (kind == KeyKind::logical) then {
+                            return self.logical_key_pressed(k);
+                        }
+                        return self.physical_key_pressed(k) || self.logical_key_pressed(k);
+                    } end function key_pressed
+
+                    function key_released(const self&, Key: k, KeyKind: kind) -> bool {
+                        if (kind == KeyKind::physical) then {
+                            return self.physical_key_released(k);
+                        }
+                        if (kind == KeyKind::logical) then {
+                            return self.logical_key_released(k);
+                        }
+                        return self.physical_key_released(k) || self.logical_key_released(k);
+                    } end function key_released
+
+                    function key_double_pressed(const self&, Key: k, KeyKind: kind) -> bool {
+                        if (kind == KeyKind::physical) then {
+                            return self.physical_key_double_pressed(k);
+                        }
+                        if (kind == KeyKind::logical) then {
+                            return self.logical_key_double_pressed(k);
+                        }
+                        return self.physical_key_double_pressed(k) || self.logical_key_double_pressed(k);
+                    } end function key_double_pressed
+
+                    function key_held_for(const self&, Key: k, KeyKind: kind) -> float {
+                        if (kind == KeyKind::physical) then {
+                            return self.physical_key_held_for(k);
+                        }
+                        if (kind == KeyKind::logical) then {
+                            return self.logical_key_held_for(k);
+                        }
+                        const float: p = self.physical_key_held_for(k);
+                        const float: l = self.logical_key_held_for(k);
+                        return p > l ? p : l;
+                    } end function key_held_for
+
+                    function modifiers(const self&) -> Modifiers {
+                        return Modifiers(self.native_modifiers());
+                    } end function modifiers
+
+                    function mouse_down(const self&, MouseButton: b = MouseButton::left) -> bool {
+                        return self.native_mouse_down(static_cast<long int>(b));
+                    } end function mouse_down
+
+                    function mouse_pressed(const self&, MouseButton: b = MouseButton::left) -> bool {
+                        return self.native_mouse_pressed(static_cast<long int>(b));
+                    } end function mouse_pressed
+
+                    function mouse_released(const self&, MouseButton: b = MouseButton::left) -> bool {
+                        return self.native_mouse_released(static_cast<long int>(b));
+                    } end function mouse_released
+
+                    function mouse_double_clicked(const self&, MouseButton: b = MouseButton::left) -> bool {
+                        return self.native_mouse_double_clicked(static_cast<long int>(b));
+                    } end function mouse_double_clicked
+
+                    function gamepad_count(const self&) -> long int {
+                        return self.native_gamepad_count();
+                    } end function gamepad_count
+
+                    function gamepad(const self&, long int: slot) -> Gamepad {
+                        if (slot < 0 || slot >= self.native_gamepad_slots()) then {
+                            throw std::errors::window_error(static_cast<string>(`there is no gamepad in slot ${slot}`));
+                        }
+                        return self.native_gamepad(slot);
+                    } end function gamepad
+
+                    function gamepads(const self&) -> std::collections::Vector<Gamepad> {
+                        std::collections::Vector<Gamepad>: out;
+                        for (long int: k = 0; k < self.native_gamepad_slots(); k++) {
+                            Gamepad: g = self.native_gamepad(k);
+                            if (g.connected()) then {
+                                out.push_back(g);
+                            }
+                        }
+                        return out;
+                    } end function gamepads
+
+                    function has_gamepad(const self&) -> bool {
+                        return self.native_primary_gamepad() >= 0;
+                    } end function has_gamepad
+
+                    function primary_gamepad(const self&) -> Gamepad {
+                        const long int: slot = self.native_primary_gamepad();
+                        if (slot < 0) then {
+                            throw std::errors::window_error("no gamepad is connected; check has_gamepad() first");
+                        }
+                        return self.native_gamepad(slot);
+                    } end function primary_gamepad
+
+                    function any_gamepad_button(const self&, GamepadButton: b) -> bool {
+                        return self.native_any_gamepad_button(static_cast<long int>(b));
+                    } end function any_gamepad_button
+
+                    function add_gamepad_mappings(const self&, const string&: mappings) -> long int {
+                        return self.native_add_gamepad_mappings(mappings);
+                    } end function add_gamepad_mappings
+
+                    function load_gamepad_mappings(const self&, const string&: path) -> long int {
+                        return self.native_load_gamepad_mappings(path);
+                    } end function load_gamepad_mappings
+                } end class Window
+            } end extern
+
+            function monitors() -> std::collections::Vector<Monitor> {
+                std::collections::Vector<Monitor>: out;
+                const long int: n = detail::Native::monitor_count();
+                for (long int: k = 0; k < n; k++) {
+                    out.push_back(detail::monitor_of(detail::Native::monitor_at(k)));
+                }
+                return out;
+            } end function monitors
+
+            function primary_monitor() -> Monitor {
+                return detail::monitor_of(detail::Native::primary_monitor());
+            } end function primary_monitor
+
+            namespace dialogs {
+                enum Buttons { ok, ok_cancel, yes_no, yes_no_cancel, retry_cancel }
+
+                enum Icon { info, warning, error, question }
+
+                enum Answer { ok, cancel, yes, no, retry }
+
+                struct FileFilter {
+                    string: name = "";
+                    string: patterns = "";
+
+                    constructor() { }
+
+                    constructor(const string&: n, const string&: p) : name = n, patterns = p { }
+                } end struct FileFilter
+
+                namespace detail {
+                    function names_of(const std::collections::Vector<FileFilter>&: filters) -> std::collections::Vector<string> {
+                        std::collections::Vector<string>: out;
+                        for (const FileFilter&: f in filters) {
+                            out.push_back(f.name);
+                        }
+                        return out;
+                    } end function names_of
+
+                    function patterns_of(const std::collections::Vector<FileFilter>&: filters) -> std::collections::Vector<string> {
+                        std::collections::Vector<string>: out;
+                        for (const FileFilter&: f in filters) {
+                            out.push_back(f.patterns);
+                        }
+                        return out;
+                    } end function patterns_of
+
+                    function some_or_none(const string&: s) -> std::optional::Optional<string> {
+                        if (s.size() == 0) then {
+                            return std::optional::nothing<string>();
+                        }
+                        return std::optional::Optional<string>(s);
+                    } end function some_or_none
+                } end namespace detail
+
+                function available() -> bool {
+                    return std::windows::detail::Native::dialogs_available();
+                } end function available
+
+                function message_box(const string&: title, const string&: message, Buttons: buttons = Buttons::ok, Icon: icon = Icon::info) -> Answer {
+                    return static_cast<Answer>(std::windows::detail::Native::message_box(title, message, static_cast<long int>(buttons), static_cast<long int>(icon)));
+                } end function message_box
+
+                function show_info(const string&: title, const string&: message) -> void {
+                    message_box(title, message, Buttons::ok, Icon::info);
+                } end function show_info
+
+                function show_warning(const string&: title, const string&: message) -> void {
+                    message_box(title, message, Buttons::ok, Icon::warning);
+                } end function show_warning
+
+                function show_error(const string&: title, const string&: message) -> void {
+                    message_box(title, message, Buttons::ok, Icon::error);
+                } end function show_error
+
+                function ask_yes_no(const string&: title, const string&: message) -> bool {
+                    return message_box(title, message, Buttons::yes_no, Icon::question) == Answer::yes;
+                } end function ask_yes_no
+
+                function open_file(const string&: title, const string&: start, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::optional::Optional<string> {
+                    return detail::some_or_none(std::windows::detail::Native::open_file(title, start, detail::names_of(filters), detail::patterns_of(filters)));
+                } end function open_file
+
+                function open_file(const string&: title = "") -> std::optional::Optional<string> {
+                    return open_file(title, "");
+                } end function open_file
+
+                function open_files(const string&: title, const string&: start, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::collections::Vector<string> {
+                    return std::windows::detail::Native::open_files(title, start, detail::names_of(filters), detail::patterns_of(filters));
+                } end function open_files
+
+                function open_files(const string&: title = "") -> std::collections::Vector<string> {
+                    return open_files(title, "");
+                } end function open_files
+
+                function save_file(const string&: title, const string&: start, const string&: name, const std::collections::Vector<FileFilter>&: filters = std::collections::Vector<FileFilter>()) -> std::optional::Optional<string> {
+                    return detail::some_or_none(std::windows::detail::Native::save_file(title, start, name, detail::names_of(filters), detail::patterns_of(filters)));
+                } end function save_file
+
+                function save_file(const string&: title = "") -> std::optional::Optional<string> {
+                    return save_file(title, "", "");
+                } end function save_file
+
+                function select_folder(const string&: title, const string&: start) -> std::optional::Optional<string> {
+                    return detail::some_or_none(std::windows::detail::Native::select_folder(title, start));
+                } end function select_folder
+
+                function select_folder(const string&: title = "") -> std::optional::Optional<string> {
+                    return select_folder(title, "");
+                } end function select_folder
+            } end namespace dialogs
+        } end namespace windows
+    } end namespace std
 } end safe

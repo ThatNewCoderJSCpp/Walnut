@@ -2,6 +2,7 @@
 #define WALNUT_GRAPHICS_HPP
 
 #include "walnut_runtime.hpp"
+#include "fizmo/../../Source/Util Hpp/util_functions.hpp"
 #include "walnut_collections.hpp"
 #include "fizmo/../../Source/Colors/color.hpp"
 #include "fizmo/../../Source/Images/Bitmap/image.hpp"

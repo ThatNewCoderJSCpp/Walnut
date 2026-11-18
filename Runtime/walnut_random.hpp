@@ -2,6 +2,7 @@
 #define WALNUT_RANDOM_HPP
 
 #include "walnut_runtime.hpp"
+#include "fizmo/../../Source/Random/random_generator.hpp"
 
 #include <cstdint>
 #include <exception>

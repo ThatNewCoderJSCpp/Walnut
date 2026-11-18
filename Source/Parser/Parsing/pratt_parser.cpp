@@ -587,7 +587,7 @@ nodes::ASTNode* Parser::parse_atom() {
             switch (lookahead(2).kind()) {
                 case TK::AutoDeclaration: case TK::DynamicDeclaration: case TK::BooleanDeclaration: case TK::CharacterDeclaration:
                 case TK::ConstantDeclaration: case TK::DecimalDeclaration: case TK::IntegerDeclaration: case TK::LongDeclaration:
-                case TK::StringDeclaration: case TK::ShortDeclaration: case TK::UnsignedDeclaration: case TK::TextDeclaration:
+                case TK::StringDeclaration: case TK::ShortDeclaration: case TK::UnsignedDeclaration: case TK::TextDeclaration: case TK::StringViewDeclaration:
                 case TK::VoidKeyword:
                     throw ParserError::invalid_expression(reporter, current_token(),
                         "type traits are variable templates in std::traits: write 'std::traits::" + std::string(trait_spelling) + "<...>' instead of '" + std::string(trait_spelling) + "(...)'");

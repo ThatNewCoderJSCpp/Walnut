@@ -43,6 +43,7 @@ class SourceManager {
     std::unordered_map<std::string, FileId> m_by_path;
     std::unordered_map<std::string, FileId> m_by_raw;
     std::unordered_map<std::string, std::string> m_virtual;
+    mutable std::size_t m_last_hit = 0;
 
 public:
     static constexpr const char* LIBRARY_ROOT = "<walnut>";
@@ -71,9 +72,13 @@ public:
     const std::string& filename(FileId id) const noexcept { return m_files[id].filename; }
 
     std::optional<FileId> file_containing(const char* p) const noexcept {
+        if (m_last_hit < m_files.size()) {
+            const Entry& e = m_files[m_last_hit];
+            if (p >= e.data && p <= e.data + e.size) return static_cast<FileId>(m_last_hit);
+        }
         for (std::size_t i = 0; i < m_files.size(); ++i) {
             const Entry& e = m_files[i];
-            if (p >= e.data && p <= e.data + e.size) return static_cast<FileId>(i);
+            if (p >= e.data && p <= e.data + e.size) { m_last_hit = i; return static_cast<FileId>(i); }
         }
         return std::nullopt;
     }

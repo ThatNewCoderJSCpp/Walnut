@@ -3,37 +3,37 @@ import module.iterators
 
 namespace std {
     safe(compile) {
-    namespace errors {
-        class collection_error {
-        public:
-            string: message;
+        namespace errors {
+            class collection_error {
+            public:
+                string: message;
 
-            constructor(const string&: m) : message = m { }
+                constructor(string: m) : message = m { }
 
-            function what(const self&) -> string {
-                return self.message;
-            } end function what
-        } end class collection_error
-    } end namespace errors
+                function what(const self&) -> string {
+                    return self.message;
+                } end function what
+            } end class collection_error
+        } end namespace errors
     } end safe
 
     namespace collections {
         namespace detail {
             safe(compile) {
-            function out_of_range(long int: index, long int: size) -> std::errors::collection_error {
-                return std::errors::collection_error(static_cast<string>(`index ${index} is out of range for a collection of size ${size}`));
-            } end function out_of_range
+                function out_of_range(long int: index, long int: size) -> std::errors::collection_error {
+                    return std::errors::collection_error(static_cast<string>(`index ${index} is out of range for a collection of size ${size}`));
+                } end function out_of_range
 
-            function empty_error(const string&: what) -> std::errors::collection_error {
-                return std::errors::collection_error(static_cast<string>(`${what} on an empty collection`));
-            } end function empty_error
+                function empty_error(const string&: what) -> std::errors::collection_error {
+                    return std::errors::collection_error(static_cast<string>(`${what} on an empty collection`));
+                } end function empty_error
 
-            template <typename T>
-            function swap_items(T&: a, T&: b) -> void {
-                T: held = std::core::move(a);
-                a = std::core::move(b);
-                b = std::core::move(held);
-            } end function swap_items
+                template <typename T>
+                function swap_items(T&: a, T&: b) -> void {
+                    T: held = std::core::move(a);
+                    a = std::core::move(b);
+                    b = std::core::move(held);
+                } end function swap_items
             } end safe
 
             template <typename T>
@@ -132,14 +132,14 @@ namespace std {
             } end function intro_sort
 
             safe(compile) {
-            template <typename T>
-            function sort_range(T*: data, long int: count) -> void {
-                int: depth = 0;
-                for (long int: n = count; n > 1; n /= 2) {
-                    depth += 2;
-                }
-                intro_sort(data, 0, count, depth);
-            } end function sort_range
+                template <typename T>
+                function sort_range(T*: data, long int: count) -> void {
+                    int: depth = 0;
+                    for (long int: n = count; n > 1; n /= 2) {
+                        depth += 2;
+                    }
+                    intro_sort(data, 0, count, depth);
+                } end function sort_range
             } end safe
 
             template <typename T>
@@ -191,62 +191,62 @@ namespace std {
             } end function same_items
 
             safe(compile) {
-            function mix(unsigned long int: h) -> unsigned long int {
-                std::hardware_uint64: x = static_cast<std::hardware_uint64>(h);
-                x = (x ^ (x >> static_cast<std::hardware_uint64>(30))) * static_cast<std::hardware_uint64>(13787848793156543929ul);
-                x = (x ^ (x >> static_cast<std::hardware_uint64>(27))) * static_cast<std::hardware_uint64>(10723151780598845931ul);
-                return static_cast<unsigned long int>(x ^ (x >> static_cast<std::hardware_uint64>(31)));
-            } end function mix
+                function mix(unsigned long int: h) -> unsigned long int {
+                    std::hardware_uint64: x = static_cast<std::hardware_uint64>(h);
+                    x = (x ^ (x >> static_cast<std::hardware_uint64>(30))) * static_cast<std::hardware_uint64>(13787848793156543929ul);
+                    x = (x ^ (x >> static_cast<std::hardware_uint64>(27))) * static_cast<std::hardware_uint64>(10723151780598845931ul);
+                    return static_cast<unsigned long int>(x ^ (x >> static_cast<std::hardware_uint64>(31)));
+                } end function mix
 
-            function combine(unsigned long int: a, unsigned long int: b) -> unsigned long int {
-                return static_cast<unsigned long int>(static_cast<std::hardware_uint64>(a) * static_cast<std::hardware_uint64>(31) + static_cast<std::hardware_uint64>(b));
-            } end function combine
+                function combine(unsigned long int: a, unsigned long int: b) -> unsigned long int {
+                    return static_cast<unsigned long int>(static_cast<std::hardware_uint64>(a) * static_cast<std::hardware_uint64>(31) + static_cast<std::hardware_uint64>(b));
+                } end function combine
 
-            function grown(long int: capacity, long int: needed) -> long int {
-                long int: next = capacity < 4 ? 4 : capacity * 2;
-                while (next < needed) {
-                    next *= 2;
-                }
-                return next;
-            } end function grown
+                function grown(long int: capacity, long int: needed) -> long int {
+                    long int: next = capacity < 4 ? 4 : capacity * 2;
+                    while (next < needed) {
+                        next *= 2;
+                    }
+                    return next;
+                } end function grown
             } end safe
         } end namespace detail
 
         safe(compile) {
-        template <typename A, typename B>
-        struct Pair {
-            A: first;
-            B: second;
+            template <typename A, typename B>
+            struct Pair {
+                A: first;
+                B: second;
 
-            constructor() { }
+                constructor() { }
 
-            constructor(const A&: a, const B&: b) : first = a, second = b { }
+                constructor(const A&: a, const B&: b) : first = a, second = b { }
 
-            operator(==) function(const self&, const Pair&: other) -> bool {
-                return self.first == other.first && self.second == other.second;
-            }
+                operator(==) function(const self&, const Pair&: other) -> bool {
+                    return self.first == other.first && self.second == other.second;
+                }
 
-            operator(!=) function(const self&, const Pair&: other) -> bool {
-                return !(self.first == other.first && self.second == other.second);
-            }
-        } end struct Pair
+                operator(!=) function(const self&, const Pair&: other) -> bool {
+                    return !(self.first == other.first && self.second == other.second);
+                }
+            } end struct Pair
 
-        template <typename... Ts>
-        struct Tuple {
-            Ts...: items;
+            template <typename... Ts>
+            struct Tuple {
+                Ts...: items;
 
-            function size(const self&) -> long int {
-                return countof(self.items);
-            } end function size
-        } end struct Tuple
+                function size(const self&) -> long int {
+                    return countof(self.items);
+                } end function size
+            } end struct Tuple
 
-        template <typename... Ts>
-        function make_tuple(Ts...: values) -> Tuple<Ts...> {
-            return Tuple<Ts...>{values...};
-        } end function make_tuple
+            template <typename... Ts>
+            function make_tuple(Ts...: values) -> Tuple<Ts...> {
+                return Tuple<Ts...>{values...};
+            } end function make_tuple
 
-        template <typename C, typename E>
-        class WhereQuery;
+            template <typename C, typename E>
+            class WhereQuery;
         } end safe
 
         extern "C++" from "<walnut_collections.hpp>" {
@@ -3370,203 +3370,203 @@ namespace std {
         } end function hash_address
 
         safe(compile) {
-        template <typename T>
-        class Stack {
-            Vector<T>: m_items;
+            template <typename T>
+            class Stack {
+                Vector<T>: m_items;
 
-        public:
-            constructor() { }
+            public:
+                constructor() { }
 
-            function push(self&, const T&: value) -> void {
-                self.m_items.push_back(value);
-            } end function push
+                function push(self&, const T&: value) -> void {
+                    self.m_items.push_back(value);
+                } end function push
 
-            function pop(self&) -> T {
-                if (self.m_items.empty()) then {
-                    throw detail::empty_error("pop()");
+                function pop(self&) -> T {
+                    if (self.m_items.empty()) then {
+                        throw detail::empty_error("pop()");
+                    }
+                    return self.m_items.pop_back();
+                } end function pop
+
+                function top(self&) -> T& {
+                    if (self.m_items.empty()) then {
+                        throw detail::empty_error("top()");
+                    }
+                    return self.m_items.back();
+                } end function top
+
+                function size(const self&) -> long int {
+                    return self.m_items.size();
+                } end function size
+
+                function empty(const self&) -> bool {
+                    return self.m_items.empty();
+                } end function empty
+
+                function clear(self&) -> void {
+                    self.m_items.clear();
+                } end function clear
+            } end class Stack
+
+            template <typename T>
+            class Queue {
+                Deque<T>: m_items;
+
+            public:
+                constructor() { }
+
+                function push(self&, const T&: value) -> void {
+                    self.m_items.push_back(value);
+                } end function push
+
+                function pop(self&) -> T {
+                    if (self.m_items.empty()) then {
+                        throw detail::empty_error("pop()");
+                    }
+                    return self.m_items.pop_front();
+                } end function pop
+
+                function front(self&) -> T& {
+                    if (self.m_items.empty()) then {
+                        throw detail::empty_error("front()");
+                    }
+                    return self.m_items.front();
+                } end function front
+
+                function back(self&) -> T& {
+                    if (self.m_items.empty()) then {
+                        throw detail::empty_error("back()");
+                    }
+                    return self.m_items.back();
+                } end function back
+
+                function size(const self&) -> long int {
+                    return self.m_items.size();
+                } end function size
+
+                function empty(const self&) -> bool {
+                    return self.m_items.empty();
+                } end function empty
+
+                function clear(self&) -> void {
+                    self.m_items.clear();
+                } end function clear
+            } end class Queue
+
+            template <typename T, bool Largest = true>
+            class PriorityQueue {
+                Vector<T>: m_heap;
+
+                function before(const self&, const T&: a, const T&: b) -> bool {
+                    if constexpr (Largest) then {
+                        return a < b;
+                    } else then {
+                        return b < a;
+                    }
+                } end function before
+
+            public:
+                constructor() { }
+
+                constructor(T...: items) {
+                    for (const T&: item in items) {
+                        self.push(item);
+                    }
                 }
-                return self.m_items.pop_back();
-            } end function pop
 
-            function top(self&) -> T& {
-                if (self.m_items.empty()) then {
-                    throw detail::empty_error("top()");
+                function push(self&, const T&: value) -> void {
+                    self.m_heap.push_back(value);
+                    long int: child = self.m_heap.size() - 1;
+                    while (child > 0) {
+                        const long int: parent = (child - 1) / 2;
+                        if (!self.before(self.m_heap[parent], self.m_heap[child])) then {
+                            break;
+                        }
+                        detail::swap_items(self.m_heap[parent], self.m_heap[child]);
+                        child = parent;
+                    }
+                } end function push
+
+                function top(const self&) -> const T& {
+                    if (self.m_heap.empty()) then {
+                        throw detail::empty_error("top()");
+                    }
+                    return self.m_heap[0];
+                } end function top
+
+                function pop(self&) -> T {
+                    if (self.m_heap.empty()) then {
+                        throw detail::empty_error("pop()");
+                    }
+                    const long int: last = self.m_heap.size() - 1;
+                    detail::swap_items(self.m_heap[0], self.m_heap[last]);
+                    T: out = self.m_heap.pop_back();
+                    const long int: count = self.m_heap.size();
+                    long int: root = 0;
+                    while (root * 2 + 1 < count) {
+                        long int: child = root * 2 + 1;
+                        if (child + 1 < count && self.before(self.m_heap[child], self.m_heap[child + 1])) then {
+                            child += 1;
+                        }
+                        if (!self.before(self.m_heap[root], self.m_heap[child])) then {
+                            break;
+                        }
+                        detail::swap_items(self.m_heap[root], self.m_heap[child]);
+                        root = child;
+                    }
+                    return out;
+                } end function pop
+
+                function size(const self&) -> long int {
+                    return self.m_heap.size();
+                } end function size
+
+                function empty(const self&) -> bool {
+                    return self.m_heap.empty();
+                } end function empty
+
+                function clear(self&) -> void {
+                    self.m_heap.clear();
+                } end function clear
+            } end class PriorityQueue
+
+            function hash_text(string_view: s) -> unsigned long int {
+                std::hardware_uint64: h = static_cast<std::hardware_uint64>(14695981039346656037ul);
+                for (char: c in s) {
+                    h = (h ^ static_cast<std::hardware_uint64>(static_cast<long int>(c))) * static_cast<std::hardware_uint64>(1099511628211ul);
                 }
-                return self.m_items.back();
-            } end function top
+                return static_cast<unsigned long int>(h);
+            } end function hash_text
 
-            function size(const self&) -> long int {
-                return self.m_items.size();
-            } end function size
-
-            function empty(const self&) -> bool {
-                return self.m_items.empty();
-            } end function empty
-
-            function clear(self&) -> void {
-                self.m_items.clear();
-            } end function clear
-        } end class Stack
-
-        template <typename T>
-        class Queue {
-            Deque<T>: m_items;
-
-        public:
-            constructor() { }
-
-            function push(self&, const T&: value) -> void {
-                self.m_items.push_back(value);
-            } end function push
-
-            function pop(self&) -> T {
-                if (self.m_items.empty()) then {
-                    throw detail::empty_error("pop()");
-                }
-                return self.m_items.pop_front();
-            } end function pop
-
-            function front(self&) -> T& {
-                if (self.m_items.empty()) then {
-                    throw detail::empty_error("front()");
-                }
-                return self.m_items.front();
-            } end function front
-
-            function back(self&) -> T& {
-                if (self.m_items.empty()) then {
-                    throw detail::empty_error("back()");
-                }
-                return self.m_items.back();
-            } end function back
-
-            function size(const self&) -> long int {
-                return self.m_items.size();
-            } end function size
-
-            function empty(const self&) -> bool {
-                return self.m_items.empty();
-            } end function empty
-
-            function clear(self&) -> void {
-                self.m_items.clear();
-            } end function clear
-        } end class Queue
-
-        template <typename T, bool Largest = true>
-        class PriorityQueue {
-            Vector<T>: m_heap;
-
-            function before(const self&, const T&: a, const T&: b) -> bool {
-                if constexpr (Largest) then {
-                    return a < b;
+            template <typename T>
+            function hash_of(const T&: value) -> unsigned long int {
+                if constexpr (std::traits::is_bool<T>) then {
+                    return value ? 1ul : 0ul;
+                } else if constexpr (std::traits::is_char<T>) then {
+                    return detail::mix(static_cast<unsigned long int>(static_cast<long int>(value)));
+                } else if constexpr (std::traits::is_enum<T>) then {
+                    return hash_of(static_cast<std::traits::underlying_type<T>>(value));
+                } else if constexpr (std::traits::is_builtin_integer<T>) then {
+                    return detail::mix(static_cast<unsigned long int>(value));
+                } else if constexpr (std::traits::is_builtin_float<T>) then {
+                    return hash_text(static_cast<string>(`${value}`));
+                } else if constexpr (std::traits::is_string<T> || std::traits::is_string_view<T>) then {
+                    return hash_text(value);
+                } else if constexpr (std::traits::is_pointer<T>) then {
+                    return hash_address(value);
                 } else then {
-                    return b < a;
+                    return value.hash();
                 }
-            } end function before
+            } end function hash_of
 
-        public:
-            constructor() { }
+            template <typename A, typename B>
+            function hash_of(const Pair<A, B>&: p) -> unsigned long int {
+                return detail::combine(hash_of(p.first), hash_of(p.second));
+            } end function hash_of
 
-            constructor(T...: items) {
-                for (const T&: item in items) {
-                    self.push(item);
-                }
-            }
-
-            function push(self&, const T&: value) -> void {
-                self.m_heap.push_back(value);
-                long int: child = self.m_heap.size() - 1;
-                while (child > 0) {
-                    const long int: parent = (child - 1) / 2;
-                    if (!self.before(self.m_heap[parent], self.m_heap[child])) then {
-                        break;
-                    }
-                    detail::swap_items(self.m_heap[parent], self.m_heap[child]);
-                    child = parent;
-                }
-            } end function push
-
-            function top(const self&) -> const T& {
-                if (self.m_heap.empty()) then {
-                    throw detail::empty_error("top()");
-                }
-                return self.m_heap[0];
-            } end function top
-
-            function pop(self&) -> T {
-                if (self.m_heap.empty()) then {
-                    throw detail::empty_error("pop()");
-                }
-                const long int: last = self.m_heap.size() - 1;
-                detail::swap_items(self.m_heap[0], self.m_heap[last]);
-                T: out = self.m_heap.pop_back();
-                const long int: count = self.m_heap.size();
-                long int: root = 0;
-                while (root * 2 + 1 < count) {
-                    long int: child = root * 2 + 1;
-                    if (child + 1 < count && self.before(self.m_heap[child], self.m_heap[child + 1])) then {
-                        child += 1;
-                    }
-                    if (!self.before(self.m_heap[root], self.m_heap[child])) then {
-                        break;
-                    }
-                    detail::swap_items(self.m_heap[root], self.m_heap[child]);
-                    root = child;
-                }
-                return out;
-            } end function pop
-
-            function size(const self&) -> long int {
-                return self.m_heap.size();
-            } end function size
-
-            function empty(const self&) -> bool {
-                return self.m_heap.empty();
-            } end function empty
-
-            function clear(self&) -> void {
-                self.m_heap.clear();
-            } end function clear
-        } end class PriorityQueue
-
-        function hash_text(const string&: s) -> unsigned long int {
-            std::hardware_uint64: h = static_cast<std::hardware_uint64>(14695981039346656037ul);
-            for (char: c in s) {
-                h = (h ^ static_cast<std::hardware_uint64>(static_cast<long int>(c))) * static_cast<std::hardware_uint64>(1099511628211ul);
-            }
-            return static_cast<unsigned long int>(h);
-        } end function hash_text
-
-        template <typename T>
-        function hash_of(const T&: value) -> unsigned long int {
-            if constexpr (std::traits::is_bool<T>) then {
-                return value ? 1ul : 0ul;
-            } else if constexpr (std::traits::is_char<T>) then {
-                return detail::mix(static_cast<unsigned long int>(static_cast<long int>(value)));
-            } else if constexpr (std::traits::is_enum<T>) then {
-                return detail::mix(static_cast<unsigned long int>(static_cast<long long int>(value)));
-            } else if constexpr (std::traits::is_builtin_integer<T>) then {
-                return detail::mix(static_cast<unsigned long int>(value));
-            } else if constexpr (std::traits::is_builtin_float<T>) then {
-                return hash_text(static_cast<string>(`${value}`));
-            } else if constexpr (std::traits::is_string<T>) then {
-                return hash_text(static_cast<string>(value));
-            } else if constexpr (std::traits::is_pointer<T>) then {
-                return hash_address(value);
-            } else then {
-                return value.hash();
-            }
-        } end function hash_of
-
-        template <typename A, typename B>
-        function hash_of(const Pair<A, B>&: p) -> unsigned long int {
-            return detail::combine(hash_of(p.first), hash_of(p.second));
-        } end function hash_of
-
-        function hash_combine(unsigned long int: a, unsigned long int: b) -> unsigned long int {
-            return detail::combine(a, b);
-        } end function hash_combine
+            function hash_combine(unsigned long int: a, unsigned long int: b) -> unsigned long int {
+                return detail::combine(a, b);
+            } end function hash_combine
         } end safe
 
         template <typename K, typename V>
@@ -3844,83 +3844,83 @@ namespace std {
         } end class UnorderedMap
 
         safe(compile) {
-        template <typename T>
-        class UnorderedSet {
-            UnorderedMap<T, bool>: m_items;
+            template <typename T>
+            class UnorderedSet {
+                UnorderedMap<T, bool>: m_items;
 
-        public:
-            using Iterator = std::iterators::Keys<UnorderedMap<T, bool>::Iterator, const T>;
-            using ReverseIterator = std::iterators::Keys<UnorderedMap<T, bool>::ReverseIterator, const T>;
+            public:
+                using Iterator = std::iterators::Keys<UnorderedMap<T, bool>::Iterator, const T>;
+                using ReverseIterator = std::iterators::Keys<UnorderedMap<T, bool>::ReverseIterator, const T>;
 
-            constructor() { }
+                constructor() { }
 
-            constructor(T...: items) {
-                for (const T&: item in items) {
-                    self.m_items.insert(item, true);
+                constructor(T...: items) {
+                    for (const T&: item in items) {
+                        self.m_items.insert(item, true);
+                    }
                 }
-            }
 
-            function size(const self&) -> long int {
-                return self.m_items.size();
-            } end function size
+                function size(const self&) -> long int {
+                    return self.m_items.size();
+                } end function size
 
-            function empty(const self&) -> bool {
-                return self.m_items.empty();
-            } end function empty
+                function empty(const self&) -> bool {
+                    return self.m_items.empty();
+                } end function empty
 
-            function begin(const self&) -> Iterator {
-                return Iterator(self.m_items.begin());
-            } end function begin
+                function begin(const self&) -> Iterator {
+                    return Iterator(self.m_items.begin());
+                } end function begin
 
-            function end(const self&) -> Iterator {
-                return Iterator(self.m_items.end());
-            } end function end
+                function end(const self&) -> Iterator {
+                    return Iterator(self.m_items.end());
+                } end function end
 
-            function rbegin(const self&) -> ReverseIterator {
-                return ReverseIterator(self.m_items.rbegin());
-            } end function rbegin
+                function rbegin(const self&) -> ReverseIterator {
+                    return ReverseIterator(self.m_items.rbegin());
+                } end function rbegin
 
-            function rend(const self&) -> ReverseIterator {
-                return ReverseIterator(self.m_items.rend());
-            } end function rend
+                function rend(const self&) -> ReverseIterator {
+                    return ReverseIterator(self.m_items.rend());
+                } end function rend
 
-            function backwards(const self&) -> std::iterators::Range<ReverseIterator> {
-                return std::iterators::Range<ReverseIterator>(self.rbegin(), self.rend());
-            } end function backwards
+                function backwards(const self&) -> std::iterators::Range<ReverseIterator> {
+                    return std::iterators::Range<ReverseIterator>(self.rbegin(), self.rend());
+                } end function backwards
 
-            function insert(self&, const T&: value) -> bool {
-                return self.m_items.insert(value, true);
-            } end function insert
+                function insert(self&, const T&: value) -> bool {
+                    return self.m_items.insert(value, true);
+                } end function insert
 
-            function contains(const self&, const T&: value) -> bool {
-                return self.m_items.contains(value);
-            } end function contains
+                function contains(const self&, const T&: value) -> bool {
+                    return self.m_items.contains(value);
+                } end function contains
 
-            function remove(self&, const T&: value) -> bool {
-                return self.m_items.remove(value);
-            } end function remove
+                function remove(self&, const T&: value) -> bool {
+                    return self.m_items.remove(value);
+                } end function remove
 
-            function clear(self&) -> void {
-                self.m_items.clear();
-            } end function clear
+                function clear(self&) -> void {
+                    self.m_items.clear();
+                } end function clear
 
-            function to_vector(const self&) -> Vector<T> {
-                return self.m_items.keys();
-            } end function to_vector
-        } end class UnorderedSet
+                function to_vector(const self&) -> Vector<T> {
+                    return self.m_items.keys();
+                } end function to_vector
+            } end class UnorderedSet
         } end safe
 
         namespace detail {
             safe(compile) {
-            template <typename E>
-            struct TreeNode {
-                E: entry;
-                TreeNode<E>*: left = nullptr;
-                TreeNode<E>*: right = nullptr;
-                TreeNode<E>*: parent = nullptr;
-                long int: count = 1;
-                bool: red = true;
-            } end struct TreeNode
+                template <typename E>
+                struct TreeNode {
+                    E: entry;
+                    TreeNode<E>*: left = nullptr;
+                    TreeNode<E>*: right = nullptr;
+                    TreeNode<E>*: parent = nullptr;
+                    long int: count = 1;
+                    bool: red = true;
+                } end struct TreeNode
             } end safe
 
             template <typename E>
@@ -4760,7 +4760,7 @@ namespace std {
         } end extern
 
         safe(compile) {
-        using TrieSet = Trie;
+            using TrieSet = Trie;
         } end safe
 
         template <typename K, typename V>
@@ -5617,12 +5617,12 @@ namespace std {
         } end class WhereQuery
 
         safe(compile) {
-        namespace detail {
-            template <typename T>
-            function empty_list() -> Vector<std::traits::discard_cv<T>> {
-                return Vector<std::traits::discard_cv<T>>();
-            } end function empty_list
-        } end namespace detail
+            namespace detail {
+                template <typename T>
+                function empty_list() -> Vector<std::traits::discard_cv<T>> {
+                    return Vector<std::traits::discard_cv<T>>();
+                } end function empty_list
+            } end namespace detail
         } end safe
 
         template <typename K, typename V>
@@ -5876,318 +5876,318 @@ namespace std {
         } end class OrderedMap
 
         safe(compile) {
-        template <typename T>
-        class OrderedSet {
-            Vector<T>: m_items;
-            UnorderedMap<T, long int>: m_index;
+            template <typename T>
+            class OrderedSet {
+                Vector<T>: m_items;
+                UnorderedMap<T, long int>: m_index;
 
-            function reindex_from(self&, long int: start) -> void {
-                for (long int: i = start; i < self.m_items.size(); i++) {
-                    self.m_index.set(self.m_items[i], i);
-                }
-            } end function reindex_from
+                function reindex_from(self&, long int: start) -> void {
+                    for (long int: i = start; i < self.m_items.size(); i++) {
+                        self.m_index.set(self.m_items[i], i);
+                    }
+                } end function reindex_from
 
-        public:
-            using Iterator = const T*;
-            using ReverseIterator = std::iterators::Pointer<const T, true>;
+            public:
+                using Iterator = const T*;
+                using ReverseIterator = std::iterators::Pointer<const T, true>;
 
-            constructor() { }
+                constructor() { }
 
-            constructor(T...: items) {
-                for (const T&: item in items) {
-                    self.insert(item);
-                }
-            }
-
-            function size(const self&) -> long int {
-                return self.m_items.size();
-            } end function size
-
-            function empty(const self&) -> bool {
-                return self.m_items.empty();
-            } end function empty
-
-            function begin(const self&) -> const T* {
-                return self.m_items.begin();
-            } end function begin
-
-            function end(const self&) -> const T* {
-                return self.m_items.end();
-            } end function end
-
-            function rbegin(const self&) -> std::iterators::Pointer<const T, true> {
-                return std::iterators::Pointer<const T, true>(self.m_items.data(), self.m_items.size() - 1);
-            } end function rbegin
-
-            function rend(const self&) -> std::iterators::Pointer<const T, true> {
-                return std::iterators::Pointer<const T, true>(self.m_items.data(), -1);
-            } end function rend
-
-            function backwards(const self&) -> std::iterators::Range<std::iterators::Pointer<const T, true>> {
-                return std::iterators::Range<std::iterators::Pointer<const T, true>>(self.rbegin(), self.rend());
-            } end function backwards
-
-            function insert(self&, const T&: value) -> bool {
-                if (self.m_index.contains(value)) then {
-                    return false;
-                }
-                self.m_index.set(value, self.m_items.size());
-                self.m_items.push_back(value);
-                return true;
-            } end function insert
-
-            function contains(const self&, const T&: value) -> bool {
-                return self.m_index.contains(value);
-            } end function contains
-
-            function index_of(const self&, const T&: value) -> long int {
-                return self.m_index.get(value, -1);
-            } end function index_of
-
-            operator([]) function(const self&, long int: i) -> const T& {
-                return self.m_items[i];
-            }
-
-            function remove(self&, const T&: value) -> bool {
-                const long int: where = self.m_index.get(value, -1);
-                if (where < 0) then {
-                    return false;
-                }
-                self.m_index.remove(value);
-                self.m_items.erase(where);
-                self.reindex_from(where);
-                return true;
-            } end function remove
-
-            function pop_last(self&) -> T {
-                if (self.m_items.empty()) then {
-                    throw std::errors::collection_error("pop_last() on an empty set");
-                }
-                T: last = self.m_items.pop_back();
-                self.m_index.remove(last);
-                return last;
-            } end function pop_last
-
-            function clear(self&) -> void {
-                self.m_items.clear();
-                self.m_index.clear();
-            } end function clear
-
-            function to_vector(const self&) -> Vector<T> {
-                return self.m_items;
-            } end function to_vector
-
-            function union_with(const self&, const OrderedSet&: other) -> OrderedSet {
-                OrderedSet: out = *this;
-                for (const T&: v in other) {
-                    out.insert(v);
-                }
-                return out;
-            } end function union_with
-
-            function intersect_with(const self&, const OrderedSet&: other) -> OrderedSet {
-                OrderedSet: out;
-                for (const T&: v in self.m_items) {
-                    if (other.contains(v)) then {
-                        out.insert(v);
+                constructor(T...: items) {
+                    for (const T&: item in items) {
+                        self.insert(item);
                     }
                 }
-                return out;
-            } end function intersect_with
 
-            function except(const self&, const OrderedSet&: other) -> OrderedSet {
-                OrderedSet: out;
-                for (const T&: v in self.m_items) {
-                    if (!other.contains(v)) then {
-                        out.insert(v);
-                    }
-                }
-                return out;
-            } end function except
+                function size(const self&) -> long int {
+                    return self.m_items.size();
+                } end function size
 
-            function is_subset_of(const self&, const OrderedSet&: other) -> bool {
-                for (const T&: v in self.m_items) {
-                    if (!other.contains(v)) then {
+                function empty(const self&) -> bool {
+                    return self.m_items.empty();
+                } end function empty
+
+                function begin(const self&) -> const T* {
+                    return self.m_items.begin();
+                } end function begin
+
+                function end(const self&) -> const T* {
+                    return self.m_items.end();
+                } end function end
+
+                function rbegin(const self&) -> std::iterators::Pointer<const T, true> {
+                    return std::iterators::Pointer<const T, true>(self.m_items.data(), self.m_items.size() - 1);
+                } end function rbegin
+
+                function rend(const self&) -> std::iterators::Pointer<const T, true> {
+                    return std::iterators::Pointer<const T, true>(self.m_items.data(), -1);
+                } end function rend
+
+                function backwards(const self&) -> std::iterators::Range<std::iterators::Pointer<const T, true>> {
+                    return std::iterators::Range<std::iterators::Pointer<const T, true>>(self.rbegin(), self.rend());
+                } end function backwards
+
+                function insert(self&, const T&: value) -> bool {
+                    if (self.m_index.contains(value)) then {
                         return false;
                     }
+                    self.m_index.set(value, self.m_items.size());
+                    self.m_items.push_back(value);
+                    return true;
+                } end function insert
+
+                function contains(const self&, const T&: value) -> bool {
+                    return self.m_index.contains(value);
+                } end function contains
+
+                function index_of(const self&, const T&: value) -> long int {
+                    return self.m_index.get(value, -1);
+                } end function index_of
+
+                operator([]) function(const self&, long int: i) -> const T& {
+                    return self.m_items[i];
                 }
-                return true;
-            } end function is_subset_of
 
-            operator(==) function(const self&, const OrderedSet&: other) -> bool {
-                return self.m_items.size() == other.m_items.size() && self.is_subset_of(other);
-            }
-
-            operator(!=) function(const self&, const OrderedSet&: other) -> bool {
-                return !(*this == other);
-            }
-        } end class OrderedSet
-
-        template <typename T>
-        class Counter {
-            OrderedMap<T, long int>: m_counts;
-
-        public:
-            constructor() { }
-
-            constructor(T...: items) {
-                for (const T&: item in items) {
-                    self.add(item);
-                }
-            }
-
-            static function of(iterable<T>: items) -> Counter {
-                Counter: out;
-                for (const T&: item in items) {
-                    out.add(item);
-                }
-                return out;
-            } end function of
-
-            function size(const self&) -> long int {
-                return self.m_counts.size();
-            } end function size
-
-            function empty(const self&) -> bool {
-                return self.m_counts.empty();
-            } end function empty
-
-            function begin(const self&) -> const Pair<T, long int>* {
-                return self.m_counts.begin();
-            } end function begin
-
-            function end(const self&) -> const Pair<T, long int>* {
-                return self.m_counts.end();
-            } end function end
-
-            function add(self&, const T&: item) -> long int {
-                long int&: n = self.m_counts[item];
-                n += 1;
-                return n;
-            } end function add
-
-            function add(self&, const T&: item, long int: times) -> long int {
-                long int&: n = self.m_counts[item];
-                n += times;
-                return n;
-            } end function add
-
-            function add_all(self&, iterable<T>: items) -> void {
-                for (const T&: item in items) {
-                    self.add(item);
-                }
-            } end function add_all
-
-            function subtract(self&, const T&: item, long int: times = 1) -> long int {
-                long int&: n = self.m_counts[item];
-                n -= times;
-                return n;
-            } end function subtract
-
-            function set(self&, const T&: item, long int: times) -> void {
-                self.m_counts.set(item, times);
-            } end function set
-
-            function count(const self&, const T&: item) -> long int {
-                return self.m_counts.get(item, 0);
-            } end function count
-
-            operator([]) function(const self&, const T&: item) -> long int {
-                return self.m_counts.get(item, 0);
-            }
-
-            function contains(const self&, const T&: item) -> bool {
-                return self.m_counts.contains(item);
-            } end function contains
-
-            function remove(self&, const T&: item) -> bool {
-                return self.m_counts.remove(item);
-            } end function remove
-
-            function clear(self&) -> void {
-                self.m_counts.clear();
-            } end function clear
-
-            function total(const self&) -> long int {
-                long int: sum = 0;
-                for (const auto&: e in self.m_counts) {
-                    sum += e.second;
-                }
-                return sum;
-            } end function total
-
-            function most_common(const self&) -> Vector<Pair<T, long int>> {
-                Vector<Pair<T, long int>>: out = self.m_counts.items();
-                out.stable_sort([](const Pair<T, long int>&: a, const Pair<T, long int>&: b) -> bool { return a.second > b.second; });
-                return out;
-            } end function most_common
-
-            function most_common(const self&, long int: n) -> Vector<Pair<T, long int>> {
-                Vector<Pair<T, long int>>: out = self.most_common();
-                if (n < out.size()) then {
-                    out.resize(n < 0 ? 0 : n);
-                }
-                return out;
-            } end function most_common
-
-            function least_common(const self&, long int: n) -> Vector<Pair<T, long int>> {
-                Vector<Pair<T, long int>>: out = self.m_counts.items();
-                out.stable_sort([](const Pair<T, long int>&: a, const Pair<T, long int>&: b) -> bool { return a.second < b.second; });
-                if (n < out.size()) then {
-                    out.resize(n < 0 ? 0 : n);
-                }
-                return out;
-            } end function least_common
-
-            function elements(const self&) -> Vector<T> {
-                Vector<T>: out;
-                for (const auto&: e in self.m_counts) {
-                    for (long int: i = 0; i < e.second; i++) {
-                        out.push_back(e.first);
-                    }
-                }
-                return out;
-            } end function elements
-
-            function keys(const self&) -> Vector<T> {
-                return self.m_counts.keys();
-            } end function keys
-
-            function drop_zeros(self&) -> long int {
-                Vector<T>: gone;
-                for (const auto&: e in self.m_counts) {
-                    if (e.second <= 0) then {
-                        gone.push_back(e.first);
-                    }
-                }
-                for (const T&: k in gone) {
-                    self.m_counts.remove(k);
-                }
-                return gone.size();
-            } end function drop_zeros
-
-            function merge(self&, const Counter&: other) -> void {
-                for (const auto&: e in other) {
-                    self.add(e.first, e.second);
-                }
-            } end function merge
-
-            operator(==) function(const self&, const Counter&: other) -> bool {
-                if (self.size() != other.size()) then {
-                    return false;
-                }
-                for (const auto&: e in self.m_counts) {
-                    if (other.count(e.first) != e.second || !other.contains(e.first)) then {
+                function remove(self&, const T&: value) -> bool {
+                    const long int: where = self.m_index.get(value, -1);
+                    if (where < 0) then {
                         return false;
                     }
-                }
-                return true;
-            }
+                    self.m_index.remove(value);
+                    self.m_items.erase(where);
+                    self.reindex_from(where);
+                    return true;
+                } end function remove
 
-            operator(!=) function(const self&, const Counter&: other) -> bool {
-                return !(*this == other);
-            }
-        } end class Counter
+                function pop_last(self&) -> T {
+                    if (self.m_items.empty()) then {
+                        throw std::errors::collection_error("pop_last() on an empty set");
+                    }
+                    T: last = self.m_items.pop_back();
+                    self.m_index.remove(last);
+                    return last;
+                } end function pop_last
+
+                function clear(self&) -> void {
+                    self.m_items.clear();
+                    self.m_index.clear();
+                } end function clear
+
+                function to_vector(const self&) -> Vector<T> {
+                    return self.m_items;
+                } end function to_vector
+
+                function union_with(const self&, const OrderedSet&: other) -> OrderedSet {
+                    OrderedSet: out = *this;
+                    for (const T&: v in other) {
+                        out.insert(v);
+                    }
+                    return out;
+                } end function union_with
+
+                function intersect_with(const self&, const OrderedSet&: other) -> OrderedSet {
+                    OrderedSet: out;
+                    for (const T&: v in self.m_items) {
+                        if (other.contains(v)) then {
+                            out.insert(v);
+                        }
+                    }
+                    return out;
+                } end function intersect_with
+
+                function except(const self&, const OrderedSet&: other) -> OrderedSet {
+                    OrderedSet: out;
+                    for (const T&: v in self.m_items) {
+                        if (!other.contains(v)) then {
+                            out.insert(v);
+                        }
+                    }
+                    return out;
+                } end function except
+
+                function is_subset_of(const self&, const OrderedSet&: other) -> bool {
+                    for (const T&: v in self.m_items) {
+                        if (!other.contains(v)) then {
+                            return false;
+                        }
+                    }
+                    return true;
+                } end function is_subset_of
+
+                operator(==) function(const self&, const OrderedSet&: other) -> bool {
+                    return self.m_items.size() == other.m_items.size() && self.is_subset_of(other);
+                }
+
+                operator(!=) function(const self&, const OrderedSet&: other) -> bool {
+                    return !(*this == other);
+                }
+            } end class OrderedSet
+
+            template <typename T>
+            class Counter {
+                OrderedMap<T, long int>: m_counts;
+
+            public:
+                constructor() { }
+
+                constructor(T...: items) {
+                    for (const T&: item in items) {
+                        self.add(item);
+                    }
+                }
+
+                static function of(iterable<T>: items) -> Counter {
+                    Counter: out;
+                    for (const T&: item in items) {
+                        out.add(item);
+                    }
+                    return out;
+                } end function of
+
+                function size(const self&) -> long int {
+                    return self.m_counts.size();
+                } end function size
+
+                function empty(const self&) -> bool {
+                    return self.m_counts.empty();
+                } end function empty
+
+                function begin(const self&) -> const Pair<T, long int>* {
+                    return self.m_counts.begin();
+                } end function begin
+
+                function end(const self&) -> const Pair<T, long int>* {
+                    return self.m_counts.end();
+                } end function end
+
+                function add(self&, const T&: item) -> long int {
+                    long int&: n = self.m_counts[item];
+                    n += 1;
+                    return n;
+                } end function add
+
+                function add(self&, const T&: item, long int: times) -> long int {
+                    long int&: n = self.m_counts[item];
+                    n += times;
+                    return n;
+                } end function add
+
+                function add_all(self&, iterable<T>: items) -> void {
+                    for (const T&: item in items) {
+                        self.add(item);
+                    }
+                } end function add_all
+
+                function subtract(self&, const T&: item, long int: times = 1) -> long int {
+                    long int&: n = self.m_counts[item];
+                    n -= times;
+                    return n;
+                } end function subtract
+
+                function set(self&, const T&: item, long int: times) -> void {
+                    self.m_counts.set(item, times);
+                } end function set
+
+                function count(const self&, const T&: item) -> long int {
+                    return self.m_counts.get(item, 0);
+                } end function count
+
+                operator([]) function(const self&, const T&: item) -> long int {
+                    return self.m_counts.get(item, 0);
+                }
+
+                function contains(const self&, const T&: item) -> bool {
+                    return self.m_counts.contains(item);
+                } end function contains
+
+                function remove(self&, const T&: item) -> bool {
+                    return self.m_counts.remove(item);
+                } end function remove
+
+                function clear(self&) -> void {
+                    self.m_counts.clear();
+                } end function clear
+
+                function total(const self&) -> long int {
+                    long int: sum = 0;
+                    for (const auto&: e in self.m_counts) {
+                        sum += e.second;
+                    }
+                    return sum;
+                } end function total
+
+                function most_common(const self&) -> Vector<Pair<T, long int>> {
+                    Vector<Pair<T, long int>>: out = self.m_counts.items();
+                    out.stable_sort([](const Pair<T, long int>&: a, const Pair<T, long int>&: b) -> bool { return a.second > b.second; });
+                    return out;
+                } end function most_common
+
+                function most_common(const self&, long int: n) -> Vector<Pair<T, long int>> {
+                    Vector<Pair<T, long int>>: out = self.most_common();
+                    if (n < out.size()) then {
+                        out.resize(n < 0 ? 0 : n);
+                    }
+                    return out;
+                } end function most_common
+
+                function least_common(const self&, long int: n) -> Vector<Pair<T, long int>> {
+                    Vector<Pair<T, long int>>: out = self.m_counts.items();
+                    out.stable_sort([](const Pair<T, long int>&: a, const Pair<T, long int>&: b) -> bool { return a.second < b.second; });
+                    if (n < out.size()) then {
+                        out.resize(n < 0 ? 0 : n);
+                    }
+                    return out;
+                } end function least_common
+
+                function elements(const self&) -> Vector<T> {
+                    Vector<T>: out;
+                    for (const auto&: e in self.m_counts) {
+                        for (long int: i = 0; i < e.second; i++) {
+                            out.push_back(e.first);
+                        }
+                    }
+                    return out;
+                } end function elements
+
+                function keys(const self&) -> Vector<T> {
+                    return self.m_counts.keys();
+                } end function keys
+
+                function drop_zeros(self&) -> long int {
+                    Vector<T>: gone;
+                    for (const auto&: e in self.m_counts) {
+                        if (e.second <= 0) then {
+                            gone.push_back(e.first);
+                        }
+                    }
+                    for (const T&: k in gone) {
+                        self.m_counts.remove(k);
+                    }
+                    return gone.size();
+                } end function drop_zeros
+
+                function merge(self&, const Counter&: other) -> void {
+                    for (const auto&: e in other) {
+                        self.add(e.first, e.second);
+                    }
+                } end function merge
+
+                operator(==) function(const self&, const Counter&: other) -> bool {
+                    if (self.size() != other.size()) then {
+                        return false;
+                    }
+                    for (const auto&: e in self.m_counts) {
+                        if (other.count(e.first) != e.second || !other.contains(e.first)) then {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+
+                operator(!=) function(const self&, const Counter&: other) -> bool {
+                    return !(*this == other);
+                }
+            } end class Counter
         } end safe
 
         template <typename K, typename V>
@@ -6266,5 +6266,414 @@ namespace std {
                 return self.m_map.values();
             } end function values
         } end class DefaultMap
+
+        safe(compile) {
+            template <long int N>
+            class Bitset {
+                static_assert(N >= 0, "a Bitset can't have a negative number of bits");
+
+            public:
+                using word_type = std::hardware_uint64;
+                static constexpr long int: word_count = N == 0 ? 1 : (N + 63) / 64;
+
+            private:
+                array[word_count] word_type: m_words;
+
+                static function word_of(long int: index) -> long int {
+                    return index / 64;
+                } end function word_of
+
+                static function bit_of(long int: index) -> word_type {
+                    return static_cast<word_type>(static_cast<word_type>(1) << static_cast<word_type>(index % 64));
+                } end function bit_of
+
+                static function last_word_mask() -> word_type {
+                    if constexpr (N % 64 == 0) then {
+                        return static_cast<word_type>(~static_cast<word_type>(0));
+                    } else then {
+                        return static_cast<word_type>(static_cast<word_type>(static_cast<word_type>(1) << static_cast<word_type>(N % 64)) - static_cast<word_type>(1));
+                    }
+                } end function last_word_mask
+
+                function trim(self&) -> void {
+                    if constexpr (N == 0) then {
+                        self.m_words[0] = static_cast<word_type>(0);
+                    } else then {
+                        self.m_words[word_count - 1] = static_cast<word_type>(self.m_words[word_count - 1] & last_word_mask());
+                    }
+                } end function trim
+
+                function check(const self&, long int: index) -> void {
+                    if (index < 0 || index >= N) then {
+                        throw detail::out_of_range(index, N);
+                    }
+                } end function check
+
+                static function bits_in(word_type: w) -> long int {
+                    long int: n = 0;
+                    while (w != static_cast<word_type>(0)) {
+                        w = static_cast<word_type>(w & static_cast<word_type>(w - static_cast<word_type>(1)));
+                        n += 1;
+                    }
+                    return n;
+                } end function bits_in
+
+                static function lowest_bit(word_type: w) -> long int {
+                    long int: i = 0;
+                    while ((w & static_cast<word_type>(1)) == static_cast<word_type>(0)) {
+                        w = static_cast<word_type>(w >> static_cast<word_type>(1));
+                        i += 1;
+                    }
+                    return i;
+                } end function lowest_bit
+
+            public:
+                class Step {
+                public:
+                    const Bitset*: owner;
+                    long int: at;
+
+                    constructor(const Bitset*: o, long int: a) : owner = o, at = a { }
+
+                    operator(!=) function(const self&, const Step&: other) -> bool {
+                        return self.at != other.at;
+                    }
+
+                    operator(++) function(self&) -> Step& {
+                        self.at = self.owner->find_next(self.at);
+                        return self;
+                    }
+
+                    operator(*) function(const self&) -> long int {
+                        return self.at;
+                    }
+                } end class Step
+
+                constructor() {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(0);
+                    }
+                }
+
+                constructor(long int...: on) {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(0);
+                    }
+                    for (long int: index in on) {
+                        self.set(index);
+                    }
+                }
+
+                static function from_mask(std::hardware_uint64: mask) -> Bitset {
+                    Bitset: out;
+                    out.m_words[0] = mask;
+                    out.trim();
+                    return out;
+                } end function from_mask
+
+                static function from_string(const string&: bits) -> Bitset {
+                    Bitset: out;
+                    const long int: n = bits.length();
+                    for (long int: k = 0; k < n; k++) {
+                        const char: c = bits[k];
+                        const long int: index = n - 1 - k;
+                        if (c == '1') then {
+                            if (index >= N) then {
+                                throw std::errors::collection_error(static_cast<string>(`the string has a '1' at bit ${index}, but this Bitset has only ${N} bits`));
+                            }
+                            out.m_words[word_of(index)] = static_cast<word_type>(out.m_words[word_of(index)] | bit_of(index));
+                        } else if (c != '0') then {
+                            throw std::errors::collection_error(static_cast<string>(`a Bitset string can only have '0' and '1', not '${c}'`));
+                        }
+                    }
+                    return out;
+                } end function from_string
+
+                static function size() -> long int {
+                    return N;
+                } end function size
+
+                function test(const self&, long int: index) -> bool {
+                    self.check(index);
+                    return (self.m_words[word_of(index)] & bit_of(index)) != static_cast<word_type>(0);
+                } end function test
+
+                function is_on(const self&, long int: index) -> bool {
+                    return self.test(index);
+                } end function is_on
+
+                function is_off(const self&, long int: index) -> bool {
+                    return !self.test(index);
+                } end function is_off
+
+                operator([]) function(const self&, long int: index) -> bool {
+                    return self.test(index);
+                }
+
+                function set(self&, long int: index) -> Bitset& {
+                    self.check(index);
+                    self.m_words[word_of(index)] = static_cast<word_type>(self.m_words[word_of(index)] | bit_of(index));
+                    return self;
+                } end function set
+
+                function set(self&, long int: index, bool: on) -> Bitset& {
+                    if (on) then {
+                        return self.set(index);
+                    }
+                    return self.clear(index);
+                } end function set
+
+                function clear(self&, long int: index) -> Bitset& {
+                    self.check(index);
+                    self.m_words[word_of(index)] = static_cast<word_type>(self.m_words[word_of(index)] & static_cast<word_type>(~bit_of(index)));
+                    return self;
+                } end function clear
+
+                function toggle(self&, long int: index) -> Bitset& {
+                    self.check(index);
+                    self.m_words[word_of(index)] = static_cast<word_type>(self.m_words[word_of(index)] ^ bit_of(index));
+                    return self;
+                } end function toggle
+
+                function set_all(self&) -> Bitset& {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(~static_cast<word_type>(0));
+                    }
+                    self.trim();
+                    return self;
+                } end function set_all
+
+                function clear_all(self&) -> Bitset& {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(0);
+                    }
+                    return self;
+                } end function clear_all
+
+                function toggle_all(self&) -> Bitset& {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(~self.m_words[i]);
+                    }
+                    self.trim();
+                    return self;
+                } end function toggle_all
+
+                function count(const self&) -> long int {
+                    long int: n = 0;
+                    for (long int: i = 0; i < word_count; i++) {
+                        n += bits_in(self.m_words[i]);
+                    }
+                    return n;
+                } end function count
+
+                function empty(const self&) -> bool {
+                    for (long int: i = 0; i < word_count; i++) {
+                        if (self.m_words[i] != static_cast<word_type>(0)) then {
+                            return false;
+                        }
+                    }
+                    return true;
+                } end function empty
+
+                function full(const self&) -> bool {
+                    return self.count() == N;
+                } end function full
+
+                function has_any(const self&, const Bitset&: other) -> bool {
+                    for (long int: i = 0; i < word_count; i++) {
+                        if ((self.m_words[i] & other.m_words[i]) != static_cast<word_type>(0)) then {
+                            return true;
+                        }
+                    }
+                    return false;
+                } end function has_any
+
+                function has_all(const self&, const Bitset&: other) -> bool {
+                    for (long int: i = 0; i < word_count; i++) {
+                        if ((self.m_words[i] & other.m_words[i]) != other.m_words[i]) then {
+                            return false;
+                        }
+                    }
+                    return true;
+                } end function has_all
+
+                function has_none(const self&, const Bitset&: other) -> bool {
+                    return !self.has_any(other);
+                } end function has_none
+
+                function includes(const self&, const Bitset&: other) -> bool {
+                    return self.has_all(other);
+                } end function includes
+
+                function is_subset_of(const self&, const Bitset&: other) -> bool {
+                    return other.has_all(self);
+                } end function is_subset_of
+
+                function find_first(const self&) -> long int {
+                    return self.find_next(-1);
+                } end function find_first
+
+                function find_next(const self&, long int: after) -> long int {
+                    long int: start = after + 1;
+                    if (start >= N) then {
+                        return N;
+                    }
+                    long int: w = word_of(start);
+                    word_type: current = static_cast<word_type>(self.m_words[w] & static_cast<word_type>(~static_cast<word_type>(bit_of(start) - static_cast<word_type>(1))));
+                    while (true) {
+                        if (current != static_cast<word_type>(0)) then {
+                            const long int: found = w * 64 + lowest_bit(current);
+                            return found < N ? found : N;
+                        }
+                        w += 1;
+                        if (w >= word_count) then {
+                            return N;
+                        }
+                        current = self.m_words[w];
+                    }
+                    return N;
+                } end function find_next
+
+                function begin(const self&) -> Step {
+                    return Step(&self, self.find_first());
+                } end function begin
+
+                function end(const self&) -> Step {
+                    return Step(&self, N);
+                } end function end
+
+                function to_mask(const self&) -> std::hardware_uint64 {
+                    for (long int: i = 1; i < word_count; i++) {
+                        if (self.m_words[i] != static_cast<word_type>(0)) then {
+                            throw std::errors::collection_error("to_mask() needs every set bit to be below 64");
+                        }
+                    }
+                    return self.m_words[0];
+                } end function to_mask
+
+                function to_string(const self&) -> string {
+                    string: out = "";
+                    for (long int: index = N - 1; index >= 0; index--) {
+                        if ((self.m_words[word_of(index)] & bit_of(index)) != static_cast<word_type>(0)) then {
+                            out += '1';
+                        } else then {
+                            out += '0';
+                        }
+                    }
+                    return out;
+                } end function to_string
+
+                operator(==) function(const self&, const Bitset&: other) -> bool {
+                    for (long int: i = 0; i < word_count; i++) {
+                        if (self.m_words[i] != other.m_words[i]) then {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+
+                operator(!=) function(const self&, const Bitset&: other) -> bool {
+                    return !(self == other);
+                }
+
+                operator(|=) function(self&, const Bitset&: other) -> Bitset& {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(self.m_words[i] | other.m_words[i]);
+                    }
+                    return self;
+                }
+
+                operator(&=) function(self&, const Bitset&: other) -> Bitset& {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(self.m_words[i] & other.m_words[i]);
+                    }
+                    return self;
+                }
+
+                operator(^=) function(self&, const Bitset&: other) -> Bitset& {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(self.m_words[i] ^ other.m_words[i]);
+                    }
+                    return self;
+                }
+
+                operator(-=) function(self&, const Bitset&: other) -> Bitset& {
+                    for (long int: i = 0; i < word_count; i++) {
+                        self.m_words[i] = static_cast<word_type>(self.m_words[i] & static_cast<word_type>(~other.m_words[i]));
+                    }
+                    return self;
+                }
+
+                operator(|) function(const self&, const Bitset&: other) -> Bitset {
+                    Bitset: out = self;
+                    out |= other;
+                    return out;
+                }
+
+                operator(&) function(const self&, const Bitset&: other) -> Bitset {
+                    Bitset: out = self;
+                    out &= other;
+                    return out;
+                }
+
+                operator(^) function(const self&, const Bitset&: other) -> Bitset {
+                    Bitset: out = self;
+                    out ^= other;
+                    return out;
+                }
+
+                operator(-) function(const self&, const Bitset&: other) -> Bitset {
+                    Bitset: out = self;
+                    out -= other;
+                    return out;
+                }
+
+                operator(~) function(const self&) -> Bitset {
+                    Bitset: out = self;
+                    out.toggle_all();
+                    return out;
+                }
+
+                operator(<<=) function(self&, long int: shift) -> Bitset& {
+                    if (shift <= 0) then {
+                        return self;
+                    }
+                    Bitset: out;
+                    for (long int: index in self) {
+                        if (index + shift < N) then {
+                            out.set(index + shift);
+                        }
+                    }
+                    self = out;
+                    return self;
+                }
+
+                operator(>>=) function(self&, long int: shift) -> Bitset& {
+                    if (shift <= 0) then {
+                        return self;
+                    }
+                    Bitset: out;
+                    for (long int: index in self) {
+                        if (index - shift >= 0) then {
+                            out.set(index - shift);
+                        }
+                    }
+                    self = out;
+                    return self;
+                }
+
+                operator(<<) function(const self&, long int: shift) -> Bitset {
+                    Bitset: out = self;
+                    out <<= shift;
+                    return out;
+                }
+
+                operator(>>) function(const self&, long int: shift) -> Bitset {
+                    Bitset: out = self;
+                    out >>= shift;
+                    return out;
+                }
+            } end class Bitset
+        } end safe
     } end namespace collections
 } end namespace std

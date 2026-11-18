@@ -2,356 +2,356 @@ import module.collections
 
 namespace std {
     safe(compile) {
-    namespace errors {
-        class arena_error {
-        public:
-            string: message;
+        namespace errors {
+            class arena_error {
+            public:
+                string: message;
 
-            constructor(const string&: m) : message = m { }
+                constructor(string: m) : message = m { }
 
-            function what(const self&) -> string {
-                return self.message;
-            } end function what
-        } end class arena_error
+                function what(const self&) -> string {
+                    return self.message;
+                } end function what
+            } end class arena_error
 
-        class pointer_error {
-        public:
-            string: message;
+            class pointer_error {
+            public:
+                string: message;
 
-            constructor(const string&: m) : message = m { }
+                constructor(string: m) : message = m { }
 
-            function what(const self&) -> string {
-                return self.message;
-            } end function what
-        } end class pointer_error
-    } end namespace errors
+                function what(const self&) -> string {
+                    return self.message;
+                } end function what
+            } end class pointer_error
+        } end namespace errors
     } end safe
 
     namespace memory {
         safe(compile) {
-        namespace detail {
+            namespace detail {
+                extern "C++" from "<walnut_memory.hpp>" {
+                    class ArenaHandle as "walnut_rt::mem::arena" {
+                    public:
+                        constructor();
+                        constructor(long int: block_size) explicit;
+                        constructor(long int: block_size, long int: max_block_size, bool: thread_safe);
+
+                        function reset(self&) -> void;
+                        function shrink_to_fit(self&) -> void;
+                        function reserve(self&, long int: bytes) -> void;
+                        function bytes_used(const self&) -> long int;
+                        function bytes_reserved(const self&) -> long int;
+                        function object_count(const self&) -> long int;
+                        function handle_count(const self&) -> long int;
+                        function block_count(const self&) -> long int;
+                        function generation(const self&) -> long int;
+                        function block_size(const self&) -> long int;
+                        function max_block_size(const self&) -> long int;
+                        function thread_safe(const self&) -> bool;
+                        function same(const self&, const ArenaHandle&: other) -> bool;
+                    } end class ArenaHandle
+                } end extern
+            } end namespace detail
+
             extern "C++" from "<walnut_memory.hpp>" {
-                class ArenaHandle as "walnut_rt::mem::arena" {
+                template <typename T>
+                class ArenaPtr as "walnut_rt::mem::ptr" {
+                    function unchecked() const -> T& as "walnut_rt::mem::ptr_ref";
+
+                    function check() const -> void {
+                        if (!valid()) then {
+                            if (expired()) then {
+                                throw std::errors::arena_error("ArenaPtr used after its Arena was reset");
+                            }
+                            throw std::errors::arena_error("ArenaPtr is empty");
+                        }
+                    } end function check
+
                 public:
                     constructor();
-                    constructor(long int: block_size) explicit;
-                    constructor(long int: block_size, long int: max_block_size, bool: thread_safe);
 
-                    function reset(self&) -> void;
-                    function shrink_to_fit(self&) -> void;
-                    function reserve(self&, long int: bytes) -> void;
-                    function bytes_used(const self&) -> long int;
-                    function bytes_reserved(const self&) -> long int;
-                    function object_count(const self&) -> long int;
-                    function handle_count(const self&) -> long int;
-                    function block_count(const self&) -> long int;
-                    function generation(const self&) -> long int;
-                    function block_size(const self&) -> long int;
-                    function max_block_size(const self&) -> long int;
-                    function thread_safe(const self&) -> bool;
-                    function same(const self&, const ArenaHandle&: other) -> bool;
-                } end class ArenaHandle
-            } end extern
-        } end namespace detail
+                    static function create(detail::ArenaHandle&: arena) -> ArenaPtr<T> as "walnut_rt::mem::make_default<T>";
+                    static function create(detail::ArenaHandle&: arena, const T&: value) -> ArenaPtr<T> as "walnut_rt::mem::make_value<T>";
+                    static function belongs(const detail::ArenaHandle&: arena, const ArenaPtr<T>&: p) -> bool as "walnut_rt::mem::arena_owns<T>";
 
-        extern "C++" from "<walnut_memory.hpp>" {
-            template <typename T>
-            class ArenaPtr as "walnut_rt::mem::ptr" {
-                function unchecked() const -> T& as "walnut_rt::mem::ptr_ref";
+                    function valid() const -> bool as "walnut_rt::mem::ptr_valid";
+                    function expired() const -> bool;
+                    function reset() -> void;
+                    function get() const -> T* as "walnut_rt::mem::ptr_get";
+                    function generation() const -> long int as "walnut_rt::mem::ptr_generation";
+                    function use_count() const -> long int as "walnut_rt::mem::ptr_use_count";
+                    function same_arena(const ArenaPtr<T>&: other) const -> bool as "walnut_rt::mem::ptr_same_arena";
+                    function same(const ArenaPtr<T>&: other) const -> bool as "walnut_rt::mem::ptr_same";
 
-                function check() const -> void {
-                    if (!valid()) then {
-                        if (expired()) then {
-                            throw std::errors::arena_error("ArenaPtr used after its Arena was reset");
-                        }
-                        throw std::errors::arena_error("ArenaPtr is empty");
+                    function value() const -> T& {
+                        check();
+                        return unchecked();
+                    } end function value
+
+                    operator(*) function() const -> T& {
+                        check();
+                        return unchecked();
                     }
-                } end function check
 
-            public:
-                constructor();
+                    operator(->) function() const -> T* {
+                        check();
+                        return get();
+                    }
 
-                static function create(detail::ArenaHandle&: arena) -> ArenaPtr<T> as "walnut_rt::mem::make_default<T>";
-                static function create(detail::ArenaHandle&: arena, const T&: value) -> ArenaPtr<T> as "walnut_rt::mem::make_value<T>";
-                static function belongs(const detail::ArenaHandle&: arena, const ArenaPtr<T>&: p) -> bool as "walnut_rt::mem::arena_owns<T>";
+                    operator(bool) function() const explicit {
+                        return valid();
+                    }
 
-                function valid() const -> bool as "walnut_rt::mem::ptr_valid";
-                function expired() const -> bool;
-                function reset() -> void;
-                function get() const -> T* as "walnut_rt::mem::ptr_get";
-                function generation() const -> long int as "walnut_rt::mem::ptr_generation";
-                function use_count() const -> long int as "walnut_rt::mem::ptr_use_count";
-                function same_arena(const ArenaPtr<T>&: other) const -> bool as "walnut_rt::mem::ptr_same_arena";
-                function same(const ArenaPtr<T>&: other) const -> bool as "walnut_rt::mem::ptr_same";
+                    operator(==) function(const ArenaPtr<T>&: other) const -> bool {
+                        return same(other);
+                    }
+                } end class ArenaPtr
 
-                function value() const -> T& {
-                    check();
-                    return unchecked();
-                } end function value
+                template <typename T>
+                class ArenaArray as "walnut_rt::mem::array" {
+                    function unchecked(long int: index) const -> T& as "walnut_rt::mem::array_ref";
+                    function element_unchecked(long int: index) const -> ArenaPtr<T> as "walnut_rt::mem::array_element";
+                    function first() const -> T* as "walnut_rt::mem::array_data";
+                    function past_last() const -> T* as "walnut_rt::mem::array_end";
 
-                operator(*) function() const -> T& {
-                    check();
-                    return unchecked();
-                }
+                    function check_live() const -> void {
+                        if (!valid()) then {
+                            if (expired()) then {
+                                throw std::errors::arena_error("ArenaArray used after its Arena was reset");
+                            }
+                            throw std::errors::arena_error("ArenaArray is empty");
+                        }
+                    } end function check_live
 
-                operator(->) function() const -> T* {
-                    check();
-                    return get();
-                }
+                    function check(long int: index) const -> void {
+                        check_live();
+                        if (index < 0 || index >= size()) then {
+                            throw std::errors::arena_error(static_cast<string>(`ArenaArray index ${index} is out of range for size ${size()}`));
+                        }
+                    } end function check
 
-                operator(bool) function() const explicit {
-                    return valid();
-                }
+                public:
+                    constructor();
 
-                operator(==) function(const ArenaPtr<T>&: other) const -> bool {
-                    return same(other);
-                }
-            } end class ArenaPtr
+                    static function create(detail::ArenaHandle&: arena, long int: count) -> ArenaArray<T> as "walnut_rt::mem::make_array<T>";
+                    static function create(detail::ArenaHandle&: arena, long int: count, const T&: fill) -> ArenaArray<T> as "walnut_rt::mem::make_filled<T>";
+                    static function create(detail::ArenaHandle&: arena, const std::collections::Vector<T>&: values) -> ArenaArray<T> as "walnut_rt::mem::make_from<T>";
 
-            template <typename T>
-            class ArenaArray as "walnut_rt::mem::array" {
-                function unchecked(long int: index) const -> T& as "walnut_rt::mem::array_ref";
-                function element_unchecked(long int: index) const -> ArenaPtr<T> as "walnut_rt::mem::array_element";
-                function first() const -> T* as "walnut_rt::mem::array_data";
-                function past_last() const -> T* as "walnut_rt::mem::array_end";
+                    function valid() const -> bool as "walnut_rt::mem::array_valid";
+                    function expired() const -> bool;
+                    function reset() -> void;
+                    function size() const -> long int as "walnut_rt::mem::array_size";
+                    function empty() const -> bool;
 
-                function check_live() const -> void {
-                    if (!valid()) then {
+                    function to_vector() const -> std::collections::Vector<T> {
+                        check_live();
+                        std::collections::Vector<T>: out;
+                        for (long int: i = 0; i < size(); i++) {
+                            out.push_back(unchecked(i));
+                        }
+                        return out;
+                    } end function to_vector
+
+                    operator(bool) function() const explicit {
+                        return valid();
+                    }
+
+                    operator([]) function(long int: index) const -> T& {
+                        check(index);
+                        return unchecked(index);
+                    }
+
+                    function at(long int: index) const -> T& {
+                        check(index);
+                        return unchecked(index);
+                    } end function at
+
+                    function front() const -> T& {
+                        check(0);
+                        return unchecked(0);
+                    } end function front
+
+                    function back() const -> T& {
+                        check(size() - 1);
+                        return unchecked(size() - 1);
+                    } end function back
+
+                    function element(long int: index) const -> ArenaPtr<T> {
+                        check(index);
+                        return element_unchecked(index);
+                    } end function element
+
+                    function data() const -> T* {
+                        return first();
+                    } end function data
+
+                    function begin() const -> T* {
                         if (expired()) then {
                             throw std::errors::arena_error("ArenaArray used after its Arena was reset");
                         }
-                        throw std::errors::arena_error("ArenaArray is empty");
-                    }
-                } end function check_live
+                        return first();
+                    } end function begin
 
-                function check(long int: index) const -> void {
-                    check_live();
-                    if (index < 0 || index >= size()) then {
-                        throw std::errors::arena_error(static_cast<string>(`ArenaArray index ${index} is out of range for size ${size()}`));
+                    function end() const -> T* {
+                        return past_last();
+                    } end function end
+                } end class ArenaArray
+            } end extern
+
+            class Arena {
+                detail::ArenaHandle: handle;
+
+                static function check_count(long int: count) -> void {
+                    if (count < 0) then {
+                        throw std::errors::arena_error(static_cast<string>(`Arena: an array can't have ${count} elements`));
                     }
-                } end function check
+                } end function check_count
+
+                static function check_size(long int: bytes, const string&: what) -> long int {
+                    if (bytes < 64) then {
+                        throw std::errors::arena_error(static_cast<string>(`Arena: ${what} must be at least 64 bytes, not ${bytes}`));
+                    }
+                    return bytes;
+                } end function check_size
 
             public:
-                constructor();
+                constructor() { }
 
-                static function create(detail::ArenaHandle&: arena, long int: count) -> ArenaArray<T> as "walnut_rt::mem::make_array<T>";
-                static function create(detail::ArenaHandle&: arena, long int: count, const T&: fill) -> ArenaArray<T> as "walnut_rt::mem::make_filled<T>";
-                static function create(detail::ArenaHandle&: arena, const std::collections::Vector<T>&: values) -> ArenaArray<T> as "walnut_rt::mem::make_from<T>";
+                constructor(long int: block_size) explicit : handle(check_size(block_size, "the block size")) { }
 
-                function valid() const -> bool as "walnut_rt::mem::array_valid";
-                function expired() const -> bool;
-                function reset() -> void;
-                function size() const -> long int as "walnut_rt::mem::array_size";
-                function empty() const -> bool;
+                constructor(long int: block_size, long int: max_block_size, bool: thread_safe) : handle(check_size(block_size, "the block size"), check_size(max_block_size, "the largest block size"), thread_safe) { }
 
-                function to_vector() const -> std::collections::Vector<T> {
-                    check_live();
-                    std::collections::Vector<T>: out;
-                    for (long int: i = 0; i < size(); i++) {
-                        out.push_back(unchecked(i));
+                template <typename T>
+                function make(self&) -> ArenaPtr<T> {
+                    return ArenaPtr<T>::create(self.handle);
+                } end function make
+
+                template <typename T>
+                function make(self&, const T&: value) -> ArenaPtr<T> {
+                    return ArenaPtr<T>::create(self.handle, value);
+                } end function make
+
+                template <typename T>
+                function make_array(self&, long int: count) -> ArenaArray<T> {
+                    check_count(count);
+                    return ArenaArray<T>::create(self.handle, count);
+                } end function make_array
+
+                template <typename T>
+                function make_array(self&, long int: count, const T&: fill) -> ArenaArray<T> {
+                    check_count(count);
+                    return ArenaArray<T>::create(self.handle, count, fill);
+                } end function make_array
+
+                template <typename T>
+                function make_array(self&, const std::collections::Vector<T>&: values) -> ArenaArray<T> {
+                    return ArenaArray<T>::create(self.handle, values);
+                } end function make_array
+
+                template <typename T>
+                function owns(const self&, const ArenaPtr<T>&: p) -> bool {
+                    return ArenaPtr<T>::belongs(self.handle, p);
+                } end function owns
+
+                function reset(self&) -> void {
+                    self.handle.reset();
+                } end function reset
+
+                function clear(self&) -> void {
+                    self.handle.reset();
+                } end function clear
+
+                function shrink_to_fit(self&) -> void {
+                    self.handle.shrink_to_fit();
+                } end function shrink_to_fit
+
+                function reserve(self&, long int: bytes) -> void {
+                    if (bytes < 0) then {
+                        throw std::errors::arena_error(static_cast<string>(`Arena: can't reserve ${bytes} bytes`));
                     }
-                    return out;
-                } end function to_vector
+                    self.handle.reserve(bytes);
+                } end function reserve
 
-                operator(bool) function() const explicit {
-                    return valid();
+                function bytes_used(const self&) -> long int {
+                    return self.handle.bytes_used();
+                } end function bytes_used
+
+                function bytes_reserved(const self&) -> long int {
+                    return self.handle.bytes_reserved();
+                } end function bytes_reserved
+
+                function object_count(const self&) -> long int {
+                    return self.handle.object_count();
+                } end function object_count
+
+                function handle_count(const self&) -> long int {
+                    return self.handle.handle_count();
+                } end function handle_count
+
+                function block_count(const self&) -> long int {
+                    return self.handle.block_count();
+                } end function block_count
+
+                function generation(const self&) -> long int {
+                    return self.handle.generation();
+                } end function generation
+
+                function block_size(const self&) -> long int {
+                    return self.handle.block_size();
+                } end function block_size
+
+                function max_block_size(const self&) -> long int {
+                    return self.handle.max_block_size();
+                } end function max_block_size
+
+                function thread_safe(const self&) -> bool {
+                    return self.handle.thread_safe();
+                } end function thread_safe
+
+                operator(==) function(const self&, const Arena&: other) -> bool {
+                    return self.handle.same(other.handle);
                 }
-
-                operator([]) function(long int: index) const -> T& {
-                    check(index);
-                    return unchecked(index);
-                }
-
-                function at(long int: index) const -> T& {
-                    check(index);
-                    return unchecked(index);
-                } end function at
-
-                function front() const -> T& {
-                    check(0);
-                    return unchecked(0);
-                } end function front
-
-                function back() const -> T& {
-                    check(size() - 1);
-                    return unchecked(size() - 1);
-                } end function back
-
-                function element(long int: index) const -> ArenaPtr<T> {
-                    check(index);
-                    return element_unchecked(index);
-                } end function element
-
-                function data() const -> T* {
-                    return first();
-                } end function data
-
-                function begin() const -> T* {
-                    if (expired()) then {
-                        throw std::errors::arena_error("ArenaArray used after its Arena was reset");
-                    }
-                    return first();
-                } end function begin
-
-                function end() const -> T* {
-                    return past_last();
-                } end function end
-            } end class ArenaArray
-        } end extern
-
-        class Arena {
-            detail::ArenaHandle: handle;
-
-            static function check_count(long int: count) -> void {
-                if (count < 0) then {
-                    throw std::errors::arena_error(static_cast<string>(`Arena: an array can't have ${count} elements`));
-                }
-            } end function check_count
-
-            static function check_size(long int: bytes, const string&: what) -> long int {
-                if (bytes < 64) then {
-                    throw std::errors::arena_error(static_cast<string>(`Arena: ${what} must be at least 64 bytes, not ${bytes}`));
-                }
-                return bytes;
-            } end function check_size
-
-        public:
-            constructor() { }
-
-            constructor(long int: block_size) explicit : handle(check_size(block_size, "the block size")) { }
-
-            constructor(long int: block_size, long int: max_block_size, bool: thread_safe) : handle(check_size(block_size, "the block size"), check_size(max_block_size, "the largest block size"), thread_safe) { }
-
-            template <typename T>
-            function make(self&) -> ArenaPtr<T> {
-                return ArenaPtr<T>::create(self.handle);
-            } end function make
-
-            template <typename T>
-            function make(self&, const T&: value) -> ArenaPtr<T> {
-                return ArenaPtr<T>::create(self.handle, value);
-            } end function make
-
-            template <typename T>
-            function make_array(self&, long int: count) -> ArenaArray<T> {
-                check_count(count);
-                return ArenaArray<T>::create(self.handle, count);
-            } end function make_array
-
-            template <typename T>
-            function make_array(self&, long int: count, const T&: fill) -> ArenaArray<T> {
-                check_count(count);
-                return ArenaArray<T>::create(self.handle, count, fill);
-            } end function make_array
-
-            template <typename T>
-            function make_array(self&, const std::collections::Vector<T>&: values) -> ArenaArray<T> {
-                return ArenaArray<T>::create(self.handle, values);
-            } end function make_array
-
-            template <typename T>
-            function owns(const self&, const ArenaPtr<T>&: p) -> bool {
-                return ArenaPtr<T>::belongs(self.handle, p);
-            } end function owns
-
-            function reset(self&) -> void {
-                self.handle.reset();
-            } end function reset
-
-            function clear(self&) -> void {
-                self.handle.reset();
-            } end function clear
-
-            function shrink_to_fit(self&) -> void {
-                self.handle.shrink_to_fit();
-            } end function shrink_to_fit
-
-            function reserve(self&, long int: bytes) -> void {
-                if (bytes < 0) then {
-                    throw std::errors::arena_error(static_cast<string>(`Arena: can't reserve ${bytes} bytes`));
-                }
-                self.handle.reserve(bytes);
-            } end function reserve
-
-            function bytes_used(const self&) -> long int {
-                return self.handle.bytes_used();
-            } end function bytes_used
-
-            function bytes_reserved(const self&) -> long int {
-                return self.handle.bytes_reserved();
-            } end function bytes_reserved
-
-            function object_count(const self&) -> long int {
-                return self.handle.object_count();
-            } end function object_count
-
-            function handle_count(const self&) -> long int {
-                return self.handle.handle_count();
-            } end function handle_count
-
-            function block_count(const self&) -> long int {
-                return self.handle.block_count();
-            } end function block_count
-
-            function generation(const self&) -> long int {
-                return self.handle.generation();
-            } end function generation
-
-            function block_size(const self&) -> long int {
-                return self.handle.block_size();
-            } end function block_size
-
-            function max_block_size(const self&) -> long int {
-                return self.handle.max_block_size();
-            } end function max_block_size
-
-            function thread_safe(const self&) -> bool {
-                return self.handle.thread_safe();
-            } end function thread_safe
-
-            operator(==) function(const self&, const Arena&: other) -> bool {
-                return self.handle.same(other.handle);
-            }
-        } end class Arena
+            } end class Arena
         } end safe
 
         namespace detail {
             safe(compile) {
-            extern "C++" from "<walnut_memory.hpp>" {
-                class Counts as "walnut_rt::mem::counts" {
+                extern "C++" from "<walnut_memory.hpp>" {
+                    class Counts as "walnut_rt::mem::counts" {
+                    public:
+                        constructor();
+                        constructor(const Counts&: other) = delete;
+                        function add_strong(self&) noexcept -> void;
+                        function release_strong(self&) noexcept -> bool;
+                        function add_weak(self&) noexcept -> void;
+                        function release_weak(self&) noexcept -> bool;
+                        function try_add_strong(self&) noexcept -> bool;
+                        function strong_count(const self&) noexcept -> long int;
+                        function weak_count(const self&) noexcept -> long int;
+                    } end class Counts
+                } end extern
+
+                class Block {
                 public:
-                    constructor();
-                    constructor(const Counts&: other) = delete;
-                    function add_strong(self&) noexcept -> void;
-                    function release_strong(self&) noexcept -> bool;
-                    function add_weak(self&) noexcept -> void;
-                    function release_weak(self&) noexcept -> bool;
-                    function try_add_strong(self&) noexcept -> bool;
-                    function strong_count(const self&) noexcept -> long int;
-                    function weak_count(const self&) noexcept -> long int;
-                } end class Counts
-            } end extern
+                    Counts: counts;
 
-            class Block {
-            public:
-                Counts: counts;
+                    function destroy(self&) virtual noexcept -> void {
+                    } end function destroy
+                } end class Block
 
-                function destroy(self&) virtual noexcept -> void {
-                } end function destroy
-            } end class Block
+                template <typename T>
+                class BlockFor inherits Block {
+                public:
+                    T*: object;
 
-            template <typename T>
-            class BlockFor inherits Block {
-            public:
-                T*: object;
+                    constructor(T*: p) : object = p { }
 
-                constructor(T*: p) : object = p { }
-
-                function destroy(self&) override noexcept -> void {
-                    delete self.object;
-                    self.object = nullptr;
-                } end function destroy
-            } end class BlockFor
+                    function destroy(self&) override noexcept -> void {
+                        delete self.object;
+                        self.object = nullptr;
+                    } end function destroy
+                } end class BlockFor
             } end safe
 
             function release_strong(Block*: block) noexcept -> void {
@@ -398,9 +398,9 @@ namespace std {
             } end class SharedHook
 
             safe(compile) {
-            function empty_pointer(const string&: kind) -> std::errors::pointer_error {
-                return std::errors::pointer_error(kind + " is empty");
-            } end function empty_pointer
+                function empty_pointer(const string&: kind) -> std::errors::pointer_error {
+                    return std::errors::pointer_error(kind + " is empty");
+                } end function empty_pointer
             } end safe
         } end namespace detail
 
@@ -507,8 +507,8 @@ namespace std {
         } end class UniquePtr
 
         safe(compile) {
-        template <typename T>
-        class WeakPtr;
+            template <typename T>
+            class WeakPtr;
         } end safe
 
         template <typename T>
@@ -795,77 +795,77 @@ namespace std {
         } end class EnableSharedFromThis
 
         safe(compile) {
-        template <typename T, typename... Ts>
-        function make_unique(Ts&&...: args) -> UniquePtr<T> {
-            return UniquePtr<T>(new T(std::core::forward<Ts>(args)...));
-        } end function make_unique
+            template <typename T, typename... Ts>
+            function make_unique(Ts&&...: args) -> UniquePtr<T> {
+                return UniquePtr<T>(new T(std::core::forward<Ts>(args)...));
+            } end function make_unique
 
-        template <typename T, typename... Ts>
-        function make_shared(Ts&&...: args) -> SharedPtr<T> {
-            return SharedPtr<T>(new T(std::core::forward<Ts>(args)...));
-        } end function make_shared
+            template <typename T, typename... Ts>
+            function make_shared(Ts&&...: args) -> SharedPtr<T> {
+                return SharedPtr<T>(new T(std::core::forward<Ts>(args)...));
+            } end function make_shared
 
-        template <typename U, typename T>
-        function static_pointer_cast(const SharedPtr<T>&: p) -> SharedPtr<U> {
-            return SharedPtr<U>(p, static_cast<U*>(p.get()));
-        } end function static_pointer_cast
+            template <typename U, typename T>
+            function static_pointer_cast(const SharedPtr<T>&: p) -> SharedPtr<U> {
+                return SharedPtr<U>(p, static_cast<U*>(p.get()));
+            } end function static_pointer_cast
 
-        template <typename U, typename T>
-        function dynamic_pointer_cast(const SharedPtr<T>&: p) -> SharedPtr<U> {
-            U*: q = dynamic_cast<U*>(p.get());
-            if (q == nullptr) then {
-                return SharedPtr<U>();
-            }
-            return SharedPtr<U>(p, q);
-        } end function dynamic_pointer_cast
+            template <typename U, typename T>
+            function dynamic_pointer_cast(const SharedPtr<T>&: p) -> SharedPtr<U> {
+                U*: q = dynamic_cast<U*>(p.get());
+                if (q == nullptr) then {
+                    return SharedPtr<U>();
+                }
+                return SharedPtr<U>(p, q);
+            } end function dynamic_pointer_cast
 
-        namespace detail {
-            extern "C++" from "<walnut_memory.hpp>" {
-                class Tracker as "walnut_rt::mem::tracker" {
-                public:
-                    static function gc_running() -> bool as "walnut_rt::mem::gc_running";
-                    static function tracking_allocations() -> bool as "walnut_rt::mem::tracking_allocations";
-                    static function collect_garbage() -> long int as "walnut_rt::mem::collect_garbage";
-                    static function live_objects() -> long int as "walnut_rt::mem::live_objects";
-                    static function live_bytes() -> long int as "walnut_rt::mem::live_bytes";
-                    static function peak_bytes() -> long int as "walnut_rt::mem::peak_bytes";
-                    static function allocations_made() -> long int as "walnut_rt::mem::allocations_made";
-                    static function allocation_report() -> string as "walnut_rt::mem::allocation_report";
-                } end class Tracker
-            } end extern
-        } end namespace detail
+            namespace detail {
+                extern "C++" from "<walnut_memory.hpp>" {
+                    class Tracker as "walnut_rt::mem::tracker" {
+                    public:
+                        static function gc_running() -> bool as "walnut_rt::mem::gc_running";
+                        static function tracking_allocations() -> bool as "walnut_rt::mem::tracking_allocations";
+                        static function collect_garbage() -> long int as "walnut_rt::mem::collect_garbage";
+                        static function live_objects() -> long int as "walnut_rt::mem::live_objects";
+                        static function live_bytes() -> long int as "walnut_rt::mem::live_bytes";
+                        static function peak_bytes() -> long int as "walnut_rt::mem::peak_bytes";
+                        static function allocations_made() -> long int as "walnut_rt::mem::allocations_made";
+                        static function allocation_report() -> string as "walnut_rt::mem::allocation_report";
+                    } end class Tracker
+                } end extern
+            } end namespace detail
 
-        function gc_running() -> bool {
-            return detail::Tracker::gc_running();
-        } end function gc_running
+            function gc_running() -> bool {
+                return detail::Tracker::gc_running();
+            } end function gc_running
 
-        function tracking_allocations() -> bool {
-            return detail::Tracker::tracking_allocations();
-        } end function tracking_allocations
+            function tracking_allocations() -> bool {
+                return detail::Tracker::tracking_allocations();
+            } end function tracking_allocations
 
-        function collect_garbage() -> long int {
-            return detail::Tracker::collect_garbage();
-        } end function collect_garbage
+            function collect_garbage() -> long int {
+                return detail::Tracker::collect_garbage();
+            } end function collect_garbage
 
-        function live_objects() -> long int {
-            return detail::Tracker::live_objects();
-        } end function live_objects
+            function live_objects() -> long int {
+                return detail::Tracker::live_objects();
+            } end function live_objects
 
-        function live_bytes() -> long int {
-            return detail::Tracker::live_bytes();
-        } end function live_bytes
+            function live_bytes() -> long int {
+                return detail::Tracker::live_bytes();
+            } end function live_bytes
 
-        function peak_bytes() -> long int {
-            return detail::Tracker::peak_bytes();
-        } end function peak_bytes
+            function peak_bytes() -> long int {
+                return detail::Tracker::peak_bytes();
+            } end function peak_bytes
 
-        function allocations_made() -> long int {
-            return detail::Tracker::allocations_made();
-        } end function allocations_made
+            function allocations_made() -> long int {
+                return detail::Tracker::allocations_made();
+            } end function allocations_made
 
-        function allocation_report() -> string {
-            return detail::Tracker::allocation_report();
-        } end function allocation_report
+            function allocation_report() -> string {
+                return detail::Tracker::allocation_report();
+            } end function allocation_report
         } end safe
     } end namespace memory
 } end namespace std

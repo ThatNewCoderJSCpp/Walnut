@@ -4,7 +4,10 @@
 #ifndef FIZMO
 #define FIZMO
 #endif
-#include "fizmo/includes.hpp"
+#include "fizmo/../../Source/Multiprecision/Fixed Width int/integer.hpp"
+#include "fizmo/../../Source/Multiprecision/Fixed Width Float/traits.hpp"
+#include "fizmo/../../Source/Multiprecision/Fixed Width Float/signed_float.hpp"
+#include "fizmo/../../Source/Multiprecision/Fixed Width Float/Math/log_pow_roots.hpp"
 
 #include <array>
 #include <atomic>
@@ -13,6 +16,7 @@
 #include <optional>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <cmath>
 #include <limits>
@@ -23,6 +27,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -166,6 +171,10 @@ template <special_kind K> struct special_constant_info<special_constant<K>> { st
 template <typename T> inline constexpr bool is_special_constant_v = special_constant_info<std::decay_t<T>>::value;
 
 template <typename T> inline constexpr bool is_hardware_float_v = std::is_floating_point_v<std::decay_t<T>>;
+
+template <typename T, typename = void> struct is_wide_enum : std::false_type {};
+template <typename T> struct is_wide_enum<T, std::void_t<typename T::walnut_wide_enum>> : std::true_type {};
+template <typename T> inline constexpr bool is_wide_enum_v = is_wide_enum<T>::value;
 
 template <typename T> inline constexpr bool is_hardware_int_v =
     std::is_integral_v<std::decay_t<T>> && !std::is_same_v<std::decay_t<T>, bool> && !std::is_same_v<std::decay_t<T>, char32_t> && !std::is_same_v<std::decay_t<T>, char>;
@@ -1202,6 +1211,68 @@ inline void append_utf8(std::string& out, char32_t c) {
 inline std::string op_add(const std::string& a, char32_t c) { std::string r = a; append_utf8(r, c); return r; }
 inline std::string op_add(char32_t c, const std::string& b) { std::string r; append_utf8(r, c); return r + b; }
 
+inline std::string& append_assign(std::string& target, const std::string& more) { target += more; return target; }
+inline std::string& append_assign(std::string& target, char32_t c) { append_utf8(target, c); return target; }
+inline std::string& append_assign(std::string& target, const char* more) { target += more; return target; }
+
+template <typename T, typename U>
+inline T& append_assign(T& target, const U& more) {
+    target = op_add(static_cast<const T&>(target), more);
+    return target;
+}
+
+inline std::size_t utf8_next(std::string_view s, std::size_t i) noexcept {
+    const unsigned char c = static_cast<unsigned char>(s[i]);
+    const std::size_t extra = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : 0;
+    ++i;
+    const std::size_t left = s.size() - i;
+    return i + (extra < left ? extra : left);
+}
+
+inline char32_t utf8_decode_at(std::string_view s, std::size_t i) noexcept {
+    const unsigned char c = static_cast<unsigned char>(s[i]);
+    char32_t cp = c;
+    std::size_t extra = 0;
+    if (c >= 0xF0)      { cp = c & 0x07; extra = 3; }
+    else if (c >= 0xE0) { cp = c & 0x0F; extra = 2; }
+    else if (c >= 0xC0) { cp = c & 0x1F; extra = 1; }
+    ++i;
+    for (std::size_t k = 0; k < extra && i < s.size(); ++k, ++i) cp = (cp << 6) | (static_cast<unsigned char>(s[i]) & 0x3F);
+    return cp;
+}
+
+inline bool utf8_ascii_word(std::string_view s, std::size_t i) noexcept {
+    std::uint64_t w = 0;
+    std::memcpy(&w, s.data() + i, 8);
+    return (w & 0x8080808080808080ull) == 0;
+}
+
+inline std::size_t utf8_count(std::string_view s) noexcept {
+    std::size_t i = 0;
+    std::size_t n = 0;
+    const std::size_t size = s.size();
+    while (i < size) {
+        if (i + 8 <= size && utf8_ascii_word(s, i)) { i += 8; n += 8; continue; }
+        if (static_cast<unsigned char>(s[i]) < 0x80) { ++i; ++n; continue; }
+        i = utf8_next(s, i);
+        ++n;
+    }
+    return n;
+}
+
+inline std::size_t utf8_offset(std::string_view s, std::size_t index) noexcept {
+    std::size_t i = 0;
+    std::size_t k = 0;
+    const std::size_t size = s.size();
+    while (i < size) {
+        if (k == index) return i;
+        if (i + 8 <= size && k + 8 <= index && utf8_ascii_word(s, i)) { i += 8; k += 8; continue; }
+        i = utf8_next(s, i);
+        ++k;
+    }
+    return std::string_view::npos;
+}
+
 template <typename T>
 inline T op_div(const T& a, const T& b) {
     if constexpr (is_hardware_int_v<T>) {
@@ -1289,14 +1360,23 @@ inline T op_bitxor(T a, T b) { return static_cast<T>(a ^ b); }
 template <typename T, std::enable_if_t<is_hardware_int_v<T>, int> = 0>
 inline T op_bitnot(T a)      { return static_cast<T>(~a); }
 
-template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T>, int> = 0>
+template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T> && !is_wide_enum_v<T>, int> = 0>
 inline T op_bitand(const T& a, const T& b) { if (a.is_special() || b.is_special()) return special_bits(a, b); return T::from_magnitude(a.magnitude() & b.magnitude(), a.is_negative() && b.is_negative()); }
-template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T>, int> = 0>
+template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T> && !is_wide_enum_v<T>, int> = 0>
 inline T op_bitor(const T& a, const T& b)  { if (a.is_special() || b.is_special()) return special_bits(a, b); return T::from_magnitude(a.magnitude() | b.magnitude(), a.is_negative() || b.is_negative()); }
-template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T>, int> = 0>
+template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T> && !is_wide_enum_v<T>, int> = 0>
 inline T op_bitxor(const T& a, const T& b) { if (a.is_special() || b.is_special()) return special_bits(a, b); return T::from_magnitude(a.magnitude() ^ b.magnitude(), a.is_negative() != b.is_negative()); }
-template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T>, int> = 0>
+template <typename T, std::enable_if_t<!std::is_enum_v<T> && !is_hardware_int_v<T> && !is_wide_enum_v<T>, int> = 0>
 inline T op_bitnot(const T& a)             { if (a.is_special()) return special_bits(a, a); return T::from_magnitude(~a.magnitude(), a.is_negative()); }
+
+template <typename E, std::enable_if_t<is_wide_enum_v<E>, int> = 0>
+inline E op_bitand(const E& a, const E& b) { return E{ op_bitand(a.value, b.value) }; }
+template <typename E, std::enable_if_t<is_wide_enum_v<E>, int> = 0>
+inline E op_bitor(const E& a, const E& b)  { return E{ op_bitor(a.value, b.value) }; }
+template <typename E, std::enable_if_t<is_wide_enum_v<E>, int> = 0>
+inline E op_bitxor(const E& a, const E& b) { return E{ op_bitxor(a.value, b.value) }; }
+template <typename E, std::enable_if_t<is_wide_enum_v<E>, int> = 0>
+inline E op_bitnot(const E& a)             { return E{ op_bitnot(a.value) }; }
 
 template <typename E, std::enable_if_t<std::is_enum_v<E>, int> = 0>
 inline E op_bitand(E a, E b) { return static_cast<E>(static_cast<std::underlying_type_t<E>>(a) & static_cast<std::underlying_type_t<E>>(b)); }
@@ -1678,7 +1758,11 @@ inline std::string to_display(const T& v) {
     else if constexpr (is_float_v<T>) return float_display(v);
     else if constexpr (is_hardware_float_v<T>) return hardware_display(v);
     else if constexpr (is_hardware_int_v<T>) return std::to_string(static_cast<hardware_wide_t<T>>(v));
-    else if constexpr (std::is_enum_v<T>) return std::to_string(static_cast<long long>(v));
+    else if constexpr (std::is_enum_v<T>) {
+        if constexpr (std::is_signed_v<std::underlying_type_t<T>>) return std::to_string(static_cast<long long>(v));
+        else return std::to_string(static_cast<unsigned long long>(v));
+    }
+    else if constexpr (is_wide_enum_v<T>) return to_display(v.value);
     else { std::ostringstream os; os << v; return os.str(); }
 }
 
@@ -1688,91 +1772,210 @@ inline std::string to_display(const std::variant<T, special_value>& v) {
     return to_display(std::get<T>(v));
 }
 
+enum class dyn_kind : std::uint8_t { none = 0, boolean, character, small_int, big_int, big_float, string, function, object };
+
+template <typename T>
+struct dynamic_type_name { static inline const char* value = nullptr; };
+
+template <typename T>
+struct dynamic_type_hooks {
+    static inline bool (*equals)(const T&, const T&) = nullptr;
+    static inline std::string (*text)(const T&) = nullptr;
+};
+
+template <typename T, typename = void>
+struct dynamic_streamable : std::false_type {};
+
+template <typename T>
+struct dynamic_streamable<T, std::void_t<decltype(std::declval<std::ostream&>() << std::declval<const T&>())>> : std::true_type {};
+
+template <typename T, typename = void>
+struct dynamic_equatable : std::false_type {};
+
+template <typename T>
+struct dynamic_equatable<T, std::void_t<decltype(static_cast<bool>(std::declval<const T&>() == std::declval<const T&>()))>> : std::true_type {};
+
+template <typename T>
+inline bool small_int_of(const T& v, std::int64_t& out) noexcept {
+    if constexpr (is_hardware_int_v<T>) {
+        if constexpr (std::is_signed_v<std::decay_t<T>>) { out = static_cast<std::int64_t>(v); return true; }
+        else {
+            if (static_cast<unsigned long long>(v) > 0x7fffffffffffffffULL) return false;
+            out = static_cast<std::int64_t>(v);
+            return true;
+        }
+    } else {
+        if (v.is_special()) return false;
+        const bool neg = v.is_negative();
+        const std::uint64_t m = v.get_lowest_bits();
+        if constexpr (int_info<T>::bits > 64) { if (v.highest_bit() >= 64) return false; }
+        if (neg) {
+            if (m > (1ULL << 63)) return false;
+            out = m == (1ULL << 63) ? std::numeric_limits<std::int64_t>::min() : -static_cast<std::int64_t>(m);
+            return true;
+        }
+        if (m > 0x7fffffffffffffffULL) return false;
+        out = static_cast<std::int64_t>(m);
+        return true;
+    }
+}
+
 class dynamic {
 public:
+    static constexpr std::size_t inline_size = 8;
     using value_type = std::variant<std::monostate, bool, char32_t, i2048, f2048, std::string, std::shared_ptr<dynamic_function>>;
 
-    dynamic() = default;
-    dynamic(bool b) : m_v(b) {}
-    dynamic(char32_t c) : m_v(c) {}
-    dynamic(const std::string& s) : m_v(s) {}
-    dynamic(std::string&& s) : m_v(std::move(s)) {}
-    dynamic(const char* s) : m_v(std::string(s)) {}
-    dynamic(std::nullptr_t) : m_v(std::monostate{}) {}
-    dynamic(special_value s) : m_v(float_special<f2048>(s.kind)) {}
-    dynamic(std::shared_ptr<dynamic_function> f) : m_v(std::move(f)) {}
+    struct ops {
+        dyn_kind kind;
+        bool stored_inline;
+        void (*destroy)(dynamic&) noexcept;
+        void (*copy)(dynamic&, const dynamic&);
+        void (*move)(dynamic&, dynamic&) noexcept;
+        std::string (*to_string)(const dynamic&);
+        bool (*equals)(const dynamic&, const dynamic&);
+        const char* (*name)();
+    };
 
-    template <typename T, typename = std::enable_if_t<is_int_v<T>>>
-    dynamic(const T& v) : m_v(cast<i2048>(v)) {}
+    dynamic() noexcept = default;
+    dynamic(bool b) { emplace<bool, dyn_kind::boolean>(b); }
+    dynamic(char32_t c) { emplace<char32_t, dyn_kind::character>(c); }
+    dynamic(const std::string& s) { emplace<std::string, dyn_kind::string>(s); }
+    dynamic(std::string&& s) { emplace<std::string, dyn_kind::string>(std::move(s)); }
+    dynamic(const char* s) { emplace<std::string, dyn_kind::string>(std::string(s)); }
+    dynamic(std::nullptr_t) noexcept {}
+    dynamic(special_value s) { emplace<f2048, dyn_kind::big_float>(float_special<f2048>(s.kind)); }
+    dynamic(std::shared_ptr<dynamic_function> f) { emplace<std::shared_ptr<dynamic_function>, dyn_kind::function>(std::move(f)); }
+    dynamic(const i2048& v) { set_int(v); }
 
-    template <typename T, typename = std::enable_if_t<is_float_v<T>>, typename = void>
-    dynamic(const T& v) : m_v(cast<f2048>(v)) {}
+    template <typename T, typename = std::enable_if_t<(is_int_v<T> && !std::is_same_v<std::decay_t<T>, i2048>) || is_hardware_int_v<T>>>
+    dynamic(const T& v) {
+        std::int64_t small = 0;
+        if (small_int_of(v, small)) emplace<std::int64_t, dyn_kind::small_int>(small);
+        else set_int(cast<i2048>(v));
+    }
 
-    template <typename T, typename = std::enable_if_t<is_hardware_float_v<T>>, typename = void, typename = void>
-    dynamic(const T& v) : m_v(cast<f2048>(v)) {}
+    template <typename T, typename = std::enable_if_t<is_float_v<T> || is_hardware_float_v<T>>, typename = void>
+    dynamic(const T& v) { emplace<f2048, dyn_kind::big_float>(cast<f2048>(v)); }
 
-    template <typename T, typename = std::enable_if_t<is_hardware_int_v<T>>, typename = void, typename = void, typename = void>
-    dynamic(const T& v) : m_v(cast<i2048>(v)) {}
+    template <typename T, typename D = std::decay_t<T>, typename = std::enable_if_t<
+        !std::is_same_v<D, dynamic> && !std::is_same_v<D, bool> && !std::is_same_v<D, char32_t> && !std::is_same_v<D, std::string>
+        && !std::is_same_v<D, std::nullptr_t> && !std::is_same_v<D, special_value> && !is_special_constant_v<D>
+        && !std::is_same_v<D, std::shared_ptr<dynamic_function>> && !is_int_v<D> && !is_float_v<D> && !is_hardware_int_v<D>
+        && !is_hardware_float_v<D> && !std::is_convertible_v<D, const char*>>, typename = void, typename = void>
+    dynamic(T&& v) { emplace<D, dyn_kind::object>(std::forward<T>(v)); }
 
-    bool is_none()   const { return std::holds_alternative<std::monostate>(m_v); }
-    bool is_bool()   const { return std::holds_alternative<bool>(m_v); }
-    bool is_char()   const { return std::holds_alternative<char32_t>(m_v); }
-    bool is_int()    const { return std::holds_alternative<i2048>(m_v); }
-    bool is_float()  const { return std::holds_alternative<f2048>(m_v); }
-    bool is_string() const { return std::holds_alternative<std::string>(m_v); }
-    bool is_function() const { return std::holds_alternative<std::shared_ptr<dynamic_function>>(m_v); }
-    bool is_number() const { return is_int() || is_float(); }
+    template <typename H, typename T>
+    static dynamic hold(T&& v, const char* name, bool (*equals)(const H&, const H&) = nullptr, std::string (*text)(const H&) = nullptr) {
+        dynamic_type_name<H>::value = name;
+        if (equals) dynamic_type_hooks<H>::equals = equals;
+        if (text) dynamic_type_hooks<H>::text = text;
+        dynamic d;
+        d.emplace<H, dyn_kind::object>(std::forward<T>(v));
+        return d;
+    }
+
+    dynamic(const dynamic& o) { if (o.m_ops) o.m_ops->copy(*this, o); }
+    dynamic(dynamic&& o) noexcept { if (o.m_ops) o.m_ops->move(*this, o); }
+
+    dynamic& operator=(const dynamic& o) {
+        if (this == &o) return *this;
+        dynamic tmp(o);
+        reset();
+        if (tmp.m_ops) tmp.m_ops->move(*this, tmp);
+        return *this;
+    }
+
+    dynamic& operator=(dynamic&& o) noexcept {
+        if (this == &o) return *this;
+        reset();
+        if (o.m_ops) o.m_ops->move(*this, o);
+        return *this;
+    }
+
+    ~dynamic() { reset(); }
+
+    dyn_kind kind() const noexcept { return m_ops ? m_ops->kind : dyn_kind::none; }
+    bool is_none()   const noexcept { return kind() == dyn_kind::none; }
+    bool is_bool()   const noexcept { return kind() == dyn_kind::boolean; }
+    bool is_char()   const noexcept { return kind() == dyn_kind::character; }
+    bool is_int()    const noexcept { return kind() == dyn_kind::small_int || kind() == dyn_kind::big_int; }
+    bool is_small_int() const noexcept { return kind() == dyn_kind::small_int; }
+    bool is_float()  const noexcept { return kind() == dyn_kind::big_float; }
+    bool is_string() const noexcept { return kind() == dyn_kind::string; }
+    bool is_function() const noexcept { return kind() == dyn_kind::function; }
+    bool is_object() const noexcept { return kind() == dyn_kind::object; }
+    bool is_number() const noexcept { return is_int() || is_float(); }
+    bool stored_inline() const noexcept { return m_ops && m_ops->stored_inline; }
+
+    template <typename T>
+    bool holds() const noexcept { return m_ops == &table<std::decay_t<T>, dyn_kind::object>; }
+
+    template <typename T>
+    T* object_ptr() noexcept { return holds<T>() ? ptr<std::decay_t<T>>() : nullptr; }
+
+    template <typename T>
+    const T* object_ptr() const noexcept { return holds<T>() ? ptr<std::decay_t<T>>() : nullptr; }
 
     bool is_unordered_number() const {
-        if (is_int())   return std::get<i2048>(m_v).is_unordered();
-        if (is_float()) return std::get<f2048>(m_v).is_unordered();
+        if (kind() == dyn_kind::big_int)   return ref<i2048>().is_unordered();
+        if (is_float()) return ref<f2048>().is_unordered();
         return false;
     }
 
     bool matches_special(special_test t) const {
-        if (is_int())   return walnut_rt::special_matches(std::get<i2048>(m_v).kind(), t);
-        if (is_float()) return walnut_rt::special_matches(float_kind(std::get<f2048>(m_v)), t);
+        if (kind() == dyn_kind::big_int) return walnut_rt::special_matches(ref<i2048>().kind(), t);
+        if (kind() == dyn_kind::small_int) return walnut_rt::special_matches(special_kind::none, t);
+        if (is_float()) return walnut_rt::special_matches(float_kind(ref<f2048>()), t);
         return false;
     }
 
-    const value_type& raw() const { return m_v; }
+    value_type raw() const {
+        switch (kind()) {
+            case dyn_kind::boolean:   return value_type(ref<bool>());
+            case dyn_kind::character: return value_type(ref<char32_t>());
+            case dyn_kind::small_int:
+            case dyn_kind::big_int:   return value_type(as_int());
+            case dyn_kind::big_float: return value_type(ref<f2048>());
+            case dyn_kind::string:    return value_type(ref<std::string>());
+            case dyn_kind::function:  return value_type(ref<std::shared_ptr<dynamic_function>>());
+            default:                  return value_type();
+        }
+    }
 
     std::string type_name() const {
-        if (is_none())   return "none";
-        if (is_bool())   return "bool";
-        if (is_char())   return "char";
-        if (is_int())    return "int";
-        if (is_float())  return "float";
-        if (is_function()) return "function";
-        return "string";
+        switch (kind()) {
+            case dyn_kind::none:      return "none";
+            case dyn_kind::boolean:   return "bool";
+            case dyn_kind::character: return "char";
+            case dyn_kind::small_int:
+            case dyn_kind::big_int:   return "int";
+            case dyn_kind::big_float: return "float";
+            case dyn_kind::function:  return "function";
+            case dyn_kind::string:    return "string";
+            default:                  return m_ops->name();
+        }
     }
 
     dynamic call(std::vector<dynamic> args) const {
         if (!is_function()) fail("a dynamic value of type '" + type_name() + "' cannot be called");
-        const dynamic_function& f = *std::get<std::shared_ptr<dynamic_function>>(m_v);
+        const dynamic_function& f = *ref<std::shared_ptr<dynamic_function>>();
         if (args.size() != f.arity) fail("this function takes " + std::to_string(f.arity) + " argument" + (f.arity == 1 ? "" : "s") + " but was called with " + std::to_string(args.size()));
         return f.body(args);
     }
 
-    std::string to_string() const {
-        if (is_none())   return "none";
-        if (is_bool())   return std::get<bool>(m_v) ? "true" : "false";
-        if (is_char())   return utf8(std::get<char32_t>(m_v));
-        if (is_int())    return std::get<i2048>(m_v).to_string();
-        if (is_float())  return float_display(std::get<f2048>(m_v));
-        if (is_function()) return "function";
-        return std::get<std::string>(m_v);
-    }
+    std::string to_string() const { return m_ops ? m_ops->to_string(*this) : std::string("none"); }
 
     f2048 as_float() const {
-        if (is_float()) return std::get<f2048>(m_v);
-        if (is_int())   return cast<f2048>(std::get<i2048>(m_v));
+        if (is_float()) return ref<f2048>();
+        if (kind() == dyn_kind::small_int) return cast<f2048>(i64(static_cast<long long>(ref<std::int64_t>())));
+        if (kind() == dyn_kind::big_int) return cast<f2048>(ref<i2048>());
         fail("dynamic value of type '" + type_name() + "' is not a number");
     }
 
-    const i2048& as_int() const {
-        if (!is_int()) fail("dynamic value of type '" + type_name() + "' is not an integer");
-        return std::get<i2048>(m_v);
+    i2048 as_int() const {
+        if (kind() == dyn_kind::small_int) return i2048(static_cast<long long>(ref<std::int64_t>()));
+        if (kind() == dyn_kind::big_int) return ref<i2048>();
+        fail("dynamic value of type '" + type_name() + "' is not an integer");
     }
 
     template <typename T>
@@ -1780,44 +1983,65 @@ public:
         if constexpr (std::is_same_v<T, dynamic>) {
             return *this;
         } else if constexpr (is_int_v<T> || is_hardware_int_v<T>) {
-            if (is_int())  return cast<T>(std::get<i2048>(m_v));
-            if (is_char()) return cast<T>(std::get<char32_t>(m_v));
+            if (kind() == dyn_kind::small_int) {
+                const std::int64_t v = ref<std::int64_t>();
+                if constexpr (is_hardware_int_v<T>) return cast<T>(i64(static_cast<long long>(v)));
+                else return cast<T>(i64(static_cast<long long>(v)));
+            }
+            if (kind() == dyn_kind::big_int) return cast<T>(ref<i2048>());
+            if (is_char()) return cast<T>(ref<char32_t>());
             fail("cannot convert dynamic value of type '" + type_name() + "' to an integer");
         } else if constexpr (is_float_v<T> || is_hardware_float_v<T>) {
             return cast<T>(as_float());
         } else if constexpr (std::is_same_v<T, bool>) {
-            if (is_bool()) return std::get<bool>(m_v);
+            if (is_bool()) return ref<bool>();
             fail("cannot convert dynamic value of type '" + type_name() + "' to bool");
         } else if constexpr (std::is_same_v<T, char32_t>) {
-            if (is_char()) return std::get<char32_t>(m_v);
+            if (is_char()) return ref<char32_t>();
             fail("cannot convert dynamic value of type '" + type_name() + "' to char");
         } else if constexpr (std::is_same_v<T, std::string>) {
-            if (is_string()) return std::get<std::string>(m_v);
+            if (is_string()) return ref<std::string>();
             fail("cannot convert dynamic value of type '" + type_name() + "' to string");
         } else {
-            static_assert(sizeof(T) == 0, "unsupported dynamic conversion");
+            if (const T* p = object_ptr<T>()) return *p;
+            fail("this var holds a value of type '" + type_name() + "', not the type it is converted to");
         }
     }
 
     bool truthy() const {
-        if (is_none())   return false;
-        if (is_bool())   return std::get<bool>(m_v);
-        if (is_char())   return std::get<char32_t>(m_v) != 0;
-        if (is_int())    return !std::get<i2048>(m_v).is_zero();
-        if (is_float())  return !std::get<f2048>(m_v).is_zero();
-        if (is_function()) return true;
-        return !std::get<std::string>(m_v).empty();
+        switch (kind()) {
+            case dyn_kind::none:      return false;
+            case dyn_kind::boolean:   return ref<bool>();
+            case dyn_kind::character: return ref<char32_t>() != 0;
+            case dyn_kind::small_int: return ref<std::int64_t>() != 0;
+            case dyn_kind::big_int:   return !ref<i2048>().is_zero();
+            case dyn_kind::big_float: return !ref<f2048>().is_zero();
+            case dyn_kind::string:    return !ref<std::string>().empty();
+            default:                  return true;
+        }
     }
 
     friend dynamic arith(const dynamic& a, const dynamic& b, char op) {
-        if (op == '+' && a.is_string() && b.is_string()) return dynamic(std::get<std::string>(a.m_v) + std::get<std::string>(b.m_v));
-        if (op == '+' && a.is_string() && b.is_char())   return dynamic(op_add(std::get<std::string>(a.m_v), std::get<char32_t>(b.m_v)));
-        if (op == '+' && a.is_char() && b.is_string())   return dynamic(op_add(std::get<char32_t>(a.m_v), std::get<std::string>(b.m_v)));
+        if (op == '+' && a.is_string() && b.is_string()) return dynamic(a.ref<std::string>() + b.ref<std::string>());
+        if (op == '+' && a.is_string() && b.is_char())   return dynamic(op_add(a.ref<std::string>(), b.ref<char32_t>()));
+        if (op == '+' && a.is_char() && b.is_string())   return dynamic(op_add(a.ref<char32_t>(), b.ref<std::string>()));
         if (!a.is_number() || !b.is_number()) fail(std::string("operator '") + op + "' cannot be applied to dynamic values of type '" + a.type_name() + "' and '" + b.type_name() + "'");
 
+        if (a.kind() == dyn_kind::small_int && b.kind() == dyn_kind::small_int) {
+            const std::int64_t x = a.ref<std::int64_t>();
+            const std::int64_t y = b.ref<std::int64_t>();
+            std::int64_t r = 0;
+            switch (op) {
+                case '+': if (!__builtin_add_overflow(x, y, &r)) return dynamic::small(r); break;
+                case '-': if (!__builtin_sub_overflow(x, y, &r)) return dynamic::small(r); break;
+                case '*': if (!__builtin_mul_overflow(x, y, &r)) return dynamic::small(r); break;
+                default: break;
+            }
+        }
+
         if (a.is_int() && b.is_int()) {
-            const i2048& x = std::get<i2048>(a.m_v);
-            const i2048& y = std::get<i2048>(b.m_v);
+            const i2048 x = a.as_int();
+            const i2048 y = b.as_int();
             switch (op) {
                 case '+': return dynamic(op_add(x, y));
                 case '-': return dynamic(op_sub(x, y));
@@ -1849,27 +2073,32 @@ public:
     friend dynamic operator%(const dynamic& a, const dynamic& b) { return arith(a, b, '%'); }
 
     friend dynamic operator-(const dynamic& a) {
-        if (a.is_int())   return dynamic(op_neg(std::get<i2048>(a.m_v)));
-        if (a.is_float()) return dynamic(-std::get<f2048>(a.m_v));
+        if (a.kind() == dyn_kind::small_int && a.ref<std::int64_t>() != std::numeric_limits<std::int64_t>::min()) return dynamic::small(-a.ref<std::int64_t>());
+        if (a.is_int())   return dynamic(op_neg(a.as_int()));
+        if (a.is_float()) return dynamic(-a.ref<f2048>());
         fail("unary '-' cannot be applied to a dynamic value of type '" + a.type_name() + "'");
     }
 
     friend int compare(const dynamic& a, const dynamic& b) {
+        if (a.kind() == dyn_kind::small_int && b.kind() == dyn_kind::small_int) {
+            const std::int64_t x = a.ref<std::int64_t>(), y = b.ref<std::int64_t>();
+            return x < y ? -1 : (y < x ? 1 : 0);
+        }
         if (a.is_number() && b.is_number()) {
             if (a.is_int() && b.is_int()) {
-                const i2048& x = std::get<i2048>(a.m_v);
-                const i2048& y = std::get<i2048>(b.m_v);
+                const i2048 x = a.as_int();
+                const i2048 y = b.as_int();
                 return x < y ? -1 : (y < x ? 1 : 0);
             }
             const f2048 x = a.as_float(), y = b.as_float();
             return x < y ? -1 : (y < x ? 1 : 0);
         }
         if (a.is_string() && b.is_string()) {
-            const int c = std::get<std::string>(a.m_v).compare(std::get<std::string>(b.m_v));
+            const int c = a.ref<std::string>().compare(b.ref<std::string>());
             return c < 0 ? -1 : (c > 0 ? 1 : 0);
         }
         if (a.is_char() && b.is_char()) {
-            const char32_t x = std::get<char32_t>(a.m_v), y = std::get<char32_t>(b.m_v);
+            const char32_t x = a.ref<char32_t>(), y = b.ref<char32_t>();
             return x < y ? -1 : (y < x ? 1 : 0);
         }
         fail("dynamic values of type '" + a.type_name() + "' and '" + b.type_name() + "' cannot be ordered");
@@ -1877,12 +2106,9 @@ public:
 
     friend bool operator==(const dynamic& a, const dynamic& b) {
         if (a.is_number() && b.is_number()) return !a.is_unordered_number() && !b.is_unordered_number() && compare(a, b) == 0;
-        if (a.m_v.index() != b.m_v.index()) return false;
-        if (a.is_none())   return true;
-        if (a.is_bool())   return std::get<bool>(a.m_v) == std::get<bool>(b.m_v);
-        if (a.is_char())   return std::get<char32_t>(a.m_v) == std::get<char32_t>(b.m_v);
-        if (a.is_function()) return std::get<std::shared_ptr<dynamic_function>>(a.m_v) == std::get<std::shared_ptr<dynamic_function>>(b.m_v);
-        return std::get<std::string>(a.m_v) == std::get<std::string>(b.m_v);
+        if (a.m_ops != b.m_ops) return false;
+        if (!a.m_ops) return true;
+        return a.m_ops->equals(a, b);
     }
 
     friend bool operator!=(const dynamic& a, const dynamic& b) { return !(a == b); }
@@ -1891,8 +2117,115 @@ public:
     friend bool operator<=(const dynamic& a, const dynamic& b) { return compare(a, b) <= 0; }
     friend bool operator>=(const dynamic& a, const dynamic& b) { return compare(a, b) >= 0; }
 
+    static dynamic small(std::int64_t v) { dynamic d; d.emplace<std::int64_t, dyn_kind::small_int>(v); return d; }
+
 private:
-    value_type m_v;
+    const ops* m_ops = nullptr;
+    alignas(8) unsigned char m_buf[inline_size];
+
+    template <typename S>
+    static constexpr bool fits_inline = sizeof(S) <= inline_size && alignof(S) <= 8 && std::is_nothrow_move_constructible_v<S>;
+
+    template <typename S>
+    S* ptr() noexcept {
+        if constexpr (fits_inline<S>) return std::launder(reinterpret_cast<S*>(m_buf));
+        else { S* p = nullptr; std::memcpy(&p, m_buf, sizeof p); return p; }
+    }
+
+    template <typename S>
+    const S* ptr() const noexcept {
+        if constexpr (fits_inline<S>) return std::launder(reinterpret_cast<const S*>(m_buf));
+        else { S* p = nullptr; std::memcpy(&p, m_buf, sizeof p); return p; }
+    }
+
+    template <typename S>
+    const S& ref() const noexcept { return *ptr<S>(); }
+
+    void reset() noexcept {
+        if (m_ops) m_ops->destroy(*this);
+        m_ops = nullptr;
+    }
+
+    void set_int(const i2048& v) {
+        std::int64_t small_value = 0;
+        if (small_int_of(v, small_value)) emplace<std::int64_t, dyn_kind::small_int>(small_value);
+        else emplace<i2048, dyn_kind::big_int>(v);
+    }
+
+    template <typename S, dyn_kind K, typename... A>
+    void emplace(A&&... args) {
+        if constexpr (fits_inline<S>) {
+            ::new (static_cast<void*>(m_buf)) S(std::forward<A>(args)...);
+        } else {
+            S* p = new S(std::forward<A>(args)...);
+            std::memcpy(m_buf, &p, sizeof p);
+        }
+        m_ops = &table<S, K>;
+    }
+
+    template <typename S>
+    static void destroy_impl(dynamic& d) noexcept {
+        if constexpr (fits_inline<S>) d.ptr<S>()->~S();
+        else delete d.ptr<S>();
+    }
+
+    template <typename S, dyn_kind K>
+    static void copy_impl(dynamic& to, const dynamic& from) {
+        if constexpr (std::is_copy_constructible_v<S>) to.template emplace<S, K>(from.ref<S>());
+        else fail(std::string("a var holding '") + table<S, K>.name() + "' can't be copied, because that type can't be copied");
+    }
+
+    template <typename S, dyn_kind K>
+    static void move_impl(dynamic& to, dynamic& from) noexcept {
+        if constexpr (fits_inline<S>) {
+            ::new (static_cast<void*>(to.m_buf)) S(std::move(*from.ptr<S>()));
+            from.ptr<S>()->~S();
+        } else {
+            std::memcpy(to.m_buf, from.m_buf, sizeof(S*));
+        }
+        to.m_ops = from.m_ops;
+        from.m_ops = nullptr;
+    }
+
+    template <typename S, dyn_kind K>
+    static std::string to_string_impl(const dynamic& d) {
+        const S& v = d.ref<S>();
+        if constexpr (K == dyn_kind::boolean) return v ? "true" : "false";
+        else if constexpr (K == dyn_kind::character) return utf8(v);
+        else if constexpr (K == dyn_kind::small_int) return std::to_string(v);
+        else if constexpr (K == dyn_kind::big_int) return v.to_string();
+        else if constexpr (K == dyn_kind::big_float) return float_display(v);
+        else if constexpr (K == dyn_kind::string) return v;
+        else if constexpr (K == dyn_kind::function) return "function";
+        else if constexpr (std::is_pointer_v<S> || std::is_enum_v<S> || dynamic_streamable<S>::value) return to_display(v);
+        else {
+            if (dynamic_type_hooks<S>::text) return dynamic_type_hooks<S>::text(v);
+            return std::string("<") + name_impl<S, K>() + ">";
+        }
+    }
+
+    template <typename S, dyn_kind K>
+    static bool equals_impl(const dynamic& a, const dynamic& b) {
+        if constexpr (K == dyn_kind::function) return a.ref<S>() == b.ref<S>();
+        else if constexpr (dynamic_equatable<S>::value) return static_cast<bool>(a.ref<S>() == b.ref<S>());
+        else if (K == dyn_kind::object && dynamic_type_hooks<S>::equals) return dynamic_type_hooks<S>::equals(a.ref<S>(), b.ref<S>());
+        else fail(std::string("two vars holding '") + name_impl<S, K>() + "' can't be compared with '==', because that type has no '=='");
+    }
+
+    template <typename S, dyn_kind K>
+    static const char* name_impl() {
+        if constexpr (K == dyn_kind::object) {
+            const char* n = dynamic_type_name<S>::value;
+            return n ? n : "object";
+        } else {
+            return "value";
+        }
+    }
+
+    template <typename S, dyn_kind K>
+    static inline const ops table = {
+        K, fits_inline<S>, &destroy_impl<S>, &copy_impl<S, K>, &move_impl<S, K>, &to_string_impl<S, K>, &equals_impl<S, K>, &name_impl<S, K>
+    };
 };
 
 template <typename T, typename Alloc, typename... A>
@@ -1940,13 +2273,27 @@ inline bool dynamic_is(const dynamic& d) {
     else if constexpr (std::is_same_v<T, std::string>) return d.is_string();
     else if constexpr (is_int_v<T>) return d.is_int();
     else if constexpr (is_float_v<T>) return d.is_float();
-    else return false;
+    else if constexpr (is_hardware_int_v<T>) return d.is_int();
+    else if constexpr (is_hardware_float_v<T>) return d.is_float();
+    else return d.template holds<T>();
 }
 
 template <typename T>
-inline T dynamic_as(const dynamic& d, const std::string& name) {
+inline constexpr bool dynamic_builtin_v = std::is_same_v<T, bool> || std::is_same_v<T, char32_t> || std::is_same_v<T, std::string>
+    || is_int_v<T> || is_float_v<T> || is_hardware_int_v<T> || is_hardware_float_v<T> || std::is_same_v<T, dynamic>;
+
+template <typename T>
+inline auto dynamic_as(const dynamic& d, const std::string& name) -> std::conditional_t<dynamic_builtin_v<T>, T, const T&> {
     if (!dynamic_is<T>(d)) fail("this var holds a value of type '" + d.type_name() + "', not '" + name + "'");
-    return d.template as<T>();
+    if constexpr (dynamic_builtin_v<T>) return d.template as<T>();
+    else return *d.template object_ptr<T>();
+}
+
+template <typename T>
+inline auto dynamic_as(dynamic& d, const std::string& name) -> std::conditional_t<dynamic_builtin_v<T>, T, T&> {
+    if (!dynamic_is<T>(d)) fail("this var holds a value of type '" + d.type_name() + "', not '" + name + "'");
+    if constexpr (dynamic_builtin_v<T>) return d.template as<T>();
+    else return *d.template object_ptr<T>();
 }
 
 template <typename T, typename... A>
@@ -2021,10 +2368,10 @@ inline dynamic op_pos(const dynamic& a)                   { return a; }
 inline bool truthy(const dynamic& d) { return d.truthy(); }
 inline std::string to_display(const dynamic& d) { return d.to_string(); }
 
-inline dynamic& pre_inc(dynamic& x)  { x = x + dynamic(i2048(1)); return x; }
-inline dynamic& pre_dec(dynamic& x)  { x = x - dynamic(i2048(1)); return x; }
-inline dynamic  post_inc(dynamic& x) { dynamic o = x; x = x + dynamic(i2048(1)); return o; }
-inline dynamic  post_dec(dynamic& x) { dynamic o = x; x = x - dynamic(i2048(1)); return o; }
+inline dynamic& pre_inc(dynamic& x)  { x = x + dynamic::small(1); return x; }
+inline dynamic& pre_dec(dynamic& x)  { x = x - dynamic::small(1); return x; }
+inline dynamic  post_inc(dynamic& x) { dynamic o = x; x = x + dynamic::small(1); return o; }
+inline dynamic  post_dec(dynamic& x) { dynamic o = x; x = x - dynamic::small(1); return o; }
 
 template <typename To>
 inline To from_dynamic(const dynamic& d) { return d.template as<To>(); }
@@ -2035,8 +2382,9 @@ inline T& compound(T& target, F&& op) {
     return target;
 }
 
-inline std::vector<char32_t> decode_utf8(const std::string& s) {
+inline std::vector<char32_t> decode_utf8(std::string_view s) {
     std::vector<char32_t> out;
+    out.reserve(s.size());
     std::size_t i = 0;
 
     while (i < s.size()) {
@@ -2210,43 +2558,59 @@ inline void check_binding_count(const C& c, std::size_t n) {
     if (c.size() != n) fail("structured binding expects " + std::to_string(n) + " elements but the array has " + std::to_string(c.size()));
 }
 
-inline i32 count_of(const std::string& s) { return i32(static_cast<long long>(decode_utf8(s).size())); }
+inline i32 count_of(const std::string& s) { return i32(static_cast<long long>(utf8_count(s))); }
+
+inline i32 count_of(std::string_view s) { return i32(static_cast<long long>(utf8_count(s))); }
 
 template <typename C>
 inline i32 count_of(const C& c) { return i32(static_cast<long long>(c.size())); }
 
 template <typename I>
+inline char32_t char_at(std::string_view s, const I& i) {
+    const long long n = to_ll(i);
+    const std::size_t at = n < 0 ? std::string_view::npos : utf8_offset(s, static_cast<std::size_t>(n));
+    if (at == std::string_view::npos) fail("string index " + std::to_string(n) + " out of range");
+    return utf8_decode_at(s, at);
+}
+
+template <typename I>
 inline char32_t char_at(const std::string& s, const I& i) {
     const long long n = to_ll(i);
-    const std::vector<char32_t> cps = decode_utf8(s);
-    if (n < 0 || static_cast<std::size_t>(n) >= cps.size()) fail("string index " + std::to_string(n) + " out of range");
-    return cps[static_cast<std::size_t>(n)];
+    const std::size_t at = n < 0 ? std::string::npos : utf8_offset(s, static_cast<std::size_t>(n));
+    if (at == std::string::npos) fail("string index " + std::to_string(n) + " out of range");
+    return utf8_decode_at(s, at);
 }
 
 template <typename I>
 inline char32_t set_char(std::string& s, const I& i, char32_t c) {
     const long long n = to_ll(i);
-    std::vector<char32_t> cps = decode_utf8(s);
-    if (n < 0 || static_cast<std::size_t>(n) >= cps.size()) fail("string index " + std::to_string(n) + " out of range");
-    cps[static_cast<std::size_t>(n)] = c;
-    std::string out;
-    for (char32_t cp : cps) append_utf8(out, cp);
-    s = std::move(out);
+    const std::size_t at = n < 0 ? std::string::npos : utf8_offset(s, static_cast<std::size_t>(n));
+    if (at == std::string::npos) fail("string index " + std::to_string(n) + " out of range");
+    const std::size_t old_len = utf8_next(s, at) - at;
+    char bytes[4];
+    std::size_t len = 0;
+    if (c < 0x80) { bytes[len++] = static_cast<char>(c); }
+    else if (c < 0x800) { bytes[len++] = static_cast<char>(0xC0 | (c >> 6)); bytes[len++] = static_cast<char>(0x80 | (c & 0x3F)); }
+    else if (c < 0x10000) { bytes[len++] = static_cast<char>(0xE0 | (c >> 12)); bytes[len++] = static_cast<char>(0x80 | ((c >> 6) & 0x3F)); bytes[len++] = static_cast<char>(0x80 | (c & 0x3F)); }
+    else { bytes[len++] = static_cast<char>(0xF0 | (c >> 18)); bytes[len++] = static_cast<char>(0x80 | ((c >> 12) & 0x3F)); bytes[len++] = static_cast<char>(0x80 | ((c >> 6) & 0x3F)); bytes[len++] = static_cast<char>(0x80 | (c & 0x3F)); }
+    if (len == old_len) std::memcpy(&s[at], bytes, len);
+    else s.replace(at, old_len, bytes, len);
     return c;
 }
 
 namespace bm {
 
 inline std::string needle_of(const std::string& s) { return s; }
+inline std::string needle_of(std::string_view s) { return std::string(s); }
 inline std::string needle_of(char32_t c) { return utf8(c); }
 
-inline i32 cp_index(const std::string& s, std::size_t byte) {
+inline i32 cp_index(std::string_view s, std::size_t byte) {
     long long n = 0;
     for (std::size_t i = 0; i < byte && i < s.size(); ++i) if ((static_cast<unsigned char>(s[i]) & 0xC0) != 0x80) ++n;
     return i32(n);
 }
 
-inline std::size_t cp_offset(const std::string& s, long long n) {
+inline std::size_t cp_offset(std::string_view s, long long n) {
     std::size_t i = 0;
     while (i < s.size() && n > 0) {
         ++i;
@@ -2257,6 +2621,10 @@ inline std::size_t cp_offset(const std::string& s, long long n) {
 }
 
 inline i32 length(const std::string& s) { return count_of(s); }
+inline i32 length(std::string_view s) { return count_of(s); }
+inline i32 size(std::string_view s) { return i32(static_cast<long long>(s.size())); }
+inline i32 countof(std::string_view s) { return count_of(s); }
+inline i32 byte_size(std::string_view s) { return i32(static_cast<long long>(s.size())); }
 template <typename C> inline i32 length(const C& c) { return count_of(c); }
 inline i32 size(const std::string& s) { return i32(static_cast<long long>(s.size())); }
 template <typename C> inline i32 size(const C& c) { return count_of(c); }
@@ -2268,15 +2636,15 @@ inline i32 byte_size(const std::string& s) { return i32(static_cast<long long>(s
 template <typename C> inline i32 byte_size(const C& c, long long element) { return i32(static_cast<long long>(c.size()) * element); }
 
 template <typename I>
-inline std::string substr(const std::string& s, const I& start) {
+inline std::string substr(std::string_view s, const I& start) {
     const long long b = to_ll(start);
     const long long total = to_ll(count_of(s));
     if (b < 0 || b > total) fail("substr start " + std::to_string(b) + " out of range for a string of length " + std::to_string(total));
-    return s.substr(cp_offset(s, b));
+    return std::string(s.substr(cp_offset(s, b)));
 }
 
 template <typename I, typename J>
-inline std::string substr(const std::string& s, const I& start, const J& count) {
+inline std::string substr(std::string_view s, const I& start, const J& count) {
     const long long b = to_ll(start);
     const long long n = to_ll(count);
     const long long total = to_ll(count_of(s));
@@ -2284,7 +2652,7 @@ inline std::string substr(const std::string& s, const I& start, const J& count) 
     if (n < 0) fail("substr count " + std::to_string(n) + " is negative");
     const std::size_t from = cp_offset(s, b);
     const std::size_t to = from + cp_offset(s.substr(from), n);
-    return s.substr(from, to - from);
+    return std::string(s.substr(from, to - from));
 }
 
 template <typename N>
@@ -2298,13 +2666,23 @@ template <typename N>
 inline bool contains(const std::string& s, const N& needle) { return s.find(needle_of(needle)) != std::string::npos; }
 
 template <typename N>
-inline bool starts_with(const std::string& s, const N& needle) {
+inline bool contains(std::string_view s, const N& needle) { return s.find(needle_of(needle)) != std::string_view::npos; }
+
+template <typename N>
+inline i32 find(std::string_view s, const N& needle) {
+    const std::size_t at = s.find(needle_of(needle));
+    if (at == std::string_view::npos) return i32::from_kind(special_kind::undefined);
+    return cp_index(s, at);
+}
+
+template <typename N>
+inline bool starts_with(std::string_view s, const N& needle) {
     const std::string n = needle_of(needle);
     return s.size() >= n.size() && s.compare(0, n.size(), n) == 0;
 }
 
 template <typename N>
-inline bool ends_with(const std::string& s, const N& needle) {
+inline bool ends_with(std::string_view s, const N& needle) {
     const std::string n = needle_of(needle);
     return s.size() >= n.size() && s.compare(s.size() - n.size(), n.size(), n) == 0;
 }
@@ -2327,23 +2705,23 @@ inline char32_t lower_cp(char32_t c) {
     return c;
 }
 
-inline std::string to_upper(const std::string& s) {
+inline std::string to_upper(std::string_view s) {
     std::string out;
     for (char32_t c : decode_utf8(s)) append_utf8(out, upper_cp(c));
     return out;
 }
 
-inline std::string to_lower(const std::string& s) {
+inline std::string to_lower(std::string_view s) {
     std::string out;
     for (char32_t c : decode_utf8(s)) append_utf8(out, lower_cp(c));
     return out;
 }
 
-inline std::string trim(const std::string& s) {
+inline std::string trim(std::string_view s) {
     const char* ws = " \t\n\r\f\v";
     const std::size_t b = s.find_first_not_of(ws);
     if (b == std::string::npos) return std::string();
-    return s.substr(b, s.find_last_not_of(ws) - b + 1);
+    return std::string(s.substr(b, s.find_last_not_of(ws) - b + 1));
 }
 
 template <typename C, typename V>

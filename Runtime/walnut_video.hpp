@@ -2,6 +2,7 @@
 #define WALNUT_VIDEO_HPP
 
 #include "walnut_runtime.hpp"
+#include "fizmo/../../Source/Util Hpp/util_functions.hpp"
 #include "walnut_audio.hpp"
 #include "fizmo/../../Source/Video/decoder.hpp"
 #include "fizmo/../../Source/Video/demux.hpp"

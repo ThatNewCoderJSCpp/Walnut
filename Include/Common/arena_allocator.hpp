@@ -114,6 +114,33 @@ public:
     }
     
     std::size_t block_count() const { return blocks_.size(); }
+
+    bool try_extend_last(void* ptr, std::size_t old_size, std::size_t new_size) noexcept;
+
+    static Arena*& current_slot() noexcept {
+        static thread_local Arena* slot = nullptr;
+        return slot;
+    }
+
+    static Arena& fallback() {
+        static thread_local Arena arena;
+        return arena;
+    }
+
+    static Arena& current() {
+        Arena* a = current_slot();
+        return a ? *a : fallback();
+    }
+};
+
+class ArenaScope {
+    Arena* m_previous;
+
+public:
+    explicit ArenaScope(Arena& arena) noexcept : m_previous(Arena::current_slot()) { Arena::current_slot() = &arena; }
+    ~ArenaScope() { Arena::current_slot() = m_previous; }
+    ArenaScope(const ArenaScope&) = delete;
+    ArenaScope& operator=(const ArenaScope&) = delete;
 };
 
 template<typename T>

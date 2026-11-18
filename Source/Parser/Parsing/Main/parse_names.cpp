@@ -3,7 +3,7 @@
 namespace walnut {
 namespace parsing {
 
-std::string Parser::join_qualified_name(const std::vector<std::string_view>& parts) {
+std::string Parser::join_qualified_name(Span<std::string_view const> parts) {
     std::string out;
 
     for (std::size_t i = 0; i < parts.size(); ++i) {

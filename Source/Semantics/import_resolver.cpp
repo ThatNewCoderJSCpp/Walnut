@@ -21,7 +21,7 @@ void ImportResolver::run(nodes::BlockStatement* program) {
     }
 }
 
-Scope* ImportResolver::namespace_path_parent(Scope* base, const std::vector<std::string_view>& parts, ASTNode* origin) {
+Scope* ImportResolver::namespace_path_parent(Scope* base, Span<std::string_view const> parts, ASTNode* origin) {
     Scope* cur = base;
         
     for (std::size_t i = 0; i + 1 < parts.size(); ++i) {
@@ -105,14 +105,14 @@ void ImportResolver::export_item(const nodes::ImportExportItem& it, std::string_
     e.has_source    = it.has_source;
     e.decl          = it.decl;
     e.module_owner  = module_owner;
-    e.origin_parts  = it.target_parts;
+    e.origin_parts  = it.target_parts.to_vector();
     e.origin_global = it.target_global;
 
     if (it.has_alias) {
-        e.public_parts  = it.alias_parts;
+        e.public_parts  = it.alias_parts.to_vector();
         e.public_global = it.alias_global;
     } else {
-        e.public_parts  = it.target_parts;
+        e.public_parts  = it.target_parts.to_vector();
         e.public_global = it.target_global;
     }
 

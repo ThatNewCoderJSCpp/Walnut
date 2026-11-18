@@ -42,7 +42,7 @@ struct Identifier : ASTNode {
 };
 
 struct QualifiedIdentifier : ASTNode {
-    std::vector<std::string_view> m_parts;
+    ArenaVector<std::string_view> m_parts;
     bool m_is_global;
     semantics::Symbol* resolved = nullptr; 
     semantics::Symbol* dependent_head = nullptr;
@@ -52,7 +52,7 @@ struct QualifiedIdentifier : ASTNode {
     static bool classof(const ASTNode* n) { return n->kind == Kind::QualifiedIdentifier; }
 
     void add_part(std::string_view part) { m_parts.push_back(part); }
-    const std::vector<std::string_view>& parts() const { return m_parts; }
+    const ArenaVector<std::string_view>& parts() const { return m_parts; }
     bool is_global() const { return m_is_global; }
     bool is_qualified() const { return m_parts.size() > 1; }
     std::string_view simple_name() const { return m_parts.empty() ? "" : m_parts.back(); }
@@ -181,8 +181,8 @@ struct TernaryExpression : ASTNode {
 
 struct CallExpression : ASTNode {
     ASTNode* m_callee;
-    std::vector<ASTNode*> m_arguments;
-    std::vector<parser_types::TemplateArgument*> m_template_args;
+    ArenaVector<ASTNode*> m_arguments;
+    ArenaVector<parser_types::TemplateArgument*> m_template_args;
     semantics::Symbol* resolved = nullptr;
     bool returns_rvalue_ref = false;
     ASTNode* closure_spec = nullptr;
@@ -197,10 +197,10 @@ struct CallExpression : ASTNode {
     void add_argument(ASTNode* arg) { m_arguments.push_back(arg); }
     ASTNode* get_callee() { return m_callee; }
     const ASTNode* get_callee() const { return m_callee; }
-    const std::vector<ASTNode*>& get_arguments() const { return m_arguments; }
+    const ArenaVector<ASTNode*>& get_arguments() const { return m_arguments; }
     std::size_t argument_count() const { return m_arguments.size(); }
-    void set_template_args(std::vector<parser_types::TemplateArgument*> a) { m_template_args = std::move(a); }
-    const std::vector<parser_types::TemplateArgument*>& get_template_args() const { return m_template_args; }
+    void set_template_args(ArenaVector<parser_types::TemplateArgument*> a) { m_template_args = std::move(a); }
+    const ArenaVector<parser_types::TemplateArgument*>& get_template_args() const { return m_template_args; }
     bool has_template_args() const { return !m_template_args.empty(); }
 
     void print(std::ostream& os, std::size_t indent) const;
@@ -227,7 +227,7 @@ struct SubscriptExpression : ASTNode {
 };
 
 struct BraceInitializerList : ASTNode {
-    std::vector<ASTNode*> m_elements;
+    ArenaVector<ASTNode*> m_elements;
     semantics::Symbol* ctor = nullptr;
     semantics::Type* init_list_type = nullptr;
     semantics::Symbol* init_list_ctor = nullptr;
@@ -238,7 +238,7 @@ struct BraceInitializerList : ASTNode {
     static bool classof(const ASTNode* n) { return n->kind == Kind::BraceInitializerList; }
 
     void add_element(ASTNode* element) { m_elements.push_back(element); }
-    const std::vector<ASTNode*>& get_elements() const { return m_elements; }
+    const ArenaVector<ASTNode*>& get_elements() const { return m_elements; }
     std::size_t size() const { return m_elements.size(); }
     bool empty() const { return m_elements.empty(); }
 
@@ -258,8 +258,8 @@ struct MemberAccessExpression : ASTNode {
     std::string_view m_member;
     Op               m_op;
     semantics::Symbol* resolved = nullptr; 
-    std::vector<semantics::Symbol*> arrow_ops;
-    std::vector<std::string_view> qualifier;
+    ArenaVector<semantics::Symbol*> arrow_ops;
+    ArenaVector<std::string_view> qualifier;
     bool qualifier_global = false;
     semantics::Symbol* qualifier_symbol = nullptr;
     semantics::Scope* qualifier_scope = nullptr;
@@ -312,17 +312,17 @@ struct CastExpression : ASTNode {
 
 struct TemplateInstantiation : ASTNode {
     ASTNode*                                      m_template; 
-    std::vector<parser_types::TemplateArgument*>  m_args;
+    ArenaVector<parser_types::TemplateArgument*>  m_args;
     semantics::Symbol*                            var_instance = nullptr;
     semantics::Symbol*                            fn_instance = nullptr;
     int                                           concept_result = -1;
 
-    TemplateInstantiation(ASTNode* tmpl, std::vector<parser_types::TemplateArgument*> args, std::uint32_t ln = 0) : ASTNode(Kind::TemplateInstantiation, ln), m_template(tmpl), m_args(std::move(args)) {}
+    TemplateInstantiation(ASTNode* tmpl, ArenaVector<parser_types::TemplateArgument*> args, std::uint32_t ln = 0) : ASTNode(Kind::TemplateInstantiation, ln), m_template(tmpl), m_args(std::move(args)) {}
 
     static bool classof(const ASTNode* n) { return n->kind == Kind::TemplateInstantiation; }
 
     const ASTNode* get_template() const { return m_template; }
-    const std::vector<parser_types::TemplateArgument*>& get_args() const { return m_args; }
+    const ArenaVector<parser_types::TemplateArgument*>& get_args() const { return m_args; }
 
     void print(std::ostream& os, std::size_t indent) const;
 
@@ -337,8 +337,8 @@ struct TypeQueryExpression : ASTNode {
     semantics::Type*                queried = nullptr;
     long long                       pack_count = -1;
     parser_types::TypeTrait         trait = parser_types::TypeTrait::IsSame;
-    std::vector<parser_types::TemplateArgument*> extra_operands;
-    std::vector<semantics::Type*>   extra_queried;
+    ArenaVector<parser_types::TemplateArgument*> extra_operands;
+    ArenaVector<semantics::Type*>   extra_queried;
     const std::string*              type_name = nullptr;
 
     TypeQueryExpression(Op o, parser_types::TemplateArgument* operand_, std::uint32_t ln = 0) : ASTNode(Kind::TypeQuery, ln), op(o), operand(operand_) {}
@@ -357,13 +357,13 @@ struct TypeQueryExpression : ASTNode {
 
 struct NewExpression : ASTNode {
     parser_types::TypeInfo type;
-    std::vector<ASTNode*>  args;        
+    ArenaVector<ASTNode*>  args;        
     ASTNode*               array_size;  
     bool                   is_array;
     semantics::Symbol*     ctor  = nullptr;
     semantics::Symbol*     alloc = nullptr;
 
-    NewExpression(const parser_types::TypeInfo& t, std::vector<ASTNode*> a, ASTNode* size, bool arr, std::uint32_t ln = 0);
+    NewExpression(const parser_types::TypeInfo& t, ArenaVector<ASTNode*> a, ASTNode* size, bool arr, std::uint32_t ln = 0);
 
     static bool classof(const ASTNode* n) { return n->kind == Kind::NewExpression; }
 

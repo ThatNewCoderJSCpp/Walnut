@@ -250,7 +250,7 @@ ASTNode* TypeQueryExpression::clone_into(Arena& a) const {
     return c;
 }
 
-NewExpression::NewExpression(const parser_types::TypeInfo& t, std::vector<ASTNode*> a, ASTNode* size, bool arr, std::uint32_t ln) : ASTNode(Kind::NewExpression, ln), type(t), args(std::move(a)),array_size(size), is_array(arr) {}
+NewExpression::NewExpression(const parser_types::TypeInfo& t, ArenaVector<ASTNode*> a, ASTNode* size, bool arr, std::uint32_t ln) : ASTNode(Kind::NewExpression, ln), type(t), args(std::move(a)),array_size(size), is_array(arr) {}
 
 void NewExpression::print(std::ostream& os, std::size_t indent) const {
     print_indent(os, indent);

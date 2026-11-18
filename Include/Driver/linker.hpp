@@ -67,21 +67,21 @@ private:
         return p.empty() ? "<unknown unit>" : p;
     }
 
-    static const std::vector<std::string_view>& local_parts(const nodes::ImportExportItem& it);
+    static const ArenaVector<std::string_view>& local_parts(const nodes::ImportExportItem& it);
 
     static std::vector<std::string_view> export_public_parts(const semantics::ExportEntry& e);
 
     static std::vector<std::string_view> export_origin_parts(const semantics::ExportEntry& e);
 
-    static std::string join_parts(const std::vector<std::string_view>& parts);
+    static std::string join_parts(Span<std::string_view const> parts);
 
     static std::string lowered(std::string_view s);
 
     static std::size_t edit_distance(std::string_view a, std::string_view b, std::size_t max);
 
-    static std::string nearest_export(const UnitFrontResult& tgt, const std::vector<std::string_view>& want);
+    static std::string nearest_export(const UnitFrontResult& tgt, Span<std::string_view const> want);
 
-    const semantics::ExportEntry* find_export(const UnitFrontResult& tgt, const std::vector<std::string_view>& name, IK kind);
+    const semantics::ExportEntry* find_export(const UnitFrontResult& tgt, Span<std::string_view const> name, IK kind);
 
     semantics::Symbol* resolve_export(const UnitFrontResult& tgt, const semantics::ExportEntry& e, bool& defer);
 

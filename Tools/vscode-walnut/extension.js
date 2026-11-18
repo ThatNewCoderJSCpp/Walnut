@@ -31,6 +31,7 @@ const categories = {
     'strings': { tm: ['string.quoted.double.walnut', 'string.quoted.single.walnut', 'string.interpolated.walnut'] },
     'escapes': { tm: ['constant.character.escape.walnut'] },
     'numbers': { tm: ['constant.numeric.decimal.walnut', 'constant.numeric.hex.walnut', 'constant.numeric.octal.walnut', 'constant.numeric.binary.walnut'] },
+    'number suffixes': { tm: ['constant.numeric.suffix.walnut'] },
     'comments': { tm: ['comment.line.double-slash.walnut', 'comment.block.walnut'] },
     'preprocessor': { tm: ['meta.preprocessor.walnut', 'keyword.control.directive.walnut'] }
 };
@@ -47,7 +48,7 @@ const keywordWords = new Set([
     'fallthrough', 'co_return', 'co_yield', 'co_await', 'from', 'match', 'has', 'not', 'safe', 'compile', 'continue', 'default', 'repeat', 'return', 'switch', 'await', 'break', 'catch', 'label', 'throw', 'while', 'case', 'down', 'else', 'goto', 'then', 'end', 'for', 'try', 'as', 'do', 'if', 'in', 'is', 'invalidate',
     'constructor', 'destructor', 'namespace', 'function', 'inherits', 'operator', 'requires', 'template', 'typename', 'concept', 'extends', 'include', 'inherit', 'typedef', 'define', 'export', 'import', 'module', 'struct', 'class', 'union', 'using', 'enum', 'def', 'let',
     'thread_local', 'threadlocal', 'no_discard', 'threadsafe', 'automatic', 'consteval', 'constexpr', 'constinit', 'nodiscard', 'protected', 'abstract', 'constant', 'explicit', 'implicit', 'noexcept', 'override', 'volatile', 'hoisted', 'mutable', 'private', 'virtual', 'extern', 'friend', 'global', 'hidden', 'inline', 'public', 'static', 'async', 'const', 'hoist', 'local', 'lazy',
-    'character', 'iterable', 'unsigned', 'variable', 'boolean', 'decimal', 'dynamic', 'floater', 'integer', 'special', 'variant', 'double', 'string', 'array', 'float', 'short', 'auto', 'bool', 'char', 'long', 'text', 'void', 'any', 'arr', 'dec', 'int', 'str', 'txt', 'var',
+    'string_view', 'strv', 'character', 'iterable', 'unsigned', 'variable', 'boolean', 'decimal', 'dynamic', 'floater', 'integer', 'special', 'variant', 'double', 'string', 'array', 'float', 'short', 'auto', 'bool', 'char', 'long', 'text', 'void', 'any', 'arr', 'dec', 'int', 'str', 'txt', 'var',
     'indeterminate', 'undefined', 'infinity', 'nullptr', 'FALSE', 'False', 'false', 'TRUE', 'True', 'true', 'inf', 'nan',
     'reinterpret_cast', 'dynamic_cast', 'static_cast', 'const_cast', 'bit_cast', 'bitcast',
     'discard_no_discard', 'discard_nodiscard', 'discard_const', 'static_assert', 'align_as', 'align_of', 'count_of', 'decltype', 'alignas', 'alignof', 'countof', 'size_of', 'type_id', 'type_of', 'delete', 'sizeof', 'typeid', 'typeof', 'new'
@@ -1090,6 +1091,235 @@ const provider = {
     }
 };
 
+function blockRanges(text) {
+    const ranges = [];
+    const open = [];
+    const regions = [];
+    const interpolations = [];
+    let line = 0;
+    let i = 0;
+    const n = text.length;
+    let lineStart = true;
+
+    const fold = (start, end, kind) => {
+        if (end > start) ranges.push(new vscode.FoldingRange(start, end, kind));
+    };
+
+    const closeBrace = () => {
+        if (open.length === 0) return;
+        const start = open.pop();
+        fold(start, line - 1);
+    };
+
+    while (i < n) {
+        const c = text[i];
+        if (c === '\n') { line++; i++; lineStart = true; continue; }
+        if (c === ' ' || c === '\t' || c === '\r') { i++; continue; }
+        const wasLineStart = lineStart;
+        lineStart = false;
+
+        if (c === '/' && text[i + 1] === '/') {
+            let end = text.indexOf('\n', i);
+            if (end < 0) end = n;
+            const comment = text.slice(i, end);
+            if (wasLineStart && /^\/\/\s*#?region\b/.test(comment)) regions.push(line);
+            else if (wasLineStart && /^\/\/\s*#?endregion\b/.test(comment) && regions.length) fold(regions.pop(), line, vscode.FoldingRangeKind.Region);
+            i = end;
+            continue;
+        }
+
+        if (c === '/' && text[i + 1] === '*') {
+            const start = line;
+            let end = text.indexOf('*/', i + 2);
+            if (end < 0) end = n; else end += 2;
+            for (let k = i; k < end; k++) if (text[k] === '\n') line++;
+            fold(start, line, vscode.FoldingRangeKind.Comment);
+            i = end;
+            continue;
+        }
+
+        if (c === '"' || c === "'" || c === '`') {
+            i++;
+            while (i < n && text[i] !== c) {
+                if (text[i] === '\\') { i += 2; continue; }
+                if (c === '`' && text[i] === '$' && text[i + 1] === '{') { interpolations.push(open.length); open.push(line); i += 2; break; }
+                if (text[i] === '\n') { if (c !== '`') break; line++; }
+                i++;
+            }
+            if (i < n && text[i] === c) i++;
+            continue;
+        }
+
+        if (/[0-9]/.test(c)) {
+            while (i < n && /[0-9A-Za-z_.']/.test(text[i])) i++;
+            continue;
+        }
+
+        if (/[A-Za-z_]/.test(c)) {
+            while (i < n && /[A-Za-z0-9_]/.test(text[i])) i++;
+            continue;
+        }
+
+        if (c === '{') { open.push(line); i++; continue; }
+
+        if (c === '}') {
+            i++;
+            if (interpolations.length && interpolations[interpolations.length - 1] === open.length - 1) {
+                interpolations.pop();
+                open.pop();
+                while (i < n && text[i] !== '`') {
+                    if (text[i] === '\\') { i += 2; continue; }
+                    if (text[i] === '$' && text[i + 1] === '{') { interpolations.push(open.length); open.push(line); i += 2; break; }
+                    if (text[i] === '\n') line++;
+                    i++;
+                }
+                if (i < n && text[i] === '`') i++;
+                continue;
+            }
+            closeBrace();
+            continue;
+        }
+
+        i++;
+    }
+
+    return ranges;
+}
+
+const foldingProvider = {
+    provideFoldingRanges(document) {
+        return blockRanges(document.getText());
+    }
+};
+
+function braceBlocks(text) {
+    const blocks = [];
+    const open = [];
+    const interpolations = [];
+    let line = 0;
+    let i = 0;
+    const n = text.length;
+
+    while (i < n) {
+        const c = text[i];
+        if (c === '\n') { line++; i++; continue; }
+        if (c === '/' && text[i + 1] === '/') {
+            let end = text.indexOf('\n', i);
+            if (end < 0) end = n;
+            i = end;
+            continue;
+        }
+        if (c === '/' && text[i + 1] === '*') {
+            let end = text.indexOf('*/', i + 2);
+            if (end < 0) end = n; else end += 2;
+            for (let k = i; k < end; k++) if (text[k] === '\n') line++;
+            i = end;
+            continue;
+        }
+        if (c === '"' || c === "'" || c === '`') {
+            i++;
+            while (i < n && text[i] !== c) {
+                if (text[i] === '\\') { i += 2; continue; }
+                if (c === '`' && text[i] === '$' && text[i + 1] === '{') { interpolations.push(open.length); open.push(null); i += 2; break; }
+                if (text[i] === '\n') { if (c !== '`') break; line++; }
+                i++;
+            }
+            if (i < n && text[i] === c) i++;
+            continue;
+        }
+        if (/[0-9A-Za-z_]/.test(c)) {
+            while (i < n && /[0-9A-Za-z_.']/.test(text[i]) && !(text[i] === '.' && /[A-Za-z_]/.test(c))) i++;
+            continue;
+        }
+        if (c === '{') { open.push({ offset: i, line }); i++; continue; }
+        if (c === '}') {
+            i++;
+            if (interpolations.length && interpolations[interpolations.length - 1] === open.length - 1) {
+                interpolations.pop();
+                open.pop();
+                while (i < n && text[i] !== '`') {
+                    if (text[i] === '\\') { i += 2; continue; }
+                    if (text[i] === '$' && text[i + 1] === '{') { interpolations.push(open.length); open.push(null); i += 2; break; }
+                    if (text[i] === '\n') line++;
+                    i++;
+                }
+                if (i < n && text[i] === '`') i++;
+                continue;
+            }
+            const start = open.pop();
+            if (start) blocks.push({ open: start.offset, openLine: start.line, close: i - 1, closeLine: line });
+            continue;
+        }
+        i++;
+    }
+    return blocks;
+}
+
+function blockHeader(lines, block, text) {
+    const lineStart = text.lastIndexOf('\n', block.open - 1) + 1;
+    let header = text.slice(lineStart, block.open);
+    let first = block.openLine;
+    const balance = s => { let d = 0; for (const ch of s) { if (ch === '(') d++; else if (ch === ')') d--; } return d; };
+    let depth = balance(header);
+    while (first > 0 && (header.trim() === '' || depth < 0)) {
+        first--;
+        const prev = lines[first].replace(/\/\/.*$/, '');
+        if (prev.trim() === '' && header.trim() !== '') continue;
+        header = prev + ' ' + header;
+        depth = balance(header);
+        if (header.trim() !== '' && depth >= 0) break;
+    }
+    return { first, header: header.replace(/\s+/g, ' ').replace(/^\s*\}\s*/, '').trim() };
+}
+
+function describeBlock(header) {
+    const S = vscode.SymbolKind;
+    let h = header.replace(/\[\[[^\]]*\]\]/g, ' ').replace(/\s+/g, ' ').trim();
+    let m;
+    if ((m = /^(?:export\s+)?(?:inline\s+)?namespace\s+([A-Za-z_][\w:]*)/.exec(h))) return { name: m[1], detail: 'namespace', kind: S.Namespace };
+    if ((m = /^safe\b\s*(\(\s*\w+\s*\))?\s*$/.exec(h))) return { name: 'safe' + (m[1] ? m[1].replace(/\s+/g, '') : ''), detail: 'safe block', kind: S.Module };
+    if ((m = /^extern\b\s*("[^"]*")?/.exec(h))) return { name: 'extern' + (m[1] ? ' ' + m[1] : ''), detail: 'extern block', kind: S.Module };
+    if ((m = /\b(class|struct|union|interface)\s+([A-Za-z_]\w*)/.exec(h)) && !/\bfunction\b/.test(h.slice(0, m.index))) return { name: m[2], detail: m[1], kind: m[1] === 'struct' ? S.Struct : m[1] === 'interface' ? S.Interface : S.Class };
+    if ((m = /\benum\s+(?:class\s+|struct\s+)?([A-Za-z_]\w*)/.exec(h))) return { name: m[1], detail: 'enum', kind: S.Enum };
+    if ((m = /\bconcept\s+([A-Za-z_]\w*)/.exec(h))) return { name: m[1], detail: 'concept', kind: S.Interface };
+    if ((m = /\bfunction\s+(operator\s*\([^)]*\)|[A-Za-z_][\w:<>,\s]*?)\s*(?:\(|<)/.exec(h)) || (m = /\bfunction\s+([A-Za-z_][\w:]*)/.exec(h))) return { name: m[1].trim(), detail: 'function', kind: S.Function };
+    if ((m = /^operator\s*\(([^)]*)\)/.exec(h)) || (m = /\boperator\s*\(([^)]*)\)\s*function\b/.exec(h))) return { name: 'operator(' + m[1].trim() + ')', detail: 'operator', kind: S.Operator };
+    if (/^(?:constructor|destructor)\b/.test(h)) return { name: h.split(/[\s(]/)[0], detail: '', kind: S.Constructor };
+    if ((m = /^(else\s+if|if|else|for|while|do|switch|match|try|catch|loop|repeat|unless|until|defer|scope|lock|async|unsafe)\b/.exec(h))) return { name: h.length > 60 ? h.slice(0, 57) + '...' : h, detail: '', kind: S.Event, control: true };
+    if (/\]\s*\([^)]*\)\s*(?:->[^{]*)?$/.test(h) || /\bfunction\s*\(/.test(h)) return { name: 'lambda', detail: '', kind: S.Function, control: true };
+    return null;
+}
+
+function blockSymbols(document) {
+    const text = document.getText();
+    const lines = text.split('\n');
+    const blocks = braceBlocks(text).filter(b => b.closeLine > b.openLine).sort((a, b) => a.open - b.open);
+    const roots = [];
+    const stack = [];
+    for (const block of blocks) {
+        while (stack.length && stack[stack.length - 1].block.close < block.open) stack.pop();
+        const { first, header } = blockHeader(lines, block, text);
+        const what = describeBlock(header);
+        if (!what) continue;
+        const endLine = Math.min(block.closeLine, document.lineCount - 1);
+        const range = new vscode.Range(first, 0, endLine, document.lineAt(endLine).text.length);
+        const openLine = document.lineAt(block.openLine).text;
+        const nameAt = Math.max(0, openLine.search(/\S/));
+        const selection = new vscode.Range(block.openLine, nameAt, block.openLine, Math.max(nameAt, openLine.length));
+        const symbol = new vscode.DocumentSymbol(what.name || header, what.detail, what.kind, range, range.contains(selection) ? selection : range);
+        const parent = stack.length ? stack[stack.length - 1].symbol : null;
+        if (parent) parent.children.push(symbol); else roots.push(symbol);
+        stack.push({ block, symbol });
+    }
+    return roots;
+}
+
+const symbolProvider = {
+    provideDocumentSymbols(document) {
+        return blockSymbols(document);
+    }
+};
+
 function activate(context) {
     extensionContext = context;
     extensionPath = context.extensionPath;
@@ -1104,6 +1334,8 @@ function activate(context) {
         vscode.languages.registerHoverProvider(walnutSelector, hoverProvider),
         vscode.languages.registerDefinitionProvider(walnutSelector, definitionProvider),
         vscode.languages.registerDeclarationProvider(walnutSelector, declarationProvider),
+        vscode.languages.registerFoldingRangeProvider(walnutSelector, foldingProvider),
+        vscode.languages.registerDocumentSymbolProvider(walnutSelector, symbolProvider, { label: 'Walnut' }),
         vscode.workspace.onDidCloseTextDocument(doc => { diagnostics.delete(doc.uri); lastResults.delete(doc.uri.toString()); errorLines.delete(doc.uri.toString()); hoverResults.delete(doc.uri.toString()); linkResults.delete(doc.uri.toString()); }),
         vscode.window.onDidChangeVisibleTextEditors(showErrorLines),
         vscode.workspace.onDidSaveTextDocument(doc => {

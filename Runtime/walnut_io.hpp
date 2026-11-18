@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <memory>
 #include <mutex>
+#include <charconv>
 #include <string>
 #include <vector>
 
@@ -349,6 +350,30 @@ inline std::string with_base_prefix(std::string digits, std::int64_t base, bool 
 inline std::string upper_ascii(std::string s) {
     for (char& c : s) if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 32);
     return s;
+}
+
+inline std::string format_u64_digits(std::uint64_t m, std::int64_t base, bool upper) {
+    char buf[72];
+    const int b = (base >= 2 && base <= 36) ? static_cast<int>(base) : 10;
+    const auto [end, ec] = std::to_chars(buf, buf + sizeof buf, m, b);
+    std::string digits(buf, ec == std::errc() ? end : buf);
+    if (upper) digits = upper_ascii(digits);
+    return digits;
+}
+
+inline std::string format_int64(std::int64_t v, std::int64_t base, bool upper, bool showbase, bool showpos) {
+    const bool neg = v < 0;
+    const std::uint64_t m = neg ? 0ull - static_cast<std::uint64_t>(v) : static_cast<std::uint64_t>(v);
+    std::string digits = format_u64_digits(m, base, upper);
+    if (showbase) digits = with_base_prefix(digits, base, upper);
+    if (neg) return "-" + digits;
+    return showpos ? "+" + digits : digits;
+}
+
+inline std::string format_uint64(std::uint64_t v, std::int64_t base, bool upper, bool showbase, bool showpos) {
+    std::string digits = format_u64_digits(v, base, upper);
+    if (showbase) digits = with_base_prefix(digits, base, upper);
+    return showpos ? "+" + digits : digits;
 }
 
 inline std::string format_int(walnut_rt::i2048 v, std::int64_t base, bool upper, bool showbase, bool showpos) {

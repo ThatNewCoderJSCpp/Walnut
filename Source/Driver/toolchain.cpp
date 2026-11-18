@@ -226,7 +226,7 @@ struct Sha256 {
     }
 };
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
 std::string os_release_value(const std::string& text, const std::string& key) {
     std::istringstream in(text);
     std::string line;
@@ -261,6 +261,22 @@ int install_with_package_manager(const InitOptions& o) {
     }
     std::cout << "walnut: finish the installer that opened, then 'walnut init --status' checks that the compiler works\n";
     return 0;
+#elif defined(__ANDROID__)
+    const std::string command = find_program("pkg") ? "pkg install -y clang" : "apt install -y clang";
+    std::cout << "walnut: no C++ compiler found; in Termux, walnut can install Clang with:\n    " << command << "\n";
+    if (!ask_yes("Run it now?", o.yes)) return 1;
+    if (run(command) != 0) {
+        std::cerr << "walnut: the install command failed\n";
+        return 1;
+    }
+    for (const char* c : { "c++", "clang++" }) {
+        if (find_program(c)) {
+            std::cout << "walnut: ready; programs will be compiled with " << c << "\n";
+            return 0;
+        }
+    }
+    std::cerr << "walnut: the install finished, but no C++ compiler is on PATH yet; open a new Termux session and run 'walnut init --status'\n";
+    return 1;
 #else
     std::string text;
     {

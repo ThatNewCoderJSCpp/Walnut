@@ -24,7 +24,7 @@ void Linker::run(const std::unordered_map<FileId, UnitFrontResult>& results, con
     }
 
     for (const Pending& p : pending) {
-        const std::vector<std::string_view>& parts = local_parts(*p.item);
+        const auto& parts = local_parts(*p.item);
         std::string name(parts.empty() ? std::string_view{} : parts.back());
         report(p, "unresolved import '" + name + "' from \"" + std::string(p.item->source) + "\" (cyclic or unresolvable re-export)");
     }
@@ -84,7 +84,7 @@ auto Linker::collect() -> std::vector<Pending> {
     return out;
 }
 
-const std::vector<std::string_view>& Linker::local_parts(const nodes::ImportExportItem& it) {
+const ArenaVector<std::string_view>& Linker::local_parts(const nodes::ImportExportItem& it) {
     if (it.kind == IK::File) return it.alias_parts;
     return it.has_alias ? it.alias_parts : it.target_parts;  
 }
@@ -99,7 +99,7 @@ std::vector<std::string_view> Linker::export_origin_parts(const semantics::Expor
     return e.origin_parts.empty() ? e.public_parts : e.origin_parts;
 }
 
-std::string Linker::join_parts(const std::vector<std::string_view>& parts) {
+std::string Linker::join_parts(Span<std::string_view const> parts) {
     std::string out;
 
     for (std::size_t i = 0; i < parts.size(); ++i) {
@@ -139,7 +139,7 @@ std::size_t Linker::edit_distance(std::string_view a, std::string_view b, std::s
     return prev[a.size()];
 }
 
-std::string Linker::nearest_export(const UnitFrontResult& tgt, const std::vector<std::string_view>& want) {
+std::string Linker::nearest_export(const UnitFrontResult& tgt, Span<std::string_view const> want) {
     if (want.empty()) return {};
     const std::string want_full  = join_parts(want);
     const std::string want_lower = lowered(want_full);
@@ -171,7 +171,7 @@ std::string Linker::nearest_export(const UnitFrontResult& tgt, const std::vector
     return best;
 }
 
-const semantics::ExportEntry* Linker::find_export(const UnitFrontResult& tgt, const std::vector<std::string_view>& name, IK kind) {
+const semantics::ExportEntry* Linker::find_export(const UnitFrontResult& tgt, Span<std::string_view const> name, IK kind) {
     for (const semantics::ExportEntry& e : tgt.exports) {
         const bool kind_ok = (e.kind == kind) || (kind == IK::Name && e.kind == IK::Function); 
         if (kind_ok && export_public_parts(e) == name) return &e;

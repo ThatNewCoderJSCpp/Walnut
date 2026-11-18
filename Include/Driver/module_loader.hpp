@@ -81,7 +81,7 @@ private:
 
     std::optional<FileId> resolve_file(std::string_view raw, FileId importer, std::uint32_t line);
 
-    std::optional<FileId> resolve_module(const std::vector<std::string_view>& parts, FileId importer, std::uint32_t line);
+    std::optional<FileId> resolve_module(Span<std::string_view const> parts, FileId importer, std::uint32_t line);
 };
 
 } // namespace driver

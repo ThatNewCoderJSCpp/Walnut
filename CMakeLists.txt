@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(walnut VERSION 1.3.1 LANGUAGES CXX)
+project(walnut VERSION 1.4.0 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -8,7 +8,7 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
-set(WALNUT_FIZMO_TAG "v1.4.6" CACHE STRING "Fizmo git tag to fetch")
+set(WALNUT_FIZMO_TAG "v1.4.7" CACHE STRING "Fizmo git tag to fetch")
 FetchContent_Declare(fizmo
     GIT_REPOSITORY https://github.com/ThatNewCoderJSCpp/Fizmo.git
     GIT_TAG        ${WALNUT_FIZMO_TAG}
@@ -227,7 +227,7 @@ file(GLOB_RECURSE WALNUT_LIBRARY_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/Library/*.wal"
     "${CMAKE_CURRENT_SOURCE_DIR}/Library/*.walh")
 list(SORT WALNUT_LIBRARY_FILES)
-set(_walnut_library "#ifndef WALNUT_LIBRARY_HPP\n#define WALNUT_LIBRARY_HPP\n\n#include <cstddef>\n\nnamespace walnut_library {\n\nstruct File {\n    const char* path;\n    const unsigned char* data;\n    std::size_t size;\n};\n\n")
+set(_walnut_library_data "#include \"walnut_library.hpp\"\n\nnamespace walnut_library {\n\n")
 set(_walnut_library_entries "")
 set(_walnut_library_index 0)
 foreach(lib_file IN LISTS WALNUT_LIBRARY_FILES)
@@ -237,15 +237,20 @@ foreach(lib_file IN LISTS WALNUT_LIBRARY_FILES)
     string(LENGTH "${lib_hex}" lib_hex_len)
     math(EXPR lib_size "${lib_hex_len} / 2")
     string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," lib_bytes "${lib_hex}")
-    string(APPEND _walnut_library "inline const unsigned char file_${_walnut_library_index}[] = { ${lib_bytes} 0x00 };\n")
+    string(APPEND _walnut_library_data "static const unsigned char file_${_walnut_library_index}[] = { ${lib_bytes} 0x00 };\n")
     string(APPEND _walnut_library_entries "    { \"${lib_rel}\", file_${_walnut_library_index}, ${lib_size} },\n")
     math(EXPR _walnut_library_index "${_walnut_library_index} + 1")
 endforeach()
-string(APPEND _walnut_library "\ninline const File files[] = {\n${_walnut_library_entries}    { nullptr, nullptr, 0 }\n};\n\n} // namespace walnut_library\n\n#endif // WALNUT_LIBRARY_HPP\n")
+math(EXPR _walnut_library_count "${_walnut_library_index} + 1")
+string(SHA256 _walnut_library_hash "${_walnut_library_data}")
+set(_walnut_library "#ifndef WALNUT_LIBRARY_HPP\n#define WALNUT_LIBRARY_HPP\n\n#include <cstddef>\n\nnamespace walnut_library {\n\nstruct File {\n    const char* path;\n    const unsigned char* data;\n    std::size_t size;\n};\n\nextern const File files[${_walnut_library_count}];\n\nextern const char* const content_hash;\n\n} // namespace walnut_library\n\n#endif // WALNUT_LIBRARY_HPP\n")
+string(APPEND _walnut_library_data "\nconst char* const content_hash = \"${_walnut_library_hash}\";\n\nconst File files[${_walnut_library_count}] = {\n${_walnut_library_entries}    { nullptr, nullptr, 0 }\n};\n\n} // namespace walnut_library\n")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/walnut_library.hpp.gen" "${_walnut_library}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/walnut_library.cpp.gen" "${_walnut_library_data}")
 configure_file("${CMAKE_CURRENT_BINARY_DIR}/walnut_library.hpp.gen" "${CMAKE_CURRENT_BINARY_DIR}/generated/library/walnut_library.hpp" COPYONLY)
+configure_file("${CMAKE_CURRENT_BINARY_DIR}/walnut_library.cpp.gen" "${CMAKE_CURRENT_BINARY_DIR}/generated/library/walnut_library.cpp" COPYONLY)
 
-add_executable(walnut walnut.cpp)
+add_executable(walnut walnut.cpp Cli/cli_setup.cpp Cli/cli_compile.cpp Cli/cli_std.cpp Cli/cli_tools.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/library/walnut_library.cpp")
 target_include_directories(walnut PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>" "${CMAKE_CURRENT_BINARY_DIR}/generated/library")
 target_link_libraries(walnut PRIVATE walnut_core)
 
@@ -286,6 +291,24 @@ if(WALNUT_PACKAGE)
     elseif(APPLE)
         set(_walnut_platform macos-${_walnut_arch})
         set(CPACK_GENERATOR TGZ)
+    elseif(ANDROID)
+        set(_walnut_platform android-${_walnut_arch})
+        set(CPACK_GENERATOR TGZ)
+        if(DEFINED ANDROID_PLATFORM_LEVEL)
+            set(_walnut_android_api ${ANDROID_PLATFORM_LEVEL})
+        else()
+            set(_walnut_android_api 24)
+        endif()
+        string(REPLACE "../fizmo/lib/" "lib/" _walnut_kit_runtime "${WALNUT_RUNTIME_LIBS}")
+        string(REPLACE "../fizmo/lib/" "lib/" _walnut_kit_archives "${WALNUT_RUNTIME_OPTIONAL_ARCHIVES}")
+        file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/android-kit/walnut-kit.txt" CONTENT
+"abi=${ANDROID_ABI}
+api=${_walnut_android_api}
+runtime-libs=${_walnut_kit_runtime}
+optional-archives=${_walnut_kit_archives}
+optional-libs=${WALNUT_RUNTIME_OPTIONAL_LIBS}
+")
+        install(FILES "${CMAKE_CURRENT_BINARY_DIR}/android-kit/walnut-kit.txt" DESTINATION fizmo)
     else()
         target_link_options(walnut PRIVATE -static-libstdc++ -static-libgcc)
         set(_walnut_platform linux-${_walnut_arch})

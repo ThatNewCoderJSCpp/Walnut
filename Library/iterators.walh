@@ -353,234 +353,234 @@ namespace std {
         } end class Sparse
 
         safe(compile) {
-        template <typename It, typename K>
-        class Keys {
-        public:
-            using value_type = K;
+            template <typename It, typename K>
+            class Keys {
+            public:
+                using value_type = K;
 
-            It: inner;
+                It: inner;
 
-            constructor() { }
+                constructor() { }
 
-            constructor(const It&: at) : inner = at { }
+                constructor(const It&: at) : inner = at { }
 
-            operator(==) function(const self&, const Keys&: other) -> bool {
-                return self.inner == other.inner;
-            }
+                operator(==) function(const self&, const Keys&: other) -> bool {
+                    return self.inner == other.inner;
+                }
 
-            operator(!=) function(const self&, const Keys&: other) -> bool {
-                return self.inner != other.inner;
-            }
+                operator(!=) function(const self&, const Keys&: other) -> bool {
+                    return self.inner != other.inner;
+                }
 
-            operator(++) function(self&) -> Keys& {
-                ++self.inner;
-                return *this;
-            }
+                operator(++) function(self&) -> Keys& {
+                    ++self.inner;
+                    return *this;
+                }
 
-            operator(*) function(const self&) -> K& {
-                return (*self.inner).first;
-            }
-        } end class Keys
+                operator(*) function(const self&) -> K& {
+                    return (*self.inner).first;
+                }
+            } end class Keys
 
-        template <typename It, typename V>
-        class Values {
-        public:
-            using value_type = V;
+            template <typename It, typename V>
+            class Values {
+            public:
+                using value_type = V;
 
-            It: inner;
+                It: inner;
 
-            constructor() { }
+                constructor() { }
 
-            constructor(const It&: at) : inner = at { }
+                constructor(const It&: at) : inner = at { }
 
-            operator(==) function(const self&, const Values&: other) -> bool {
-                return self.inner == other.inner;
-            }
+                operator(==) function(const self&, const Values&: other) -> bool {
+                    return self.inner == other.inner;
+                }
 
-            operator(!=) function(const self&, const Values&: other) -> bool {
-                return self.inner != other.inner;
-            }
+                operator(!=) function(const self&, const Values&: other) -> bool {
+                    return self.inner != other.inner;
+                }
 
-            operator(++) function(self&) -> Values& {
-                ++self.inner;
-                return *this;
-            }
+                operator(++) function(self&) -> Values& {
+                    ++self.inner;
+                    return *this;
+                }
 
-            operator(*) function(const self&) -> V& {
-                return (*self.inner).second;
-            }
-        } end class Values
+                operator(*) function(const self&) -> V& {
+                    return (*self.inner).second;
+                }
+            } end class Values
 
-        template <typename It>
-        class Range {
-        public:
-            It: first;
-            It: last;
+            template <typename It>
+            class Range {
+            public:
+                It: first;
+                It: last;
 
-            constructor() { }
+                constructor() { }
 
-            constructor(const It&: a, const It&: b) : first = a, last = b { }
+                constructor(const It&: a, const It&: b) : first = a, last = b { }
 
-            function begin(const self&) -> It {
-                return self.first;
-            } end function begin
+                function begin(const self&) -> It {
+                    return self.first;
+                } end function begin
 
-            function end(const self&) -> It {
-                return self.last;
-            } end function end
+                function end(const self&) -> It {
+                    return self.last;
+                } end function end
 
-            function empty(const self&) -> bool {
-                return !(self.first != self.last);
-            } end function empty
-        } end class Range
+                function empty(const self&) -> bool {
+                    return !(self.first != self.last);
+                } end function empty
+            } end class Range
 
-        template <typename T>
-        function count(iterable<T>: items) -> long int {
-            long int: n = 0;
-            for (const T&: item in items) {
-                n += 1;
-            }
-            return n;
-        } end function count
-
-        template <typename T>
-        function count_if(iterable<T>: items, std::Predicate<T>: keep) -> long int {
-            long int: n = 0;
-            for (const T&: item in items) {
-                if (keep(item)) then {
+            template <typename T>
+            function count(iterable<T>: items) -> long int {
+                long int: n = 0;
+                for (const T&: item in items) {
                     n += 1;
                 }
-            }
-            return n;
-        } end function count_if
+                return n;
+            } end function count
 
-        template <typename T>
-        function any_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
-            for (const T&: item in items) {
-                if (test(item)) then {
-                    return true;
+            template <typename T>
+            function count_if(iterable<T>: items, std::Predicate<T>: keep) -> long int {
+                long int: n = 0;
+                for (const T&: item in items) {
+                    if (keep(item)) then {
+                        n += 1;
+                    }
                 }
-            }
-            return false;
-        } end function any_of
+                return n;
+            } end function count_if
 
-        template <typename T>
-        function all_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
-            for (const T&: item in items) {
-                if (!test(item)) then {
-                    return false;
+            template <typename T>
+            function any_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
+                for (const T&: item in items) {
+                    if (test(item)) then {
+                        return true;
+                    }
                 }
-            }
-            return true;
-        } end function all_of
+                return false;
+            } end function any_of
 
-        template <typename T>
-        function none_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
-            return !any_of(items, test);
-        } end function none_of
-
-        template <typename T>
-        function contains(iterable<T>: items, const T&: value) -> bool {
-            for (const T&: item in items) {
-                if (item == value) then {
-                    return true;
+            template <typename T>
+            function all_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
+                for (const T&: item in items) {
+                    if (!test(item)) then {
+                        return false;
+                    }
                 }
-            }
-            return false;
-        } end function contains
+                return true;
+            } end function all_of
 
-        template <typename T>
-        function index_of(iterable<T>: items, const T&: value) -> long int {
-            long int: at = 0;
-            for (const T&: item in items) {
-                if (item == value) then {
-                    return at;
+            template <typename T>
+            function none_of(iterable<T>: items, std::Predicate<T>: test) -> bool {
+                return !any_of(items, test);
+            } end function none_of
+
+            template <typename T>
+            function contains(iterable<T>: items, const T&: value) -> bool {
+                for (const T&: item in items) {
+                    if (item == value) then {
+                        return true;
+                    }
                 }
-                at += 1;
-            }
-            return -1;
-        } end function index_of
+                return false;
+            } end function contains
 
-        template <typename T>
-        function index_if(iterable<T>: items, std::Predicate<T>: test) -> long int {
-            long int: at = 0;
-            for (const T&: item in items) {
-                if (test(item)) then {
-                    return at;
+            template <typename T>
+            function index_of(iterable<T>: items, const T&: value) -> long int {
+                long int: at = 0;
+                for (const T&: item in items) {
+                    if (item == value) then {
+                        return at;
+                    }
+                    at += 1;
                 }
-                at += 1;
-            }
-            return -1;
-        } end function index_if
+                return -1;
+            } end function index_of
 
-        template <typename T>
-        function sum(iterable<T>: items) -> T {
-            T: total = T();
-            for (const T&: item in items) {
-                total = total + item;
-            }
-            return total;
-        } end function sum
-
-        template <typename T, typename U>
-        function fold(iterable<T>: items, U: start, function(const U&, const T&) -> U: step) -> U {
-            U: total = start;
-            for (const T&: item in items) {
-                total = step(total, item);
-            }
-            return total;
-        } end function fold
-
-        template <typename T>
-        function min_of(iterable<T>: items, std::Compare<T>: less = std::less_than<T>) -> T {
-            bool: seen = false;
-            T: best = T();
-            for (const T&: item in items) {
-                if (!seen || less(item, best)) then {
-                    best = item;
-                    seen = true;
+            template <typename T>
+            function index_if(iterable<T>: items, std::Predicate<T>: test) -> long int {
+                long int: at = 0;
+                for (const T&: item in items) {
+                    if (test(item)) then {
+                        return at;
+                    }
+                    at += 1;
                 }
-            }
-            if (!seen) then {
-                throw std::errors::empty_range("min_of() needs at least one item");
-            }
-            return best;
-        } end function min_of
+                return -1;
+            } end function index_if
 
-        template <typename T>
-        function max_of(iterable<T>: items, std::Compare<T>: less = std::less_than<T>) -> T {
-            bool: seen = false;
-            T: best = T();
-            for (const T&: item in items) {
-                if (!seen || less(best, item)) then {
-                    best = item;
-                    seen = true;
+            template <typename T>
+            function sum(iterable<T>: items) -> T {
+                T: total = T();
+                for (const T&: item in items) {
+                    total = total + item;
                 }
-            }
-            if (!seen) then {
-                throw std::errors::empty_range("max_of() needs at least one item");
-            }
-            return best;
-        } end function max_of
+                return total;
+            } end function sum
 
-        template <typename T>
-        function each(iterable<T>&: items, std::Action<T>: act) -> void {
-            for (T&: item in items) {
-                act(item);
-            }
-        } end function each
+            template <typename T, typename U>
+            function fold(iterable<T>: items, U: start, function(const U&, const T&) -> U: step) -> U {
+                U: total = start;
+                for (const T&: item in items) {
+                    total = step(total, item);
+                }
+                return total;
+            } end function fold
 
-        template <typename T>
-        struct Numbered {
-            long int: index;
-            T: value;
-        } end struct Numbered
+            template <typename T>
+            function min_of(iterable<T>: items, std::Compare<T>: less = std::less_than<T>) -> T {
+                bool: seen = false;
+                T: best = T();
+                for (const T&: item in items) {
+                    if (!seen || less(item, best)) then {
+                        best = item;
+                        seen = true;
+                    }
+                }
+                if (!seen) then {
+                    throw std::errors::empty_range("min_of() needs at least one item");
+                }
+                return best;
+            } end function min_of
 
-        template <typename A, typename B>
-        struct Zipped {
-            A: first;
-            B: second;
-        } end struct Zipped
+            template <typename T>
+            function max_of(iterable<T>: items, std::Compare<T>: less = std::less_than<T>) -> T {
+                bool: seen = false;
+                T: best = T();
+                for (const T&: item in items) {
+                    if (!seen || less(best, item)) then {
+                        best = item;
+                        seen = true;
+                    }
+                }
+                if (!seen) then {
+                    throw std::errors::empty_range("max_of() needs at least one item");
+                }
+                return best;
+            } end function max_of
+
+            template <typename T>
+            function each(iterable<T>&: items, std::Action<T>: act) -> void {
+                for (T&: item in items) {
+                    act(item);
+                }
+            } end function each
+
+            template <typename T>
+            struct Numbered {
+                long int: index;
+                T: value;
+            } end struct Numbered
+
+            template <typename A, typename B>
+            struct Zipped {
+                A: first;
+                B: second;
+            } end struct Zipped
 
         } end safe
 
@@ -612,188 +612,188 @@ namespace std {
 
         safe(compile) {
 
-        function range(long int: start, long int: stop, long int: step) -> generator<long int> {
-            if (step == 0) then {
-                throw std::errors::empty_range("range() needs a step that isn't 0");
-            }
-            if (step > 0) then {
-                for (long int: i = start; i < stop; i += step) {
+            function range(long int: start, long int: stop, long int: step) -> generator<long int> {
+                if (step == 0) then {
+                    throw std::errors::empty_range("range() needs a step that isn't 0");
+                }
+                if (step > 0) then {
+                    for (long int: i = start; i < stop; i += step) {
+                        co_yield i;
+                    }
+                } else then {
+                    for (long int: i = start; i > stop; i += step) {
+                        co_yield i;
+                    }
+                }
+            } end function range
+
+            function range(long int: start, long int: stop) -> generator<long int> {
+                for (long int: i = start; i < stop; i += 1) {
                     co_yield i;
                 }
-            } else then {
-                for (long int: i = start; i > stop; i += step) {
+            } end function range
+
+            function range(long int: stop) -> generator<long int> {
+                for (long int: i = 0; i < stop; i += 1) {
                     co_yield i;
                 }
-            }
-        } end function range
+            } end function range
 
-        function range(long int: start, long int: stop) -> generator<long int> {
-            for (long int: i = start; i < stop; i += 1) {
-                co_yield i;
-            }
-        } end function range
-
-        function range(long int: stop) -> generator<long int> {
-            for (long int: i = 0; i < stop; i += 1) {
-                co_yield i;
-            }
-        } end function range
-
-        template <typename T>
-        function enumerate(iterable<T>: items, long int: start = 0) -> generator<Numbered<T>> {
-            long int: i = start;
-            for (const T&: item in items) {
-                co_yield Numbered<T>{i, item};
-                i += 1;
-            }
-        } end function enumerate
-
-        template <typename A, typename B>
-        function zip(iterable<A>: a, iterable<B>: b) -> generator<Zipped<A, B>> {
-            long int: n = 0;
-            for (const B&: item in b) {
-                n += 1;
-            }
-            detail::Held<B>: held(n);
-            for (const B&: item in b) {
-                held.put(item);
-            }
-            long int: j = 0;
-            for (const A&: item in a) {
-                if (j >= held.size) then {
-                    break;
-                }
-                co_yield Zipped<A, B>{item, held.at(j)};
-                j += 1;
-            }
-        } end function zip
-
-        template <typename T>
-        function chain(iterable<T>: a, iterable<T>: b) -> generator<T> {
-            for (const T&: item in a) {
-                co_yield item;
-            }
-            for (const T&: item in b) {
-                co_yield item;
-            }
-        } end function chain
-
-        template <typename T>
-        function take(iterable<T>: items, long int: n) -> generator<T> {
-            long int: given = 0;
-            for (const T&: item in items) {
-                if (given >= n) then {
-                    break;
-                }
-                co_yield item;
-                given += 1;
-            }
-        } end function take
-
-        template <typename T>
-        function skip(iterable<T>: items, long int: n) -> generator<T> {
-            long int: seen = 0;
-            for (const T&: item in items) {
-                if (seen < n) then {
-                    seen += 1;
-                    continue;
-                }
-                co_yield item;
-            }
-        } end function skip
-
-        template <typename T>
-        function take_while(iterable<T>: items, std::Predicate<T>: keep) -> generator<T> {
-            for (const T&: item in items) {
-                if (!keep(item)) then {
-                    break;
-                }
-                co_yield item;
-            }
-        } end function take_while
-
-        template <typename T>
-        function skip_while(iterable<T>: items, std::Predicate<T>: drop) -> generator<T> {
-            bool: dropping = true;
-            for (const T&: item in items) {
-                if (dropping && drop(item)) then {
-                    continue;
-                }
-                dropping = false;
-                co_yield item;
-            }
-        } end function skip_while
-
-        template <typename T>
-        function filter(iterable<T>: items, std::Predicate<T>: keep) -> generator<T> {
-            for (const T&: item in items) {
-                if (keep(item)) then {
-                    co_yield item;
-                }
-            }
-        } end function filter
-
-        template <typename T, typename R>
-        function map(iterable<T>: items, function(const T&) -> R: change) -> generator<R> {
-            for (const T&: item in items) {
-                co_yield change(item);
-            }
-        } end function map
-
-        template <typename T>
-        function pairwise(iterable<T>: items) -> generator<Zipped<T, T>> {
-            bool: started = false;
-            T: previous = T();
-            for (const T&: item in items) {
-                if (started) then {
-                    co_yield Zipped<T, T>{previous, item};
-                }
-                previous = item;
-                started = true;
-            }
-        } end function pairwise
-
-        template <typename T>
-        function repeat(const T&: value, long int: times) -> generator<T> {
-            for (long int: i = 0; i < times; i += 1) {
-                co_yield value;
-            }
-        } end function repeat
-
-        template <typename T>
-        function cycle(iterable<T>: items, long int: times) -> generator<T> {
-            for (long int: i = 0; i < times; i += 1) {
+            template <typename T>
+            function enumerate(iterable<T>: items, long int: start = 0) -> generator<Numbered<T>> {
+                long int: i = start;
                 for (const T&: item in items) {
+                    co_yield Numbered<T>{i, item};
+                    i += 1;
+                }
+            } end function enumerate
+
+            template <typename A, typename B>
+            function zip(iterable<A>: a, iterable<B>: b) -> generator<Zipped<A, B>> {
+                long int: n = 0;
+                for (const B&: item in b) {
+                    n += 1;
+                }
+                detail::Held<B>: held(n);
+                for (const B&: item in b) {
+                    held.put(item);
+                }
+                long int: j = 0;
+                for (const A&: item in a) {
+                    if (j >= held.size) then {
+                        break;
+                    }
+                    co_yield Zipped<A, B>{item, held.at(j)};
+                    j += 1;
+                }
+            } end function zip
+
+            template <typename T>
+            function chain(iterable<T>: a, iterable<T>: b) -> generator<T> {
+                for (const T&: item in a) {
                     co_yield item;
                 }
-            }
-        } end function cycle
+                for (const T&: item in b) {
+                    co_yield item;
+                }
+            } end function chain
 
-        template <typename T>
-        function running(iterable<T>: items) -> generator<T> {
-            bool: started = false;
-            T: total = T();
-            for (const T&: item in items) {
-                total = started ? total + item : item;
-                started = true;
-                co_yield total;
-            }
-        } end function running
+            template <typename T>
+            function take(iterable<T>: items, long int: n) -> generator<T> {
+                long int: given = 0;
+                for (const T&: item in items) {
+                    if (given >= n) then {
+                        break;
+                    }
+                    co_yield item;
+                    given += 1;
+                }
+            } end function take
+
+            template <typename T>
+            function skip(iterable<T>: items, long int: n) -> generator<T> {
+                long int: seen = 0;
+                for (const T&: item in items) {
+                    if (seen < n) then {
+                        seen += 1;
+                        continue;
+                    }
+                    co_yield item;
+                }
+            } end function skip
+
+            template <typename T>
+            function take_while(iterable<T>: items, std::Predicate<T>: keep) -> generator<T> {
+                for (const T&: item in items) {
+                    if (!keep(item)) then {
+                        break;
+                    }
+                    co_yield item;
+                }
+            } end function take_while
+
+            template <typename T>
+            function skip_while(iterable<T>: items, std::Predicate<T>: drop) -> generator<T> {
+                bool: dropping = true;
+                for (const T&: item in items) {
+                    if (dropping && drop(item)) then {
+                        continue;
+                    }
+                    dropping = false;
+                    co_yield item;
+                }
+            } end function skip_while
+
+            template <typename T>
+            function filter(iterable<T>: items, std::Predicate<T>: keep) -> generator<T> {
+                for (const T&: item in items) {
+                    if (keep(item)) then {
+                        co_yield item;
+                    }
+                }
+            } end function filter
+
+            template <typename T, typename R>
+            function map(iterable<T>: items, function(const T&) -> R: change) -> generator<R> {
+                for (const T&: item in items) {
+                    co_yield change(item);
+                }
+            } end function map
+
+            template <typename T>
+            function pairwise(iterable<T>: items) -> generator<Zipped<T, T>> {
+                bool: started = false;
+                T: previous = T();
+                for (const T&: item in items) {
+                    if (started) then {
+                        co_yield Zipped<T, T>{previous, item};
+                    }
+                    previous = item;
+                    started = true;
+                }
+            } end function pairwise
+
+            template <typename T>
+            function repeat(const T&: value, long int: times) -> generator<T> {
+                for (long int: i = 0; i < times; i += 1) {
+                    co_yield value;
+                }
+            } end function repeat
+
+            template <typename T>
+            function cycle(iterable<T>: items, long int: times) -> generator<T> {
+                for (long int: i = 0; i < times; i += 1) {
+                    for (const T&: item in items) {
+                        co_yield item;
+                    }
+                }
+            } end function cycle
+
+            template <typename T>
+            function running(iterable<T>: items) -> generator<T> {
+                bool: started = false;
+                T: total = T();
+                for (const T&: item in items) {
+                    total = started ? total + item : item;
+                    started = true;
+                    co_yield total;
+                }
+            } end function running
         } end safe
     } end namespace iterators
 
     safe(compile) {
-    namespace errors {
-        class empty_range {
-        public:
-            string: message;
+        namespace errors {
+            class empty_range {
+            public:
+                string: message;
 
-            constructor(const string&: m) : message = m { }
+                constructor(string: m) : message = m { }
 
-            function what(const self&) -> string {
-                return self.message;
-            } end function what
-        } end class empty_range
-    } end namespace errors
+                function what(const self&) -> string {
+                    return self.message;
+                } end function what
+            } end class empty_range
+        } end namespace errors
     } end safe
 } end namespace std

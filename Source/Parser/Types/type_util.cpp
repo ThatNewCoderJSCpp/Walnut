@@ -21,6 +21,7 @@ parser_types::PrimitiveType::BaseKind token_to_base_kind(const tokenizing::Token
         case tokenizing::Token::Kind::CharacterDeclaration: return BK::Char;
         case tokenizing::Token::Kind::StringDeclaration: return BK::String;
         case tokenizing::Token::Kind::TextDeclaration: return BK::Text;
+        case tokenizing::Token::Kind::StringViewDeclaration: return BK::StringView;
         case tokenizing::Token::Kind::VoidKeyword: return BK::Void;
         case tokenizing::Token::Kind::AutoDeclaration: return BK::Auto;
         case tokenizing::Token::Kind::DynamicDeclaration: return BK::Dynamic;
@@ -36,6 +37,7 @@ parser_types::PrimitiveType::BaseKind lexeme_to_base_kind(std::string_view lexem
     if (lexeme == "char" || lexeme == "character") return BK::Char;
     if (lexeme == "string" || lexeme == "str") return BK::String;
     if (lexeme == "text" || lexeme == "txt") return BK::Text;
+    if (lexeme == "string_view" || lexeme == "strv") return BK::StringView;
     if (lexeme == "void") return BK::Void;
     if (lexeme == "auto" || lexeme == "automatic") return BK::Auto;
     if (lexeme == "let" || lexeme == "var" || lexeme == "def" || lexeme == "define" || lexeme == "variable" || lexeme == "any") return BK::Dynamic;

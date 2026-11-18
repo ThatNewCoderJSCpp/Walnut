@@ -413,7 +413,7 @@ Here `missing` is `true`, `found` is `true` and `s` is `"walnut"`.
 
 ### Dynamic values
 
-A `var` holds a number, `bool`, `char`, string or function, and checks operations when the program runs. With `var`, the colon is optional.
+A `var` holds a value of any type, like a variable in JavaScript, and checks operations when the program runs. With `var`, the colon is optional.
 
 ```walnut
 function main() -> int {
@@ -429,9 +429,35 @@ function main() -> int {
 Here `y` is `7.5`, `x` ends as `"now a string"`, and `r` is `42`.
 
 **What a `var` can hold**
+- Numbers, `bool`, `char`, strings and text, objects of any class, enums, pointers, fixed-size arrays, variants and generators.
 - A function or lambda can be stored in a `var` when its parameters and result are types a `var` can hold. Calling it converts the arguments while the program runs.
-- Assigning a `var` to a typed variable also converts while the program runs. It fails with a runtime error if the value doesn't fit (for example, an `int` into a `string`).
-- Classes, pointers and arrays can't be stored in a `var`; that's a compile-time error.
+- Assigning a `var` to a typed variable also converts while the program runs. It fails with a runtime error if the value doesn't fit (for example, an `int` into a `string`, or a `Point` into a `Color`).
+- Arithmetic, ordering and joining work on numbers, characters and strings. `==` works on any two values whose type has `==`; comparing two objects whose class has none is a runtime error.
+
+**Objects in a `var`**
+
+```walnut
+class Point {
+public:
+    long int: x;
+    long int: y;
+} end class Point
+
+function main() -> int {
+    var p = Point{3, 4};
+    if (p is Point) then {
+        (p as Point).x = 10;
+    }
+    Point: copy = p;
+    return 0;
+} end function main
+```
+
+`p is Point` checks the exact type, and `p as Point` gives the object inside the `var` itself, so changing it changes the value the `var` holds. Assigning a `var` to a `Point` copies it out. A `var` holding an object prints as `<Point>` unless the type can be printed.
+
+**How a `var` is stored**
+
+A `var` is 16 bytes. Values of 8 bytes or less are kept inside it: `bool`, `char`, pointers, enums, small objects, and every integer whose value fits in 64 bits, whatever its declared width. Anything bigger (strings, floats, larger objects, and integers too big for 64 bits) is kept on the heap and freed when the `var` changes or goes away. Integer arithmetic between two `var`s that both fit in 64 bits runs on 64-bit numbers and only moves to wider ones when the result doesn't fit, so a `var` counter is as cheap as a plain one.
 
 `x is int` and `x as int` check and read what a `var` currently holds; see [Checking types with is and as](#checking-types-with-is-and-as).
 
@@ -731,6 +757,39 @@ Here `joined` is `"abcdefd"`, `s` is `"abc!"`, `t` is ``"back`tick"``, `letters`
 - `for (char: c in s)` walks through the characters.
 - Any value can be turned into text with `${}` in a text literal (see [Text interpolation](#text-interpolation)) or with `.to_string()` and `.to_text()` (see [Methods on built-in values](#methods-on-built-in-values)). Reading a value out of a string is done with `std::io::parse_int`, `parse_float`, `parse_bool` and the other parse functions in the [io library](Documentation/Library/io.md#parsing-values), or with a stream such as `std::io::istringstream`.
 
+### String views
+
+`string_view` (or `strv`) looks at characters that a `string` or `text` owns, without copying them. It's the type to use for a parameter that only reads a string, because a `string`, a `text` and a string literal all convert to it for free.
+
+```walnut
+import module.io
+
+function shout(string_view: s) -> string {
+    return s.to_upper() + "!";
+} end function shout
+
+function main() -> int {
+    string: name = "walnut";
+    string_view: v = name;
+    string: loud = shout(v);
+    string: also = shout("tree");
+    int: n = countof(v);
+    char: first = v[0];
+    bool: same = v == "walnut";
+    string: copy = v;
+    std::io::println(loud, " ", also, " ", n, " ", first, " ", same, " ", copy);
+    return 0;
+} end function main
+```
+
+Here `loud` is `"WALNUT!"`, `also` is `"TREE!"`, `n` is `6`, `first` is `'w'`, `same` is `true` and `copy` is `"walnut"`.
+
+- A `string_view` works like a read-only `string`: `countof`, `[...]` (to read), `for (char: c in v)`, the comparisons, `+` (which makes a new `string`) and the [built-in methods](#methods-on-built-in-values) such as `.length()`, `.find(...)` and `.substr(...)`. Methods that make new text, like `.substr(...)` and `.to_upper()`, give a `string`.
+- It can't be changed: `v[0] = 'x'` and `v += "..."` are errors. Assigning another string to it with `=` makes it look at that string instead.
+- A `string_view` converts back to a `string` by copying, so it can be passed wherever a `string` is wanted. It turns into `text` only with `static_cast<text>(...)`, and it's `std::traits::is_string_view<T>` that tells it apart.
+- The string it looks at has to outlive it. Walnut reports the common mistakes: a `string_view` variable set from a temporary (`string_view: v = a + b;`), returning a view of a local variable or a by-value parameter, and making one out of a `var`. A view passed straight into a function call is always fine, since the temporary lasts until the call returns.
+- The strings library's extra methods (`split`, `replace` and the rest) take `string` and `text`; write `static_cast<string>(v).split(",")` for a view.
+
 ### Text interpolation
 
 A `text` literal (written with backticks) can hold `${expression}`. The expression is evaluated, turned into text, and put in its place, the same way JavaScript template literals work. This is what makes `text` different from `string`: a `"..."` string literal never interpolates.
@@ -800,6 +859,12 @@ Strings and characters get many more methods from the [strings library](Document
 | `to_string()`, `to_text()` | The value as a `string` or `text`, written the same way as [text interpolation](#text-interpolation) writes it. Not available on classes and structs |
 | `countof()` | The same as `countof(x)`: elements of an array, characters of a string, or enumerators of an enum |
 
+**Enums**
+
+| Method | Result |
+|---|---|
+| `name()` | The enumerator's name as a `string_view`, such as `"Green"` for `Color::Green`. A value that is no enumerator, such as two flags put together with `\|`, gives `""` |
+
 **`string` and `text`.** Positions and counts are in characters (code points), not bytes. Methods that give back a string give back the same type they were called on.
 
 | Method | Result |
@@ -835,7 +900,7 @@ A needle can be a `string`, a `text` or a `char`.
 
 ```walnut
 enum Color { Red, Green = 5, Blue }
-enum Flags : short int { Read = 1, Write = 2, Exec = 4 }
+enum Flags : unsigned short int { Read = 1, Write = 2, Exec = 4 }
 
 function main() -> int {
     Color: c = Color::Green;
@@ -850,11 +915,16 @@ function main() -> int {
 Here `blue` is `6`, `countof(Color)` is `3`, `f` holds `7`, and `can_write` is `true`.
 
 - Enumerators are always reached through the enum's name, as in `Color::Blue`.
-- `: type` sets the underlying integer type; the default is `int`.
+- `: type` sets the underlying type, which has to be an unsigned integer type: Walnut's (`unsigned short short int` up to `unsigned long long integer`, 8 to 2048 bits) or a hardware one (`std::hardware_uint8` to `std::hardware_uint64`). The default is `unsigned int`. A signed type is an error.
+- Enumerators can't be negative, and each has to fit in the underlying type, so `enum E : unsigned short short int { A = 300 }` is an error. An enumerator without `= value` is one more than the one before it.
+- An enum whose underlying type has 64 bits or fewer is stored as a plain C++ enum of that size. A wider one (`unsigned long long int` and up) keeps its full value, so `enum Huge : unsigned long long int { A = 100000000000000000000000 }` works.
 - `countof(E)` is the number of enumerators.
 - An enum and an integer don't convert into each other implicitly; use `static_cast`.
 - Enums compare with `==` and `<`.
 - `|`, `&`, `^` and `~` work on two values of the same enum and give that enum, so enums work as flag sets. Mixing an enum with an integer needs a cast.
+- `c.name()` gives the enumerator's name, so `Color::Green.name()` is `"Green"`. `to_string()` and printing still give the number.
+- `std::traits::enum_min<E>` and `std::traits::enum_max<E>` are the smallest and largest enumerator values, in the enum's underlying type. `std::traits::enum_bits<E>` uses each value as a bit position and gives an `unsigned long long integer`, so it needs every value to be below 2048.
+- [`std::Flags<E>`](Documentation/Library/core.md#stdflags) keeps a set of an enum's values as bits, with `set`, `toggle`, `is_on`, `has_any` and the rest, so the enumerators can stay `0, 1, 2, ...` instead of powers of two.
 
 ### Type aliases
 
@@ -3851,11 +3921,36 @@ dist/
 
 - fizmo is linked statically, and on Windows the compiler from `walnut init` links the C++ runtime statically too, so the only DLLs a Walnut program needs there are the ones you link yourself.
 
+### Building for Android
+
+`walnut` on Linux, macOS or Windows can build Walnut code for Android with the [Android NDK](https://developer.android.com/ndk) and Walnut's Android kit (`Walnut-<version>-android-kit.zip` on the Releases page, which holds fizmo built for each Android ABI). An Android app loads its code from a shared library, so this is usually a `--shared` build:
+
+```
+walnut build --shared game.wal --android arm64-v8a --android-kit ~/Walnut-android-kit --ndk ~/Android/Sdk/ndk/27.2.12479018
+```
+
+This makes `libgame.so` for the app's `lib/arm64-v8a` folder. Without `--shared` it makes an Android program, which runs from `adb shell`.
+
+| Option | Meaning |
+|---|---|
+| `--android <abi>` | The Android ABI to build for: `arm64-v8a` (`arm64`), `x86_64`, `armeabi-v7a` (`arm`) or `x86`; the kit has to have that ABI (the released kit has `arm64-v8a` and `x86_64`) |
+| `--android-kit <dir>` | The kit's folder; also `WALNUT_ANDROID_KIT`, or a folder named `android-kit` in the Walnut folder, next to `bin` |
+| `--ndk <dir>` | The NDK; also `ANDROID_NDK_HOME` or `ANDROID_NDK_ROOT`. `--cxx` picks a compiler yourself instead |
+| `--android-api <n>` | The oldest Android version the code runs on, as an API level (the default is the kit's, 24, which is Android 7.0) |
+
+- The C++ runtime is linked into the library (`-static-libstdc++`), so the app doesn't need `libc++_shared.so`, and the library is aligned for 16 KB memory pages, which Google Play requires.
+- `walnut run` can't run Android code on the computer; copy the program or library to the device.
+- The build cache keeps Android builds separate from the computer's own, since the compiler is different.
+
+To run Walnut on an Android device itself instead, use the Termux download (see [the README](README.md#installing)).
+
 ### The precompiled standard library
 
 With `build` and `run`, the standard library modules a program uses are compiled once and kept in the [build cache](#the-command-line), one module at a time, for each C++ compiler and set of options. Later programs that use the same modules only compile their own code, so building a new program, or one whose classes or signatures changed, is several times faster. The first program to use a module pays for compiling it.
 
 - `walnut library --precompile` compiles all of them ahead of time, for example right after installing `walnut`, so even the first program doesn't wait for them. It takes the options that change the compiled code, such as `--cxx`, `-O3`, `-g` or `--check-bounds`, and precompiles the modules for that combination.
+- `walnut init` runs `walnut library --precompile` for you once it has set up or found a compiler, unless you give it `--no-precompile`.
+- A Walnut package can ship the modules already compiled, in a `std-prebuilt` folder next to `bin`; the Windows `-with-compiler` downloads do. Walnut uses a shipped module when it was compiled by the same Walnut, with a compiler of the same version and the same options, wherever the package was extracted, and compiles it into the cache otherwise. `walnut library --precompile --into <folder>` writes such a folder, for whoever makes the package.
 - `--no-prebuilt-std` compiles the modules with the program instead, as before.
 - `--keep-cpp`, `--debug-cpp`, `--line-map` and `--no-cache` always compile them with the program, so the generated C++ is complete.
 
@@ -4332,8 +4427,8 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `clean` | Deletes the build cache |
 | `highlight` | Prints what each name and operator in the file is, and its errors and warnings, as JSON for editors. With `--stdin`, the file's text comes from standard input. It also takes a `.walh` file. The format is in [the VS Code extension's README](Tools/vscode-walnut/README.md#the-highlight-command) |
 | `complete` | With `--at LINE:COL` (from 1, the column in bytes), prints what can be typed at that spot as JSON, for editors' autocomplete. After `.` or `->` it lists the members of the value's type, after `::` what's inside the namespace, class or enum, and otherwise every name in scope there (locals declared further down are left out). It works on unfinished code, so the line being typed doesn't have to compile. The answer is `{"start": column, "mode": "member" \| "scope" \| "name" \| "none", "items": [{"label", "kind", "detail"}]}`, where `start` is the byte column (from 0) where the word being completed starts and `detail` is a type or signature. Also takes `--stdin` and `.walh` files |
-| `library` | Lists the library files built into `walnut`. `walnut library io.walh` prints one, and `walnut library --extract <dir>` writes them all into a folder, so an editor can open them. `walnut library --precompile` compiles every module into the build cache ahead of time (see [The precompiled standard library](#the-precompiled-standard-library)). `walnut library --verify [programs.wal]` checks the library's safe code (see [Safe code](#safe-code)) |
-| `init` | Sets up a C++ compiler: on Windows it downloads a pinned compiler matching this `walnut` into `%LOCALAPPDATA%\walnut\toolchain` (checked with SHA-256), on Linux it installs `g++` with the package manager, on macOS it opens Apple's Command Line Tools installer. `--yes` doesn't ask, `--force` downloads on Windows even when another compiler is on `PATH`, `--status` shows the compiler in use, `--print-compiler` prints just its path, `--remove` deletes the download. The compiler is picked from `--cxx`, then `WALNUT_CXX`, then the `walnut init` download, then `c++` on `PATH` |
+| `library` | Lists the library files built into `walnut`. `walnut library io.walh` prints one, and `walnut library --extract <dir>` writes them all into a folder, so an editor can open them. `walnut library --precompile` compiles every module into the build cache ahead of time, and `--into <folder>` also writes a copy to ship in a package (see [The precompiled standard library](#the-precompiled-standard-library)). `walnut library --verify [programs.wal]` checks the library's safe code (see [Safe code](#safe-code)) |
+| `init` | Sets up a C++ compiler: on Windows it downloads a pinned compiler matching this `walnut` into `%LOCALAPPDATA%\walnut\toolchain` (checked with SHA-256), on Linux it installs `g++` with the package manager, in Termux on Android it installs Clang with `pkg`, on macOS it opens Apple's Command Line Tools installer. `--yes` doesn't ask, `--force` downloads on Windows even when another compiler is on `PATH`, `--status` shows the compiler in use, `--print-compiler` prints just its path, `--remove` deletes the download, `--no-precompile` skips precompiling the standard library afterwards. The compiler is picked from `--cxx`, then `WALNUT_CXX`, then the `walnut init` download, then `c++` on `PATH` |
 | `help`, `-h`, `--help` | Shows the usage |
 
 | Option | Meaning |
@@ -4349,6 +4444,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `--shared` | Makes a shared library |
 | `--lib-dir <folder>` | Puts the shared libraries the program uses into this folder next to it, and makes the program find them there |
 | `--no-prebuilt-std` | Compiles the standard library modules with the program instead of using their [precompiled copies](#the-precompiled-standard-library) |
+| `--android <abi>`, `--android-kit <dir>`, `--ndk <dir>`, `--android-api <n>` | Builds for Android with the NDK and Walnut's Android kit; see [Building for Android](#building-for-android) |
 | `--cxx <compiler>` | The C++ compiler to use |
 | `--cxx-flag <flag>` | Passes a flag to the C++ compiler |
 | `--runtime <dir>` | Where the Walnut runtime is |

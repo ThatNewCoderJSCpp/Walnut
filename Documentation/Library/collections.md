@@ -1,6 +1,6 @@
 # collections
 
-`collections` has the containers most programs need: growable arrays, linked lists, double-ended queues, stacks, queues, priority queues, hash maps and sets, maps and sets that keep the order things were added in, counters, maps with default values, sorted maps and sets, tries for prefix search, caches, pairs and tuples, and views over memory.
+`collections` has the containers most programs need: growable arrays, linked lists, double-ended queues, stacks, queues, priority queues, hash maps and sets, maps and sets that keep the order things were added in, counters, maps with default values, sorted maps and sets, tries for prefix search, caches, pairs and tuples, fixed-size sets of bits, and views over memory.
 
 `Vector` is C++'s `std::vector`, and `DynamicArray`, `SmallVector`, `TrieMap` and `Trie` are Fizmo's containers of the same names, used from Walnut as [C++ classes](../../documentation.md#using-c-classes). The other containers are written in Walnut.
 
@@ -33,11 +33,12 @@ Everything in `collections` is in the namespace `std::collections`. `import modu
 19. [Cache](#cache)
 20. [Pair](#pair)
 21. [Tuple](#tuple)
-22. [Searching, sorting and more](#searching-sorting-and-more)
-23. [WhereQuery](#wherequery)
-24. [Hashing](#hashing)
-25. [Errors](#errors)
-26. [What the element type needs](#what-the-element-type-needs)
+22. [Bitset](#bitset)
+23. [Searching, sorting and more](#searching-sorting-and-more)
+24. [WhereQuery](#wherequery)
+25. [Hashing](#hashing)
+26. [Errors](#errors)
+27. [What the element type needs](#what-the-element-type-needs)
 
 ## A first example
 
@@ -95,6 +96,7 @@ This prints `apple fig fig pear pear` and `pears: 2, kinds: 3`.
 | `Cache<K, V>` | A map that forgets the least recently used entries | Keeping results that are expensive to make, up to a size limit |
 | `Pair<A, B>` | Two values | Returning or storing two things together |
 | `Tuple<Ts...>` | Any number of values, each of its own type | Returning or storing several things together |
+| `Bitset<N>` | `N` bits packed into 64-bit words (C++'s `std::bitset`) | Sets of small numbers, masks, grids of on/off cells |
 
 ## What every container has
 
@@ -677,6 +679,53 @@ This prints `age 31 3 1`.
 - It has `==` and `!=`, and works with structured bindings: `auto: [a, b, c] = t;`.
 - `Tuple<>` is allowed and holds nothing.
 - A function can take any tuple with `template <typename... Ts> function f(const Tuple<Ts...>&: t)`.
+
+## Bitset
+
+A `Bitset<N>` holds `N` bits, numbered from `0`, packed 64 to a word. Each bit is on or off. It doesn't grow; `N` is part of the type. For a set of an enum's values, [`std::Flags<E>`](core.md#stdflags) names the bits instead.
+
+```walnut
+import module.collections
+import module.io
+
+using std::collections::Bitset;
+
+function main() -> int {
+    Bitset<10>: b = Bitset<10>(1, 3, 9);
+    b.toggle(4);
+    b.set(3, false);
+    bool: on = b[4];
+    Bitset<10>: c = Bitset<10>::from_string("1000010010");
+    bool: same = b == c;
+    for (long int: i in b) {
+        std::io::println(i);
+    }
+    std::io::println(b.to_string(), " ", (b << 2).to_string(), " ", b.count());
+    return 0;
+} end function main
+```
+
+Here `on` and `same` are `true`, the loop prints `1`, `4` and `9`, and the last line prints `1000010010 0001001000 3`.
+
+| Member | Does |
+|---|---|
+| `Bitset<N>()`, `Bitset<N>(i...)` | All bits off, or the bits given on |
+| `Bitset<N>::from_string(s)` | Bits from a string of `0`s and `1`s, written with bit 0 last, like a binary number. Another character, or a `1` past bit `N - 1`, throws `collection_error` |
+| `Bitset<N>::from_mask(m)` | The low 64 bits from an unsigned integer |
+| `size()` | `N` |
+| `test(i)`, `b[i]`, `is_on(i)`, `is_off(i)` | Whether bit `i` is on or off |
+| `set(i)`, `set(i, on)`, `clear(i)`, `toggle(i)` | Turn one bit on, on or off, off, or the other way |
+| `set_all()`, `clear_all()`, `toggle_all()` | The same for every bit |
+| `count()`, `empty()`, `full()` | How many bits are on, whether none are, whether all are |
+| `has_any(other)`, `has_all(other)`, `has_none(other)`, `includes(other)`, `is_subset_of(other)` | Comparisons with another `Bitset<N>` |
+| `find_first()`, `find_next(i)` | The first bit that is on, or the first after `i`. `N` if there isn't one |
+| `for (long int: i in b)` | Goes through the bits that are on, lowest first |
+| `to_string()`, `to_mask()` | The bits as `0`s and `1`s with bit 0 last, or as a 64-bit unsigned integer (throws if a bit at 64 or above is on) |
+| `\|`, `&`, `^`, `-`, `~`, `<<`, `>>` | Union, common bits, bits in exactly one, bits of the left without the right, every bit flipped, and shifts that drop bits pushed past either end |
+| `\|=`, `&=`, `^=`, `-=`, `<<=`, `>>=`, `==`, `!=` | The same, changing the left side, and comparing |
+
+- An index below 0 or at `N` or above throws `std::errors::collection_error`, the same as the other containers.
+- `set`, `clear`, `toggle` and the `_all` methods return the bitset, so calls chain: `b.set(1).set(5)`.
 
 ## Searching, sorting and more
 

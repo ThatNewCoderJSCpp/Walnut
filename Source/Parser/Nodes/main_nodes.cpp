@@ -85,8 +85,29 @@ parser_types::TemplateArgument* clone_targ(const parser_types::TemplateArgument*
     return n;
 }
 
+BodyMaterializer& body_materializer() noexcept {
+    static thread_local BodyMaterializer slot;
+    return slot;
+}
+
+int& lazy_member_clone_depth() noexcept {
+    static thread_local int depth = 0;
+    return depth;
+}
+
+ASTNode* clone_pending_body(const ASTNode* source, Arena& a) {
+    EagerClones eager;
+    return clone_child(source, a);
+}
+
 std::vector<parser_types::TemplateArgument*> clone_targs(const std::vector<parser_types::TemplateArgument*>& src, Arena& a) {
     std::vector<parser_types::TemplateArgument*> out; out.reserve(src.size());
+    for (const auto* t : src) out.push_back(clone_targ(t, a));
+    return out;
+}
+
+ArenaVector<parser_types::TemplateArgument*> clone_targs(const ArenaVector<parser_types::TemplateArgument*>& src, Arena& a) {
+    ArenaVector<parser_types::TemplateArgument*> out; out.reserve(src.size());
     for (const auto* t : src) out.push_back(clone_targ(t, a));
     return out;
 }

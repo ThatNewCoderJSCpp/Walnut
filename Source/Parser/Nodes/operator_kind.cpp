@@ -99,7 +99,7 @@ OverloadableOperator classify_single_operator(tokenizing::Token::Kind k) {
 }
 
 OverloadableOperator classify_overloadable_operator(
-    const std::vector<tokenizing::Token::Kind>& t
+    Span<const tokenizing::Token::Kind> t
 ) {
     using K = tokenizing::Token::Kind;
 

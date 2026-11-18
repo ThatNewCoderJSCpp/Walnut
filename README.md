@@ -22,6 +22,7 @@ Walnut needs a **C++17 compiler** to build programs, because it compiles to C++.
 | Linux (x86_64, arm64, i686) | GCC 9 or newer, or Clang 9 or newer, available as `c++`; `walnut init` installs `g++` with your package manager |
 | Windows (x86_64, i686, arm64) | nothing: the `-with-compiler` downloads include llvm-mingw, and for the others `walnut init` downloads it |
 | macOS 11 or newer (Apple silicon and Intel) | Apple's Command Line Tools, which have Clang; `walnut init` opens Apple's installer for them |
+| Android 7.0 or newer (arm64, x86_64), in [Termux](https://termux.dev) | Termux's Clang; `walnut init` installs it with `pkg` |
 
 Visual Studio's compiler (MSVC) can't be used to build Walnut programs, because Walnut calls the compiler with GCC-style options.
 
@@ -41,6 +42,8 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
    | `Walnut-<version>-windows-clangarm64.zip` | ARM Windows |
    | `Walnut-<version>-macos-arm64.tar.gz` | Macs with Apple silicon (M1 and newer) |
    | `Walnut-<version>-macos-x86_64.tar.gz` | Intel Macs |
+   | `Walnut-<version>-android-arm64.tar.gz` | Android phones and tablets, in Termux |
+   | `Walnut-<version>-android-x86_64.tar.gz` | Android on x86_64 (emulators, Chromebooks), in Termux |
 
    Every download comes in a few formats with the same contents. The Releases page only shows the first few files; click **Show all assets** under them to see the rest.
 
@@ -48,9 +51,10 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
    |---|---|
    | Linux | `.tar.gz`, `.tar.xz` and `.zip` to extract anywhere, and `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, openSUSE) packages, which install Walnut into `/opt/walnut` and put `walnut` on your `PATH`, so steps 2 and 3 aren't needed |
    | Windows | `.zip` and `.7z` to extract anywhere, and an `.exe` installer that puts Walnut in Program Files, can add it to your `PATH`, and comes with an uninstaller |
-   | macOS | `.tar.gz`, `.tar.xz` and `.zip` |
+   | macOS | `.tar.gz`, `.tar.xz` and `.zip` to extract anywhere, and a `.pkg` installer (also inside the `.dmg`) that installs Walnut into `/usr/local/walnut` and puts `walnut` on your `PATH`, so steps 2 and 3 aren't needed; `sudo /usr/local/walnut/uninstall.sh` removes it again |
+   | Android (Termux) | `.tar.gz`, `.tar.xz` and `.zip` |
 
-   Each Windows download also comes as `...-with-compiler` (about 200 MB more), which has the C++ compiler inside, so it works offline as soon as it's unpacked and step 4 isn't needed. The smaller download gets the same compiler with `walnut init` the first time it's needed. Walnut for Windows doesn't need MSYS2.
+   Each Windows download also comes as `...-with-compiler` (about 200 MB more), which has the C++ compiler inside and the standard library already compiled with it, so it works offline as soon as it's unpacked, step 4 isn't needed, and even the first program builds quickly. The smaller download gets the same compiler with `walnut init` the first time it's needed. Walnut for Windows doesn't need MSYS2.
 
    With a `.deb` or `.rpm` file:
 
@@ -68,6 +72,7 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
      fizmo/                Fizmo's library and headers
      docs/                 the language and library documentation
      toolchain/            the C++ compiler (only in the -with-compiler downloads)
+     std-prebuilt/         the standard library compiled with that compiler (only in the -with-compiler downloads)
    ```
 
 3. Add the `bin` folder to your `PATH`.
@@ -78,7 +83,16 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
    xattr -dr com.apple.quarantine Walnut-<version>-macos-arm64
    ```
 
-   An archive extracted with `tar` in the terminal doesn't get the mark.
+   An archive extracted with `tar` in the terminal doesn't get the mark. The `.pkg` installer isn't signed by Apple either, so if macOS says it can't be opened, right-click it and choose **Open**.
+
+   On Android, install [Termux](https://termux.dev) (from F-Droid or GitHub, not the old Play Store version), then in Termux:
+
+   ```
+   pkg install wget
+   wget https://github.com/ThatNewCoderJSCpp/Walnut/releases/download/v<version>/Walnut-<version>-android-arm64.tar.gz
+   tar -xzf Walnut-<version>-android-arm64.tar.gz
+   echo 'export PATH="$HOME/Walnut-<version>-android-arm64/bin:$PATH"' >> ~/.bashrc
+   ```
 
 4. Set up a C++ compiler:
 
@@ -119,6 +133,9 @@ Fizmo can use some extra system libraries (X11, Pango, Cairo, OpenSSL and others
 | Windows | With a `-with-compiler` download, nothing: Walnut uses the compiler in its own `toolchain` folder. Otherwise it downloads the compiler that matches your Walnut download, checks its SHA-256, and unpacks it into `%LOCALAPPDATA%\walnut\toolchain`. It needs no administrator rights, installs nothing system-wide and doesn't change `PATH`. |
 | Linux | Installs your distribution's `g++` with its package manager (`apt`, `dnf`, `pacman`, `zypper`, `apk` or `xbps`), using `sudo`, so it asks for your password. |
 | macOS | Opens Apple's installer for the Command Line Tools. |
+| Android (Termux) | Installs Clang with `pkg install clang`. |
+
+Once there's a compiler, `walnut init` also precompiles the standard library for it (the same as `walnut library --precompile`), which takes a few minutes once, so the first program you build doesn't have to compile the std modules it uses. `--no-precompile` skips that. The `-with-compiler` downloads for Windows don't need it: they come with the standard library already compiled.
 
 The Windows compilers are pinned, so every Walnut version uses the exact compiler it was tested with:
 
@@ -136,6 +153,7 @@ If `walnut build` or `walnut run` can't find a compiler and you're at a terminal
 |---|---|
 | `walnut init` | set up a compiler, asking first |
 | `walnut init --yes` | the same, without asking (for scripts and CI) |
+| `walnut init --no-precompile` | set up a compiler without precompiling the standard library afterwards |
 | `walnut init --force` | on Windows, download Walnut's own compiler even when another one is already on `PATH` |
 | `walnut init --status` | show which compiler Walnut uses, where it came from and its version |
 | `walnut init --print-compiler` | print only the compiler's path, for editors and build tools such as Canopy and Grove |
@@ -171,7 +189,7 @@ walnut <command> [options] <main.wal> [more.wal ...] [C/C++ files] [-- program a
 
 Arguments after `--` go to your program: `walnut run main.wal -- input.txt 3`.
 
-`build` and `run` keep what they compile in a cache (`~/.cache/walnut`, or `WALNUT_CACHE_DIR`). Each Walnut file is compiled on its own, several at once, and only files whose generated C++ changed are compiled again; an unchanged program is ready almost at once. The standard library's modules are compiled into the cache too, the first time a program imports them, and every later program reuses them; `walnut library --precompile` does that for all of them at once, for example right after installing. There is nothing to set up.
+`build` and `run` keep what they compile in a cache (`~/.cache/walnut`, or `WALNUT_CACHE_DIR`). Each Walnut file is compiled on its own, several at once, and only files whose generated C++ changed are compiled again; an unchanged program is ready almost at once. The standard library's modules are compiled into the cache too, the first time a program imports them, and every later program reuses them; `walnut library --precompile` does that for all of them at once, and `walnut init` runs it after setting up a compiler. The Windows `-with-compiler` downloads come with the modules already compiled in their `std-prebuilt` folder, which Walnut uses as long as the program is built with the bundled compiler and the default options. There is nothing to set up.
 
 Common options:
 
@@ -218,6 +236,16 @@ Common options:
 | `--shared` | a shared library (`lib<input>.so`, `lib<input>.dylib`, or `<input>.dll` with `lib<input>.dll.a`) |
 
 Each one also writes a `.walnut` file next to it; keep the two together. A program that links the library (`-L <dir> -l <name>`, or the file itself on the command line), or that `#include`s a header sitting next to them, uses the compiled code instead of compiling the library's Walnut code again. `--lib-dir <folder>` copies the shared libraries a program uses into a folder next to it and makes the program find them there, so they don't have to sit next to the program. See [Libraries and object files](documentation.md#libraries-and-object-files).
+
+### Building for Android
+
+With the [Android NDK](https://developer.android.com/ndk) and Walnut's Android kit (`Walnut-<version>-android-kit.zip` on the Releases page), Walnut on Linux, macOS or Windows builds Walnut code for Android, usually as the shared library an app loads:
+
+```
+walnut build --shared game.wal --android arm64-v8a --android-kit <kit folder> --ndk <NDK folder>
+```
+
+That makes `libgame.so` for the app's `lib/arm64-v8a` folder. `ANDROID_NDK_HOME` and `WALNUT_ANDROID_KIT` can stand in for `--ndk` and `--android-kit`. See [Building for Android](documentation.md#building-for-android).
 
 ### Looking at the generated code
 
@@ -379,7 +407,7 @@ cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAI
 cmake --build build-windows
 ```
 
-The release workflow tests each Windows package on a real Windows machine (x86_64 and ARM): it runs a program with the bundled compiler, and runs `walnut init` with the plain package and builds a program with what it downloads, so a mismatch fails the release instead of reaching users.
+The release workflow tests each Windows package on a real Windows machine (x86_64 and ARM): it runs a program with the bundled compiler, and runs `walnut init` with the plain package and builds a program with what it downloads, so a mismatch fails the release instead of reaching users. The precompiled standard library in the `-with-compiler` packages is made there too: `walnut library --precompile --into std-prebuilt` runs on each Windows machine with the bundled compiler, `.github/scripts/add-std-prebuilt.sh` adds the folder to the package on Linux, and the Windows test then builds a program with an empty cache and fails if Walnut compiled any std module again.
 
 ## Changing the built-in character names
 

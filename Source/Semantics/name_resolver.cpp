@@ -64,7 +64,7 @@ bool NameResolver::is_type_symbol(SymbolKind k) {
            k == SymbolKind::TemplateParam;
 }
 
-std::string NameResolver::join(const std::vector<std::string_view>& parts, bool is_global) {
+std::string NameResolver::join(Span<std::string_view const> parts, bool is_global) {
     std::string out;
     if (is_global) { out += "::"; }
 
@@ -91,7 +91,7 @@ Symbol* NameResolver::node_symbol(nodes::ASTNode* n) {
     }
 }
 
-void NameResolver::check_visibility(const std::vector<std::string_view>& parts, bool is_global, const nodes::ASTNode* use) {
+void NameResolver::check_visibility(Span<std::string_view const> parts, bool is_global, const nodes::ASTNode* use) {
     if (m_quiet || !use) return;
     check_symbols(resolve_path(m_current, m_root, parts, is_global, use), use);
 }
@@ -239,10 +239,10 @@ void NameResolver::resolve_spec_args(nodes::ASTNode* decl) {
 
     if (decl->kind == nodes::ASTNode::Kind::RecordDeclaration) {
         auto* r = static_cast<nodes::RecordDeclaration*>(decl);
-        if (r->is_specialization()) { resolve_targs(const_cast<std::vector<parser_types::TemplateArgument*>&>(r->get_spec_args()), r); }
+        if (r->is_specialization()) { resolve_targs(const_cast<ArenaVector<parser_types::TemplateArgument*>&>(r->get_spec_args()), r); }
     } else if (decl->kind == nodes::ASTNode::Kind::FunctionDeclaration) {
         auto* f = static_cast<nodes::FunctionDeclaration*>(decl);
-        if (f->is_specialization()) { resolve_targs(const_cast<std::vector<parser_types::TemplateArgument*>&>(f->get_spec_args()), f); }
+        if (f->is_specialization()) { resolve_targs(const_cast<ArenaVector<parser_types::TemplateArgument*>&>(f->get_spec_args()), f); }
     }
 }
 
@@ -634,7 +634,7 @@ void NameResolver::build(nodes::ASTNode* node) {
             if (Scope* fs = inner_of(fn->symbol)) { m_current = fs; }
             resolve_type(fn->get_return_type(), fn);
             resolve_params(fn->get_parameters());
-            if (fn->has_body()) { build(fn->get_body()); }
+            if (fn->peek_body()) { build(fn->peek_body()); }
             m_current = saved;
             break;
         }
@@ -646,7 +646,7 @@ void NameResolver::build(nodes::ASTNode* node) {
             resolve_type(mut(op->get_return_type()), op);
             if (op->is_conversion()) { resolve_type(mut(op->get_conversion_type()), op); }
             resolve_params(op->get_parameters());
-            if (op->has_body()) { build(mn(op->get_body())); }
+            if (op->peek_body()) { build(op->peek_body()); }
             m_current = saved;
             break;
         }

@@ -27,6 +27,7 @@ constexpr bool is_declaration_token(const tokenizing::Token& token) noexcept {
         tokenizing::Token::Kind::ShortDeclaration,
         tokenizing::Token::Kind::UnsignedDeclaration,
         tokenizing::Token::Kind::TextDeclaration,
+        tokenizing::Token::Kind::StringViewDeclaration,
         tokenizing::Token::Kind::AutoDeclaration,
         tokenizing::Token::Kind::DynamicDeclaration
     );
@@ -42,6 +43,7 @@ constexpr bool is_declaration_token(tokenizing::Token::Kind token) noexcept {
             token == tokenizing::Token::Kind::ShortDeclaration ||
             token == tokenizing::Token::Kind::UnsignedDeclaration ||
             token == tokenizing::Token::Kind::TextDeclaration ||
+            token == tokenizing::Token::Kind::StringViewDeclaration ||
             token == tokenizing::Token::Kind::AutoDeclaration ||
             token == tokenizing::Token::Kind::DynamicDeclaration;
 }
@@ -94,6 +96,7 @@ constexpr bool is_base_type_token(tokenizing::Token::Kind kind) {
         case tokenizing::Token::Kind::CharacterDeclaration:
         case tokenizing::Token::Kind::StringDeclaration:
         case tokenizing::Token::Kind::TextDeclaration:
+        case tokenizing::Token::Kind::StringViewDeclaration:
         case tokenizing::Token::Kind::VoidKeyword:
         case tokenizing::Token::Kind::AutoDeclaration:
         case tokenizing::Token::Kind::DynamicDeclaration:

@@ -2,128 +2,128 @@ import module.colors
 import module.images
 
 safe(compile) {
-namespace std {
-    namespace fluids {
-        using std::colors::Color;
-        using std::images::Image;
+    namespace std {
+        namespace fluids {
+            using std::colors::Color;
+            using std::images::Image;
 
-        extern "C++" from "<walnut_fluids.hpp>" {
-            class Fluid2D as "walnut_rt::fluids::fluid2d" {
-                function native_pour(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: preset) -> long int as "pour";
-                function native_paint_sand(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: cell, std::hardware_float: probability) -> long int as "paint_sand";
-                function native_particle_color(const self&, long int: index) -> long int as "particle_color";
-                function native_add_emitter(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: vx, std::hardware_float: vy, std::hardware_float: rate, const string&: preset) -> long int as "add_emitter";
-                function native_to_image(self&, long int: width, long int: height) -> Image as "to_image";
-                function native_step_frame(self&) -> void as "step_frame";
+            extern "C++" from "<walnut_fluids.hpp>" {
+                class Fluid2D as "walnut_rt::fluids::fluid2d" {
+                    function native_pour(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: preset) -> long int as "pour";
+                    function native_paint_sand(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: cell, std::hardware_float: probability) -> long int as "paint_sand";
+                    function native_particle_color(const self&, long int: index) -> long int as "particle_color";
+                    function native_add_emitter(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: vx, std::hardware_float: vy, std::hardware_float: rate, const string&: preset) -> long int as "add_emitter";
+                    function native_to_image(self&, long int: width, long int: height) -> Image as "to_image";
+                    function native_step_frame(self&) -> void as "step_frame";
 
-            public:
-                constructor();
-                constructor(const string&: level, std::hardware_float: x0, std::hardware_float: y0, std::hardware_float: x1, std::hardware_float: y1, const string&: preset, std::hardware_float: fill, std::hardware_float: cell_size, bool: heat);
+                public:
+                    constructor();
+                    constructor(const string&: level, std::hardware_float: x0, std::hardware_float: y0, std::hardware_float: x1, std::hardware_float: y1, const string&: preset, std::hardware_float: fill, std::hardware_float: cell_size, bool: heat);
 
-                static function make(const string&: level, std::hardware_float: x0, std::hardware_float: y0, std::hardware_float: x1, std::hardware_float: y1, const string&: preset = "water", std::hardware_float: fill = 0.0, std::hardware_float: cell_size = 0.0, bool: heat = false) -> Fluid2D {
-                    return Fluid2D(level, x0, y0, x1, y1, preset, fill, cell_size, heat);
-                } end function make
+                    static function make(const string&: level, std::hardware_float: x0, std::hardware_float: y0, std::hardware_float: x1, std::hardware_float: y1, const string&: preset = "water", std::hardware_float: fill = 0.0, std::hardware_float: cell_size = 0.0, bool: heat = false) -> Fluid2D {
+                        return Fluid2D(level, x0, y0, x1, y1, preset, fill, cell_size, heat);
+                    } end function make
 
-                function step(self&, std::hardware_float: seconds) -> void;
+                    function step(self&, std::hardware_float: seconds) -> void;
 
-                function step(self&) -> void {
-                    self.native_step_frame();
-                } end function step
+                    function step(self&) -> void {
+                        self.native_step_frame();
+                    } end function step
 
-                function level(const self&) -> string;
-                function cells_x(const self&) -> long int;
-                function cells_y(const self&) -> long int;
-                function cell_size(const self&) -> std::hardware_float;
-                function columns(const self&) -> long int;
-                function column_size(const self&) -> std::hardware_float;
-                function min_x(const self&) -> std::hardware_float;
-                function min_y(const self&) -> std::hardware_float;
-                function max_x(const self&) -> std::hardware_float;
-                function max_y(const self&) -> std::hardware_float;
+                    function level(const self&) -> string;
+                    function cells_x(const self&) -> long int;
+                    function cells_y(const self&) -> long int;
+                    function cell_size(const self&) -> std::hardware_float;
+                    function columns(const self&) -> long int;
+                    function column_size(const self&) -> std::hardware_float;
+                    function min_x(const self&) -> std::hardware_float;
+                    function min_y(const self&) -> std::hardware_float;
+                    function max_x(const self&) -> std::hardware_float;
+                    function max_y(const self&) -> std::hardware_float;
 
-                function pour(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius) -> long int {
-                    return self.native_pour(x, y, radius, "");
-                } end function pour
+                    function pour(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius) -> long int {
+                        return self.native_pour(x, y, radius, "");
+                    } end function pour
 
-                function pour(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: preset) -> long int {
-                    return self.native_pour(x, y, radius, preset);
-                } end function pour
+                    function pour(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: preset) -> long int {
+                        return self.native_pour(x, y, radius, preset);
+                    } end function pour
 
-                function erase(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius) -> long int;
-                function clear(self&) -> void;
-                function push(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: vx, std::hardware_float: vy, std::hardware_float: strength) -> void;
-                function swirl(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: spin, std::hardware_float: strength) -> void;
-                function explode(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: strength) -> void;
-                function paint_wall(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, bool: on) -> void;
-                function add_heat(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: degrees) -> void;
-                function count_cells(const self&, const string&: cell) -> long int;
-                function heat(const self&) -> bool;
-                function temperature(const self&, long int: i, long int: j) -> std::hardware_float;
+                    function erase(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius) -> long int;
+                    function clear(self&) -> void;
+                    function push(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: vx, std::hardware_float: vy, std::hardware_float: strength) -> void;
+                    function swirl(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: spin, std::hardware_float: strength) -> void;
+                    function explode(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: strength) -> void;
+                    function paint_wall(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, bool: on) -> void;
+                    function add_heat(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: degrees) -> void;
+                    function count_cells(const self&, const string&: cell) -> long int;
+                    function heat(const self&) -> bool;
+                    function temperature(const self&, long int: i, long int: j) -> std::hardware_float;
 
-                function paint_sand(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: cell) -> long int {
-                    return self.native_paint_sand(x, y, radius, cell, 1.0);
-                } end function paint_sand
+                    function paint_sand(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: cell) -> long int {
+                        return self.native_paint_sand(x, y, radius, cell, 1.0);
+                    } end function paint_sand
 
-                function paint_sand(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: cell, std::hardware_float: probability) -> long int {
-                    return self.native_paint_sand(x, y, radius, cell, probability);
-                } end function paint_sand
+                    function paint_sand(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, const string&: cell, std::hardware_float: probability) -> long int {
+                        return self.native_paint_sand(x, y, radius, cell, probability);
+                    } end function paint_sand
 
-                function paint_wall(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius) -> void {
-                    self.paint_wall(x, y, radius, true);
-                } end function paint_wall
+                    function paint_wall(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius) -> void {
+                        self.paint_wall(x, y, radius, true);
+                    } end function paint_wall
 
-                function cell(const self&, long int: i, long int: j) -> string;
-                function cell_id(const self&, long int: i, long int: j) -> long int;
-                function cell_fill(const self&, long int: i, long int: j) -> std::hardware_float;
+                    function cell(const self&, long int: i, long int: j) -> string;
+                    function cell_id(const self&, long int: i, long int: j) -> long int;
+                    function cell_fill(const self&, long int: i, long int: j) -> std::hardware_float;
 
-                function particle_count(const self&) -> long int;
-                function particle_x(const self&, long int: index) -> std::hardware_float;
-                function particle_y(const self&, long int: index) -> std::hardware_float;
-                function particle_material(const self&, long int: index) -> long int;
-                function particle_radius(const self&) -> std::hardware_float;
+                    function particle_count(const self&) -> long int;
+                    function particle_x(const self&, long int: index) -> std::hardware_float;
+                    function particle_y(const self&, long int: index) -> std::hardware_float;
+                    function particle_material(const self&, long int: index) -> long int;
+                    function particle_radius(const self&) -> std::hardware_float;
 
-                function particle_color(const self&, long int: index) -> Color {
-                    return Color::from_packed(self.native_particle_color(index));
-                } end function particle_color
+                    function particle_color(const self&, long int: index) -> Color {
+                        return Color::from_packed(self.native_particle_color(index));
+                    } end function particle_color
 
-                function surface_height(const self&, std::hardware_float: x) -> std::hardware_float;
-                function depth_at(const self&, std::hardware_float: x, std::hardware_float: y) -> std::hardware_float;
-                function inside(const self&, std::hardware_float: x, std::hardware_float: y) -> bool;
-                function velocity_x(const self&, std::hardware_float: x, std::hardware_float: y) -> std::hardware_float;
-                function velocity_y(const self&, std::hardware_float: x, std::hardware_float: y) -> std::hardware_float;
-                function density_at(const self&, std::hardware_float: x, std::hardware_float: y) -> std::hardware_float;
-                function total_volume(const self&) -> std::hardware_float;
-                function sleeping(const self&) -> bool;
-                function step_ms(const self&) -> std::hardware_float;
+                    function surface_height(const self&, std::hardware_float: x) -> std::hardware_float;
+                    function depth_at(const self&, std::hardware_float: x, std::hardware_float: y) -> std::hardware_float;
+                    function inside(const self&, std::hardware_float: x, std::hardware_float: y) -> bool;
+                    function velocity_x(const self&, std::hardware_float: x, std::hardware_float: y) -> std::hardware_float;
+                    function velocity_y(const self&, std::hardware_float: x, std::hardware_float: y) -> std::hardware_float;
+                    function density_at(const self&, std::hardware_float: x, std::hardware_float: y) -> std::hardware_float;
+                    function total_volume(const self&) -> std::hardware_float;
+                    function sleeping(const self&) -> bool;
+                    function step_ms(const self&) -> std::hardware_float;
 
-                function set_gravity(self&, std::hardware_float: x, std::hardware_float: y) -> void;
-                function set_quality(self&, long int: quality) -> void;
-                function set_threads(self&, long int: count) -> void;
-                function set_current(self&, std::hardware_float: x, std::hardware_float: y) -> void;
-                function set_property(self&, const string&: property, std::hardware_float: value) -> void;
-                function set_color(self&, std::hardware_float: r, std::hardware_float: g, std::hardware_float: b) -> void;
+                    function set_gravity(self&, std::hardware_float: x, std::hardware_float: y) -> void;
+                    function set_quality(self&, long int: quality) -> void;
+                    function set_threads(self&, long int: count) -> void;
+                    function set_current(self&, std::hardware_float: x, std::hardware_float: y) -> void;
+                    function set_property(self&, const string&: property, std::hardware_float: value) -> void;
+                    function set_color(self&, std::hardware_float: r, std::hardware_float: g, std::hardware_float: b) -> void;
 
-                function add_emitter(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: vx, std::hardware_float: vy, std::hardware_float: rate) -> long int {
-                    return self.native_add_emitter(x, y, radius, vx, vy, rate, "");
-                } end function add_emitter
+                    function add_emitter(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: vx, std::hardware_float: vy, std::hardware_float: rate) -> long int {
+                        return self.native_add_emitter(x, y, radius, vx, vy, rate, "");
+                    } end function add_emitter
 
-                function add_emitter(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: vx, std::hardware_float: vy, std::hardware_float: rate, const string&: preset) -> long int {
-                    return self.native_add_emitter(x, y, radius, vx, vy, rate, preset);
-                } end function add_emitter
+                    function add_emitter(self&, std::hardware_float: x, std::hardware_float: y, std::hardware_float: radius, std::hardware_float: vx, std::hardware_float: vy, std::hardware_float: rate, const string&: preset) -> long int {
+                        return self.native_add_emitter(x, y, radius, vx, vy, rate, preset);
+                    } end function add_emitter
 
-                function set_emitter_active(self&, long int: emitter, bool: on) -> void;
-                function emitter_count(const self&) -> long int;
-                function clear_emitters(self&) -> void;
+                    function set_emitter_active(self&, long int: emitter, bool: on) -> void;
+                    function emitter_count(const self&) -> long int;
+                    function clear_emitters(self&) -> void;
 
-                function to_image(self&, long int: width) -> Image {
-                    return self.native_to_image(width, 0);
-                } end function to_image
+                    function to_image(self&, long int: width) -> Image {
+                        return self.native_to_image(width, 0);
+                    } end function to_image
 
-                function to_image(self&, long int: width, long int: height) -> Image {
-                    return self.native_to_image(width, height);
-                } end function to_image
-            } end class Fluid2D
-        } end extern
-    } end namespace fluids
-} end namespace std
+                    function to_image(self&, long int: width, long int: height) -> Image {
+                        return self.native_to_image(width, height);
+                    } end function to_image
+                } end class Fluid2D
+            } end extern
+        } end namespace fluids
+    } end namespace std
 } end safe

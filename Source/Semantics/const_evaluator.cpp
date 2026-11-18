@@ -467,10 +467,38 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
                     types.push_back(q->operand ? m_types.canonicalize(q->operand->type) : nullptr);
                     for (parser_types::TemplateArgument* x : q->extra_operands) types.push_back(x ? m_types.canonicalize(x->type) : nullptr);
                 }
+                if (q->trait == parser_types::TypeTrait::EnumMin || q->trait == parser_types::TypeTrait::EnumMax || q->trait == parser_types::TypeTrait::EnumBits) {
+                    Type* et = types.empty() ? nullptr : types.front();
+                    if (et && et->is_reference()) et = static_cast<ReferenceType*>(et)->referent();
+                    if (et) et = m_types.strip_cv(et);
+                    if (nodes::EnumDeclaration* d = enum_declaration_of(et); d && !d->values.empty()) {
+                        WideInt lo, hi, bits;
+                        bool first = true;
+                        for (nodes::EnumValue* v : d->values) {
+                            if (!v || !v->symbol) return ConstValue{};
+                            const ConstValue x = eval_enum_constant(v->symbol);
+                            if (!x.ok() || !x.is_int()) return ConstValue{};
+                            if (first || *x.i < lo) lo = *x.i;
+                            if (first || hi < *x.i) hi = *x.i;
+                            first = false;
+                            if (q->trait == parser_types::TypeTrait::EnumBits) {
+                                if (x.i->is_negative() || x.i->highest_bit() >= 11) {
+                                    if (m_types.type_error_hook) m_types.type_error_hook("enum_bits uses each enumerator's value as a bit position, so every value has to be between 0 and 2047, but '" + std::string(v->name) + "' is " + x.i->to_string());
+                                    return ConstValue{};
+                                }
+                                bits.set_bit(static_cast<std::size_t>(x.i->get_lowest_bits()), true);
+                            }
+                        }
+                        if (q->trait == parser_types::TypeTrait::EnumMin) return make_int(lo);
+                        if (q->trait == parser_types::TypeTrait::EnumMax) return make_int(hi);
+                        return make_int(bits);
+                    }
+                }
                 std::string error;
                 const std::optional<std::int64_t> r = eval_type_trait(m_types, q->trait, types, error);
                 if (!error.empty() && m_types.type_error_hook) m_types.type_error_hook(error);
                 if (!r) return ConstValue{};
+                if (q->trait == parser_types::TypeTrait::EnumBits) return make_int(WideInt(static_cast<std::uint64_t>(*r)));
                 if (parser_types::type_trait_gives_int(q->trait)) return make_int(WideInt(*r));
                 return make_bool(*r != 0);
             }
@@ -614,6 +642,24 @@ ConstValue ConstEvaluator::eval_impl(nodes::ASTNode* e) {
 }
 
 auto ConstEvaluator::eval_literal(nodes::Literal* lit) -> ConstValue {
+    int slot = -1;
+    switch (lit->get_kind()) {
+        case TK::Integer:     slot = 0; break;
+        case TK::Float:       slot = 1; break;
+        case TK::Character:   slot = 2; break;
+        case TK::String:      slot = 3; break;
+        case TK::TextLiteral: slot = 4; break;
+        default: break;
+    }
+    if (slot < 0) return eval_literal_uncached(lit);
+    auto& cache = m_literal_cache[slot];
+    if (auto it = cache.find(lit->value); it != cache.end()) return it->second;
+    ConstValue v = eval_literal_uncached(lit);
+    cache.emplace(lit->value, v);
+    return v;
+}
+
+auto ConstEvaluator::eval_literal_uncached(nodes::Literal* lit) -> ConstValue {
     switch (lit->get_kind()) {
         case TK::Integer: {
             const tokenizing::NumericLiteral n = tokenizing::parse_numeric_literal(lit->value);
