@@ -61,7 +61,7 @@ private:
 
     static bool is_type_symbol(SymbolKind k);
 
-    static std::string join(const std::vector<std::string_view>& parts, bool is_global);
+    static std::string join(Span<std::string_view const> parts, bool is_global);
 
     static Symbol* node_symbol(nodes::ASTNode* n);
 
@@ -69,7 +69,7 @@ private:
 
     void error_unresolved(const nodes::ASTNode* use, std::string_view name);
 
-    void check_visibility(const std::vector<std::string_view>& parts, bool is_global, const nodes::ASTNode* use);
+    void check_visibility(Span<std::string_view const> parts, bool is_global, const nodes::ASTNode* use);
 
     void check_symbols(const std::vector<Symbol*>& chain, const nodes::ASTNode* use);
 
@@ -81,7 +81,7 @@ private:
 
     void resolve_spec_args(nodes::ASTNode* decl);
 
-    void resolve_targs(std::vector<parser_types::TemplateArgument*>& args, const nodes::ASTNode* use) {
+    void resolve_targs(ArenaVector<parser_types::TemplateArgument*>& args, const nodes::ASTNode* use) {
         for (parser_types::TemplateArgument* a : args) { resolve_targ(a, use); }
     }
 

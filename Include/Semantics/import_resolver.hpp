@@ -50,7 +50,7 @@ private:
     std::vector<ExportEntry> m_exports;
 
 private:
-    Scope* namespace_path_parent(Scope* base, const std::vector<std::string_view>& parts, ASTNode* origin);
+    Scope* namespace_path_parent(Scope* base, Span<std::string_view const> parts, ASTNode* origin);
 
     void declare_import(Scope* target, std::string_view name, SymbolKind kind, ASTNode* origin, std::string_view source);
 

@@ -42,6 +42,8 @@ public:
         m_current = saved;
     }
 
+    void build_body_into(nodes::ASTNode* body, Scope* function_scope);
+
 private:
     AnalysisContext& m_ctx;
     Arena&           m_arena;
@@ -98,7 +100,7 @@ private:
 
     void build_variable(nodes::VariableDeclaration* var);
 
-    void build_callable_scope(Symbol* sym, const nodes::FunctionParameters* params, nodes::ASTNode* body, const std::vector<nodes::ASTNode*>* init_list = nullptr);
+    void build_callable_scope(Symbol* sym, const nodes::FunctionParameters* params, nodes::ASTNode* body, const ArenaVector<nodes::ASTNode*>* init_list = nullptr);
 
     void declare_parameters(const nodes::FunctionParameters* params);
 
@@ -139,7 +141,7 @@ private:
 
     void build_requires(nodes::RequiresExpression* req);
 
-    void walk_template_args(const std::vector<parser_types::TemplateArgument*>& args) {
+    void walk_template_args(Span<parser_types::TemplateArgument* const> args) {
         for (auto* a : args) { if (a && a->is_value()) { walk_expr(a->value); } }
     }
 

@@ -47,6 +47,7 @@ class CompilerPipeline {
 private:
     std::string input_file;
     Arena ast_arena;         
+    ArenaScope ast_arena_scope;
     SourceManager sources;    
     ErrorReporter reporter;
     WarningReporter warnings;
@@ -89,6 +90,7 @@ public:
     )
         : input_file(std::move(input))
         , ast_arena(arena_block_size)
+        , ast_arena_scope(ast_arena)
         , sources(ast_arena)
         , reporter(ErrorOutput::StdErr)
         , warnings(ErrorOutput::StdErr)
@@ -292,7 +294,7 @@ private:
 
     std::vector<std::string> m_missing_native;
 
-    void check_native_files(const std::vector<nodes::ASTNode*>& stmts) {
+    void check_native_files(Span<nodes::ASTNode* const> stmts) {
         namespace fs = std::filesystem;
 
         for (nodes::ASTNode* s : stmts) {

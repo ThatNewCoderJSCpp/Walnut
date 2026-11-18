@@ -66,8 +66,14 @@ public:
     Instantiator(Arena& arena, TypeContext& types, ErrorReporter& reporter, WarningReporter& warnings)
 ;
 
+    ~Instantiator();
+
     Instantiator(const Instantiator&) = delete;
     Instantiator& operator=(const Instantiator&) = delete;
+
+    void materialize_member_body(nodes::ASTNode* decl);
+    std::size_t lazy_bodies_materialized() const { return m_lazy_materialized; }
+    void set_eager_member_bodies(bool on) { m_eager_member_bodies = on; }
 
     std::function<void(nodes::ASTNode*, Scope*)> build_scopes;
     Arena& arena() { return m_arena; }
@@ -99,13 +105,13 @@ public:
 
     Instantiation* instantiate_for_call(
         Symbol* generic,
-        const std::vector<parser_types::TemplateArgument*>& explicit_args,
+        Span<parser_types::TemplateArgument* const> explicit_args,
         const std::vector<Type*>& call_args,
         nodes::ASTNode* site,
         const std::vector<bool>* lvalue_args = nullptr
     );
 
-    std::vector<Arg> canon_args(const std::vector<parser_types::TemplateArgument*>& written, bool& ok);
+    std::vector<Arg> canon_args(Span<parser_types::TemplateArgument* const> written, bool& ok);
 
     void refresh_function_type(Instantiation* I);
 
@@ -177,24 +183,24 @@ private:
 
     bool bind_written(nodes::TemplateParameter* p, const parser_types::TemplateArgument* w, SubstEnv& env);
 
-    static nodes::TemplateParameter* trailing_pack(const std::vector<nodes::TemplateParameter*>& ps) {
+    static nodes::TemplateParameter* trailing_pack(Span<nodes::TemplateParameter* const> ps) {
         return (!ps.empty() && ps.back()->is_pack()) ? ps.back() : nullptr;
     }
 
-    static bool has_nontrailing_pack(const std::vector<nodes::TemplateParameter*>& ps) {
+    static bool has_nontrailing_pack(Span<nodes::TemplateParameter* const> ps) {
         for (std::size_t i = 0; i + 1 < ps.size(); ++i) if (ps[i]->is_pack()) return true;
         return false;
     }
 
     static Symbol* entity_symbol(nodes::ASTNode* d);
 
-    static const std::vector<parser_types::TemplateArgument*>* spec_args_of(nodes::TemplateDeclaration* t);
+    static const ArenaVector<parser_types::TemplateArgument*>* spec_args_of(nodes::TemplateDeclaration* t);
 
     static const parser_types::TemplateArgument* trailing_targ_pack(
-        const std::vector<parser_types::TemplateArgument*>& written, std::size_t& fixed_out
+        Span<parser_types::TemplateArgument* const> written, std::size_t& fixed_out
     );
 
-    bool pattern_matches(const std::vector<parser_types::TemplateArgument*>& written, std::size_t fixed, const std::vector<Arg>& args, const SubstEnv& env);
+    bool pattern_matches(Span<parser_types::TemplateArgument* const> written, std::size_t fixed, const std::vector<Arg>& args, const SubstEnv& env);
 
     bool bindings_complete(nodes::TemplateDeclaration* st, const SubstEnv& env);
 
@@ -206,6 +212,9 @@ private:
     static std::uint32_t line_of(const nodes::ASTNode* n) { return n ? n->line : 0; }
 
 private:
+    nodes::BodyMaterializer m_previous_materializer;
+    std::size_t    m_lazy_materialized = 0;
+    bool           m_eager_member_bodies = false;
     Arena&         m_arena;
     TypeContext&   m_types;
     ErrorReporter& m_reporter;

@@ -98,8 +98,8 @@ private:
     struct ControlContextGuard {
         TypeWalker& w; unsigned long long int loops, switches;
         std::vector<std::string_view> labels;
-        std::vector<std::pair<const std::vector<nodes::ASTNode*>*, std::size_t>> path;
-        std::vector<std::pair<nodes::SingleStatement*, std::vector<std::pair<const std::vector<nodes::ASTNode*>*, std::size_t>>>> jump_labels, jumps;
+        std::vector<std::pair<Span<nodes::ASTNode* const>, std::size_t>> path;
+        std::vector<std::pair<nodes::SingleStatement*, std::vector<std::pair<Span<nodes::ASTNode* const>, std::size_t>>>> jump_labels, jumps;
 
         explicit ControlContextGuard(TypeWalker& tw);
 
@@ -166,11 +166,11 @@ private:
     std::size_t                  m_catch_depth  = 0; 
     unsigned long long int       m_loop_depth   = 0;
     std::vector<std::string_view> m_loop_labels;
-    using StmtPath = std::vector<std::pair<const std::vector<nodes::ASTNode*>*, std::size_t>>;
+    using StmtPath = std::vector<std::pair<Span<nodes::ASTNode* const>, std::size_t>>;
     StmtPath m_stmt_path;
     std::vector<std::pair<nodes::SingleStatement*, StmtPath>> m_jump_labels, m_jumps;
     void resolve_gotos();
-    void build_list(const std::vector<nodes::ASTNode*>& stmts);   
+    void build_list(Span<nodes::ASTNode* const> stmts);   
     unsigned long long int       m_switch_depth = 0;
 
 private:
@@ -360,9 +360,9 @@ private:
     static bool is_static_member_function(const Symbol* fn);
     bool  is_builtin_method_call(nodes::CallExpression* c);
     bool  rewrite_extension_call(nodes::CallExpression* c);
-    void  refine_by_value_category(std::vector<CandidateMatch>& matches, const std::vector<std::vector<ParamShape>>& shapes_list, const std::vector<nodes::ASTNode*>& args, std::size_t offset);
+    void  refine_by_value_category(std::vector<CandidateMatch>& matches, const std::vector<std::vector<ParamShape>>& shapes_list, Span<nodes::ASTNode* const> args, std::size_t offset);
     void  substitute_pack_types(nodes::ASTNode* n, const std::vector<Symbol*>& pks, std::size_t k);
-    std::string candidate_notes(Symbol* head, const std::vector<Type*>& args, const std::vector<nodes::ASTNode*>* arg_nodes, std::string_view shown);
+    std::string candidate_notes(Symbol* head, const std::vector<Type*>& args, const ArenaVector<nodes::ASTNode*>* arg_nodes, std::string_view shown);
     Type* type_builtin_method(nodes::CallExpression* c, const std::vector<Type*>& args);
 
     static bool is_instance_field(const Symbol* s);
@@ -396,14 +396,14 @@ private:
 
     bool is_member_function(const Symbol* fn) const;
     nodes::VariableDeclaration* pack_field_group(nodes::ASTNode* e);
-    void expand_pack_list(std::vector<nodes::ASTNode*>& items, bool allow_runtime = false);
+    void expand_pack_list(ArenaVector<nodes::ASTNode*>& items, bool allow_runtime = false);
     Type* runtime_spread_element(nodes::ASTNode* a);
     std::unordered_set<const nodes::ASTNode*> m_runtime_spreads;
     nodes::VariableDeclaration* pack_field_group_of(Symbol* s);
 
     void check_const_call(Symbol* chosen, nodes::CallExpression* c);
 
-    Type* arrow_target(Type* obj, std::vector<Symbol*>* chain = nullptr);
+    Type* arrow_target(Type* obj, ArenaVector<Symbol*>* chain = nullptr);
 
     Type* deduce_auto_declared(const parser_types::TypeInfo& ti, Type* init);
 
@@ -483,7 +483,7 @@ private:
 
     CandidateMatch match_with_constants(nodes::CallExpression* c, const std::vector<ParamShape>& shapes, const std::vector<Type*>& args);
     void adapt_contains_literal(nodes::CallExpression* c, std::vector<Type*>& args);
-    CandidateMatch match_with_constants(const std::vector<nodes::ASTNode*>* nodes, const std::vector<ParamShape>& shapes, const std::vector<Type*>& args);
+    CandidateMatch match_with_constants(const ArenaVector<nodes::ASTNode*>* nodes, const std::vector<ParamShape>& shapes, const std::vector<Type*>& args);
 
     void check_arg_bindings(nodes::CallExpression* c, const std::vector<ParamShape>& shapes);
 
@@ -508,10 +508,10 @@ private:
 
     OpResult resolve_operator(nodes::OverloadableOperator want, const std::vector<Type*>& operands);
     Type* init_list_element(Type* t);
-    Symbol* init_list_constructor(Type* rec, const std::vector<nodes::ASTNode*>& els, Type*& il_type, nodes::ASTNode* site);
+    Symbol* init_list_constructor(Type* rec, Span<nodes::ASTNode* const> els, Type*& il_type, nodes::ASTNode* site);
     bool element_converts(nodes::ASTNode* el, Type* to);
     ConversionRank rank_brace_arg(nodes::ASTNode* arg, Type* param);
-    void bind_brace_args(const std::vector<nodes::ASTNode*>* nodes, const std::vector<ParamShape>& shapes, nodes::ASTNode* site);
+    void bind_brace_args(const ArenaVector<nodes::ASTNode*>* nodes, const std::vector<ParamShape>& shapes, nodes::ASTNode* site);
     bool prefer_rvalue_ref_for_temporaries(std::vector<CandidateMatch>& matches, const std::vector<Symbol*>& cands, const std::vector<bool>& member, const std::vector<Type*>& operands);
     Type* synthesize_comparison(nodes::BinaryExpression* b, Type* l, Type* r, Symbol*& resolved_op);
     bool memberwise_equality(Type* t, int depth);
@@ -525,7 +525,7 @@ private:
     bool text_displayable(Type* t);
     void check_member_ambiguity(Scope* members, std::string_view name, nodes::ASTNode* site);
     nodes::ASTNode* m_operator_site = nullptr;
-    const std::vector<nodes::ASTNode*>* m_operator_args = nullptr;
+    const ArenaVector<nodes::ASTNode*>* m_operator_args = nullptr;
     void check_member_initialization(nodes::ConstructorDeclaration* ct, const std::vector<const Symbol*>& initialized);
     bool report_if_deleted(Symbol* fn);
 
@@ -569,7 +569,7 @@ private:
 
     FunctionType* as_function_type(Type* t);
 
-    const std::vector<nodes::ASTNode*>* m_ctor_arg_nodes = nullptr;
+    const ArenaVector<nodes::ASTNode*>* m_ctor_arg_nodes = nullptr;
 
     static bool is_lvalue(const nodes::ASTNode* n) {
         return n && n->expr_type.vc == VC::LValue;
