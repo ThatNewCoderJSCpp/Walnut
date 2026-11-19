@@ -77,6 +77,8 @@ class value {
 public:
     value() = default;
     value(long long v) : m_v(static_cast<std::int64_t>(v)) {}
+    template <typename I, std::enable_if_t<std::is_integral_v<I> && !std::is_same_v<I, bool> && !std::is_same_v<I, long long>, int> = 0>
+    value(I v) : m_v(static_cast<std::int64_t>(v)) {}
     value(double v) : m_v(v) {}
     value(const std::string& v) : m_v(v) {}
     value(bool v) : m_v(v) {}
