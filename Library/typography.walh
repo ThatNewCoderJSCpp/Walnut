@@ -46,7 +46,7 @@ safe(compile) {
                 } end function to_string
             } end struct TextMetrics
 
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_graphics.hpp>" {
                     class Native as "walnut_rt::gfx::typography_api" {
                     public:

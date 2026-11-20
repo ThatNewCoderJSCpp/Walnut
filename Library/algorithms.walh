@@ -26,13 +26,13 @@ namespace std {
             } end struct Range
         } end safe
 
-        namespace detail {
+        hidden namespace detail {
             safe(compile) {
                 template <typename T>
                 function swap_values(T&: a, T&: b) -> void {
-                    auto: held = std::core::move(a);
-                    a = std::core::move(b);
-                    b = std::core::move(held);
+                    auto: held = std::move(a);
+                    a = std::move(b);
+                    b = std::move(held);
                 } end function swap_values
 
                 function depth_limit(long int: n) -> int {
@@ -77,13 +77,13 @@ namespace std {
             function insertion(It: first, long int: lo, long int: hi, const std::Compare<E>&: comp) -> void {
                 for (long int: i = lo + 1; i < hi; i++) {
                     if (comp(first[i], first[i - 1])) then {
-                        auto: held = std::core::move(first[i]);
+                        auto: held = std::move(first[i]);
                         long int: j = i;
                         while (j > lo && comp(held, first[j - 1])) {
-                            first[j] = std::core::move(first[j - 1]);
+                            first[j] = std::move(first[j - 1]);
                             j -= 1;
                         }
-                        first[j] = std::core::move(held);
+                        first[j] = std::move(held);
                     }
                 }
             } end function insertion
@@ -171,7 +171,7 @@ namespace std {
             function merge_pass(It: first, long int: lo, long int: mid, long int: hi, V*: buffer, const std::Compare<E>&: comp) -> void {
                 long int: n = 0;
                 for (long int: k = lo; k < mid; k++) {
-                    buffer[n] = std::core::move(first[k]);
+                    buffer[n] = std::move(first[k]);
                     n += 1;
                 }
                 long int: i = 0;
@@ -179,16 +179,16 @@ namespace std {
                 long int: out = lo;
                 while (i < n && j < hi) {
                     if (comp(first[j], buffer[i])) then {
-                        first[out] = std::core::move(first[j]);
+                        first[out] = std::move(first[j]);
                         j += 1;
                     } else then {
-                        first[out] = std::core::move(buffer[i]);
+                        first[out] = std::move(buffer[i]);
                         i += 1;
                     }
                     out += 1;
                 }
                 while (i < n) {
-                    first[out] = std::core::move(buffer[i]);
+                    first[out] = std::move(buffer[i]);
                     i += 1;
                     out += 1;
                 }
@@ -692,7 +692,7 @@ namespace std {
 
         template <typename It, typename T>
         function accumulate(It: first, It: last, T: init) -> T {
-            T: total = std::core::move(init);
+            T: total = std::move(init);
             for (It: it = first; it != last; ++it) {
                 total = total + *it;
             }
@@ -701,7 +701,7 @@ namespace std {
 
         template <typename It, typename T, typename E>
         function accumulate(It: first, It: last, T: init, std::Combine<T, E>: op) -> T {
-            T: total = std::core::move(init);
+            T: total = std::move(init);
             for (It: it = first; it != last; ++it) {
                 total = op(total, *it);
             }
@@ -801,7 +801,7 @@ namespace std {
         function move_to(It: first, It: last, Out: out) -> Out {
             Out: o = out;
             for (It: it = first; it != last; ++it) {
-                *o = std::core::move(*it);
+                *o = std::move(*it);
                 ++o;
             }
             return o;
@@ -858,7 +858,7 @@ namespace std {
             ++it;
             while (it != last) {
                 if (!pred(*it)) then {
-                    *out = std::core::move(*it);
+                    *out = std::move(*it);
                     ++out;
                 }
                 ++it;
@@ -886,7 +886,7 @@ namespace std {
                 if (!same(*out, *it)) then {
                     ++out;
                     if (out != it) then {
-                        *out = std::core::move(*it);
+                        *out = std::move(*it);
                     }
                 }
                 ++it;
@@ -1008,18 +1008,18 @@ namespace std {
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
                     if (out != it) then {
-                        *out = std::core::move(*it);
+                        *out = std::move(*it);
                     }
                     ++out;
                     kept += 1;
                 } else then {
-                    rejected[dropped] = std::core::move(*it);
+                    rejected[dropped] = std::move(*it);
                     dropped += 1;
                 }
             }
             It: o = out;
             for (long int: k = 0; k < dropped; k++) {
-                *o = std::core::move(rejected[k]);
+                *o = std::move(rejected[k]);
                 ++o;
             }
             delete[] rejected;
@@ -1295,13 +1295,13 @@ namespace std {
             }
             while (gap >= 1) {
                 for (long int: i = gap; i < n; i++) {
-                    auto: held = std::core::move(first[i]);
+                    auto: held = std::move(first[i]);
                     long int: j = i;
                     while (j >= gap && comp(held, first[j - gap])) {
-                        first[j] = std::core::move(first[j - gap]);
+                        first[j] = std::move(first[j - gap]);
                         j -= gap;
                     }
-                    first[j] = std::core::move(held);
+                    first[j] = std::move(held);
                 }
                 gap /= 3;
             }

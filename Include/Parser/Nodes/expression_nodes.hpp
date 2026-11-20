@@ -46,6 +46,7 @@ struct QualifiedIdentifier : ASTNode {
     bool m_is_global;
     semantics::Symbol* resolved = nullptr; 
     semantics::Symbol* dependent_head = nullptr;
+    bool from_compiler = false;
 
     QualifiedIdentifier(std::uint32_t ln, bool is_global = false) : ASTNode(Kind::QualifiedIdentifier, ln), m_is_global(is_global) {}
 

@@ -929,7 +929,7 @@ safe(compile) {
 
             template <bool Condition, typename A, typename B>
             using conditional = __conditional(Condition, A, B);
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_limits.hpp>" {
                     template <typename T>
                     class FloatLimits as "walnut_rt::num::tag" {
@@ -1201,13 +1201,13 @@ safe(compile) {
             concept copy_constructible = requires (const T&: value) { T(value); }
 
             template <typename T>
-            concept move_constructible = requires (T&&: value) { T(std::core::move(value)); }
+            concept move_constructible = requires (T&&: value) { T(std::move(value)); }
 
             template <typename T>
             concept copy_assignable = requires (T&: target, const T&: value) { target = value; }
 
             template <typename T>
-            concept move_assignable = requires (T&: target, T&&: value) { target = std::core::move(value); }
+            concept move_assignable = requires (T&: target, T&&: value) { target = std::move(value); }
 
             template <typename T>
             concept copyable = copy_constructible<T> && copy_assignable<T>
@@ -1287,6 +1287,26 @@ safe(compile) {
             } end class match_error
         } end namespace errors
 
+        template <typename T>
+        constexpr function move(T&: value) noexcept -> T&& {
+            return static_cast<T&&>(value);
+        } end function move
+
+        template <typename T>
+        constexpr function move(T&&: value) noexcept -> T&& {
+            return static_cast<T&&>(value);
+        } end function move
+
+        template <typename T>
+        constexpr function forward(std::traits::discard_ref<T>&: value) noexcept -> T&& {
+            return static_cast<T&&>(value);
+        } end function forward
+
+        template <typename T>
+        constexpr function forward(std::traits::discard_ref<T>&&: value) noexcept -> T&& {
+            return static_cast<T&&>(value);
+        } end function forward
+
         namespace core {
             template <typename T>
             constexpr function move(T&: value) noexcept -> T&& {
@@ -1320,7 +1340,7 @@ safe(compile) {
                 return static_cast<string>(`${value}`);
             } end function to_string
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename T>
                 constexpr bool: checkable_number = (std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>) || std::traits::is_builtin_float<T>;
 
@@ -1558,7 +1578,7 @@ safe(compile) {
                 return detail::magnitude(x) < std::traits::float_traits<T>::min();
             } end function is_subnormal
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename C, typename T>
                 concept has_contains = requires (const C&: items, const T&: value) { items.contains(value); }
             } end namespace detail
@@ -1593,7 +1613,7 @@ safe(compile) {
                 return ((value == options) || ... || false);
             } end function equals_any
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename T, typename S>
                 concept checks_type = requires (const S&: value) { value is T; }
 

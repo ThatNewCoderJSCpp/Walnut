@@ -170,12 +170,16 @@ private:
     bool m_is_global = false;
 
 public:
+    bool from_compiler = false;
+
     explicit UserDefinedType(std::string_view name) { m_parts.push_back(name); }
     UserDefinedType(std::vector<std::string_view> parts, bool is_global = false) : m_parts(std::move(parts)), m_is_global(is_global) {}
     Kind kind() const override { return Kind::UserDefined; }
 
     Type* clone_into(Arena& arena) const override {
-        return make_in<UserDefinedType>(arena, m_parts, m_is_global);
+        auto* copy = make_in<UserDefinedType>(arena, m_parts, m_is_global);
+        copy->from_compiler = from_compiler;
+        return copy;
     }
 
     void write_to(std::ostream& os) const override;

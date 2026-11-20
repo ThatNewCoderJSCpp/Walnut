@@ -110,7 +110,7 @@ namespace std {
                     } end function set
 
                     function set(self&, T&&: value) -> void {
-                        self.put_moved(std::core::move(value));
+                        self.put_moved(std::move(value));
                     } end function set
 
                     function emplace(self&, const T&: value) -> T& {
@@ -367,7 +367,7 @@ namespace std {
             } end function error
         } end safe
 
-        namespace detail {
+        hidden namespace detail {
             safe(compile) {
                 class Propagated {
                 public:

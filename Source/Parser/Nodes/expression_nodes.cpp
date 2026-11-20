@@ -19,7 +19,7 @@ void QualifiedIdentifier::print(std::ostream& os, std::size_t indent) const {
     os << "\n";
 }
 
-ASTNode* QualifiedIdentifier::clone_into(Arena& a) const { auto* c = make_in<QualifiedIdentifier>(a, line, m_is_global); copy_base_to(c); c->m_parts = m_parts; return c; }
+ASTNode* QualifiedIdentifier::clone_into(Arena& a) const { auto* c = make_in<QualifiedIdentifier>(a, line, m_is_global); copy_base_to(c); c->m_parts = m_parts; c->from_compiler = from_compiler; return c; }
 
 void BinaryExpression::print(std::ostream& os, std::size_t indent) const {
     print_indent(os, indent);

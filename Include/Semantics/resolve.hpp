@@ -9,6 +9,7 @@
 #include "symbol.hpp"
 
 #include "../Parser/nodes.hpp"
+#include "../Common/source_manager.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -36,6 +37,8 @@ std::vector<Symbol*> resolve_path(
 );
 
 std::string visibility_violation(const Symbol* sym, const Scope* from, const nodes::ASTNode* use);
+std::string visibility_violation(const Symbol* sym, const Scope* from, FileId use_file);
+bool visible_from(const Symbol* sym, const Scope* from, FileId use_file);
 
 std::string suggest_similar(const Scope* from, std::string_view name, bool members_only);
 

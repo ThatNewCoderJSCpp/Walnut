@@ -1070,7 +1070,7 @@ std::string TypeWalker::candidate_notes(Symbol* head, const std::vector<Type*>& 
                     auto* rt = static_cast<ReferenceType*>(want);
                     const bool lv = is_lvalue((*arg_nodes)[j]);
                     if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const && !lv) why = "argument " + std::to_string(j + 1) + " is a temporary value, and a temporary can't be passed to '" + type_str(want) + "' (make the parameter 'const " + type_str(rt->referent()) + "&', or store the value in a variable first)";
-                    else if (rt->ref_qual() == RefQual::RValue && lv) why = "argument " + std::to_string(j + 1) + " is a variable, and '" + type_str(want) + "' only takes temporaries (pass 'std::core::move(...)' to give it away)";
+                    else if (rt->ref_qual() == RefQual::RValue && lv) why = "argument " + std::to_string(j + 1) + " is a variable, and '" + type_str(want) + "' only takes temporaries (pass 'std::move(...)' to give it away)";
                     else if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const && args[j]->cv().is_const) why = "argument " + std::to_string(j + 1) + " is const, but '" + type_str(want) + "' could change it";
                 }
             }

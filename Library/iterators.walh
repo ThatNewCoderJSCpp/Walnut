@@ -584,7 +584,7 @@ namespace std {
 
         } end safe
 
-        namespace detail {
+        hidden namespace detail {
             template <typename T>
             class Held {
             public:

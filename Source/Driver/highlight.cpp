@@ -5,6 +5,7 @@
 #include "Semantics/const_evaluator.hpp"
 #include "Semantics/conversion.hpp"
 #include "Semantics/instantiator.hpp"
+#include "Semantics/resolve.hpp"
 #include "Semantics/scope.hpp"
 #include "Semantics/symbol.hpp"
 
@@ -2341,11 +2342,37 @@ struct Candidates {
     std::vector<std::string> order;
     std::map<std::string, std::pair<const S::Symbol*, int>> by_name;
     std::string_view placeholder;
+    const S::Scope* from = nullptr;
+    FileId file = INVALID_FILE;
+
+    static bool derives(const S::Scope* record, const S::Scope* base, int depth = 0) {
+        if (!record || depth > 16) return false;
+        for (const S::Scope* b : record->bases) if (b == base || derives(b, base, depth + 1)) return true;
+        return false;
+    }
+
+    bool reachable_member(const S::Symbol* s) const {
+        if (!s || s->member_access == 0 || !s->owner || s->owner->kind != S::Scope::Kind::Record) return true;
+        const bool is_private = s->member_access == static_cast<std::uint8_t>(N::AccessLevel::Private);
+        for (const S::Scope* sc = from; sc; sc = sc->parent) {
+            if (sc->kind != S::Scope::Kind::Record) continue;
+            if (sc == s->owner) return true;
+            if (!is_private && derives(sc, s->owner)) return true;
+        }
+        return false;
+    }
+
+    bool usable(const S::Symbol* s) const {
+        if (!from) return true;
+        if (!reachable_member(s)) return false;
+        return file == INVALID_FILE || S::visible_from(s, from, file);
+    }
 
     void add(const S::Symbol* raw) {
         if (!raw) return;
         const S::Symbol* s = follow(raw);
         if (!s || raw->name.empty() || raw->name == placeholder) return;
+        if (!usable(raw) || !usable(s)) return;
         const std::string name(raw->name);
         if (name[0] == '~' || name.rfind("operator", 0) == 0 || name.rfind("__", 0) == 0) return;
         if (s->decl && (s->decl->kind == K::ConstructorDeclaration || s->decl->kind == K::DestructorDeclaration || s->decl->kind == K::OperatorFunctionDeclaration)) return;
@@ -2442,6 +2469,8 @@ std::string complete_json(CompilerPipeline& compiler, std::string_view placehold
     const S::Scope* scope = site.scope ? site.scope : root;
     const char* caret = site.node ? site.node->at : nullptr;
     std::string_view mode = "name";
+    cands.from = scope;
+    cands.file = *main;
 
     if (request.mode == CompletionRequest::Mode::Member || request.mode == CompletionRequest::Mode::Arrow) {
         mode = "member";
@@ -2493,6 +2522,12 @@ std::string complete_json(CompilerPipeline& compiler, std::string_view placehold
         }
         if (s->kind == S::Scope::Kind::Record) {
             for (const S::Scope* b : s->bases) cands.members(b);
+        }
+        for (const N::ASTNode* d : s->using_directives) {
+            if (!d || d->kind != K::UsingDeclaration) continue;
+            const S::Symbol* ns = static_cast<const N::UsingDeclaration*>(d)->symbol;
+            if (!ns || !ns->inner_scope) continue;
+            for (const S::Symbol* sym : ns->inner_scope->symbols) cands.add(sym);
         }
     }
     return cands.json(request.start, mode);

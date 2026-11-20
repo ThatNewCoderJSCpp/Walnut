@@ -1229,7 +1229,13 @@ bool OwnershipChecker::is_move(nodes::CallExpression* c) {
         if (s->name != "move" && s->name.rfind("move<", 0) != 0) return false;
         for (const Scope* sc = s->owner; sc; sc = sc->parent) {
             const Symbol* o = sc->owner_symbol;
-            if (o && o->kind == SymbolKind::Namespace) return o->name == "core";
+            if (!o || o->kind != SymbolKind::Namespace) continue;
+            if (o->name == "core") return true;
+            if (o->name != "std") return false;
+            for (const Scope* up = sc->parent; up; up = up->parent) {
+                if (up->owner_symbol && up->owner_symbol->kind == SymbolKind::Namespace) return false;
+            }
+            return true;
         }
         return false;
     }
@@ -1237,6 +1243,7 @@ bool OwnershipChecker::is_move(nodes::CallExpression* c) {
         auto* m = static_cast<nodes::MemberAccessExpression*>(c->m_callee);
         if (m->m_op != nodes::MemberAccessExpression::Op::Scope || m->m_member != "move") return false;
         for (std::string_view q : m->qualifier) if (q == "core") return true;
+        if (m->qualifier.size() == 1 && m->qualifier[0] == "std") return true;
     }
     return false;
 }

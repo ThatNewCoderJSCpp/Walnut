@@ -349,6 +349,10 @@ std::string target_triple(const Options& o) {
     return cached;
 }
 
+std::string object_set_id(const Options& o, const std::string& compiler_version) {
+    return o.cxx + "\n" + compiler_version + "\n" + __DATE__ " " __TIME__ + "\n" + walnut_library::content_hash;
+}
+
 walnut::build::LibraryAbi current_abi(const Options& o) {
     walnut::build::LibraryAbi abi;
     abi.walnut_version = WALNUT_VERSION;
@@ -476,7 +480,7 @@ bool compile_objects(const Options& o, const walnut::codegen::SplitProgram& prog
     std::string id = compiler_query(o, "--version");
     id = id.substr(0, id.find('\n'));
     set.clang = id.find("clang") != std::string::npos;
-    set.id = o.cxx + "\n" + id + "\n" + __DATE__ " " __TIME__ + "\n" + walnut_library::content_hash;
+    set.id = object_set_id(o, id);
     set.flags = compile_flags(o);
     const std::string& flags = set.flags;
     const fs::path& root = set.root;

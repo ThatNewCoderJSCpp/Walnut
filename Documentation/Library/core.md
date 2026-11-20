@@ -1,11 +1,11 @@
 # core
 
-`core` holds the parts of the library that almost every program needs. Every Walnut program gets it automatically: there is nothing to `import`, and its names are always available. It has `std::core` (`move`, `forward`, `to_string`, and checks on number values such as `is_integer`, `is_even` and `is_finite`), `std::traits` (type traits and type operations), `std::concepts` (ready-made concepts), and directly in `std` the function types (`std::Predicate`, `std::Compare` and the rest) with ready-made comparators, the constant types (`std::true_type`, `std::bool_constant` and the rest), `std::enable_if` and `std::initializer_list`.
+`core` holds the parts of the library that almost every program needs. Every Walnut program gets it automatically: there is nothing to `import`, and its names are always available. It has `std::move` and `std::forward`, `std::core` (`to_string` and checks on number values such as `is_integer`, `is_even` and `is_finite`), `std::traits` (type traits and type operations), `std::concepts` (ready-made concepts), and directly in `std` the function types (`std::Predicate`, `std::Compare` and the rest) with ready-made comparators, the constant types (`std::true_type`, `std::bool_constant` and the rest), `std::enable_if` and `std::initializer_list`.
 
 ## Contents
 
-1. [std::core::move](#stdcoremove)
-2. [std::core::forward](#stdcoreforward)
+1. [std::move](#stdmove)
+2. [std::forward](#stdforward)
 3. [std::core::to_string](#stdcoreto_string)
 4. [Checking numbers](#checking-numbers)
 5. [std::traits](#stdtraits)
@@ -19,7 +19,7 @@
 13. [std::Flags](#stdflags)
 14. [Errors](#errors)
 
-## std::core::move
+## std::move
 
 ```walnut
 template <typename T>
@@ -29,7 +29,7 @@ template <typename T>
 constexpr function move(T&&: value) noexcept -> T&&;
 ```
 
-`std::core::move(x)` lets `x` be moved from: it gives `x` back as an rvalue reference (`T&&`), so a move constructor or move assignment is chosen instead of a copy. It doesn't move anything itself; the move happens when the result is used to construct or assign another object.
+`std::move(x)` lets `x` be moved from: it gives `x` back as an rvalue reference (`T&&`), so a move constructor or move assignment is chosen instead of a copy. It doesn't move anything itself; the move happens when the result is used to construct or assign another object. `std::core::move` is the same function under its older name, so code that uses it keeps working.
 
 ```walnut
 class Track {
@@ -45,7 +45,7 @@ public:
 function main() -> int {
     Track: a = Track(8);
     Track: b = a;
-    Track: c = std::core::move(b);
+    Track: c = std::move(b);
     return 0;
 } end function main
 ```
@@ -53,28 +53,28 @@ function main() -> int {
 Here `a.size` and `c.size` are `8`, and `b.size` is `0`: `b` was copied from `a`, then `c` was moved from `b`.
 
 - After a move, the moved-from object is still valid, but its value is whatever the move constructor or move assignment left in it.
-- `std::core::move` on a temporary is allowed and has no extra effect.
-- `std::core::move(x)` does the same thing as `static_cast<T&&>(x)`.
+- `std::move` on a temporary is allowed and has no extra effect.
+- `std::move(x)` does the same thing as `static_cast<T&&>(x)`.
 - It is `constexpr`, so it can be used in constant expressions, and `noexcept`, so it can be used in `noexcept` functions and destructors.
 - Because it is in `std::core`, a function of your own called `move` doesn't clash with it.
 
 ```walnut
 constexpr function shifted(int: n) -> int {
-    int: copy = std::core::move(n);
+    int: copy = std::move(n);
     return copy + 6;
 } end function shifted
 
 static_assert(shifted(4) == 10, "shifted adds 6");
 
 function main() -> int {
-    constexpr int: seven = std::core::move(7);
+    constexpr int: seven = std::move(7);
     return 0;
 } end function main
 ```
 
 Here `seven` is `7`.
 
-## std::core::forward
+## std::forward
 
 ```walnut
 template <typename T>
@@ -83,7 +83,7 @@ template <typename T>
 constexpr function forward(std::traits::discard_ref<T>&&: value) noexcept -> T&&;
 ```
 
-`std::core::forward<T>(x)` passes on a [forwarding reference](../../documentation.md#copying-and-moving) the way it arrived: when the caller gave a variable, `T` is a reference and `forward` gives an lvalue, and when the caller gave a temporary, `forward` gives an rvalue so the value can be moved. `T` is always written out, because it is the template parameter of the function doing the forwarding.
+`std::forward<T>(x)` passes on a [forwarding reference](../../documentation.md#copying-and-moving) the way it arrived: when the caller gave a variable, `T` is a reference and `forward` gives an lvalue, and when the caller gave a temporary, `forward` gives an rvalue so the value can be moved. `T` is always written out, because it is the template parameter of the function doing the forwarding. `std::core::forward` is the same function under its older name.
 
 ```walnut
 function take(int&: x) -> string {
@@ -96,14 +96,14 @@ function take(int&&: x) -> string {
 
 template <typename T>
 function relay(T&&: value) -> string {
-    return take(std::core::forward<T>(value));
+    return take(std::forward<T>(value));
 } end function relay
 
 function main() -> int {
     int: n = 3;
     string: a = relay(n);
     string: b = relay(4);
-    string: c = relay(std::core::move(n));
+    string: c = relay(std::move(n));
     return 0;
 } end function main
 ```
@@ -111,7 +111,7 @@ function main() -> int {
 Here `a` is `"kept"`, and `b` and `c` are `"moved"`.
 
 - It does the same thing as `static_cast<T&&>(x)`.
-- With a pack, forward each element: `make(std::core::forward<Ts>(args)...)`.
+- With a pack, forward each element: `make(std::forward<Ts>(args)...)`.
 - It is mostly used in [template constructors](../../documentation.md#constructors-and-destructors) and wrapper functions that hand their arguments to something else.
 
 ## std::core::to_string

@@ -306,6 +306,7 @@ bool run_jobs(std::vector<CompileJob>& jobs, const Options& o, const fs::path& t
 std::string trimmed(std::string s);
 std::string target_triple(const Options& o);
 walnut::build::LibraryAbi current_abi(const Options& o);
+std::string object_set_id(const Options& o, const std::string& compiler_version);
 const walnut_library::File* library_file_named(const std::string& rel);
 std::string std_module_import(const std::string& rel);
 bool generate_std_unit(const Options& base, const std::string& rel, const fs::path& dir, walnut::codegen::SplitProgram& prog, std::vector<walnut::codegen::NativeCode>& native_code, std::vector<std::string>& native_files, bool& cpp20);

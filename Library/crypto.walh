@@ -17,7 +17,7 @@ safe(compile) {
             enum Algorithm { sha1, sha224, sha256, sha384, sha512 }
 
             extern "C++" from "<walnut_crypto.hpp>" {
-                class Native as "walnut_rt::crypt::api" {
+                hidden class Native as "walnut_rt::crypt::api" {
                 public:
                     static function sha1(const string&: data) -> string as "walnut_rt::crypt::sha1";
                     static function sha224(const string&: data) -> string as "walnut_rt::crypt::sha224";

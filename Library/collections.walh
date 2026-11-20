@@ -18,7 +18,7 @@ namespace std {
     } end safe
 
     namespace collections {
-        namespace detail {
+        hidden namespace detail {
             safe(compile) {
                 function out_of_range(long int: index, long int: size) -> std::errors::collection_error {
                     return std::errors::collection_error(static_cast<string>(`index ${index} is out of range for a collection of size ${size}`));
@@ -30,9 +30,9 @@ namespace std {
 
                 template <typename T>
                 function swap_items(T&: a, T&: b) -> void {
-                    T: held = std::core::move(a);
-                    a = std::core::move(b);
-                    b = std::core::move(held);
+                    T: held = std::move(a);
+                    a = std::move(b);
+                    b = std::move(held);
                 } end function swap_items
             } end safe
 
@@ -71,13 +71,13 @@ namespace std {
             function insertion_sort(T*: data, long int: lo, long int: hi) -> void {
                 for (long int: i = lo + 1; i < hi; i++) {
                     if (data[i] < data[i - 1]) then {
-                        T: held = std::core::move(data[i]);
+                        T: held = std::move(data[i]);
                         long int: j = i;
                         while (j > lo && held < data[j - 1]) {
-                            data[j] = std::core::move(data[j - 1]);
+                            data[j] = std::move(data[j - 1]);
                             j -= 1;
                         }
-                        data[j] = std::core::move(held);
+                        data[j] = std::move(held);
                     }
                 }
             } end function insertion_sort
@@ -169,7 +169,7 @@ namespace std {
                 for (long int: i = 0; i < count; i++) {
                     if (!(items[i] == target)) then {
                         if (kept != i) then {
-                            items[kept] = std::core::move(items[i]);
+                            items[kept] = std::move(items[i]);
                         }
                         kept += 1;
                     }
@@ -797,7 +797,7 @@ namespace std {
                         const long int: hole = start + k;
                         const long int: source = n - 1 - k;
                         if (source >= stop && source > hole) then {
-                            self.data()[hole] = std::core::move(self.data()[source]);
+                            self.data()[hole] = std::move(self.data()[source]);
                         }
                     }
                     for (long int: k = 0; k < count; k++) {
@@ -835,7 +835,7 @@ namespace std {
                         }
                         if (!seen) then {
                             if (kept != i) then {
-                                self.data()[kept] = std::core::move(self.data()[i]);
+                                self.data()[kept] = std::move(self.data()[i]);
                             }
                             kept += 1;
                         }
@@ -1666,7 +1666,7 @@ namespace std {
                         const long int: hole = start + k;
                         const long int: source = n - 1 - k;
                         if (source >= stop && source > hole) then {
-                            data()[hole] = std::core::move(data()[source]);
+                            data()[hole] = std::move(data()[source]);
                         }
                     }
                     for (long int: k = 0; k < count; k++) {
@@ -1715,7 +1715,7 @@ namespace std {
                         }
                         if (!seen) then {
                             if (kept != i) then {
-                                data()[kept] = std::core::move(data()[i]);
+                                data()[kept] = std::move(data()[i]);
                             }
                             kept += 1;
                         }
@@ -2400,7 +2400,7 @@ namespace std {
                         const long int: hole = start + k;
                         const long int: source = n - 1 - k;
                         if (source >= stop && source > hole) then {
-                            data()[hole] = std::core::move(data()[source]);
+                            data()[hole] = std::move(data()[source]);
                         }
                     }
                     for (long int: k = 0; k < count; k++) {
@@ -2438,7 +2438,7 @@ namespace std {
                         }
                         if (!seen) then {
                             if (kept != i) then {
-                                data()[kept] = std::core::move(data()[i]);
+                                data()[kept] = std::move(data()[i]);
                             }
                             kept += 1;
                         }
@@ -2646,7 +2646,7 @@ namespace std {
                 } else then {
                     self.m_tail = n->prev;
                 }
-                T: out = std::core::move(n->value);
+                T: out = std::move(n->value);
                 delete n;
                 self.m_size -= 1;
                 return out;
@@ -2949,7 +2949,7 @@ namespace std {
                 std::algorithms::sort(items.data(), items.data() + items.size(), comp);
                 long int: i = 0;
                 for (T&: x in *this) {
-                    x = std::core::move(items[i]);
+                    x = std::move(items[i]);
                     i += 1;
                 }
             } end function sort
@@ -2963,7 +2963,7 @@ namespace std {
                 std::algorithms::stable_sort(items.data(), items.data() + items.size(), comp);
                 long int: i = 0;
                 for (T&: x in *this) {
-                    x = std::core::move(items[i]);
+                    x = std::move(items[i]);
                     i += 1;
                 }
             } end function stable_sort
@@ -3019,7 +3019,7 @@ namespace std {
                 }
                 T*: fresh = new T[wanted];
                 for (long int: i = 0; i < self.m_size; i++) {
-                    fresh[i] = std::core::move(self.m_data[self.slot(i)]);
+                    fresh[i] = std::move(self.m_data[self.slot(i)]);
                 }
                 if (self.m_data != nullptr) then {
                     delete[] self.m_data;
@@ -3196,7 +3196,7 @@ namespace std {
                     throw detail::empty_error("pop_back()");
                 }
                 const long int: at = self.slot(self.m_size - 1);
-                T: out = std::core::move(self.m_data[at]);
+                T: out = std::move(self.m_data[at]);
                 self.m_data[at] = T();
                 self.m_size -= 1;
                 return out;
@@ -3206,7 +3206,7 @@ namespace std {
                 if (self.m_size == 0) then {
                     throw detail::empty_error("pop_front()");
                 }
-                T: out = std::core::move(self.m_data[self.m_head]);
+                T: out = std::move(self.m_data[self.m_head]);
                 self.m_data[self.m_head] = T();
                 self.m_head = (self.m_head + 1) % self.m_capacity;
                 self.m_size -= 1;
@@ -3311,7 +3311,7 @@ namespace std {
                 std::algorithms::sort(items.data(), items.data() + items.size(), comp);
                 long int: i = 0;
                 for (T&: x in *this) {
-                    x = std::core::move(items[i]);
+                    x = std::move(items[i]);
                     i += 1;
                 }
             } end function sort
@@ -3325,7 +3325,7 @@ namespace std {
                 std::algorithms::stable_sort(items.data(), items.data() + items.size(), comp);
                 long int: i = 0;
                 for (T&: x in *this) {
-                    x = std::core::move(items[i]);
+                    x = std::move(items[i]);
                     i += 1;
                 }
             } end function stable_sort
@@ -3605,7 +3605,7 @@ namespace std {
                 self.m_used = 0;
                 for (long int: i = 0; i < old_capacity; i++) {
                     if (old_state[i] == 'f') then {
-                        self.place(std::core::move(old_slots[i].first), std::core::move(old_slots[i].second));
+                        self.place(std::move(old_slots[i].first), std::move(old_slots[i].second));
                     }
                 }
                 if (old_slots != nullptr) then {
@@ -3910,7 +3910,7 @@ namespace std {
             } end class UnorderedSet
         } end safe
 
-        namespace detail {
+        hidden namespace detail {
             safe(compile) {
                 template <typename E>
                 struct TreeNode {
@@ -5001,7 +5001,7 @@ namespace std {
             } end function item
 
             function with(const self&, Vector<long int>&&: picked) -> WhereQuery {
-                return WhereQuery(self.m_items, std::core::move(picked));
+                return WhereQuery(self.m_items, std::move(picked));
             } end function with
 
             function total(const self&) -> long int {
@@ -5063,7 +5063,7 @@ namespace std {
         public:
             constructor() { }
 
-            constructor(C*: items, Vector<long int>&&: picked) : m_items = items, m_indices = std::core::move(picked) { }
+            constructor(C*: items, Vector<long int>&&: picked) : m_items = items, m_indices = std::move(picked) { }
 
             static function matching(C&: items, std::Predicate<E>: pred) -> WhereQuery {
                 Vector<long int>: picked;
@@ -5074,7 +5074,7 @@ namespace std {
                     }
                     i += 1;
                 }
-                return WhereQuery(&items, std::core::move(picked));
+                return WhereQuery(&items, std::move(picked));
             } end function matching
 
             static function equal_to(C&: items, const E&: value) -> WhereQuery {
@@ -5086,7 +5086,7 @@ namespace std {
                     }
                     i += 1;
                 }
-                return WhereQuery(&items, std::core::move(picked));
+                return WhereQuery(&items, std::move(picked));
             } end function equal_to
 
             static function at_indices(C&: items, const Vector<long int>&: picked) -> WhereQuery {
@@ -5098,7 +5098,7 @@ namespace std {
                         clean.push_back(i);
                     }
                 }
-                return WhereQuery(&items, std::core::move(clean));
+                return WhereQuery(&items, std::move(clean));
             } end function at_indices
 
             function count(const self&) -> long int {
@@ -5194,7 +5194,7 @@ namespace std {
                 for (long int: k = 0; k < n && k < self.m_indices.size(); k++) {
                     picked.push_back(self.m_indices[k]);
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function first
 
             function take(const self&, long int: n) -> WhereQuery {
@@ -5210,7 +5210,7 @@ namespace std {
                 for (long int: k = start; k < self.m_indices.size(); k++) {
                     picked.push_back(self.m_indices[k]);
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function last
 
             function skip(const self&, long int: n) -> WhereQuery {
@@ -5218,7 +5218,7 @@ namespace std {
                 for (long int: k = n < 0 ? 0 : n; k < self.m_indices.size(); k++) {
                     picked.push_back(self.m_indices[k]);
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function skip
 
             function skip_last(const self&, long int: n) -> WhereQuery {
@@ -5226,7 +5226,7 @@ namespace std {
                 for (long int: k = 0; k < self.m_indices.size() - n; k++) {
                     picked.push_back(self.m_indices[k]);
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function skip_last
 
             function slice(const self&, long int: start, long int: stop) -> WhereQuery {
@@ -5234,7 +5234,7 @@ namespace std {
                 for (long int: k = start < 0 ? 0 : start; k < stop && k < self.m_indices.size(); k++) {
                     picked.push_back(self.m_indices[k]);
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function slice
 
             function range(const self&, long int: lo, long int: hi) -> WhereQuery {
@@ -5244,7 +5244,7 @@ namespace std {
                         picked.push_back(i);
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function range
 
             function step(const self&, long int: n) -> WhereQuery {
@@ -5253,7 +5253,7 @@ namespace std {
                 for (long int: k = 0; k < self.m_indices.size(); k += by) {
                     picked.push_back(self.m_indices[k]);
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function step
 
             function even(const self&) -> WhereQuery {
@@ -5271,7 +5271,7 @@ namespace std {
                         picked.push_back(self.m_indices[k]);
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function where
 
             function where(const self&, const E&: value) -> WhereQuery {
@@ -5281,7 +5281,7 @@ namespace std {
                         picked.push_back(self.m_indices[k]);
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function where
 
             function where_not(const self&, std::Predicate<E>: pred) -> WhereQuery {
@@ -5291,7 +5291,7 @@ namespace std {
                         picked.push_back(self.m_indices[k]);
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function where_not
 
             function where_indexed(const self&, function(long int, const E&) -> bool: pred) -> WhereQuery {
@@ -5301,7 +5301,7 @@ namespace std {
                         picked.push_back(self.m_indices[k]);
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function where_indexed
 
             function invert(const self&) -> WhereQuery {
@@ -5315,7 +5315,7 @@ namespace std {
                         picked.push_back(i);
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function invert
 
             function union_with(const self&, const WhereQuery&: other) -> WhereQuery {
@@ -5336,7 +5336,7 @@ namespace std {
                         b += 1;
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function union_with
 
             function intersect_with(const self&, const WhereQuery&: other) -> WhereQuery {
@@ -5355,7 +5355,7 @@ namespace std {
                         b += 1;
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function intersect_with
 
             function except(const self&, const WhereQuery&: other) -> WhereQuery {
@@ -5370,7 +5370,7 @@ namespace std {
                         picked.push_back(i);
                     }
                 }
-                return self.with(std::core::move(picked));
+                return self.with(std::move(picked));
             } end function except
 
             function or_where(const self&, std::Predicate<E>: pred) -> WhereQuery {
@@ -5617,7 +5617,7 @@ namespace std {
         } end class WhereQuery
 
         safe(compile) {
-            namespace detail {
+            hidden namespace detail {
                 template <typename T>
                 function empty_list() -> Vector<std::traits::discard_cv<T>> {
                     return Vector<std::traits::discard_cv<T>>();

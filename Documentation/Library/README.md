@@ -4,7 +4,7 @@ These pages document Walnut's library, one page per module. The language itself 
 
 The library's source is built into the `walnut` program, so it is not a separate download. A module is used with `import module.<name>`, except `core`, which every program gets automatically.
 
-When a module is used, its contents are in the namespace `std::<name>`: `core` is `std::core`, so its `move` is `std::core::move`, and `import module.io` makes `std::io::cout`, `std::io::ifstream` and the rest of `io` available. `import module.<name> as <alias>` also makes `<alias>` another name for `std::<name>`:
+When a module is used, its contents are in the namespace `std::<name>`: `core` is `std::core`, so its `move` is `std::move`, and `import module.io` makes `std::io::cout`, `std::io::ifstream` and the rest of `io` available. `import module.<name> as <alias>` also makes `<alias>` another name for `std::<name>`:
 
 ```walnut
 import module.io as io
@@ -25,7 +25,7 @@ function main() -> int {
 | [colors](colors.md) | `Color` with hex, HSL and HSV conversions, mixing, lightening and contrast, and the 148 CSS named colors |
 | [combinatorics](combinatorics.md) | `ncr`, `npr`, `combinations`, `permutations`, `factorial`, `lock_combinations`, `lock_permutations`, combinations and permutations with repetition, `multinomial`, `derangements`, and helpers for combining probabilities (`bayes`, `conditional_probability` and more) |
 | [constants](constants.md) | `pi`, `e`, `phi`, `sqrt2`, `euler_mascheroni` and other constants, and numbered ones such as `bernoulli(n)`, for every float type and `BigFloat` |
-| [core](core.md) | `std::core::move`, `std::core::forward` and `std::core::to_string`; the function types `std::Predicate`, `std::Compare`, `std::Transform` and others, and ready-made comparators such as `std::less_than` and `std::by`; checks on number values (`is_integer`, `is_even`, `is_odd`, `is_finite`, `is_nan`, `is_power_of_two` and more); type traits and type operations in `std::traits`; concepts in `std::concepts`; `std::true_type`, `std::false_type` and the other constant types; `std::enable_if`; `std::initializer_list` |
+| [core](core.md) | `std::move`, `std::forward` and `std::core::to_string`; the function types `std::Predicate`, `std::Compare`, `std::Transform` and others, and ready-made comparators such as `std::less_than` and `std::by`; checks on number values (`is_integer`, `is_even`, `is_odd`, `is_finite`, `is_nan`, `is_power_of_two` and more); type traits and type operations in `std::traits`; concepts in `std::concepts`; `std::true_type`, `std::false_type` and the other constant types; `std::enable_if`; `std::initializer_list` |
 | [crypto](crypto.md) | Hashes (`sha256` and the rest of SHA-1 and SHA-2), `Hasher`, HMAC, PBKDF2 and HKDF, hex, base64, base64url, base32 and URL encoding, secure random bytes, tokens and UUIDs, `secure_equals` and `strequal`, `crc32` and other checksums |
 | [database](database.md) | `Database`, an embedded database with typed tables, hash and ordered indexes, a query planner, `Query` with joins, aggregates and sorting, conditions built from `column(...)`, transactions, a write-ahead log on disk, a result cache, and graph searches over edge tables (`Graph`) |
 | [fluids](fluids.md) | `Fluid2D`, a 2D fluid sandbox from Fizmo: falling sand with 13 cell kinds, heat and reactions, flowing cells, wave columns and particle fluids that mix; pouring, erasing, pushing, swirling, explosions, painted walls, emitters, queries, and `to_image` for drawing |

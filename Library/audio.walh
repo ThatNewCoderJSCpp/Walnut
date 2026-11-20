@@ -43,7 +43,7 @@ safe(compile) {
 
             enum AutomationCurve { linear, hold, exponential, s_curve, bezier }
 
-            namespace detail {
+            hidden namespace detail {
                 function fail(const string&: what, const string&: why) -> std::errors::audio_error {
                     return std::errors::audio_error(static_cast<string>(`${what}: ${why}`));
                 } end function fail
@@ -106,7 +106,7 @@ safe(compile) {
                     } end function to_string
                 } end class Device
 
-                class DeviceList as "walnut_rt::audio::device_list" {
+                hidden class DeviceList as "walnut_rt::audio::device_list" {
                 public:
                     constructor();
                     static function list(long int: kind) -> DeviceList as "walnut_rt::audio::device_list::list";
@@ -115,7 +115,7 @@ safe(compile) {
                     function at(const self&, long int: index) -> Device;
                 } end class DeviceList
 
-                class Api as "walnut_rt::audio::api" {
+                hidden class Api as "walnut_rt::audio::api" {
                 public:
                     static function backend_name() -> string as "walnut_rt::audio::backend_name";
                     static function available_backends() -> Vector<string> as "walnut_rt::audio::available_backends";
@@ -600,7 +600,7 @@ safe(compile) {
                         if (!s.is_open()) then {
                             throw detail::fail(what, native_error());
                         }
-                        return std::core::move(s);
+                        return std::move(s);
                     } end function opened
 
                 public:
@@ -696,7 +696,7 @@ safe(compile) {
                         if (!e.valid()) then {
                             throw detail::fail(what, native_error());
                         }
-                        return std::core::move(e);
+                        return std::move(e);
                     } end function made
 
                 public:
@@ -907,7 +907,7 @@ safe(compile) {
                         if (problem.size() > 0) then {
                             throw detail::fail(what, problem);
                         }
-                        return std::core::move(c);
+                        return std::move(c);
                     } end function loaded
 
                 public:

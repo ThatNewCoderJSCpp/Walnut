@@ -35,7 +35,7 @@ safe(compile) {
 
             enum EventType { loaded, first_frame, play, pause, playing, waiting, seeking, seeked, ended, looped, rate_changed, volume_changed, track_changed, warning, error }
 
-            namespace detail {
+            hidden namespace detail {
                 function fail(const string&: what, const string&: why) -> std::errors::video_error {
                     return std::errors::video_error(static_cast<string>(`${what}: ${why}`));
                 } end function fail
@@ -77,7 +77,7 @@ safe(compile) {
             class Packet;
 
             extern "C++" from "<walnut_video.hpp>" {
-                class Api as "walnut_rt::video::api" {
+                hidden class Api as "walnut_rt::video::api" {
                 public:
                     static function native_error() -> string as "walnut_rt::video::last_error";
                     static function codec_supported(const string&: codec) -> bool as "walnut_rt::video::codec_supported";
@@ -370,13 +370,13 @@ safe(compile) {
                     static function open(const string&: path) -> Demuxer {
                         Demuxer: d;
                         detail::check_not_empty(d.native_open(path), static_cast<string>(`can't open '${path}'`));
-                        return std::core::move(d);
+                        return std::move(d);
                     } end function open
 
                     static function open(const Vector<std::hardware_uint8>&: data) -> Demuxer {
                         Demuxer: d;
                         detail::check_not_empty(d.native_open_bytes(data), "can't open the media");
-                        return std::core::move(d);
+                        return std::move(d);
                     } end function open
 
                     function close(self&) -> void;
@@ -454,7 +454,7 @@ safe(compile) {
                         if (!d.valid()) then {
                             throw detail::fail(static_cast<string>(`can't decode track ${track.index()}`), Api::native_error());
                         }
-                        return std::core::move(d);
+                        return std::move(d);
                     } end function for_track
 
                     function valid(const self&) -> bool;
@@ -552,13 +552,13 @@ safe(compile) {
                     static function open(const string&: path) -> H264Reader {
                         H264Reader: r;
                         detail::check_not_empty(r.native_open(path), static_cast<string>(`can't open '${path}'`));
-                        return std::core::move(r);
+                        return std::move(r);
                     } end function open
 
                     static function open(const Vector<std::hardware_uint8>&: data) -> H264Reader {
                         H264Reader: r;
                         detail::check_not_empty(r.native_open_bytes(data), "can't read the H.264 data");
-                        return std::core::move(r);
+                        return std::move(r);
                     } end function open
 
                     function read(self&) -> Optional<Vector<std::hardware_uint8>> {
@@ -596,7 +596,7 @@ safe(compile) {
                     } end function to_string
                 } end class PlayerEvent
 
-                class EventList as "walnut_rt::video::event_list" {
+                hidden class EventList as "walnut_rt::video::event_list" {
                 public:
                     constructor();
                     function size(const self&) -> long int;

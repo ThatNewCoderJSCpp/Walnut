@@ -3,7 +3,7 @@ import module.collections
 
 namespace std {
     namespace linalg {
-        namespace detail {
+        hidden namespace detail {
             template <typename T>
             function past(T*: first, long int: count) -> T* {
                 return first + count;
@@ -28,7 +28,7 @@ safe(compile) {
         } end namespace errors
 
         namespace linalg {
-            namespace detail {
+            hidden namespace detail {
                 template <typename T>
                 function tolerance() -> T {
                     if constexpr (std::traits::is_builtin_float<T>) then {
@@ -2045,7 +2045,7 @@ safe(compile) {
                 return v * k;
             }
 
-            namespace detail {
+            hidden namespace detail {
                 template <int N>
                 constexpr long int: kv_factorial = N * kv_factorial<N - 1>;
 

@@ -132,8 +132,9 @@ nodes::ASTNode* Parser::parse_extern_block(const modifiers::RawModifiers& mods) 
                 throw ParserError::invalid_declaration(reporter, current_token(), "An extern \"C\" block can only hold functions; C++ classes go in an extern \"C++\" block");
             }
 
-            if (!item.exactly(modifiers::RawModifiers::Extern)) {
-                throw ParserError::invalid_declaration(reporter, item_start, "A C++ class in an extern block can't have modifiers");
+            constexpr std::uint16_t visibility = modifiers::RawModifiers::Global | modifiers::RawModifiers::Local | modifiers::RawModifiers::Hidden;
+            if ((item.flags() & ~visibility) != modifiers::RawModifiers::Extern) {
+                throw ParserError::invalid_declaration(reporter, item_start, "A C++ class in an extern block can only have 'global', 'local' or 'hidden' in front of it");
             }
 
             m_native_record_next = true;

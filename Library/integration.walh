@@ -23,7 +23,7 @@ safe(compile) {
             template <typename T>
             concept Float = std::traits::is_builtin_float<T>
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename T>
                 requires std::symbolic::Real<T>
                 function finite(const T&: value) -> bool {

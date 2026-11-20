@@ -3,7 +3,7 @@ import module.collections
 safe(compile) {
     namespace std {
         namespace strings {
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_strings.hpp>" {
                     template <typename S, typename N = S>
                     class Native as "walnut_rt::str::ttag" {

@@ -302,9 +302,12 @@ jobs:
 
       - name: Check walnut is an Android program that only needs Android's own libraries
         run: |
+          readelf="$NDK"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
           file build/walnut
-          file build/walnut | grep -q "Android"
-          "$NDK"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -d build/walnut | tee needed.txt
+          file build/walnut | grep -q "interpreter /system/bin/linker"
+          "$readelf" -n build/walnut | tee notes.txt
+          grep -q "NT_ANDROID_TYPE_IDENT" notes.txt
+          "$readelf" -d build/walnut | tee needed.txt
           if grep NEEDED needed.txt | grep -vE "\[(libc|libm|libdl|liblog|libandroid|libz)\.so\]"; then
             echo "::error::walnut needs a library that Android doesn't have"
             exit 1
@@ -778,6 +781,7 @@ jobs:
           & $walnut run std-smoke.wal
           if ($LASTEXITCODE -ne 0) { exit 1 }
           if ((Test-Path "$env:WALNUT_CACHE_DIR\std") -and (Get-ChildItem "$env:WALNUT_CACHE_DIR\std" -Recurse -Filter *.o)) {
+            Get-ChildItem "$env:WALNUT_CACHE_DIR\std" -Directory | ForEach-Object { "compiled again: $($_.Name) (shipped: $(Test-Path "$root\std-prebuilt\$($_.Name)"))" }
             Write-Error "walnut compiled the std library again instead of using the precompiled one"
             exit 1
           }

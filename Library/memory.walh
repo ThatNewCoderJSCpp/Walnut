@@ -29,7 +29,7 @@ namespace std {
 
     namespace memory {
         safe(compile) {
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_memory.hpp>" {
                     class ArenaHandle as "walnut_rt::mem::arena" {
                     public:
@@ -315,7 +315,7 @@ namespace std {
             } end class Arena
         } end safe
 
-        namespace detail {
+        hidden namespace detail {
             safe(compile) {
                 extern "C++" from "<walnut_memory.hpp>" {
                     class Counts as "walnut_rt::mem::counts" {
@@ -797,12 +797,12 @@ namespace std {
         safe(compile) {
             template <typename T, typename... Ts>
             function make_unique(Ts&&...: args) -> UniquePtr<T> {
-                return UniquePtr<T>(new T(std::core::forward<Ts>(args)...));
+                return UniquePtr<T>(new T(std::forward<Ts>(args)...));
             } end function make_unique
 
             template <typename T, typename... Ts>
             function make_shared(Ts&&...: args) -> SharedPtr<T> {
-                return SharedPtr<T>(new T(std::core::forward<Ts>(args)...));
+                return SharedPtr<T>(new T(std::forward<Ts>(args)...));
             } end function make_shared
 
             template <typename U, typename T>
@@ -819,7 +819,7 @@ namespace std {
                 return SharedPtr<U>(p, q);
             } end function dynamic_pointer_cast
 
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_memory.hpp>" {
                     class Tracker as "walnut_rt::mem::tracker" {
                     public:

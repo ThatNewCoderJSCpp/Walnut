@@ -1382,7 +1382,7 @@ namespace std {
             }
         } end class iostream
 
-        namespace detail {
+        hidden namespace detail {
             template <typename T>
             function writable(const T&: value) -> T& {
                 return const_cast<T&>(value);
@@ -1709,7 +1709,7 @@ namespace std {
             ostream: cerr = ostream(&stderr_buf, &cout, ios_base::unitbuf);
             ostream: clog = ostream(&stderr_buf, &cout, walnut_rt::io_native::start_unbuffered() ? ios_base::unitbuf : 0);
 
-            namespace detail {
+            hidden namespace detail {
                 struct format_spec {
                     bool: left = false;
                     bool: plus = false;
@@ -2002,7 +2002,7 @@ namespace std {
                 out.write(sprintf(static_cast<string>(fmt), args...));
             } end function printf
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename T>
                 function wants_flush(const T&: value) -> bool {
                     return false;
@@ -2202,7 +2202,7 @@ namespace std {
                 return parse_string(static_cast<string>(s));
             } end function parse_string
 
-            namespace detail {
+            hidden namespace detail {
                 function input_line(istream&: input, const string&: prompt, const string&: what) -> string {
                     if (!prompt.empty()) then {
                         cout << prompt;

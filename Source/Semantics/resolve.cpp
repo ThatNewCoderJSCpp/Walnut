@@ -202,8 +202,17 @@ std::string scope_path(const Scope* s) {
 }
 
 std::string visibility_violation(const Symbol* sym, const Scope* from, const nodes::ASTNode* use) {
-    if (!sym || !sym->decl || !use || sym->visibility == Visibility::Global) return {};
-    const bool other_file = sym->decl->file_id != use->file_id;
+    if (!use) return {};
+    return visibility_violation(sym, from, FileId(use->file_id));
+}
+
+bool visible_from(const Symbol* sym, const Scope* from, FileId use_file) {
+    return visibility_violation(sym, from, use_file).empty();
+}
+
+std::string visibility_violation(const Symbol* sym, const Scope* from, FileId use_file) {
+    if (!sym || !sym->decl || sym->visibility == Visibility::Global) return {};
+    const bool other_file = FileId(sym->decl->file_id) != use_file;
 
     if (sym->visibility == Visibility::Local) {
         if (!other_file) return {};

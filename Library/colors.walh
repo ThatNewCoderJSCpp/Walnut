@@ -17,7 +17,7 @@ safe(compile) {
         } end namespace errors
 
         namespace colors {
-            namespace detail {
+            hidden namespace detail {
                 function clamp_channel(long int: v) -> int {
                     if (v < 0) then {
                         return 0;

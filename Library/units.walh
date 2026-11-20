@@ -25,7 +25,7 @@ safe(compile) {
                 } end struct none
             } end namespace kind
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename Q, int L, int M, int T, int I, int K, int N, int J, int A>
                 constexpr bool: kind_matches = Q::is_generic || std::traits::is_same<Q::dims, Dims<L, M, T, I, K, N, J, A>>;
 
@@ -354,7 +354,7 @@ safe(compile) {
                 }
             } end struct Quantity
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename D, typename Q>
                 struct unit_from {
                 } end struct unit_from
@@ -864,7 +864,7 @@ safe(compile) {
             } end namespace kind
 
 
-            namespace detail {
+            hidden namespace detail {
                 template <>
                 struct pow_kind_of<kind::length, 2> {
                     using type = kind::area;

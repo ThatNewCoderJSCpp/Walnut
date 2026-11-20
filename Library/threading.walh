@@ -1,7 +1,7 @@
 namespace std {
     namespace threading {
         safe(compile) {
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_threading.hpp>" {
                     class Api as "walnut_rt::threading::api" {
                     public:
@@ -162,7 +162,7 @@ namespace std {
             enum MemoryOrder { relaxed, acquire, release, acq_rel, seq_cst }
         } end safe
 
-        namespace detail {
+        hidden namespace detail {
             safe(compile) {
                 template <typename T, bool Integer>
                 struct SmallInteger {

@@ -434,6 +434,7 @@ nodes::ASTNode* Parser::parse_match(bool as_expression) {
                         have->form = parser_types::TemplateArgument::Form::Type;
                         have->type = elem_type;
                         auto* name = make<nodes::QualifiedIdentifier>(at, false);
+                        name->from_compiler = true;
                         for (std::string_view part : { "std", "core", "detail", "same_type" }) name->add_part(part);
                         fixed.push_back(make<nodes::TemplateInstantiation>(name, std::vector<parser_types::TemplateArgument*>{ want, have }, at));
                         if (!item.name.empty()) binds.push_back(early(make<nodes::VariableDeclaration>(auto_type(true), item.name, element, at), false));

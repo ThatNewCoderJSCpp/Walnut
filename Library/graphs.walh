@@ -306,7 +306,7 @@ safe(compile) {
                 } end function path_to
             } end struct Distances
 
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_threading.hpp>" {
                     class ClaimTable as "walnut_rt::threading::claim_table" {
                     public:
@@ -338,7 +338,7 @@ safe(compile) {
                 } end function run_parts
             } end namespace detail
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename W>
                 struct HeapItem {
                     W: cost;

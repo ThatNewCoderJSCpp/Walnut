@@ -42,7 +42,7 @@ safe(compile) {
                 } end class SparseMatrix
 
                 template <typename T>
-                class Native as "walnut_rt::numerics::tag" {
+                hidden class Native as "walnut_rt::numerics::tag" {
                 public:
                     static function solve_adaptive(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, const T&: rtol, const T&: atol) -> OdeSolution<T> as "walnut_rt::numerics::solve_adaptive<T>";
                     static function solve_stiff(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, const T&: rtol, const T&: atol) -> OdeSolution<T> as "walnut_rt::numerics::solve_stiff<T>";

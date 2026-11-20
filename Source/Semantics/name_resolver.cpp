@@ -132,7 +132,7 @@ void NameResolver::resolve_type(parser_types::TypeInfo& info, const nodes::ASTNo
     if (info.type && info.type->is_user_defined()) {
         auto* ud = static_cast<parser_types::UserDefinedType*>(info.type);
         Symbol* s = resolve_name(m_current, m_root, ud->parts(), ud->is_global(), use);
-        if (s) check_visibility(ud->parts(), ud->is_global(), use);
+        if (s && !ud->from_compiler) check_visibility(ud->parts(), ud->is_global(), use);
 
         if (s) {
             Symbol* c = chase(s);
@@ -272,7 +272,7 @@ void NameResolver::walk_expr(nodes::ASTNode* e) {
         case K::QualifiedIdentifier: {
             auto* q = static_cast<nodes::QualifiedIdentifier*>(e);
             Symbol* s = resolve_name(m_current, m_root, q->parts(), q->is_global(), q);
-            if (s) { check_visibility(q->parts(), q->is_global(), q); q->resolved = chase(s); break; }
+            if (s) { if (!q->from_compiler) check_visibility(q->parts(), q->is_global(), q); q->resolved = chase(s); break; }
             if (!q->is_global() && q->parts().size() > 1) {
                 Symbol* head = resolve_lexical_visible(m_current, q->parts()[0], q);
                 if (head && (head->kind == SymbolKind::TemplateParam || (head->kind == SymbolKind::TypeAlias && head->type && !head->template_decl))) { q->dependent_head = head; break; }

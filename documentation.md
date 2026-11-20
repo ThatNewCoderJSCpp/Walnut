@@ -603,7 +603,11 @@ Visibility controls whether other files can see a top-level or namespace-level d
 | `local` | yes | no | yes |
 | `hidden` | yes | no | no |
 
-A `hidden` declaration inside a namespace can only be used inside that namespace (and the namespaces nested in it).
+A `hidden` declaration inside a namespace can only be used inside that namespace (and the namespaces nested in it). A `hidden namespace detail` is the usual place for helpers that the rest of a library needs but its users don't.
+
+Autocomplete (`walnut complete`, which editors use) only suggests names that can be used where you're typing, so `hidden` and `local` names stay out of the list everywhere else. The library's own helpers, such as each module's `detail` namespace, are `hidden` for this reason: typing `std::collections::` doesn't offer them. Names brought in with `using namespace` are suggested too.
+
+A C++ class declared in an `extern "C++"` block can be `hidden` as well (`hidden class Api as "my_native::api" { ... }`).
 
 Inside a class, use `public`, `private` and `protected` instead. Visibility words can't be used inside functions.
 
@@ -1265,7 +1269,7 @@ A cast to an integer type that can't hold the value gives the nearest value it c
 
 ### Casting to an rvalue reference
 
-`static_cast<T&&>(x)` lets `x` be moved from, so a move constructor or move assignment is chosen instead of a copy. The core library wraps this as `std::core::move(x)`. See [Copying and moving](#copying-and-moving).
+`static_cast<T&&>(x)` lets `x` be moved from, so a move constructor or move assignment is chosen instead of a copy. The core library wraps this as `std::move(x)`. See [Copying and moving](#copying-and-moving).
 
 ## Checking types with is and as
 
@@ -2687,7 +2691,7 @@ Here `c.get()` is `16`, `d.get()` is `17` while `k` stays `16`, and `taken` is `
 | `self&` | The object, and it can change it | `&mut self` | Objects that aren't `const` |
 | `self` | Its own copy of the object, which it can change freely; the caller's object is left as it was | `self` (but copied, not moved) | Any object |
 | `const self` | Its own read-only copy | | Any object |
-| `self&&` | The object, only when it's about to go away: a temporary such as `Counter()`, or `std::core::move(c)`. It can take the object's parts | `self` | Temporaries and moved objects |
+| `self&&` | The object, only when it's about to go away: a temporary such as `Counter()`, or `std::move(c)`. It can take the object's parts | `self` | Temporaries and moved objects |
 
 - Inside a method with a receiver, the object's fields and methods are always reached through `self` (or `this->`): `self.value`, `self.helper()`. A bare `value` or `helper()` is an error that says what to write instead. `static` members are still written on their own or as `Counter::name`.
 - A receiver says everything `const`, `&` and `&&` after the parameters would, so a method can't have both.
@@ -2797,7 +2801,7 @@ public:
     string: origin;
 
     template <typename U>
-    constructor(U&&: input) : value(std::core::forward<U>(input)), origin("one value") { }
+    constructor(U&&: input) : value(std::forward<U>(input)), origin("one value") { }
 
     template <typename A, typename B>
     constructor(const A&: a, const B&: b) : value(a + b), origin("two values") { }
@@ -2806,7 +2810,7 @@ public:
 function main() -> int {
     string: name = "walnut";
     Holder<string>: copied(name);
-    Holder<string>: moved(std::core::move(name));
+    Holder<string>: moved(std::move(name));
     Holder<float>: sum(1, 2.5);
     return 0;
 } end function main
@@ -2962,16 +2966,16 @@ public:
 function main() -> int {
     Resource: a = Resource(1);
     Resource: b = a;
-    Resource: c = std::core::move(a);
+    Resource: c = std::move(a);
     return 0;
 } end function main
 ```
 
 Here `b` is a copy (`b.copies` is `1`), `c` took `a`'s value (`c.id` is `1`), and `a.id` is now `-1`.
 
-`std::core::move(x)` lets `x` be moved from; afterwards `x` is valid but its value is up to the move constructor. It comes from the [core library](Documentation/Library/core.md), and does the same as `static_cast<T&&>(x)`. Returning a local variable from a function moves it automatically.
+`std::move(x)` lets `x` be moved from; afterwards `x` is valid but its value is up to the move constructor. It comes from the [core library](Documentation/Library/core.md), and does the same as `static_cast<T&&>(x)`. Returning a local variable from a function moves it automatically.
 
-When a function has both a `const T&` and a `T&&` overload, a temporary or a `std::core::move`d value goes to the `T&&` one and anything else to the `const T&` one, so `v.push_back(Thread(...))` moves a value that can't be copied.
+When a function has both a `const T&` and a `T&&` overload, a temporary or a `std::move`d value goes to the `T&&` one and anything else to the `const T&` one, so `v.push_back(Thread(...))` moves a value that can't be copied.
 
 **Forwarding references.** In a function template, a parameter written `T&&`, where `T` is that template's own type parameter, takes anything. Given a variable, `T` becomes a reference (`int&`, or `const int&` for a `const` variable) and the parameter is an lvalue reference to it; given a temporary, `T` is the plain type and the parameter is `T&&`. `static_cast<T&&>(value)` passes the argument on the way it came in:
 
@@ -3004,7 +3008,7 @@ function main() -> int {
 
 Here `a`, `d` and `e` are `"variable"`, and `b` and `f` are `"temporary"`. When a `T&` overload and a forwarding `T&&` overload both fit a variable, the `T&` one is chosen.
 
-`std::core::forward<T>(value)` from the [core library](Documentation/Library/core.md) does the same as `static_cast<T&&>(value)` and reads better: `pass_on` above could `return kind(std::core::forward<T>(value));`. A pack works too: `template <typename... Ts> function make(Ts&&...: args)` takes each argument as a forwarding reference.
+`std::forward<T>(value)` from the [core library](Documentation/Library/core.md) does the same as `static_cast<T&&>(value)` and reads better: `pass_on` above could `return kind(std::forward<T>(value));`. A pack works too: `template <typename... Ts> function make(Ts&&...: args)` takes each argument as a forwarding reference.
 
 A copy that isn't allowed is reported with the reason:
 
@@ -3491,7 +3495,7 @@ Here `i`, `d` and `s` are all `42`.
 - A conversion operator that isn't a template wins over a template that converts to the same type.
 - `requires` limits which types the template accepts, as on any template.
 
-**Moving conversions.** `&&` after the empty parameter list, as in `operator(Box<U>) function() && { ... }`, marks a conversion that takes the object over, the way [`UniquePtr`](Documentation/Library/memory.md#uniqueptr) moves its pointer into a `UniquePtr` of a base class. It is only used on a value that is being moved or thrown away anyway: a temporary such as a function's result, or `std::core::move(x)`. Converting a named variable without `std::core::move` is an error that says to add it.
+**Moving conversions.** `&&` after the empty parameter list, as in `operator(Box<U>) function() && { ... }`, marks a conversion that takes the object over, the way [`UniquePtr`](Documentation/Library/memory.md#uniqueptr) moves its pointer into a `UniquePtr` of a base class. It is only used on a value that is being moved or thrown away anyway: a temporary such as a function's result, or `std::move(x)`. Converting a named variable without `std::move` is an error that says to add it.
 
 ### Generated comparisons
 
@@ -3812,7 +3816,7 @@ A module block lists names declared elsewhere in the file, and can also define n
 
 `import module.name` looks for a module file called `name.walh` (or `name.wal`).
 
-**Library modules.** When a module comes from Walnut's own library, it exists in `std::name`: `import module.io` gives `std::io::cout`, and the always-present `core` module gives `std::core::move`. `import module.io as io` makes `io` another name for `std::io`. The library's modules are listed in [Documentation/Library](Documentation/Library/README.md).
+**Library modules.** When a module comes from Walnut's own library, it exists in `std::name`: `import module.io` gives `std::io::cout`, and the always-present `core` module gives `std::core::to_string` (plus a few names directly in `std`, such as `std::move`). `import module.io as io` makes `io` another name for `std::io`. The library's modules are listed in [Documentation/Library](Documentation/Library/README.md).
 
  In `import module.a.b`, the dots become folders, so it looks for `a/b.walh`. The module is reached through its last name part (`b::`), or through the name given with `as`. A module whose name is a keyword, such as `module.string`, must be imported with `as`.
 
@@ -4303,7 +4307,7 @@ Code that isn't marked `safe` can already do anything, so there is no `unsafe` k
 
 - **Methods name their object.** Every method that isn't `static` takes a [receiver](#receivers), conversion operators included (`operator(bool) function(const self&)`), and fields and methods are reached through `self` or `this->`, in constructors too. In a class template this is checked where the template is written, so a method that is missing its receiver is reported even if no program uses it yet.
 - **Raw pointers only where the compiler can follow them.** `*p` and `p->x` work when `p` is a local pointer variable that holds memory from `new` made in the same function and not deleted yet, or the address of a local variable that still exists. On any other pointer (a parameter, a global, a field, the result of a call) they are errors, and so are `p[i]`, pointer arithmetic, and `++`/`--` on a pointer. `this->x` and `self` are fine, and so are references, `std::memory::UniquePtr` and `SharedPtr` (`make_unique`, `make_shared`), `std::optional::Optional`, and the containers in `std::collections`. Taking an address with `&x` is allowed, and the pointer can be passed on.
-- **`new` and `delete` are tracked.** Memory from `new` has to end up in exactly one place on every path through the function: deleted once, returned, moved away with `std::core::move`, or stored in a field or container (`self.p = q;`, `list.push_back(q)`). Passing the pointer to a function only lends it, so the memory still has to be deleted afterwards. These are errors:
+- **`new` and `delete` are tracked.** Memory from `new` has to end up in exactly one place on every path through the function: deleted once, returned, moved away with `std::move`, or stored in a field or container (`self.p = q;`, `list.push_back(q)`). Passing the pointer to a function only lends it, so the memory still has to be deleted afterwards. These are errors:
   - memory from `new` that is never deleted, or deleted on only some paths (`if (c) then { delete p; }`)
   - deleting twice, including through a copy (`int*: q = p; delete q; delete p;`), and deleting on some paths before deleting again
   - using a pointer after its memory was deleted, even just to read or pass the pointer, until it's given a new value
@@ -4312,7 +4316,7 @@ Code that isn't marked `safe` can already do anything, so there is no `unsafe` k
   - `new` outside a function, such as a global `int*: p = new int(1);` (a field's default value is fine)
 
   Fields can be deleted too, as in a destructor's `delete this->p;`. Within one function, deleting the same field twice, or using it after deleting it, is an error until it's given a new value (`self.p = nullptr;`).
-- **Moves are tracked.** After `std::core::move(data)`, using `data` or moving it again is an error until it's given a new value. This covers fields (`std::core::move(self.items)`), moving inside a loop (the second time through moves it again), moving on only some paths (`if (c) then { take(std::core::move(data)); } take(data);`), and using a whole object after one of its fields was moved out.
+- **Moves are tracked.** After `std::move(data)`, using `data` or moving it again is an error until it's given a new value. This covers fields (`std::move(self.items)`), moving inside a loop (the second time through moves it again), moving on only some paths (`if (c) then { take(std::move(data)); } take(data);`), and using a whole object after one of its fields was moved out.
 - **No escape hatches.** `reinterpret_cast`, `const_cast`, reading or writing a field of a `union`, `goto`, and `extern "C"` or `extern "C++"` code blocks are errors.
 - **Integer overflow stops the program.** `+`, `-`, `*`, negation, `++`, `--` and the compound assignments (`+=` and so on) on integers are checked while the program runs, and a result that doesn't fit stops it with `walnut runtime error: integer overflow in safe code: ...` and exit code 70. Outside safe code they become `inf` (or 0 for an unsigned result below zero), unless the program is built with `--check-overflow`.
 - **Ownership is checked.** The compile-time checks of [`--ownership`](#safety-checks) (use after move, use after `delete`, references and pointers to locals that are gone) run on all safe code without the flag, and what would be warnings there are errors.
@@ -4366,8 +4370,8 @@ function show(string: s) -> void {
 function main() -> int {
     safe {
         string: data = "hello";
-        show(std::core::move(data));
-        show(std::core::move(data));
+        show(std::move(data));
+        show(std::move(data));
 
         int*: p = new int(5);
         io::println(*p);
@@ -4524,7 +4528,7 @@ walnut leak warning: 3 objects (72 bytes) made with new were never deleted
 
 **Ownership checks.** `--ownership` looks at each function while compiling and reports:
 
-- Using a variable after `std::core::move` gave its value away, and moving it a second time (`'data' is moved again, but it was already moved on line 5`). Assigning it a new value makes it usable again. Fields count too: after `std::core::move(self.items)` (or `this->items`, `box.items`, or `items` inside a method), using or moving that field again is an error until it gets a new value, and so is copying or passing the whole object while one of its fields is moved out.
+- Using a variable after `std::move` gave its value away, and moving it a second time (`'data' is moved again, but it was already moved on line 5`). Assigning it a new value makes it usable again. Fields count too: after `std::move(self.items)` (or `this->items`, `box.items`, or `items` inside a method), using or moving that field again is an error until it gets a new value, and so is copying or passing the whole object while one of its fields is moved out.
 - Using a pointer through `*`, `->` or `[]` after it was deleted, and deleting it a second time. This follows copies: after `int*: alias = p;` or `int&: r = *p;` (or `p->field`, `p[i]`), `delete p;` makes `*alias`, `r` and `delete alias;` errors too.
 - Returning a reference to a local variable or by-value parameter, or a pointer to one (`return &value;`, or a pointer that was set to `&value`), including a field or element of one (`return local.field;` from a function returning a reference, `return &numbers[1];` for a local array).
 - Using a pointer to a variable, or to one of its fields or elements, after the block that variable was declared in has ended.
@@ -4537,7 +4541,7 @@ import module.io as io
 
 function main() -> int {
     string: a = "hello";
-    string: b = std::core::move(a);
+    string: b = std::move(a);
     io::println(a);
 
     int*: q = nullptr;

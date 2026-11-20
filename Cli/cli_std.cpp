@@ -206,7 +206,7 @@ bool build_std_objects(const Options& o, std::vector<fs::path>& objects, const f
     std::string id = compiler_query(o, "--version");
     id = id.substr(0, id.find('\n'));
     set.clang = id.find("clang") != std::string::npos;
-    set.id = o.cxx + "\n" + id + "\n" + __DATE__ " " __TIME__ + "\n" + walnut_library::content_hash;
+    set.id = object_set_id(o, id);
     set.flags = compile_flags(o);
     std::vector<CompileJob> jobs;
     std::vector<PendingUnit> pending;

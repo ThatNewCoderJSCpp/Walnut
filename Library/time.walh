@@ -20,7 +20,7 @@ safe(compile) {
 
             enum Weekday { monday, tuesday, wednesday, thursday, friday, saturday, sunday }
 
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_time.hpp>" {
                     class Parsed as "walnut_rt::clock::Parsed" {
                     public:

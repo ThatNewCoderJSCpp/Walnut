@@ -34,7 +34,7 @@ safe(compile) {
                 } end class Values
             } end extern
 
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_symbolic.hpp>" {
                     class Node as "walnut_rt::symbolic::node" {
                     public:

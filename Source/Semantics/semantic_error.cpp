@@ -85,7 +85,7 @@ SemanticError SemanticError::unresolved_name(
     std::stringstream ss;
     ss << build_error_header(line, "Name");
     ss << "use of undeclared identifier '" << name << "'" << suggestion;
-    if (name == "move") ss << "; 'move' is part of the core library, so write 'std::core::move'";
+    if (name == "move" || name == "forward") ss << "; '" << name << "' is part of the core library, so write 'std::" << name << "'";
     if (parser_types::find_type_op(name)) ss << "; type operations are alias templates in std::traits, so write 'std::traits::" << name << "<T>'";
     if (parser_types::find_type_trait(name)) ss << "; type traits are variable templates in std::traits, so write 'std::traits::" << name << "<T>'";
     if (const std::string why = native::skipped_reason(name); !why.empty()) ss << "; " << why;
@@ -265,7 +265,7 @@ SemanticError SemanticError::bad_reference_binding(
     std::stringstream ss;
     ss << build_error_header(line, "Type");
     if (to_rvalue) ss << "a temporary value can't be bound to '" << ref << "', because that reference could change it; use 'const " << ref << "' or store the value in a variable first";
-    else           ss << "'" << ref << "' only binds to temporary values, but this is a variable; write 'std::core::move(...)' to hand it over";
+    else           ss << "'" << ref << "' only binds to temporary values, but this is a variable; write 'std::move(...)' to hand it over";
     return make_and_report(reporter, file_id, line, ss.str());
 }
 

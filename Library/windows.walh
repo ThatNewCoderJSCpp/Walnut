@@ -160,7 +160,7 @@ safe(compile) {
                 } end function to_string
             } end struct Monitor
 
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_graphics.hpp>" {
                     class NativeEvent as "walnut_rt::gfx::event" {
                     public:
@@ -672,7 +672,7 @@ safe(compile) {
                     constructor(const string&: n, const string&: p) : name = n, patterns = p { }
                 } end struct FileFilter
 
-                namespace detail {
+                hidden namespace detail {
                     function names_of(const std::collections::Vector<FileFilter>&: filters) -> std::collections::Vector<string> {
                         std::collections::Vector<string>: out;
                         for (const FileFilter&: f in filters) {

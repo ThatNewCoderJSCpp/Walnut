@@ -43,7 +43,7 @@ safe(compile) {
                 } end class Sample
 
                 template <typename T>
-                class RawTest as "walnut_rt::stats::TestResult" {
+                hidden class RawTest as "walnut_rt::stats::TestResult" {
                 public:
                     function name() const -> string as "walnut_rt::stats::test_name";
                     function number(int: which) const -> T as "walnut_rt::stats::test_number";
@@ -55,7 +55,7 @@ safe(compile) {
                 } end class RawTest
 
                 template <typename T>
-                class RawInterval as "walnut_rt::stats::ConfidenceInterval" {
+                hidden class RawInterval as "walnut_rt::stats::ConfidenceInterval" {
                 public:
                     function name() const -> string as "walnut_rt::stats::interval_name";
                     function number(int: which) const -> T as "walnut_rt::stats::interval_number";
@@ -66,7 +66,7 @@ safe(compile) {
                 } end class RawInterval
 
                 template <typename T>
-                class Native as "walnut_rt::stats::tag" {
+                hidden class Native as "walnut_rt::stats::tag" {
                 public:
                     static function sum(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::sum";
                     static function mean(const std::collections::Vector<T>&: data) -> T as "walnut_rt::stats::mean";
@@ -790,7 +790,7 @@ safe(compile) {
                 } end function value
             } end struct Proportion
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename T>
                 function conditions_of(const RawTest<T>&: raw) -> std::collections::Vector<Condition> {
                     std::collections::Vector<Condition>: out;

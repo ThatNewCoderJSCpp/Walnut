@@ -23,7 +23,7 @@ safe(compile) {
             template <typename T>
             concept Probability = std::traits::is_float<T>
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename T>
                 requires Count<T>
                 function require_nonnegative(const T&: n, const string&: what) -> void {

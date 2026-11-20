@@ -316,7 +316,7 @@ safe(compile) {
                     function stats_json(const self&) -> string;
                 } end class Database
 
-                class Native as "walnut_rt::db::api" {
+                hidden class Native as "walnut_rt::db::api" {
                 public:
                     static function like_match(const string&: subject, const string&: pattern) -> bool as "walnut_rt::db::like_match";
                 } end class Native

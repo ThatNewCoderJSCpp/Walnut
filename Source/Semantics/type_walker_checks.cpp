@@ -133,7 +133,7 @@ void TypeWalker::check_binding(nodes::ASTNode* expr, Type* from, Type* to, nodes
         const bool moved_ok = rank_user_defined(from, to, m_types, false, &via) != ConversionRank::None && rvalue_only_conversion(via);
         m_types.conversion_source_lvalue = true;
         if (moved_ok) {
-            SemanticError::emit(m_reporter, file_of(site), site->line, "Type", "'" + type_str(from) + "' can only be converted to '" + type_str(to) + "' by moving it, because the conversion takes the value over; write 'std::core::move(...)' around it");
+            SemanticError::emit(m_reporter, file_of(site), site->line, "Type", "'" + type_str(from) + "' can only be converted to '" + type_str(to) + "' by moving it, because the conversion takes the value over; write 'std::move(...)' around it");
             return;
         }
     }
@@ -2234,6 +2234,7 @@ bool TypeWalker::always_exits(nodes::ASTNode* s) {
 void TypeWalker::check_chosen_overload_visibility(nodes::CallExpression* c) {
     const Symbol* chosen = c ? c->resolved : nullptr;
     if (!chosen || chosen->kind != SymbolKind::Function || !chosen->owner) return;
+    if (c->m_callee && c->m_callee->kind == K::QualifiedIdentifier && static_cast<nodes::QualifiedIdentifier*>(c->m_callee)->from_compiler) return;
     const Symbol* first = chosen->owner->find_local(chosen->name);
     if (!first || !first->next_overload) return;
     const std::string why = visibility_violation(chosen, m_current, c);

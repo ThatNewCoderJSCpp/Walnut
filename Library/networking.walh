@@ -243,7 +243,7 @@ safe(compile) {
                     function active(const self&) -> bool;
                 } end class Timer
 
-                class Native as "walnut_rt::net::api" {
+                hidden class Native as "walnut_rt::net::api" {
                 public:
                     static function resolve(const string&: host) -> std::collections::Vector<string> as "walnut_rt::net::resolve";
                     static function resolve4(const string&: host) -> std::collections::Vector<string> as "walnut_rt::net::resolve4";
@@ -600,7 +600,7 @@ safe(compile) {
                         static function placeholders_for(long int: count) -> string as "walnut_rt::guard::sql_statement::placeholders_for";
                     } end class SqlStatement
 
-                    class Native as "walnut_rt::guard::api" {
+                    hidden class Native as "walnut_rt::guard::api" {
                     public:
                         static function hash_secret(const string&: secret) -> string as "walnut_rt::guard::hash_secret";
                     } end class Native

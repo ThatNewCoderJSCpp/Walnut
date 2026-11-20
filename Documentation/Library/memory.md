@@ -50,7 +50,7 @@ public:
 
 function main() -> int {
     UniquePtr<Circle>: c = make_unique<Circle>(2.0);
-    UniquePtr<Shape>: s = std::core::move(c);
+    UniquePtr<Shape>: s = std::move(c);
     std::io::println(s->name(), " ", c.valid());
 
     SharedPtr<Circle>: a = make_shared<Circle>(3.0);
@@ -78,8 +78,8 @@ This prints `circle 0`, `circle 2 3` and `1 0`. Both circles are deleted on the 
 | `make_unique<T>(args...)` | Makes a `T` with `new T(args...)` and gives a `UniquePtr<T>` that owns it |
 | `UniquePtr<T>: p;` | An empty pointer |
 | `UniquePtr<T>(raw)` | Takes over a `T*` made with `new` |
-| `UniquePtr<T>: q = std::core::move(p);`, `q = std::core::move(p);` | Moves ownership to `q`; `p` becomes empty. Copying is an error |
-| `UniquePtr<Base>: b = std::core::move(p);` | Moves ownership into a pointer to a base class. A named `UniquePtr` has to be moved; a temporary such as `make_unique<Derived>()` converts on its own |
+| `UniquePtr<T>: q = std::move(p);`, `q = std::move(p);` | Moves ownership to `q`; `p` becomes empty. Copying is an error |
+| `UniquePtr<Base>: b = std::move(p);` | Moves ownership into a pointer to a base class. A named `UniquePtr` has to be moved; a temporary such as `make_unique<Derived>()` converts on its own |
 | `*p`, `p->member`, `p.value()` | The object |
 | `get()` | The plain `T*`, or `nullptr`. It still belongs to the `UniquePtr` |
 | `release()` | Gives up ownership and returns the `T*`, which the caller must now delete |
@@ -95,7 +95,7 @@ This prints `circle 0`, `circle 2 3` and `1 0`. Both circles are deleted on the 
 | `make_shared<T>(args...)` | Makes a `T` with `new T(args...)` and gives a `SharedPtr<T>` that owns it |
 | `SharedPtr<T>: p;` | An empty pointer |
 | `SharedPtr<T>(raw)` | Takes over a `T*` made with `new` |
-| `SharedPtr<T>(std::core::move(unique))` | Takes over the object of a `UniquePtr<T>` |
+| `SharedPtr<T>(std::move(unique))` | Takes over the object of a `UniquePtr<T>` |
 | `SharedPtr<T>: q = p;` | Another owner of the same object |
 | `SharedPtr<Base>: b = p;` | Another owner, as a pointer to a base class |
 | `SharedPtr<T>(owner, raw)` | A pointer to `raw` (often a member of the owned object) that keeps `owner`'s object alive |

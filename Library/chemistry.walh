@@ -236,7 +236,7 @@ safe(compile) {
                     function phase(const self&, short float: temperature, short float: pressure) -> string;
                 } end class Gas
 
-                class Native as "walnut_rt::chemistry::api" {
+                hidden class Native as "walnut_rt::chemistry::api" {
                 public:
                     static function element_count() -> long int as "walnut_rt::chemistry::element_count";
                     static function name_of(const string&: formula) -> string as "walnut_rt::chemistry::name_of";

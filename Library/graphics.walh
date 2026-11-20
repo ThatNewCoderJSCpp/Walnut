@@ -223,7 +223,7 @@ safe(compile) {
                 constructor() { }
             } end struct TileHit
 
-            namespace detail {
+            hidden namespace detail {
                 function xs_of(const std::collections::Vector<Point>&: pts) -> std::collections::Vector<float> {
                     std::collections::Vector<float>: out;
                     for (const Point&: p in pts) {

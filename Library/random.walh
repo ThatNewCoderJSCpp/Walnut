@@ -1,7 +1,7 @@
 safe(compile) {
     namespace std {
         namespace random {
-            namespace detail {
+            hidden namespace detail {
                 extern "C++" from "<walnut_random.hpp>" {
                     class Engine as "fizmo::RandomGenerator" {
                     public:
@@ -111,9 +111,9 @@ safe(compile) {
                 for (long int: i = static_cast<long int>(items.size()) - 1; i > 0; i--) {
                     const long int: j = detail::Api::index_below(i + 1);
                     if (j != i) then {
-                        auto: held = std::core::move(items[i]);
-                        items[i] = std::core::move(items[j]);
-                        items[j] = std::core::move(held);
+                        auto: held = std::move(items[i]);
+                        items[i] = std::move(items[j]);
+                        items[j] = std::move(held);
                     }
                 }
             } end function shuffle
@@ -199,9 +199,9 @@ safe(compile) {
                     for (long int: i = static_cast<long int>(items.size()) - 1; i > 0; i--) {
                         const long int: j = detail::Api::index_below_with(self.m_engine, i + 1);
                         if (j != i) then {
-                            auto: held = std::core::move(items[i]);
-                            items[i] = std::core::move(items[j]);
-                            items[j] = std::core::move(held);
+                            auto: held = std::move(items[i]);
+                            items[i] = std::move(items[j]);
+                            items[j] = std::move(held);
                         }
                     }
                 } end function shuffle

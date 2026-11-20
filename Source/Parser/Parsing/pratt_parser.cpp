@@ -433,7 +433,9 @@ nodes::ASTNode* Parser::wrap_propagation(nodes::ASTNode* body, const parser_type
     auto* handler = make<nodes::BlockStatement>();
     handler->add_statement(make<nodes::ReturnStatement>(pass_on, line));
     parser_types::TypeInfo catch_type;
-    catch_type.type = make<parser_types::UserDefinedType>(std::vector<std::string_view>{ "std", "optional", "detail", "Propagated" });
+    auto* propagated = make<parser_types::UserDefinedType>(std::vector<std::string_view>{ "std", "optional", "detail", "Propagated" });
+    propagated->from_compiler = true;
+    catch_type.type = propagated;
     catch_type.modifiers.add(modifiers::RawModifiers::Const);
     catch_type.add_reference();
     auto* guarded = make<nodes::TryCatchStatement>(static_cast<nodes::BlockStatement*>(body), caught, catch_type, true, handler, line);
@@ -451,6 +453,7 @@ std::string_view Parser::intern(const std::string& text) {
 
 nodes::ASTNode* Parser::make_library_call(std::initializer_list<std::string_view> path, std::vector<nodes::ASTNode*> args, std::uint32_t line) {
     auto* name = make<nodes::QualifiedIdentifier>(line, false);
+    name->from_compiler = true;
     for (std::string_view part : path) name->add_part(part);
     auto* call = make<nodes::CallExpression>(name, line);
     for (nodes::ASTNode* a : args) call->add_argument(a);

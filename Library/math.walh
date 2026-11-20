@@ -120,7 +120,7 @@ safe(compile) {
 
             } end extern
 
-            namespace detail {
+            hidden namespace detail {
                 template <typename T>
                 concept ComplexValue = requires (T: z) { z.imaginary(); z.conjugate(); }
 
