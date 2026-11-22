@@ -436,8 +436,12 @@ jobs:
           printf 'import module.collections\n\nfunction doubled(int: n) -> int {\n    std::collections::Stack<int>: s;\n    s.push(n);\n    return s.pop() * 2;\n} end function doubled\n' > smoke/mylib.wal
           (cd smoke && "$walnut" build std.wal -o std-x86_64 --android x86_64 --android-kit "$PWD/../$KIT" --ndk "$ndk")
           (cd smoke && "$walnut" build mylib.wal --shared --android arm64-v8a --android-kit "$PWD/../$KIT" --ndk "$ndk")
-          file smoke/std-x86_64 | grep -q "Android"
+          readelf="$ndk"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
+          file smoke/std-x86_64 smoke/libmylib.so
+          file smoke/std-x86_64 | grep -q "x86-64.*interpreter /system/bin/linker64"
+          "$readelf" -n smoke/std-x86_64 | grep -q "NT_ANDROID_TYPE_IDENT"
           file smoke/libmylib.so | grep -q "ARM aarch64"
+          "$readelf" -n smoke/libmylib.so | grep -q "NT_ANDROID_TYPE_IDENT"
 
       - name: Run what the kit built in Termux
         run: |
