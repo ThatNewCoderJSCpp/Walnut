@@ -308,7 +308,7 @@ jobs:
           "$readelf" -n build/walnut | tee notes.txt
           grep -q "NT_ANDROID_TYPE_IDENT" notes.txt
           "$readelf" -d build/walnut | tee needed.txt
-          if grep NEEDED needed.txt | grep -vE "\[(libc|libm|libdl|liblog|libandroid|libz)\.so\]"; then
+          if grep NEEDED needed.txt | grep -vE "\[(libc|libm|libdl|liblog|libz)\.so\]"; then
             echo "::error::walnut needs a library that Android doesn't have"
             exit 1
           fi

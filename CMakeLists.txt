@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(walnut VERSION 1.4.4 LANGUAGES CXX)
+project(walnut VERSION 1.4.5 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -130,6 +130,9 @@ if(TARGET fizmo_core)
         set(WALNUT_FIZMO_OPTIONAL fizmo_net fizmo_graphics)
     endif()
     set(WALNUT_REQUIRED_DEPS ${FIZMO_CORE_DEPENDENCY_TARGETS})
+    if(ANDROID)
+        list(REMOVE_ITEM WALNUT_REQUIRED_DEPS log android)
+    endif()
     set(WALNUT_OPTIONAL_DEPS ${FIZMO_NET_DEPENDENCY_TARGETS} ${FIZMO_GRAPHICS_DEPENDENCY_TARGETS} ${FIZMO_AUDIO_DEPENDENCY_TARGETS})
 else()
     set(WALNUT_FIZMO_REQUIRED fizmo)
@@ -253,6 +256,10 @@ configure_file("${CMAKE_CURRENT_BINARY_DIR}/walnut_library.cpp.gen" "${CMAKE_CUR
 add_executable(walnut walnut.cpp Cli/cli_setup.cpp Cli/cli_compile.cpp Cli/cli_std.cpp Cli/cli_tools.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/library/walnut_library.cpp")
 target_include_directories(walnut PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>" "${CMAKE_CURRENT_BINARY_DIR}/generated/library")
 target_link_libraries(walnut PRIVATE walnut_core)
+
+if(ANDROID)
+    target_link_options(walnut PRIVATE -Wl,--as-needed)
+endif()
 
 if(WALNUT_PACKAGE)
     if(MSVC)
