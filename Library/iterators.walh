@@ -6,21 +6,21 @@ namespace std {
             using value_type = T;
 
             T*: base = nullptr;
-            long int: index = 0;
+            unsigned long int: index = 0;
 
-            constructor() { }
+            constructor() noexcept { }
 
-            constructor(T*: start, long int: at) : base = start, index = at { }
+            constructor(T*: start, unsigned long int: at) noexcept : base = start, index = at { }
 
-            operator(==) function(const self&, const Pointer&: other) -> bool {
+            operator(==) function(const self&, const Pointer&: other) noexcept -> bool {
                 return self.index == other.index;
             }
 
-            operator(!=) function(const self&, const Pointer&: other) -> bool {
+            operator(!=) function(const self&, const Pointer&: other) noexcept -> bool {
                 return self.index != other.index;
             }
 
-            operator(++) function(self&) -> Pointer& {
+            operator(++) function(self&) noexcept -> Pointer& {
                 if constexpr (Reverse) then {
                     self.index -= 1;
                 } else then {
@@ -29,7 +29,7 @@ namespace std {
                 return *this;
             }
 
-            operator(--) function(self&) -> Pointer& {
+            operator(--) function(self&) noexcept -> Pointer& {
                 if constexpr (Reverse) then {
                     self.index += 1;
                 } else then {
@@ -38,29 +38,37 @@ namespace std {
                 return *this;
             }
 
-            operator(*) function(const self&) -> T& {
-                return self.base[self.index];
+            function slot(const self&) noexcept -> unsigned long int {
+                if constexpr (Reverse) then {
+                    return self.index - 1;
+                } else then {
+                    return self.index;
+                }
+            } end function slot
+
+            operator(*) function(const self&) noexcept -> T& {
+                return self.base[self.slot()];
             }
 
-            operator(->) function(const self&) -> T* {
-                return &self.base[self.index];
+            operator(->) function(const self&) noexcept -> T* {
+                return &self.base[self.slot()];
             }
 
-            function position(const self&) -> long int {
-                return self.index;
+            function position(const self&) noexcept -> unsigned long int {
+                return self.slot();
             } end function position
 
-            static function first(T*: start, long int: count) -> Pointer {
+            static function first(T*: start, unsigned long int: count) -> Pointer {
                 if constexpr (Reverse) then {
-                    return Pointer(start, count - 1);
+                    return Pointer(start, count);
                 } else then {
                     return Pointer(start, 0);
                 }
             } end function first
 
-            static function past(T*: start, long int: count) -> Pointer {
+            static function past(T*: start, unsigned long int: count) -> Pointer {
                 if constexpr (Reverse) then {
-                    return Pointer(start, -1);
+                    return Pointer(start, 0);
                 } else then {
                     return Pointer(start, count);
                 }
@@ -73,11 +81,11 @@ namespace std {
             using value_type = T;
 
             C*: owner = nullptr;
-            long int: index = 0;
+            unsigned long int: index = 0;
 
             constructor() { }
 
-            constructor(C*: container, long int: at) : owner = container, index = at { }
+            constructor(C*: container, unsigned long int: at) : owner = container, index = at { }
 
             operator(==) function(const self&, const Indexed&: other) -> bool {
                 return self.index == other.index;
@@ -105,29 +113,37 @@ namespace std {
                 return *this;
             }
 
+            function slot(const self&) noexcept -> unsigned long int {
+                if constexpr (Reverse) then {
+                    return self.index - 1;
+                } else then {
+                    return self.index;
+                }
+            } end function slot
+
             operator(*) function(const self&) -> T& {
-                return (*self.owner)[self.index];
+                return (*self.owner)[self.slot()];
             }
 
             operator(->) function(const self&) -> T* {
-                return &(*self.owner)[self.index];
+                return &(*self.owner)[self.slot()];
             }
 
-            function position(const self&) -> long int {
-                return self.index;
+            function position(const self&) -> unsigned long int {
+                return self.slot();
             } end function position
 
-            static function first(C*: container, long int: count) -> Indexed {
+            static function first(C*: container, unsigned long int: count) -> Indexed {
                 if constexpr (Reverse) then {
-                    return Indexed(container, count - 1);
+                    return Indexed(container, count);
                 } else then {
                     return Indexed(container, 0);
                 }
             } end function first
 
-            static function past(C*: container, long int: count) -> Indexed {
+            static function past(C*: container, unsigned long int: count) -> Indexed {
                 if constexpr (Reverse) then {
-                    return Indexed(container, -1);
+                    return Indexed(container, 0);
                 } else then {
                     return Indexed(container, count);
                 }
@@ -284,7 +300,7 @@ namespace std {
         class Sparse {
             function settle(self&) -> void {
                 if constexpr (Reverse) then {
-                    while (self.index >= 0 && self.state[self.index] != self.filled) {
+                    while (self.index > 0 && self.state[self.index - 1] != self.filled) {
                         self.index -= 1;
                     }
                 } else then {
@@ -299,27 +315,27 @@ namespace std {
 
             T*: slots = nullptr;
             const char*: state = nullptr;
-            long int: capacity = 0;
-            long int: index = 0;
+            unsigned long int: capacity = 0;
+            unsigned long int: index = 0;
             char: filled = 'f';
 
             constructor() { }
 
-            constructor(T*: s, const char*: flags, long int: count, long int: at, char: mark = 'f') : slots = s, state = flags, capacity = count, index = at, filled = mark {
+            constructor(T*: s, const char*: flags, unsigned long int: count, unsigned long int: at, char: mark = 'f') : slots = s, state = flags, capacity = count, index = at, filled = mark {
                 settle();
             }
 
-            static function first(T*: s, const char*: flags, long int: count, char: mark = 'f') -> Sparse {
+            static function first(T*: s, const char*: flags, unsigned long int: count, char: mark = 'f') -> Sparse {
                 if constexpr (Reverse) then {
-                    return Sparse(s, flags, count, count - 1, mark);
+                    return Sparse(s, flags, count, count, mark);
                 } else then {
                     return Sparse(s, flags, count, 0, mark);
                 }
             } end function first
 
-            static function past(T*: s, const char*: flags, long int: count, char: mark = 'f') -> Sparse {
+            static function past(T*: s, const char*: flags, unsigned long int: count, char: mark = 'f') -> Sparse {
                 if constexpr (Reverse) then {
-                    return Sparse(s, flags, count, -1, mark);
+                    return Sparse(s, flags, count, 0, mark);
                 } else then {
                     return Sparse(s, flags, count, count, mark);
                 }
@@ -343,12 +359,20 @@ namespace std {
                 return *this;
             }
 
+            function slot(const self&) noexcept -> unsigned long int {
+                if constexpr (Reverse) then {
+                    return self.index - 1;
+                } else then {
+                    return self.index;
+                }
+            } end function slot
+
             operator(*) function(const self&) -> T& {
-                return self.slots[self.index];
+                return self.slots[self.slot()];
             }
 
             operator(->) function(const self&) -> T* {
-                return &self.slots[self.index];
+                return &self.slots[self.slot()];
             }
         } end class Sparse
 
@@ -417,7 +441,7 @@ namespace std {
                 It: first;
                 It: last;
 
-                constructor() { }
+                constructor() noexcept { }
 
                 constructor(const It&: a, const It&: b) : first = a, last = b { }
 
@@ -435,8 +459,8 @@ namespace std {
             } end class Range
 
             template <typename T>
-            function count(iterable<T>: items) -> long int {
-                long int: n = 0;
+            function count(iterable<T>: items) -> unsigned long int {
+                unsigned long int: n = 0;
                 for (const T&: item in items) {
                     n += 1;
                 }
@@ -444,8 +468,8 @@ namespace std {
             } end function count
 
             template <typename T>
-            function count_if(iterable<T>: items, std::Predicate<T>: keep) -> long int {
-                long int: n = 0;
+            function count_if(iterable<T>: items, std::Predicate<T>: keep) -> unsigned long int {
+                unsigned long int: n = 0;
                 for (const T&: item in items) {
                     if (keep(item)) then {
                         n += 1;
@@ -490,30 +514,31 @@ namespace std {
             } end function contains
 
             template <typename T>
-            function index_of(iterable<T>: items, const T&: value) -> long int {
-                long int: at = 0;
+            function index_of(iterable<T>: items, const T&: value) -> unsigned long int {
+                unsigned long int: at = 0;
                 for (const T&: item in items) {
                     if (item == value) then {
                         return at;
                     }
                     at += 1;
                 }
-                return -1;
+                return std::npos;
             } end function index_of
 
             template <typename T>
-            function index_if(iterable<T>: items, std::Predicate<T>: test) -> long int {
-                long int: at = 0;
+            function index_if(iterable<T>: items, std::Predicate<T>: test) -> unsigned long int {
+                unsigned long int: at = 0;
                 for (const T&: item in items) {
                     if (test(item)) then {
                         return at;
                     }
                     at += 1;
                 }
-                return -1;
+                return std::npos;
             } end function index_if
 
             template <typename T>
+            requires std::traits::has_operator<std::traits::op::add, T>
             function sum(iterable<T>: items) -> T {
                 T: total = T();
                 for (const T&: item in items) {
@@ -532,7 +557,13 @@ namespace std {
             } end function fold
 
             template <typename T>
-            function min_of(iterable<T>: items, std::Compare<T>: less = std::less_than<T>) -> T {
+            requires std::traits::has_operator<std::traits::op::less, T>
+            function min_of(iterable<T>: items) -> T {
+                return min_of(items, std::less_than<T>);
+            } end function min_of
+
+            template <typename T>
+            function min_of(iterable<T>: items, std::Compare<T>: less) -> T {
                 bool: seen = false;
                 T: best = T();
                 for (const T&: item in items) {
@@ -548,7 +579,13 @@ namespace std {
             } end function min_of
 
             template <typename T>
-            function max_of(iterable<T>: items, std::Compare<T>: less = std::less_than<T>) -> T {
+            requires std::traits::has_operator<std::traits::op::less, T>
+            function max_of(iterable<T>: items) -> T {
+                return max_of(items, std::less_than<T>);
+            } end function max_of
+
+            template <typename T>
+            function max_of(iterable<T>: items, std::Compare<T>: less) -> T {
                 bool: seen = false;
                 T: best = T();
                 for (const T&: item in items) {
@@ -572,7 +609,7 @@ namespace std {
 
             template <typename T>
             struct Numbered {
-                long int: index;
+                unsigned long int: index;
                 T: value;
             } end struct Numbered
 
@@ -589,13 +626,13 @@ namespace std {
             class Held {
             public:
                 T*: items = nullptr;
-                long int: size = 0;
+                unsigned long int: size = 0;
 
-                constructor(long int: n) {
+                constructor(unsigned long int: n) {
                     items = new T[n > 0 ? n : 1];
                 }
 
-                destructor() {
+                destructor() noexcept {
                     delete[] items;
                 }
 
@@ -604,7 +641,7 @@ namespace std {
                     self.size += 1;
                 } end function put
 
-                function at(const self&, long int: index) -> const T& {
+                function at(const self&, unsigned long int: index) -> const T& {
                     return self.items[index];
                 } end function at
             } end class Held
@@ -640,8 +677,8 @@ namespace std {
             } end function range
 
             template <typename T>
-            function enumerate(iterable<T>: items, long int: start = 0) -> generator<Numbered<T>> {
-                long int: i = start;
+            function enumerate(iterable<T>: items, unsigned long int: start = 0) -> generator<Numbered<T>> {
+                unsigned long int: i = start;
                 for (const T&: item in items) {
                     co_yield Numbered<T>{i, item};
                     i += 1;
@@ -650,7 +687,7 @@ namespace std {
 
             template <typename A, typename B>
             function zip(iterable<A>: a, iterable<B>: b) -> generator<Zipped<A, B>> {
-                long int: n = 0;
+                unsigned long int: n = 0;
                 for (const B&: item in b) {
                     n += 1;
                 }
@@ -658,7 +695,7 @@ namespace std {
                 for (const B&: item in b) {
                     held.put(item);
                 }
-                long int: j = 0;
+                unsigned long int: j = 0;
                 for (const A&: item in a) {
                     if (j >= held.size) then {
                         break;
@@ -679,8 +716,8 @@ namespace std {
             } end function chain
 
             template <typename T>
-            function take(iterable<T>: items, long int: n) -> generator<T> {
-                long int: given = 0;
+            function take(iterable<T>: items, unsigned long int: n) -> generator<T> {
+                unsigned long int: given = 0;
                 for (const T&: item in items) {
                     if (given >= n) then {
                         break;
@@ -691,8 +728,8 @@ namespace std {
             } end function take
 
             template <typename T>
-            function skip(iterable<T>: items, long int: n) -> generator<T> {
-                long int: seen = 0;
+            function skip(iterable<T>: items, unsigned long int: n) -> generator<T> {
+                unsigned long int: seen = 0;
                 for (const T&: item in items) {
                     if (seen < n) then {
                         seen += 1;
@@ -754,15 +791,15 @@ namespace std {
             } end function pairwise
 
             template <typename T>
-            function repeat(const T&: value, long int: times) -> generator<T> {
-                for (long int: i = 0; i < times; i += 1) {
+            function repeat(const T&: value, unsigned long int: times) -> generator<T> {
+                for (unsigned long int: i = 0; i < times; i += 1) {
                     co_yield value;
                 }
             } end function repeat
 
             template <typename T>
-            function cycle(iterable<T>: items, long int: times) -> generator<T> {
-                for (long int: i = 0; i < times; i += 1) {
+            function cycle(iterable<T>: items, unsigned long int: times) -> generator<T> {
+                for (unsigned long int: i = 0; i < times; i += 1) {
                     for (const T&: item in items) {
                         co_yield item;
                     }
@@ -770,6 +807,7 @@ namespace std {
             } end function cycle
 
             template <typename T>
+            requires std::traits::has_operator<std::traits::op::add, T>
             function running(iterable<T>: items) -> generator<T> {
                 bool: started = false;
                 T: total = T();

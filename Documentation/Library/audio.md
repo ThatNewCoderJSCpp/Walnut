@@ -277,7 +277,7 @@ using std::audio::Effect;
 
 function main() -> int {
     Effect: fuzz = Effect::custom([](AudioBlock&: block) -> void {
-        for (long int: i = 0; i < block.sample_count(); i++) {
+        for (unsigned long int: i = 0; i < block.sample_count(); i++) {
             std::hardware_float: s = block.sample(i) * 4.0;
             if (s > 0.5) then {
                 s = 0.5;
@@ -373,7 +373,7 @@ function main() -> int {
 | `effects()` | The `EffectChain` the whole mix goes through, such as a limiter |
 | `start(device = "", latency_ms = 30)` | Plays through a device (the default output when `device` is `""`); throws an `audio_error` when it can't be opened |
 | `stop_output()`, `output_running()`, `output_failed()`, `output_error()`, `device_name()` | The device |
-| `wait_idle(timeout_ms = -1)` | Waits until nothing is playing (-1 waits as long as it takes); `false` if it gave up or the device stopped |
+| `wait_idle(timeout_ms = std::npos)` | Waits until nothing is playing (`std::npos` waits as long as it takes); `false` if it gave up or the device stopped |
 | `render(frames)`, `render_seconds(seconds)` | Mixes the next stretch of sound into a buffer instead of a device, to save a mix or test without a sound card. Throws while `start()`ed |
 
 `play`, `play_buffer` and `play_file` all take these, named or in order:
@@ -402,7 +402,7 @@ A `Voice` is one sound playing on a mixer.
 | `set_gain(gain)`, `set_pan(pan)`, `set_speed(speed)`, `set_loop(on)` | Changes it while it plays |
 | `set_pitch(semitones)`, `set_preserve_pitch(on)` | Changes the pitch while it plays |
 | `seek(seconds)`, `position()`, `duration()` | Where it is |
-| `wait(timeout_ms = -1)` | Waits until it ends; `false` if it gave up first, or straight away when the mixer isn't playing through a device (use `render` then) |
+| `wait(timeout_ms = std::npos)` | Waits until it ends (`std::npos` waits as long as it takes); `false` if it gave up first, or straight away when the mixer isn't playing through a device (use `render` then) |
 | `id()`, `valid()` | A number for the voice, and whether it's a real one |
 
 A voice that has ended (or whose mixer is gone) ignores changes, and `is_playing()` is `false`.
@@ -448,12 +448,12 @@ function main() -> int {
     std::hardware_double: frequency = 220.0;
     Stream: synth = Stream::playback([&](AudioBlock&: block) -> void {
         const std::hardware_double: step = frequency / static_cast<std::hardware_double>(block.sample_rate());
-        for (long int: f = 0; f < block.frames(); f++) {
+        for (unsigned long int: f = 0; f < block.frames(); f++) {
             std::hardware_float: s = 0.2;
             if (phase >= 0.5) then {
                 s = -0.2;
             }
-            for (long int: c = 0; c < block.channels(); c++) {
+            for (unsigned long int: c = 0; c < block.channels(); c++) {
                 block.set(f, c, s);
             }
             phase += step;
@@ -589,7 +589,7 @@ function main() -> int {
     for (int: beat = 0; beat < 16; beat++) {
         drums.add_clip(kick, song.beats_to_seconds(static_cast<float>(beat)));
     }
-    long int: take = vocals.add_clip(AudioBuffer::load("vocal.wav"), song.bars_to_seconds(1.0), "verse");
+    unsigned long int: take = vocals.add_clip(AudioBuffer::load("vocal.wav"), song.bars_to_seconds(1.0), "verse");
     vocals.set_clip_fades(take, 0.05, 0.5);
     vocals.effects().add(Effect::compressor(-20.0, 3.0));
     vocals.effects().add(Effect::reverb());

@@ -46,7 +46,7 @@ safe(compile) {
                 Key: key = Key::unknown;
                 Key: logical_key = Key::unknown;
                 Key: physical_key = Key::unknown;
-                long int: scancode = 0;
+                unsigned long int: scancode = 0;
                 string: key_name = "";
                 Modifiers: modifiers;
                 bool: repeat_press = false;
@@ -56,48 +56,48 @@ safe(compile) {
                 float: precise_x = 0.0;
                 float: precise_y = 0.0;
                 PointerType: pointer = PointerType::mouse;
-                long int: pointer_id = 0;
+                unsigned long int: pointer_id = 0;
                 float: pressure = 0.0;
                 long int: window_x = 0;
                 long int: window_y = 0;
                 float: dpi_scale = 1.0;
-                long int: gamepad = -1;
-                long int: gamepad_button = 0;
-                long int: gamepad_axis = 0;
+                unsigned long int: gamepad = std::npos;
+                unsigned long int: gamepad_button = 0;
+                unsigned long int: gamepad_axis = 0;
                 float: axis_value = 0.0;
                 std::collections::Vector<string>: paths;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                function width(const self&) -> long int {
-                    return self.x;
+                function width(const self&) noexcept -> unsigned long int {
+                    return static_cast<unsigned long int>(self.x);
                 } end function width
 
-                function height(const self&) -> long int {
-                    return self.y;
+                function height(const self&) noexcept -> unsigned long int {
+                    return static_cast<unsigned long int>(self.y);
                 } end function height
 
-                function is_key(const self&, Key: k) -> bool {
+                function is_key(const self&, Key: k) noexcept -> bool {
                     return (self.type == EventType::key_press || self.type == EventType::key_release) && self.key == k;
                 } end function is_key
 
-                function is_key_event(const self&) -> bool {
+                function is_key_event(const self&) noexcept -> bool {
                     return self.type == EventType::key_press || self.type == EventType::key_release;
                 } end function is_key_event
 
-                function is_physical_key(const self&, Key: k) -> bool {
+                function is_physical_key(const self&, Key: k) noexcept -> bool {
                     return self.is_key_event() && k != Key::unknown && self.physical_key == k;
                 } end function is_physical_key
 
-                function is_logical_key(const self&, Key: k) -> bool {
+                function is_logical_key(const self&, Key: k) noexcept -> bool {
                     return self.is_key_event() && k != Key::unknown && self.logical_key == k;
                 } end function is_logical_key
 
-                function is_either_key(const self&, Key: k) -> bool {
+                function is_either_key(const self&, Key: k) noexcept -> bool {
                     return self.is_physical_key(k) || self.is_logical_key(k);
                 } end function is_either_key
 
-                function is_key(const self&, Key: k, KeyKind: kind) -> bool {
+                function is_key(const self&, Key: k, KeyKind: kind) noexcept -> bool {
                     if (kind == KeyKind::physical) then {
                         return self.is_physical_key(k);
                     }
@@ -107,7 +107,7 @@ safe(compile) {
                     return self.is_either_key(k);
                 } end function is_key
 
-                function key_of(const self&, KeyKind: kind) -> Key {
+                function key_of(const self&, KeyKind: kind) noexcept -> Key {
                     if (kind == KeyKind::physical) then {
                         return self.physical_key;
                     }
@@ -125,16 +125,16 @@ safe(compile) {
                     return std::input::key_name(self.logical_key);
                 } end function logical_name
 
-                function is_mouse(const self&) -> bool {
+                function is_mouse(const self&) noexcept -> bool {
                     return self.type == EventType::mouse_move || self.type == EventType::mouse_click || self.type == EventType::mouse_release || self.type == EventType::mouse_scroll || self.type == EventType::mouse_double_click;
                 } end function is_mouse
 
-                function is_keyboard(const self&) -> bool {
+                function is_keyboard(const self&) noexcept -> bool {
                     return self.type == EventType::key_press || self.type == EventType::key_release || self.type == EventType::text_input;
                 } end function is_keyboard
 
                 function to_string(const self&) -> string {
-                    return static_cast<string>(`WindowEvent(${static_cast<long int>(self.type)}, x ${self.x}, y ${self.y})`);
+                    return static_cast<string>(`WindowEvent(${static_cast<unsigned long int>(self.type)}, x ${self.x}, y ${self.y})`);
                 } end function to_string
             } end struct WindowEvent
 
@@ -142,18 +142,18 @@ safe(compile) {
                 string: name = "";
                 long int: x = 0;
                 long int: y = 0;
-                long int: width = 0;
-                long int: height = 0;
+                unsigned long int: width = 0;
+                unsigned long int: height = 0;
                 long int: work_x = 0;
                 long int: work_y = 0;
-                long int: work_width = 0;
-                long int: work_height = 0;
+                unsigned long int: work_width = 0;
+                unsigned long int: work_height = 0;
                 float: refresh_rate = 0.0;
                 float: scale = 1.0;
                 float: dpi = 96.0;
                 bool: primary = false;
 
-                constructor() { }
+                constructor() noexcept { }
 
                 function to_string(const self&) -> string {
                     return static_cast<string>(`${self.name} (${self.width} by ${self.height} at ${self.x}, ${self.y})`);
@@ -165,67 +165,67 @@ safe(compile) {
                     class NativeEvent as "walnut_rt::gfx::event" {
                     public:
                         constructor();
-                        function type(const self&) -> long int;
+                        function type(const self&) -> unsigned long int;
                         function x(const self&) -> long int;
                         function y(const self&) -> long int;
-                        function dx(const self&) -> long int;
-                        function dy(const self&) -> long int;
-                        function button(const self&) -> long int;
-                        function key(const self&) -> long int;
-                        function logical_key(const self&) -> long int;
-                        function physical_key(const self&) -> long int;
-                        function scancode(const self&) -> long int;
+                        function dx(const self&) noexcept -> long int;
+                        function dy(const self&) noexcept -> long int;
+                        function button(const self&) -> unsigned long int;
+                        function key(const self&) -> unsigned long int;
+                        function logical_key(const self&) -> unsigned long int;
+                        function physical_key(const self&) -> unsigned long int;
+                        function scancode(const self&) -> unsigned long int;
                         function key_name(const self&) -> string;
-                        function modifiers(const self&) -> long int;
-                        function repeat(const self&) -> bool;
+                        function modifiers(const self&) -> unsigned long int;
+                        function repeat(const self&) noexcept -> bool;
                         function typed(const self&) -> string as "text";
                         function scroll_x(const self&) -> float;
                         function scroll_y(const self&) -> float;
                         function fx(const self&) -> float;
                         function fy(const self&) -> float;
                         function pressure(const self&) -> float;
-                        function pointer(const self&) -> long int;
-                        function pointer_id(const self&) -> long int;
-                        function window_x(const self&) -> long int;
-                        function window_y(const self&) -> long int;
+                        function pointer(const self&) -> unsigned long int;
+                        function pointer_id(const self&) -> unsigned long int;
+                        function window_x(const self&) noexcept -> long int;
+                        function window_y(const self&) noexcept -> long int;
                         function dpi_scale(const self&) -> float;
-                        function gamepad(const self&) -> long int;
-                        function gamepad_button(const self&) -> long int;
-                        function gamepad_axis(const self&) -> long int;
+                        function gamepad(const self&) noexcept -> unsigned long int;
+                        function gamepad_button(const self&) -> unsigned long int;
+                        function gamepad_axis(const self&) -> unsigned long int;
                         function axis_value(const self&) -> float;
-                        function path_count(const self&) -> long int;
-                        function path(const self&, long int: index) -> string;
+                        function path_count(const self&) -> unsigned long int;
+                        function path(const self&, unsigned long int: index) -> string;
                     } end class NativeEvent
 
                     class NativeMonitor as "walnut_rt::gfx::monitor" {
                     public:
                         constructor();
                         function name(const self&) -> string;
-                        function x(const self&) -> long int;
-                        function y(const self&) -> long int;
-                        function width(const self&) -> long int;
-                        function height(const self&) -> long int;
-                        function work_x(const self&) -> long int;
-                        function work_y(const self&) -> long int;
-                        function work_width(const self&) -> long int;
-                        function work_height(const self&) -> long int;
+                        function x(const self&) noexcept -> long int;
+                        function y(const self&) noexcept -> long int;
+                        function width(const self&) noexcept -> unsigned long int;
+                        function height(const self&) noexcept -> unsigned long int;
+                        function work_x(const self&) noexcept -> long int;
+                        function work_y(const self&) noexcept -> long int;
+                        function work_width(const self&) noexcept -> unsigned long int;
+                        function work_height(const self&) noexcept -> unsigned long int;
                         function refresh_rate(const self&) -> float;
                         function scale(const self&) -> float;
                         function dpi(const self&) -> float;
-                        function primary(const self&) -> bool;
+                        function primary(const self&) noexcept -> bool;
                     } end class NativeMonitor
 
                     class Native as "walnut_rt::gfx::windows_api" {
                     public:
-                        static function monitor_count() -> long int as "walnut_rt::gfx::monitor_count";
-                        static function monitor_at(long int: index) -> NativeMonitor as "walnut_rt::gfx::monitor_at";
+                        static function monitor_count() -> unsigned long int as "walnut_rt::gfx::monitor_count";
+                        static function monitor_at(unsigned long int: index) -> NativeMonitor as "walnut_rt::gfx::monitor_at";
                         static function primary_monitor() -> NativeMonitor as "walnut_rt::gfx::primary_monitor";
                         static function dialogs_available() -> bool as "walnut_rt::gfx::dialogs_available";
                         static function open_file(const string&: title, const string&: start, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> string as "walnut_rt::gfx::open_file";
                         static function open_files(const string&: title, const string&: start, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> std::collections::Vector<string> as "walnut_rt::gfx::open_files";
                         static function save_file(const string&: title, const string&: start, const string&: name, const std::collections::Vector<string>&: names, const std::collections::Vector<string>&: patterns) -> string as "walnut_rt::gfx::save_file";
                         static function select_folder(const string&: title, const string&: start) -> string as "walnut_rt::gfx::select_folder";
-                        static function message_box(const string&: title, const string&: message, long int: buttons, long int: icon) -> long int as "walnut_rt::gfx::message_box";
+                        static function message_box(const string&: title, const string&: message, unsigned long int: buttons, unsigned long int: icon) -> unsigned long int as "walnut_rt::gfx::message_box";
                     } end class Native
                 } end extern
 
@@ -236,8 +236,8 @@ safe(compile) {
                     e.y = n.y();
                     e.dx = n.dx();
                     e.dy = n.dy();
-                    const long int: b = n.button();
-                    e.button = b >= 0 && b <= 5 ? static_cast<MouseButton>(b) : MouseButton::no_button;
+                    const unsigned long int: b = n.button();
+                    e.button = b <= 5 ? static_cast<MouseButton>(b) : MouseButton::no_button;
                     e.key = std::input::key_from_index(n.key());
                     e.logical_key = std::input::key_from_index(n.logical_key());
                     e.physical_key = std::input::key_from_index(n.physical_key());
@@ -250,8 +250,8 @@ safe(compile) {
                     e.scroll_y = n.scroll_y();
                     e.precise_x = n.fx();
                     e.precise_y = n.fy();
-                    const long int: p = n.pointer();
-                    e.pointer = p >= 0 && p <= 2 ? static_cast<PointerType>(p) : PointerType::mouse;
+                    const unsigned long int: p = n.pointer();
+                    e.pointer = p <= 2 ? static_cast<PointerType>(p) : PointerType::mouse;
                     e.pointer_id = n.pointer_id();
                     e.pressure = n.pressure();
                     e.window_x = n.window_x();
@@ -261,7 +261,7 @@ safe(compile) {
                     e.gamepad_button = n.gamepad_button();
                     e.gamepad_axis = n.gamepad_axis();
                     e.axis_value = n.axis_value();
-                    for (long int: k = 0; k < n.path_count(); k++) {
+                    for (unsigned long int: k = 0; k < n.path_count(); k++) {
                         e.paths.push_back(n.path(k));
                     }
                     return e;
@@ -288,43 +288,43 @@ safe(compile) {
 
             extern "C++" from "<walnut_graphics.hpp>" {
                 class Gamepad as "walnut_rt::gfx::gamepad" {
-                    function native_button(const self&, long int: b) -> bool as "button";
-                    function native_pressed(const self&, long int: b) -> bool as "pressed";
-                    function native_released(const self&, long int: b) -> bool as "released";
-                    function native_axis(const self&, long int: a) -> float as "axis";
-                    function native_raw_axis(const self&, long int: a) -> float as "raw_axis";
+                    function native_button(const self&, unsigned long int: b) -> bool as "button";
+                    function native_pressed(const self&, unsigned long int: b) -> bool as "pressed";
+                    function native_released(const self&, unsigned long int: b) -> bool as "released";
+                    function native_axis(const self&, unsigned long int: a) -> float as "axis";
+                    function native_raw_axis(const self&, unsigned long int: a) -> float as "raw_axis";
 
                 public:
                     constructor();
 
-                    function slot(const self&) -> long int;
+                    function slot(const self&) noexcept -> unsigned long int;
                     function connected(const self&) -> bool;
                     function mapped(const self&) -> bool;
                     function name(const self&) -> string;
                     function guid(const self&) -> string;
                     function set_deadzones(self&, float: stick, float: trigger) -> void;
                     function has_rumble(const self&) -> bool;
-                    function rumble(self&, float: low_frequency, float: high_frequency, long int: milliseconds) -> bool;
+                    function rumble(self&, float: low_frequency, float: high_frequency, unsigned long int: milliseconds) -> bool;
                     function stop_rumble(self&) -> bool;
 
                     function button(const self&, GamepadButton: b) -> bool {
-                        return self.native_button(static_cast<long int>(b));
+                        return self.native_button(static_cast<unsigned long int>(b));
                     } end function button
 
                     function pressed(const self&, GamepadButton: b) -> bool {
-                        return self.native_pressed(static_cast<long int>(b));
+                        return self.native_pressed(static_cast<unsigned long int>(b));
                     } end function pressed
 
                     function released(const self&, GamepadButton: b) -> bool {
-                        return self.native_released(static_cast<long int>(b));
+                        return self.native_released(static_cast<unsigned long int>(b));
                     } end function released
 
                     function axis(const self&, GamepadAxis: a) -> float {
-                        return self.native_axis(static_cast<long int>(a));
+                        return self.native_axis(static_cast<unsigned long int>(a));
                     } end function axis
 
                     function raw_axis(const self&, GamepadAxis: a) -> float {
-                        return self.native_raw_axis(static_cast<long int>(a));
+                        return self.native_raw_axis(static_cast<unsigned long int>(a));
                     } end function raw_axis
                 } end class Gamepad
 
@@ -332,40 +332,40 @@ safe(compile) {
                     function valid(const self&) -> bool;
                     function has_event(const self&) -> bool;
                     function native_next(self&) -> detail::NativeEvent as "next_event";
-                    function native_set_background(self&, long int: rgba) -> void as "set_background";
-                    function native_background(const self&) -> long int as "background";
-                    function native_set_mode(self&, long int: mode, long int: monitor) -> bool as "set_mode";
-                    function native_mode(const self&) -> long int as "mode";
-                    function native_set_cursor(self&, long int: cursor) -> bool as "set_cursor";
-                    function native_set_cursor_image(self&, const Image&: img, long int: hx, long int: hy) -> bool as "set_cursor_image";
-                    function native_key_down(const self&, long int: k) -> bool as "key_down";
-                    function native_key_pressed(const self&, long int: k) -> bool as "key_pressed";
-                    function native_key_released(const self&, long int: k) -> bool as "key_released";
-                    function native_key_double_pressed(const self&, long int: k) -> bool as "key_double_pressed";
-                    function native_key_held_for(const self&, long int: k) -> float as "key_held_for";
-                    function native_logical_key_down(const self&, long int: k) -> bool as "logical_key_down";
-                    function native_logical_key_pressed(const self&, long int: k) -> bool as "logical_key_pressed";
-                    function native_logical_key_released(const self&, long int: k) -> bool as "logical_key_released";
-                    function native_logical_key_double_pressed(const self&, long int: k) -> bool as "logical_key_double_pressed";
-                    function native_logical_key_held_for(const self&, long int: k) -> float as "logical_key_held_for";
-                    function native_modifiers(const self&) -> long int as "modifiers";
-                    function native_mouse_down(const self&, long int: b) -> bool as "mouse_down";
-                    function native_mouse_pressed(const self&, long int: b) -> bool as "mouse_pressed";
-                    function native_mouse_released(const self&, long int: b) -> bool as "mouse_released";
-                    function native_mouse_double_clicked(const self&, long int: b) -> bool as "mouse_double_clicked";
-                    function native_gamepad_count(const self&) -> long int as "walnut_rt::gfx::gamepad_count";
-                    function native_gamepad_slots(const self&) -> long int as "walnut_rt::gfx::gamepad_slots";
-                    function native_gamepad(const self&, long int: slot) -> Gamepad as "walnut_rt::gfx::gamepad_at";
-                    function native_primary_gamepad(const self&) -> long int as "walnut_rt::gfx::primary_gamepad";
-                    function native_any_gamepad_button(const self&, long int: b) -> bool as "walnut_rt::gfx::any_gamepad_button";
-                    function native_add_gamepad_mappings(const self&, const string&: text_value) -> long int as "walnut_rt::gfx::add_gamepad_mappings";
-                    function native_load_gamepad_mappings(const self&, const string&: path) -> long int as "walnut_rt::gfx::load_gamepad_mappings";
+                    function native_set_background(self&, unsigned long int: rgba) -> void as "set_background";
+                    function native_background(const self&) -> unsigned long int as "background";
+                    function native_set_mode(self&, unsigned long int: mode, unsigned long int: monitor) -> bool as "set_mode";
+                    function native_mode(const self&) -> unsigned long int as "mode";
+                    function native_set_cursor(self&, unsigned long int: cursor) -> bool as "set_cursor";
+                    function native_set_cursor_image(self&, const Image&: img, unsigned long int: hx, unsigned long int: hy) -> bool as "set_cursor_image";
+                    function native_key_down(const self&, unsigned long int: k) -> bool as "key_down";
+                    function native_key_pressed(const self&, unsigned long int: k) -> bool as "key_pressed";
+                    function native_key_released(const self&, unsigned long int: k) -> bool as "key_released";
+                    function native_key_double_pressed(const self&, unsigned long int: k) -> bool as "key_double_pressed";
+                    function native_key_held_for(const self&, unsigned long int: k) -> float as "key_held_for";
+                    function native_logical_key_down(const self&, unsigned long int: k) -> bool as "logical_key_down";
+                    function native_logical_key_pressed(const self&, unsigned long int: k) -> bool as "logical_key_pressed";
+                    function native_logical_key_released(const self&, unsigned long int: k) -> bool as "logical_key_released";
+                    function native_logical_key_double_pressed(const self&, unsigned long int: k) -> bool as "logical_key_double_pressed";
+                    function native_logical_key_held_for(const self&, unsigned long int: k) -> float as "logical_key_held_for";
+                    function native_modifiers(const self&) -> unsigned long int as "modifiers";
+                    function native_mouse_down(const self&, unsigned long int: b) -> bool as "mouse_down";
+                    function native_mouse_pressed(const self&, unsigned long int: b) -> bool as "mouse_pressed";
+                    function native_mouse_released(const self&, unsigned long int: b) -> bool as "mouse_released";
+                    function native_mouse_double_clicked(const self&, unsigned long int: b) -> bool as "mouse_double_clicked";
+                    function native_gamepad_count(const self&) -> unsigned long int as "walnut_rt::gfx::gamepad_count";
+                    function native_gamepad_slots(const self&) -> unsigned long int as "walnut_rt::gfx::gamepad_slots";
+                    function native_gamepad(const self&, unsigned long int: slot) -> Gamepad as "walnut_rt::gfx::gamepad_at";
+                    function native_primary_gamepad(const self&) -> unsigned long int as "walnut_rt::gfx::primary_gamepad";
+                    function native_any_gamepad_button(const self&, unsigned long int: b) -> bool as "walnut_rt::gfx::any_gamepad_button";
+                    function native_add_gamepad_mappings(const self&, const string&: text_value) -> unsigned long int as "walnut_rt::gfx::add_gamepad_mappings";
+                    function native_load_gamepad_mappings(const self&, const string&: path) -> unsigned long int as "walnut_rt::gfx::load_gamepad_mappings";
 
                 public:
                     constructor();
-                    constructor(const string&: title, long int: width, long int: height, long int: background);
+                    constructor(const string&: title, unsigned long int: width, unsigned long int: height, unsigned long int: background);
 
-                    static function open(const string&: title, long int: width, long int: height, const Color&: background = Color(0, 0, 0)) -> Window {
+                    static function open(const string&: title, unsigned long int: width, unsigned long int: height, const Color&: background = Color(0, 0, 0)) -> Window {
                         if (width <= 0 || height <= 0) then {
                             throw std::errors::window_error(static_cast<string>(`a window needs a width and height above 0, not ${width} by ${height}`));
                         }
@@ -397,12 +397,12 @@ safe(compile) {
                         return out;
                     } end function events
 
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
                     function title(const self&) -> string;
                     function set_title(self&, const string&: title) -> void;
-                    function set_size(self&, long int: width, long int: height) -> bool;
-                    function set_min_size(self&, long int: width, long int: height) -> void;
+                    function set_size(self&, unsigned long int: width, unsigned long int: height) -> bool;
+                    function set_min_size(self&, unsigned long int: width, unsigned long int: height) -> void;
                     function set_resizable(self&, bool: resizable) -> void;
                     function set_position(self&, long int: x, long int: y) -> bool;
                     function x(const self&) -> long int;
@@ -415,7 +415,7 @@ safe(compile) {
                     function fullscreen(const self&) -> bool;
                     function set_borderless(self&, bool: on) -> bool;
                     function dpi_scale(const self&) -> float;
-                    function monitor_index(const self&) -> long int;
+                    function monitor_index(const self&) -> unsigned long int;
                     function set_cursor_visible(self&, bool: visible) -> void;
                     function cursor_visible(const self&) -> bool;
                     function set_cursor_locked(self&, bool: locked) -> bool;
@@ -443,8 +443,8 @@ safe(compile) {
                         return Color::from_packed(self.native_background());
                     } end function background
 
-                    function set_mode(self&, WindowMode: mode, long int: monitor = -1) -> bool {
-                        return self.native_set_mode(static_cast<long int>(mode), monitor);
+                    function set_mode(self&, WindowMode: mode, unsigned long int: monitor = std::npos) -> bool {
+                        return self.native_set_mode(static_cast<unsigned long int>(mode), monitor);
                     } end function set_mode
 
                     function mode(const self&) -> WindowMode {
@@ -452,75 +452,75 @@ safe(compile) {
                     } end function mode
 
                     function set_cursor(self&, Cursor: cursor) -> bool {
-                        return self.native_set_cursor(static_cast<long int>(cursor));
+                        return self.native_set_cursor(static_cast<unsigned long int>(cursor));
                     } end function set_cursor
 
                     function set_cursor(self&, const Image&: img) -> bool {
                         return self.native_set_cursor_image(img, 0, 0);
                     } end function set_cursor
 
-                    function set_cursor(self&, const Image&: img, long int: hot_x, long int: hot_y) -> bool {
+                    function set_cursor(self&, const Image&: img, unsigned long int: hot_x, unsigned long int: hot_y) -> bool {
                         return self.native_set_cursor_image(img, hot_x, hot_y);
                     } end function set_cursor
 
                     function key_down(const self&, Key: k) -> bool {
-                        return self.native_key_down(static_cast<long int>(k));
+                        return self.native_key_down(static_cast<unsigned long int>(k));
                     } end function key_down
 
                     function key_pressed(const self&, Key: k) -> bool {
-                        return self.native_key_pressed(static_cast<long int>(k));
+                        return self.native_key_pressed(static_cast<unsigned long int>(k));
                     } end function key_pressed
 
                     function key_released(const self&, Key: k) -> bool {
-                        return self.native_key_released(static_cast<long int>(k));
+                        return self.native_key_released(static_cast<unsigned long int>(k));
                     } end function key_released
 
                     function key_double_pressed(const self&, Key: k) -> bool {
-                        return self.native_key_double_pressed(static_cast<long int>(k));
+                        return self.native_key_double_pressed(static_cast<unsigned long int>(k));
                     } end function key_double_pressed
 
                     function key_held_for(const self&, Key: k) -> float {
-                        return self.native_key_held_for(static_cast<long int>(k));
+                        return self.native_key_held_for(static_cast<unsigned long int>(k));
                     } end function key_held_for
 
                     function logical_key_down(const self&, Key: k) -> bool {
-                        return self.native_logical_key_down(static_cast<long int>(k));
+                        return self.native_logical_key_down(static_cast<unsigned long int>(k));
                     } end function logical_key_down
 
                     function logical_key_pressed(const self&, Key: k) -> bool {
-                        return self.native_logical_key_pressed(static_cast<long int>(k));
+                        return self.native_logical_key_pressed(static_cast<unsigned long int>(k));
                     } end function logical_key_pressed
 
                     function logical_key_released(const self&, Key: k) -> bool {
-                        return self.native_logical_key_released(static_cast<long int>(k));
+                        return self.native_logical_key_released(static_cast<unsigned long int>(k));
                     } end function logical_key_released
 
                     function logical_key_double_pressed(const self&, Key: k) -> bool {
-                        return self.native_logical_key_double_pressed(static_cast<long int>(k));
+                        return self.native_logical_key_double_pressed(static_cast<unsigned long int>(k));
                     } end function logical_key_double_pressed
 
                     function logical_key_held_for(const self&, Key: k) -> float {
-                        return self.native_logical_key_held_for(static_cast<long int>(k));
+                        return self.native_logical_key_held_for(static_cast<unsigned long int>(k));
                     } end function logical_key_held_for
 
                     function physical_key_down(const self&, Key: k) -> bool {
-                        return self.native_key_down(static_cast<long int>(k));
+                        return self.native_key_down(static_cast<unsigned long int>(k));
                     } end function physical_key_down
 
                     function physical_key_pressed(const self&, Key: k) -> bool {
-                        return self.native_key_pressed(static_cast<long int>(k));
+                        return self.native_key_pressed(static_cast<unsigned long int>(k));
                     } end function physical_key_pressed
 
                     function physical_key_released(const self&, Key: k) -> bool {
-                        return self.native_key_released(static_cast<long int>(k));
+                        return self.native_key_released(static_cast<unsigned long int>(k));
                     } end function physical_key_released
 
                     function physical_key_double_pressed(const self&, Key: k) -> bool {
-                        return self.native_key_double_pressed(static_cast<long int>(k));
+                        return self.native_key_double_pressed(static_cast<unsigned long int>(k));
                     } end function physical_key_double_pressed
 
                     function physical_key_held_for(const self&, Key: k) -> float {
-                        return self.native_key_held_for(static_cast<long int>(k));
+                        return self.native_key_held_for(static_cast<unsigned long int>(k));
                     } end function physical_key_held_for
 
                     function key_down(const self&, Key: k, KeyKind: kind) -> bool {
@@ -580,27 +580,27 @@ safe(compile) {
                     } end function modifiers
 
                     function mouse_down(const self&, MouseButton: b = MouseButton::left) -> bool {
-                        return self.native_mouse_down(static_cast<long int>(b));
+                        return self.native_mouse_down(static_cast<unsigned long int>(b));
                     } end function mouse_down
 
                     function mouse_pressed(const self&, MouseButton: b = MouseButton::left) -> bool {
-                        return self.native_mouse_pressed(static_cast<long int>(b));
+                        return self.native_mouse_pressed(static_cast<unsigned long int>(b));
                     } end function mouse_pressed
 
                     function mouse_released(const self&, MouseButton: b = MouseButton::left) -> bool {
-                        return self.native_mouse_released(static_cast<long int>(b));
+                        return self.native_mouse_released(static_cast<unsigned long int>(b));
                     } end function mouse_released
 
                     function mouse_double_clicked(const self&, MouseButton: b = MouseButton::left) -> bool {
-                        return self.native_mouse_double_clicked(static_cast<long int>(b));
+                        return self.native_mouse_double_clicked(static_cast<unsigned long int>(b));
                     } end function mouse_double_clicked
 
-                    function gamepad_count(const self&) -> long int {
+                    function gamepad_count(const self&) -> unsigned long int {
                         return self.native_gamepad_count();
                     } end function gamepad_count
 
-                    function gamepad(const self&, long int: slot) -> Gamepad {
-                        if (slot < 0 || slot >= self.native_gamepad_slots()) then {
+                    function gamepad(const self&, unsigned long int: slot) -> Gamepad {
+                        if (slot >= self.native_gamepad_slots()) then {
                             throw std::errors::window_error(static_cast<string>(`there is no gamepad in slot ${slot}`));
                         }
                         return self.native_gamepad(slot);
@@ -608,7 +608,7 @@ safe(compile) {
 
                     function gamepads(const self&) -> std::collections::Vector<Gamepad> {
                         std::collections::Vector<Gamepad>: out;
-                        for (long int: k = 0; k < self.native_gamepad_slots(); k++) {
+                        for (unsigned long int: k = 0; k < self.native_gamepad_slots(); k++) {
                             Gamepad: g = self.native_gamepad(k);
                             if (g.connected()) then {
                                 out.push_back(g);
@@ -622,22 +622,19 @@ safe(compile) {
                     } end function has_gamepad
 
                     function primary_gamepad(const self&) -> Gamepad {
-                        const long int: slot = self.native_primary_gamepad();
-                        if (slot < 0) then {
-                            throw std::errors::window_error("no gamepad is connected; check has_gamepad() first");
-                        }
+                        const unsigned long int: slot = self.native_primary_gamepad();
                         return self.native_gamepad(slot);
                     } end function primary_gamepad
 
                     function any_gamepad_button(const self&, GamepadButton: b) -> bool {
-                        return self.native_any_gamepad_button(static_cast<long int>(b));
+                        return self.native_any_gamepad_button(static_cast<unsigned long int>(b));
                     } end function any_gamepad_button
 
-                    function add_gamepad_mappings(const self&, const string&: mappings) -> long int {
+                    function add_gamepad_mappings(const self&, const string&: mappings) -> unsigned long int {
                         return self.native_add_gamepad_mappings(mappings);
                     } end function add_gamepad_mappings
 
-                    function load_gamepad_mappings(const self&, const string&: path) -> long int {
+                    function load_gamepad_mappings(const self&, const string&: path) -> unsigned long int {
                         return self.native_load_gamepad_mappings(path);
                     } end function load_gamepad_mappings
                 } end class Window
@@ -645,8 +642,8 @@ safe(compile) {
 
             function monitors() -> std::collections::Vector<Monitor> {
                 std::collections::Vector<Monitor>: out;
-                const long int: n = detail::Native::monitor_count();
-                for (long int: k = 0; k < n; k++) {
+                const unsigned long int: n = detail::Native::monitor_count();
+                for (unsigned long int: k = 0; k < n; k++) {
                     out.push_back(detail::monitor_of(detail::Native::monitor_at(k)));
                 }
                 return out;
@@ -667,7 +664,7 @@ safe(compile) {
                     string: name = "";
                     string: patterns = "";
 
-                    constructor() { }
+                    constructor() noexcept { }
 
                     constructor(const string&: n, const string&: p) : name = n, patterns = p { }
                 } end struct FileFilter
@@ -702,7 +699,7 @@ safe(compile) {
                 } end function available
 
                 function message_box(const string&: title, const string&: message, Buttons: buttons = Buttons::ok, Icon: icon = Icon::info) -> Answer {
-                    return static_cast<Answer>(std::windows::detail::Native::message_box(title, message, static_cast<long int>(buttons), static_cast<long int>(icon)));
+                    return static_cast<Answer>(std::windows::detail::Native::message_box(title, message, static_cast<unsigned long int>(buttons), static_cast<unsigned long int>(icon)));
                 } end function message_box
 
                 function show_info(const string&: title, const string&: message) -> void {

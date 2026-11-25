@@ -8,12 +8,20 @@ nodes::ASTNode* Parser::parse_try_catch_statement() {
     expect(tokenizing::Token::Kind::TryKeyword);
     nodes::BlockStatement* try_body = parse_block();
 
+    if (match(tokenizing::Token::Kind::FinallyKeyword)) {
+        parser_types::TypeInfo no_type;
+        no_type.type = parser_types::PrimitiveType::make_auto(arena);
+        auto* alone = make<nodes::TryCatchStatement>(try_body, std::string_view{}, no_type, false, nullptr, line_number);
+        alone->finally_body = parse_block(false);
+        return alone;
+    }
+
     if (!match(tokenizing::Token::Kind::CatchKeyword)) {
         throw ParserError::missing_token(
             reporter,
             current_token(),
             tokenizing::Token::Kind::CatchKeyword,
-            "Expected 'catch' after try block"
+            "Expected 'catch' or 'finally' after try block"
         );
     }
 
@@ -68,6 +76,8 @@ nodes::ASTNode* Parser::parse_try_catch_statement() {
         else tail->next_handler = handler;
         tail = handler;
     } while (match(tokenizing::Token::Kind::CatchKeyword));
+
+    if (match(tokenizing::Token::Kind::FinallyKeyword)) head->finally_body = parse_block(false);
 
     return head;
 }

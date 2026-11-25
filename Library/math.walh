@@ -13,7 +13,7 @@ safe(compile) {
                     constructor(long long double: value) as "walnut_rt::math::big_from";
                     constructor(const string&: digits) explicit as "walnut_rt::math::parse_big";
                     function to_string(const self&) -> string;
-                    function to_string(const self&, long int: digits) -> string as "walnut_rt::math::big_to_string";
+                    function to_string(const self&, unsigned long int: digits) -> string as "walnut_rt::math::big_to_string";
                     function is_zero(const self&) -> bool;
                     function is_negative(const self&) -> bool;
                     function is_positive(const self&) -> bool;
@@ -63,7 +63,7 @@ safe(compile) {
                     function argument(const self&) -> BigFloat as "walnut_rt::math::big_argument";
                     function conjugate(const self&) -> BigComplex;
                     function to_string(const self&) -> string;
-                    function to_string(const self&, long int: digits) -> string as "walnut_rt::math::big_complex_to_string";
+                    function to_string(const self&, unsigned long int: digits) -> string as "walnut_rt::math::big_complex_to_string";
                     function is_zero(const self&) -> bool;
                     function is_real(const self&) -> bool;
                     function is_imaginary(const self&) -> bool;
@@ -82,6 +82,7 @@ safe(compile) {
                 } end class BigComplex
 
                 template <typename T>
+                requires std::traits::is_float<T> && !std::traits::is_same<T, BigFloat>
                 class Complex as "fizmo::Complex" {
                 public:
                     constructor();
@@ -272,29 +273,29 @@ safe(compile) {
                         static function permutation(const T&: x, const T&: y) -> T as "walnut_rt::math::permutation";
                         static function combination(const T&: x, const T&: y) -> T as "walnut_rt::math::combination";
                         static function pow(const T&: x, long int: n) -> T as "walnut_rt::math::pow";
-                        static function nth_root(const T&: x, long int: n) -> T as "walnut_rt::math::nth_root";
-                        static function polygamma(const T&: x, long int: n) -> T as "walnut_rt::math::polygamma";
-                        static function chebyshev_t(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_t";
-                        static function chebyshev_u(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_u";
-                        static function chebyshev_v(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_v";
-                        static function chebyshev_w(const T&: x, long int: n) -> T as "walnut_rt::math::chebyshev_w";
+                        static function nth_root(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::nth_root";
+                        static function polygamma(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::polygamma";
+                        static function chebyshev_t(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::chebyshev_t";
+                        static function chebyshev_u(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::chebyshev_u";
+                        static function chebyshev_v(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::chebyshev_v";
+                        static function chebyshev_w(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::chebyshev_w";
                         static function fibonacci(const T&: x) -> T as "walnut_rt::math::fibonacci";
                         static function lucas(const T&: x) -> T as "walnut_rt::math::lucas";
-                        static function fibonacci_polynomial(const T&: x, long int: n) -> T as "walnut_rt::math::fibonacci_polynomial";
-                        static function lucas_polynomial(const T&: x, long int: n) -> T as "walnut_rt::math::lucas_polynomial";
-                        static function legendre_p(const T&: x, long int: n) -> T as "walnut_rt::math::legendre_p";
-                        static function legendre_q(const T&: x, long int: n) -> T as "walnut_rt::math::legendre_q";
+                        static function fibonacci_polynomial(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::fibonacci_polynomial";
+                        static function lucas_polynomial(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::lucas_polynomial";
+                        static function legendre_p(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::legendre_p";
+                        static function legendre_q(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::legendre_q";
                         static function lambert_w(const T&: x, long int: n) -> T as "walnut_rt::math::lambert_w";
-                        static function exp_integral_generalized(const T&: x, long int: n) -> T as "walnut_rt::math::exp_integral_generalized";
-                        static function log_integral_generalized(const T&: x, long int: n) -> T as "walnut_rt::math::log_integral_generalized";
-                        static function clausen(const T&: x, long int: n) -> T as "walnut_rt::math::clausen";
-                        static function debye(const T&: x, long int: n) -> T as "walnut_rt::math::debye";
-                        static function debye_integral(const T&: x, long int: n) -> T as "walnut_rt::math::debye_integral";
-                        static function debye_tail(const T&: x, long int: n) -> T as "walnut_rt::math::debye_tail";
-                        static function rising_pochhammer(const T&: x, long int: n) -> T as "walnut_rt::math::rising_pochhammer";
-                        static function falling_pochhammer(const T&: x, long int: n) -> T as "walnut_rt::math::falling_pochhammer";
-                        static function permutation(const T&: x, long int: n) -> T as "walnut_rt::math::permutation";
-                        static function combination(const T&: x, long int: n) -> T as "walnut_rt::math::combination";
+                        static function exp_integral_generalized(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::exp_integral_generalized";
+                        static function log_integral_generalized(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::log_integral_generalized";
+                        static function clausen(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::clausen";
+                        static function debye(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::debye";
+                        static function debye_integral(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::debye_integral";
+                        static function debye_tail(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::debye_tail";
+                        static function rising_pochhammer(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::rising_pochhammer";
+                        static function falling_pochhammer(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::falling_pochhammer";
+                        static function permutation(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::permutation";
+                        static function combination(const T&: x, unsigned long int: n) -> T as "walnut_rt::math::combination";
                         static function lerch_transcendent(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::lerch_transcendent";
                         static function carlson_rf(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::carlson_rf";
                         static function carlson_rd(const T&: x, const T&: y, const T&: z) -> T as "walnut_rt::math::carlson_rd";
@@ -343,25 +344,25 @@ safe(compile) {
                         static function silver_ratio() -> T as "walnut_rt::math::silver_ratio<T>";
                         static function bronze_ratio() -> T as "walnut_rt::math::bronze_ratio<T>";
                         static function silver_constant() -> T as "walnut_rt::math::silver_constant<T>";
-                        static function stieltjes(long int: n) -> T as "walnut_rt::math::stieltjes<T>";
-                        static function bernoulli(long int: n) -> T as "walnut_rt::math::bernoulli<T>";
-                        static function metallic_ratio(long int: n) -> T as "walnut_rt::math::metallic_ratio<T>";
-                        static function inv_metallic_ratio(long int: n) -> T as "walnut_rt::math::inv_metallic_ratio<T>";
-                        static function metallic_mean(long int: n) -> T as "walnut_rt::math::metallic_mean<T>";
-                        static function inv_metallic_mean(long int: n) -> T as "walnut_rt::math::inv_metallic_mean<T>";
-                        static function beraha(long int: n) -> T as "walnut_rt::math::beraha<T>";
-                        static function tangent_number(long int: n) -> T as "walnut_rt::math::tangent_number<T>";
-                        static function secant_number(long int: n) -> T as "walnut_rt::math::secant_number<T>";
-                        static function euler_number(long int: n) -> T as "walnut_rt::math::euler_number<T>";
-                        static function eulerian_number(long int: n, long int: k) -> T as "walnut_rt::math::eulerian_number<T>";
+                        static function stieltjes(unsigned long int: n) -> T as "walnut_rt::math::stieltjes<T>";
+                        static function bernoulli(unsigned long int: n) -> T as "walnut_rt::math::bernoulli<T>";
+                        static function metallic_ratio(unsigned long int: n) -> T as "walnut_rt::math::metallic_ratio<T>";
+                        static function inv_metallic_ratio(unsigned long int: n) -> T as "walnut_rt::math::inv_metallic_ratio<T>";
+                        static function metallic_mean(unsigned long int: n) -> T as "walnut_rt::math::metallic_mean<T>";
+                        static function inv_metallic_mean(unsigned long int: n) -> T as "walnut_rt::math::inv_metallic_mean<T>";
+                        static function beraha(unsigned long int: n) -> T as "walnut_rt::math::beraha<T>";
+                        static function tangent_number(unsigned long int: n) -> T as "walnut_rt::math::tangent_number<T>";
+                        static function secant_number(unsigned long int: n) -> T as "walnut_rt::math::secant_number<T>";
+                        static function euler_number(unsigned long int: n) -> T as "walnut_rt::math::euler_number<T>";
+                        static function eulerian_number(unsigned long int: n, unsigned long int: k) -> T as "walnut_rt::math::eulerian_number<T>";
                     } end class Fn
 
                     class Api as "walnut_rt::math::api" {
                     public:
-                        static function set_precision(long int: bits) -> void as "walnut_rt::math::set_precision";
-                        static function precision() -> long int as "walnut_rt::math::precision";
-                        static function set_digits(long int: digits) -> void as "walnut_rt::math::set_digits";
-                        static function digits() -> long int as "walnut_rt::math::digits";
+                        static function set_precision(unsigned long int: bits) -> void as "walnut_rt::math::set_precision";
+                        static function precision() -> unsigned long int as "walnut_rt::math::precision";
+                        static function set_digits(unsigned long int: digits) -> void as "walnut_rt::math::set_digits";
+                        static function digits() -> unsigned long int as "walnut_rt::math::digits";
                     } end class Api
                 } end extern
             } end namespace detail
@@ -2120,73 +2121,73 @@ safe(compile) {
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function nth_root(const T&: x, long int: n) -> float {
+            function nth_root(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::nth_root(static_cast<float>(x), n);
             } end function nth_root
 
             template <typename T>
             requires detail::MathValue<T>
-            function nth_root(const T&: x, long int: n) -> T {
+            function nth_root(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::nth_root(x, n);
             } end function nth_root
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function polygamma(const T&: x, long int: n) -> float {
+            function polygamma(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::polygamma(static_cast<float>(x), n);
             } end function polygamma
 
             template <typename T>
             requires detail::MathValue<T>
-            function polygamma(const T&: x, long int: n) -> T {
+            function polygamma(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::polygamma(x, n);
             } end function polygamma
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function chebyshev_t(const T&: x, long int: n) -> float {
+            function chebyshev_t(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::chebyshev_t(static_cast<float>(x), n);
             } end function chebyshev_t
 
             template <typename T>
             requires detail::MathValue<T>
-            function chebyshev_t(const T&: x, long int: n) -> T {
+            function chebyshev_t(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::chebyshev_t(x, n);
             } end function chebyshev_t
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function chebyshev_u(const T&: x, long int: n) -> float {
+            function chebyshev_u(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::chebyshev_u(static_cast<float>(x), n);
             } end function chebyshev_u
 
             template <typename T>
             requires detail::MathValue<T>
-            function chebyshev_u(const T&: x, long int: n) -> T {
+            function chebyshev_u(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::chebyshev_u(x, n);
             } end function chebyshev_u
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function chebyshev_v(const T&: x, long int: n) -> float {
+            function chebyshev_v(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::chebyshev_v(static_cast<float>(x), n);
             } end function chebyshev_v
 
             template <typename T>
             requires detail::MathValue<T>
-            function chebyshev_v(const T&: x, long int: n) -> T {
+            function chebyshev_v(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::chebyshev_v(x, n);
             } end function chebyshev_v
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function chebyshev_w(const T&: x, long int: n) -> float {
+            function chebyshev_w(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::chebyshev_w(static_cast<float>(x), n);
             } end function chebyshev_w
 
             template <typename T>
             requires detail::MathValue<T>
-            function chebyshev_w(const T&: x, long int: n) -> T {
+            function chebyshev_w(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::chebyshev_w(x, n);
             } end function chebyshev_w
 
@@ -2216,49 +2217,49 @@ safe(compile) {
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function fibonacci_polynomial(const T&: x, long int: n) -> float {
+            function fibonacci_polynomial(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::fibonacci_polynomial(static_cast<float>(x), n);
             } end function fibonacci_polynomial
 
             template <typename T>
             requires detail::MathValue<T>
-            function fibonacci_polynomial(const T&: x, long int: n) -> T {
+            function fibonacci_polynomial(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::fibonacci_polynomial(x, n);
             } end function fibonacci_polynomial
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function lucas_polynomial(const T&: x, long int: n) -> float {
+            function lucas_polynomial(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::lucas_polynomial(static_cast<float>(x), n);
             } end function lucas_polynomial
 
             template <typename T>
             requires detail::MathValue<T>
-            function lucas_polynomial(const T&: x, long int: n) -> T {
+            function lucas_polynomial(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::lucas_polynomial(x, n);
             } end function lucas_polynomial
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function legendre_p(const T&: x, long int: n) -> float {
+            function legendre_p(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::legendre_p(static_cast<float>(x), n);
             } end function legendre_p
 
             template <typename T>
             requires detail::MathValue<T>
-            function legendre_p(const T&: x, long int: n) -> T {
+            function legendre_p(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::legendre_p(x, n);
             } end function legendre_p
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function legendre_q(const T&: x, long int: n) -> float {
+            function legendre_q(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::legendre_q(static_cast<float>(x), n);
             } end function legendre_q
 
             template <typename T>
             requires detail::MathValue<T>
-            function legendre_q(const T&: x, long int: n) -> T {
+            function legendre_q(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::legendre_q(x, n);
             } end function legendre_q
 
@@ -2276,121 +2277,121 @@ safe(compile) {
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function exp_integral_generalized(const T&: x, long int: n) -> float {
+            function exp_integral_generalized(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::exp_integral_generalized(static_cast<float>(x), n);
             } end function exp_integral_generalized
 
             template <typename T>
             requires detail::MathValue<T>
-            function exp_integral_generalized(const T&: x, long int: n) -> T {
+            function exp_integral_generalized(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::exp_integral_generalized(x, n);
             } end function exp_integral_generalized
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function log_integral_generalized(const T&: x, long int: n) -> float {
+            function log_integral_generalized(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::log_integral_generalized(static_cast<float>(x), n);
             } end function log_integral_generalized
 
             template <typename T>
             requires detail::MathValue<T>
-            function log_integral_generalized(const T&: x, long int: n) -> T {
+            function log_integral_generalized(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::log_integral_generalized(x, n);
             } end function log_integral_generalized
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function clausen(const T&: x, long int: n) -> float {
+            function clausen(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::clausen(static_cast<float>(x), n);
             } end function clausen
 
             template <typename T>
             requires detail::MathValue<T>
-            function clausen(const T&: x, long int: n) -> T {
+            function clausen(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::clausen(x, n);
             } end function clausen
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function debye(const T&: x, long int: n) -> float {
+            function debye(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::debye(static_cast<float>(x), n);
             } end function debye
 
             template <typename T>
             requires detail::MathValue<T>
-            function debye(const T&: x, long int: n) -> T {
+            function debye(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::debye(x, n);
             } end function debye
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function debye_integral(const T&: x, long int: n) -> float {
+            function debye_integral(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::debye_integral(static_cast<float>(x), n);
             } end function debye_integral
 
             template <typename T>
             requires detail::MathValue<T>
-            function debye_integral(const T&: x, long int: n) -> T {
+            function debye_integral(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::debye_integral(x, n);
             } end function debye_integral
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function debye_tail(const T&: x, long int: n) -> float {
+            function debye_tail(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::debye_tail(static_cast<float>(x), n);
             } end function debye_tail
 
             template <typename T>
             requires detail::MathValue<T>
-            function debye_tail(const T&: x, long int: n) -> T {
+            function debye_tail(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::debye_tail(x, n);
             } end function debye_tail
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function rising_pochhammer(const T&: x, long int: n) -> float {
+            function rising_pochhammer(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::rising_pochhammer(static_cast<float>(x), n);
             } end function rising_pochhammer
 
             template <typename T>
             requires detail::MathValue<T>
-            function rising_pochhammer(const T&: x, long int: n) -> T {
+            function rising_pochhammer(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::rising_pochhammer(x, n);
             } end function rising_pochhammer
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function falling_pochhammer(const T&: x, long int: n) -> float {
+            function falling_pochhammer(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::falling_pochhammer(static_cast<float>(x), n);
             } end function falling_pochhammer
 
             template <typename T>
             requires detail::MathValue<T>
-            function falling_pochhammer(const T&: x, long int: n) -> T {
+            function falling_pochhammer(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::falling_pochhammer(x, n);
             } end function falling_pochhammer
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function permutation(const T&: x, long int: n) -> float {
+            function permutation(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::permutation(static_cast<float>(x), n);
             } end function permutation
 
             template <typename T>
             requires detail::MathValue<T>
-            function permutation(const T&: x, long int: n) -> T {
+            function permutation(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::permutation(x, n);
             } end function permutation
 
             template <typename T>
             requires std::traits::is_builtin_integer<T>
-            function combination(const T&: x, long int: n) -> float {
+            function combination(const T&: x, unsigned long int: n) -> float {
                 return detail::Fn<float>::combination(static_cast<float>(x), n);
             } end function combination
 
             template <typename T>
             requires detail::MathValue<T>
-            function combination(const T&: x, long int: n) -> T {
+            function combination(const T&: x, unsigned long int: n) -> T {
                 return detail::Fn<T>::combination(x, n);
             } end function combination
 
@@ -2579,16 +2580,19 @@ safe(compile) {
             } end function conj
 
             template <typename T>
+            requires std::traits::has_operator<std::traits::op::less, T>
             function min(const T&: a, const T&: b) -> T {
                 return b < a ? b : a;
             } end function min
 
             template <typename T>
+            requires std::traits::has_operator<std::traits::op::less, T>
             function max(const T&: a, const T&: b) -> T {
                 return a < b ? b : a;
             } end function max
 
             template <typename T>
+            requires std::traits::has_operator<std::traits::op::less, T>
             function clamp(const T&: x, const T&: lo, const T&: hi) -> T {
                 if (x < lo) then {
                     return lo;
@@ -2667,19 +2671,19 @@ safe(compile) {
                 return radians * detail::Fn<T>::inv_pi_180();
             } end function degrees
 
-            function set_precision(long int: bits) -> void {
+            function set_precision(unsigned long int: bits) -> void {
                 detail::Api::set_precision(bits);
             } end function set_precision
 
-            function precision() -> long int {
+            function precision() -> unsigned long int {
                 return detail::Api::precision();
             } end function precision
 
-            function set_digits(long int: digits) -> void {
+            function set_digits(unsigned long int: digits) -> void {
                 detail::Api::set_digits(digits);
             } end function set_digits
 
-            function digits() -> long int {
+            function digits() -> unsigned long int {
                 return detail::Api::digits();
             } end function digits
 

@@ -38,11 +38,11 @@ safe(compile) {
             extern "C++" from "<walnut_game.hpp>" {
                 class Assets as "walnut_rt::gfx::assets" {
                     function native_load_image(self&, const string&: name) -> Image as "load_image";
-                    function native_load_texture(self&, const string&: name, long int: filter, long int: wrap) -> Texture as "load_texture";
+                    function native_load_texture(self&, const string&: name, unsigned long int: filter, unsigned long int: wrap) -> Texture as "load_texture";
                     function native_text_ok(self&, const string&: name) -> bool as "text_ok";
                     function native_text(self&, const string&: name) -> string as "text";
                     function native_add_root(self&, const string&: folder, bool: first) -> void as "add_root";
-                    function native_stat(const self&, long int: which) -> long int as "stat";
+                    function native_stat(const self&, unsigned long int: which) -> unsigned long int as "stat";
 
                 public:
                     constructor();
@@ -62,7 +62,7 @@ safe(compile) {
                     } end function image
 
                     function texture(self&, const string&: name, Filter: filter = Filter::nearest, Wrap: wrap = Wrap::clamp) -> Texture {
-                        Texture: t = self.native_load_texture(name, static_cast<long int>(filter), static_cast<long int>(wrap));
+                        Texture: t = self.native_load_texture(name, static_cast<unsigned long int>(filter), static_cast<unsigned long int>(wrap));
                         if (!t.valid()) then {
                             throw std::errors::image_error(static_cast<string>(`can't load the texture '${name}': ${self.last_error()}`));
                         }
@@ -78,32 +78,32 @@ safe(compile) {
 
                     function loaded(const self&, const string&: name) -> bool;
                     function unload(self&, const string&: name) -> bool;
-                    function collect(self&) -> long int;
+                    function collect(self&) -> unsigned long int;
                     function clear(self&) -> void;
                     function last_error(const self&) -> string;
                     function enable_hot_reload(self&) -> void;
                     function disable_hot_reload(self&) -> void;
-                    function check_reloads(self&) -> long int;
+                    function check_reloads(self&) -> unsigned long int;
 
-                    function image_count(const self&) -> long int {
+                    function image_count(const self&) -> unsigned long int {
                         return self.native_stat(0);
                     } end function image_count
 
-                    function text_count(const self&) -> long int {
+                    function text_count(const self&) -> unsigned long int {
                         return self.native_stat(1);
                     } end function text_count
 
-                    function image_bytes(const self&) -> long int {
+                    function image_bytes(const self&) -> unsigned long int {
                         return self.native_stat(2);
                     } end function image_bytes
 
-                    function reload_count(const self&) -> long int {
+                    function reload_count(const self&) -> unsigned long int {
                         return self.native_stat(3);
                     } end function reload_count
                 } end class Assets
 
                 class Node as "walnut_rt::gfx::scene_node" {
-                    function native_add_shape(self&, long int: kind, float: w, float: h, float: r, const Paint&: p, const string&: name) -> Node as "add_shape";
+                    function native_add_shape(self&, unsigned long int: kind, float: w, float: h, float: r, const Paint&: p, const string&: name) -> Node as "add_shape";
                     function native_add_group(self&, const string&: name) -> Node as "add_group";
                     function native_add_sprite(self&, const Texture&: t, const string&: name) -> Node as "add_sprite";
                     function native_add_path(self&, const Path&: p, const Paint&: paint, const string&: name) -> Node as "add_path";
@@ -181,8 +181,8 @@ safe(compile) {
                     function world_y(const self&) -> float;
                     function world_rotation(const self&) -> float;
                     function hit(const self&, float: wx, float: wy) -> bool;
-                    function child_count(const self&) -> long int;
-                    function child(const self&, long int: index) -> Node;
+                    function child_count(const self&) -> unsigned long int;
+                    function child(const self&, unsigned long int: index) -> Node;
                     function parent(const self&) -> Node;
                     function find(const self&, const string&: name) -> Node;
                     function reparent(self&, const Node&: new_parent) -> bool;
@@ -234,7 +234,7 @@ safe(compile) {
                 float: current_fps = 0.0;
                 float: average_fps = 0.0;
                 float: total_seconds = 0.0;
-                long int: frames = 0;
+                unsigned long int: frames = 0;
 
                 function start_frame(self&, std::time::Instant&: last) -> void {
                     const std::time::Instant: now = std::time::Instant::now();
@@ -262,9 +262,9 @@ safe(compile) {
                 } end function finish_frame
 
             public:
-                constructor(const string&: title, long int: width, long int: height, Backend: backend = Backend::best, bool: vsync = false) : window = Window::open(title, width, height), renderer = Renderer::make(self.window, backend, vsync) { }
+                constructor(const string&: title, unsigned long int: width, unsigned long int: height, Backend: backend = Backend::best, bool: vsync = false) : window = Window::open(title, width, height), renderer = Renderer::make(self.window, backend, vsync) { }
 
-                function quit(self&) -> void {
+                function quit(self&) noexcept -> void {
                     self.running = false;
                 } end function quit
 
@@ -272,31 +272,31 @@ safe(compile) {
                     return self.running && self.window.is_open();
                 } end function is_running
 
-                function delta_seconds(const self&) -> float {
+                function delta_seconds(const self&) noexcept -> float {
                     return self.delta;
                 } end function delta_seconds
 
-                function fps(const self&) -> float {
+                function fps(const self&) noexcept -> float {
                     return self.current_fps;
                 } end function fps
 
-                function fps_average(const self&) -> float {
+                function fps_average(const self&) noexcept -> float {
                     return self.average_fps;
                 } end function fps_average
 
-                function elapsed_seconds(const self&) -> float {
+                function elapsed_seconds(const self&) noexcept -> float {
                     return self.total_seconds;
                 } end function elapsed_seconds
 
-                function frame_count(const self&) -> long int {
+                function frame_count(const self&) noexcept -> unsigned long int {
                     return self.frames;
                 } end function frame_count
 
-                function width(const self&) -> long int {
+                function width(const self&) -> unsigned long int {
                     return self.window.width();
                 } end function width
 
-                function height(const self&) -> long int {
+                function height(const self&) -> unsigned long int {
                     return self.window.height();
                 } end function height
 

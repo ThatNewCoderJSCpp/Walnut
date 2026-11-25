@@ -288,6 +288,18 @@ auto Instantiator::canon_args(Span<parser_types::TemplateArgument* const> writte
         } else if (w && w->is_type()) {
             Type* t = m_types.canonicalize(w->type);
             a.type = w->is_pack ? m_types.pack_expansion(t) : t;
+            if (w->is_pack) {
+                std::vector<Type*> elems;
+                const SubstEnv* active = m_types.active_subst();
+                if (active && expand_into(a.type, *active, m_types, elems) && !(elems.size() == 1 && elems[0] && elems[0]->kind() == TypeKind::PackExpansion)) {
+                    for (Type* e : elems) {
+                        Arg each;
+                        each.type = e;
+                        out.push_back(each);
+                    }
+                    continue;
+                }
+            }
         } else if (w && w->is_value()) {
             if (!eval_value_arg(w->value, a)) { ok = false; continue; }
         }

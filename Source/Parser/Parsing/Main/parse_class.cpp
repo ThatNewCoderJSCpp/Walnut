@@ -336,6 +336,7 @@ nodes::TemplateDeclaration* Parser::template_for_friend(nodes::TemplateDeclarati
     }
 
     if (requires_clause) t->set_requires_clause(requires_clause);
+    if (own) t->m_requires_text = own->m_requires_text;
     t->set_declaration(fn);
     if (auto* f = nodes::node_cast<nodes::FunctionDeclaration>(fn)) register_template_name(f->get_name());
     return t;
@@ -549,7 +550,38 @@ nodes::ASTNode* Parser::parse_record_declaration(const modifiers::RawModifiers& 
         m_injected_spec     = &decl->m_spec_args;
     }
 
+    nodes::ASTNode* pending_requires = nullptr;
+    std::size_t pending_requires_at = 0;
+    std::string_view pending_requires_text;
+    tokenizing::Token pending_requires_token = current_token();
+
+    auto attach_requires = [&]() {
+        if (!pending_requires || decl->m_members.size() <= pending_requires_at) return;
+        nodes::ASTNode* target = decl->m_members[pending_requires_at].node;
+        if (target && target->kind == nodes::ASTNode::Kind::FunctionDeclaration) {
+            static_cast<nodes::FunctionDeclaration*>(target)->member_requires = pending_requires;
+            static_cast<nodes::FunctionDeclaration*>(target)->member_requires_text = pending_requires_text;
+        } else if (target && target->kind == nodes::ASTNode::Kind::OperatorFunctionDeclaration) {
+            static_cast<nodes::OperatorFunctionDeclaration*>(target)->member_requires = pending_requires;
+            static_cast<nodes::OperatorFunctionDeclaration*>(target)->member_requires_text = pending_requires_text;
+        }
+        else throw ParserError::invalid_declaration(reporter, pending_requires_token, "A 'requires' clause in a class has to come right before a method or an operator, as in 'requires std::traits::has_operator<std::traits::op::less, T> function sort(self&) -> void { ... }'; for a template method, put it after the 'template <...>' line");
+        pending_requires = nullptr;
+    };
+
     while (current_token().kind() != tokenizing::Token::Kind::RightCurly && current_token().kind() != tokenizing::Token::Kind::End) {
+        attach_requires();
+
+        if (current_token().kind() == tokenizing::Token::Kind::RequiresKeyword && !pending_requires) {
+            pending_requires_token = current_token();
+            const char* requires_start = current_token().data();
+            advance();
+            pending_requires = parse_expression();
+            pending_requires_text = source_between(requires_start, current_token().data());
+            pending_requires_at = decl->m_members.size();
+            continue;
+        }
+
         if (current_token().is_one_of(
                 tokenizing::Token::Kind::PublicKeyword,
                 tokenizing::Token::Kind::PrivateKeyword,
@@ -648,6 +680,9 @@ nodes::ASTNode* Parser::parse_record_declaration(const modifiers::RawModifiers& 
             }
         }
     }
+
+    attach_requires();
+    if (pending_requires) throw ParserError::invalid_declaration(reporter, pending_requires_token, "This 'requires' clause has no method after it");
 
     if (!match(tokenizing::Token::Kind::RightCurly)) {
         throw ParserError::missing_token(

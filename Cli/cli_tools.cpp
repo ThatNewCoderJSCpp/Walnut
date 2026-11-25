@@ -27,6 +27,7 @@ int highlight(const Options& o) {
     for (const std::string& extra : o.extra_inputs) compiler.add_input(extra);
     compiler.set_native_header_args([&o](bool cpp) { return native_header_args(o, cpp); });
     if (o.from_stdin) compiler.set_input_text(std::move(text));
+    compiler.record_macros();
 
     try {
         compiler.compile();

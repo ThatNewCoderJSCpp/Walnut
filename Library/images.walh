@@ -26,54 +26,54 @@ safe(compile) {
                     static function native_can_read(const string&: extension) -> bool as "walnut_rt::gfx::can_read_format";
                     static function native_can_write(const string&: extension) -> bool as "walnut_rt::gfx::can_write_format";
                     function valid(const self&) -> bool;
-                    function get(const self&, long int: x, long int: y) -> long int;
-                    function set(self&, long int: x, long int: y, long int: rgba) -> void;
-                    function native_fill(self&, long int: rgba) -> void as "fill";
-                    function native_fill_rect(self&, long int: x, long int: y, long int: w, long int: h, long int: rgba) -> void as "fill_rect";
-                    function native_save(const self&, const string&: path, long int: quality) -> string as "save";
-                    function native_resized(const self&, long int: w, long int: h) -> Image as "resized";
-                    function native_cropped(const self&, long int: x, long int: y, long int: w, long int: h) -> Image as "cropped";
+                    function get(const self&, unsigned long int: x, unsigned long int: y) -> unsigned long int;
+                    function set(self&, unsigned long int: x, unsigned long int: y, unsigned long int: rgba) -> void;
+                    function native_fill(self&, unsigned long int: rgba) -> void as "fill";
+                    function native_fill_rect(self&, long int: x, long int: y, unsigned long int: w, unsigned long int: h, unsigned long int: rgba) -> void as "fill_rect";
+                    function native_save(const self&, const string&: path, unsigned long int: quality) -> string as "save";
+                    function native_resized(const self&, unsigned long int: w, unsigned long int: h) -> Image as "resized";
+                    function native_cropped(const self&, unsigned long int: x, unsigned long int: y, unsigned long int: w, unsigned long int: h) -> Image as "cropped";
                     function native_flipped(const self&, bool: horizontal) -> Image as "flipped";
                     function native_rotated(const self&, long int: quarter_turns) -> Image as "rotated";
                     function native_draw(self&, const Image&: other, long int: x, long int: y) -> void as "draw";
                     function native_grayscale(const self&, float: percent) -> Image as "grayscale";
                     function native_inverted(const self&) -> Image as "inverted";
                     function native_sepia(const self&, float: percent) -> Image as "sepia";
-                    function native_blurred(const self&, long int: radius) -> Image as "blurred";
+                    function native_blurred(const self&, unsigned long int: radius) -> Image as "blurred";
                     function native_brightness(const self&, long int: amount) -> Image as "brightness";
                     function native_contrast(const self&, float: factor) -> Image as "contrast";
                     function native_saturation(const self&, float: percent) -> Image as "saturation";
                     function native_hue_rotated(const self&, float: degrees) -> Image as "hue_rotated";
                     function native_opacity(const self&, float: percent) -> Image as "opacity";
-                    function native_replace(const self&, long int: old_rgba, long int: new_rgba) -> Image as "replace_color";
-                    static function native_from_rgba(long int: w, long int: h, const std::collections::Vector<std::hardware_uint8>&: pixels) -> Image as "walnut_rt::gfx::image::from_rgba";
+                    function native_replace(const self&, unsigned long int: old_rgba, unsigned long int: new_rgba) -> Image as "replace_color";
+                    static function native_from_rgba(unsigned long int: w, unsigned long int: h, const std::collections::Vector<std::hardware_uint8>&: pixels) -> Image as "walnut_rt::gfx::image::from_rgba";
                     function native_to_rgba(const self&) -> std::collections::Vector<std::hardware_uint8> as "to_rgba";
 
-                    function check(const self&, long int: x, long int: y, const string&: what) -> void {
+                    function check(const self&, unsigned long int: x, unsigned long int: y, const string&: what) -> void {
                         if (!self.contains(x, y)) then {
                             throw std::errors::image_error(static_cast<string>(`${what}: (${x}, ${y}) is outside the ${self.width()} by ${self.height()} image`));
                         }
                     } end function check
 
-                    function check_size(const self&, long int: w, long int: h, const string&: what) -> void {
-                        if (w <= 0 || h <= 0) then {
+                    function check_size(const self&, unsigned long int: w, unsigned long int: h, const string&: what) -> void {
+                        if (w == 0 || h == 0) then {
                             throw std::errors::image_error(static_cast<string>(`${what} needs a width and height above 0, not ${w} by ${h}`));
                         }
                     } end function check_size
 
                 public:
                     constructor();
-                    constructor(long int: w, long int: h, long int: rgba);
+                    constructor(unsigned long int: w, unsigned long int: h, unsigned long int: rgba);
 
-                    static function make(long int: w, long int: h, const Color&: fill = std::colors::transparent) -> Image {
-                        if (w <= 0 || h <= 0) then {
+                    static function make(unsigned long int: w, unsigned long int: h, const Color&: fill = std::colors::transparent) -> Image {
+                        if (w == 0 || h == 0) then {
                             throw std::errors::image_error(static_cast<string>(`an image needs a width and height above 0, not ${w} by ${h}`));
                         }
                         return Image(w, h, fill.packed());
                     } end function make
 
-                    static function from_rgba(long int: w, long int: h, const std::collections::Vector<std::hardware_uint8>&: pixels) -> Image {
-                        if (w <= 0 || h <= 0) then {
+                    static function from_rgba(unsigned long int: w, unsigned long int: h, const std::collections::Vector<std::hardware_uint8>&: pixels) -> Image {
+                        if (w == 0 || h == 0) then {
                             throw std::errors::image_error(static_cast<string>(`Image::from_rgba() needs a width and height above 0, not ${w} by ${h}`));
                         }
                         if (pixels.size() != w * h * 4) then {
@@ -102,27 +102,27 @@ safe(compile) {
                         return native_can_write(extension);
                     } end function can_write
 
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function contains(const self&, long int: x, long int: y) -> bool;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
+                    function contains(const self&, unsigned long int: x, unsigned long int: y) -> bool;
 
                     function is_empty(const self&) -> bool {
                         return !self.valid();
                     } end function is_empty
 
-                    function save(const self&, const string&: path, long int: quality = 90) -> void {
+                    function save(const self&, const string&: path, unsigned long int: quality = 90) -> void {
                         const string: problem = self.native_save(path, quality);
                         if (problem.size() > 0) then {
                             throw std::errors::image_error(static_cast<string>(`can't save '${path}': ${problem}`));
                         }
                     } end function save
 
-                    function pixel(const self&, long int: x, long int: y) -> Color {
+                    function pixel(const self&, unsigned long int: x, unsigned long int: y) -> Color {
                         self.check(x, y, "pixel()");
                         return Color::from_packed(self.get(x, y));
                     } end function pixel
 
-                    function set_pixel(self&, long int: x, long int: y, const Color&: c) -> void {
+                    function set_pixel(self&, unsigned long int: x, unsigned long int: y, const Color&: c) -> void {
                         self.check(x, y, "set_pixel()");
                         self.set(x, y, c.packed());
                     } end function set_pixel
@@ -131,7 +131,7 @@ safe(compile) {
                         self.native_fill(c.packed());
                     } end function fill
 
-                    function fill_rect(self&, long int: x, long int: y, long int: w, long int: h, const Color&: c) -> void {
+                    function fill_rect(self&, long int: x, long int: y, unsigned long int: w, unsigned long int: h, const Color&: c) -> void {
                         self.native_fill_rect(x, y, w, h, c.packed());
                     } end function fill_rect
 
@@ -143,19 +143,19 @@ safe(compile) {
                         self.native_draw(other, x, y);
                     } end function draw
 
-                    function resized(const self&, long int: w, long int: h) -> Image {
+                    function resized(const self&, unsigned long int: w, unsigned long int: h) -> Image {
                         self.check_size(w, h, "resized()");
                         return self.native_resized(w, h);
                     } end function resized
 
                     function scaled(const self&, float: factor) -> Image {
-                        const long int: w = static_cast<long int>(static_cast<float>(self.width()) * factor + 0.5);
-                        const long int: h = static_cast<long int>(static_cast<float>(self.height()) * factor + 0.5);
+                        const unsigned long int: w = static_cast<unsigned long int>(static_cast<float>(self.width()) * factor + 0.5);
+                        const unsigned long int: h = static_cast<unsigned long int>(static_cast<float>(self.height()) * factor + 0.5);
                         self.check_size(w, h, "scaled()");
                         return self.native_resized(w, h);
                     } end function scaled
 
-                    function cropped(const self&, long int: x, long int: y, long int: w, long int: h) -> Image {
+                    function cropped(const self&, unsigned long int: x, unsigned long int: y, unsigned long int: w, unsigned long int: h) -> Image {
                         self.check_size(w, h, "cropped()");
                         return self.native_cropped(x, y, w, h);
                     } end function cropped
@@ -192,7 +192,7 @@ safe(compile) {
                         return self.native_sepia(amount * 100.0);
                     } end function sepia
 
-                    function blurred(const self&, long int: radius) -> Image {
+                    function blurred(const self&, unsigned long int: radius) -> Image {
                         return self.native_blurred(radius);
                     } end function blurred
 

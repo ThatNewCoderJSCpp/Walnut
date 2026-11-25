@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(walnut VERSION 1.4.6 LANGUAGES CXX)
+project(walnut VERSION 1.5.0 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -8,7 +8,7 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
-set(WALNUT_FIZMO_TAG "v1.4.8" CACHE STRING "Fizmo git tag to fetch")
+set(WALNUT_FIZMO_TAG "v1.5.0" CACHE STRING "Fizmo git tag to fetch")
 FetchContent_Declare(fizmo
     GIT_REPOSITORY https://github.com/ThatNewCoderJSCpp/Fizmo.git
     GIT_TAG        ${WALNUT_FIZMO_TAG}
@@ -253,7 +253,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/walnut_library.cpp.gen" "${_walnut_libra
 configure_file("${CMAKE_CURRENT_BINARY_DIR}/walnut_library.hpp.gen" "${CMAKE_CURRENT_BINARY_DIR}/generated/library/walnut_library.hpp" COPYONLY)
 configure_file("${CMAKE_CURRENT_BINARY_DIR}/walnut_library.cpp.gen" "${CMAKE_CURRENT_BINARY_DIR}/generated/library/walnut_library.cpp" COPYONLY)
 
-add_executable(walnut walnut.cpp Cli/cli_setup.cpp Cli/cli_compile.cpp Cli/cli_std.cpp Cli/cli_tools.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/library/walnut_library.cpp")
+add_executable(walnut walnut.cpp Cli/cli_setup.cpp Cli/cli_compile.cpp Cli/cli_std.cpp Cli/cli_tools.cpp Cli/cli_profile.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/library/walnut_library.cpp")
 target_include_directories(walnut PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>" "${CMAKE_CURRENT_BINARY_DIR}/generated/library")
 target_link_libraries(walnut PRIVATE walnut_core)
 

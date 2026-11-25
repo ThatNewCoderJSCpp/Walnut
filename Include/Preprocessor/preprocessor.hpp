@@ -60,6 +60,23 @@ struct Macro {
     FileId                   def_file = INVALID_FILE;
 };
 
+struct MacroUse {
+    FileId        file = INVALID_FILE;
+    std::uint32_t line = 0;
+    const char*   at = nullptr;
+    std::uint32_t length = 0;
+    std::string   name;
+    std::string   definition;
+    std::string   expansion;
+    bool          defined = true;
+};
+
+struct InactiveRange {
+    FileId        file = INVALID_FILE;
+    std::uint32_t first = 0;
+    std::uint32_t last = 0;
+};
+
 struct FileMark {
     std::size_t at = 0;
     FileId      file = INVALID_FILE;
@@ -78,6 +95,10 @@ public:
 
     tokenizing::TokenStream preprocess(FileId main);
     const std::vector<FileMark>& file_marks() const noexcept { return m_marks; }
+
+    void record_macros(bool on) noexcept { m_record = on; }
+    const std::vector<MacroUse>& macro_uses() const noexcept { return m_uses; }
+    const std::vector<InactiveRange>& inactive_ranges() const noexcept { return m_inactive; }
 
 private:
     struct Reader {
@@ -190,6 +211,18 @@ private:
 
     std::string spell(const TokenVec& toks);
 
+    static std::string display(const Token& t);
+
+    static std::string display_tokens(const Token* toks, std::size_t n);
+
+    std::string definition_text(std::string_view name, const Macro& m) const;
+
+    void record_use(const Token& name, std::string expansion);
+
+    void record_directive_names(const TokenVec& body, FileId file);
+
+    void cond_changed(bool before, std::uint32_t line, FileId file);
+
     long long parse_int(std::string_view sv);
 
     std::vector<Token> lex_fragment(const std::string& text);
@@ -206,6 +239,11 @@ private:
     Token int_token(long long v, std::uint32_t line) { return make_token(Kind::Integer, std::to_string(v), line); }
     Token retarget(const Token& t, std::uint32_t line) { return Token(t.kind(), t.data(), t.length(), line); }
     void emit(const Token& t) { m_out.push_back(t); }
+
+    bool m_record = false;
+    std::vector<MacroUse> m_uses;
+    std::vector<InactiveRange> m_inactive;
+    std::uint32_t m_inactive_from = 0;
 
     std::unordered_map<std::string, walnut::preprocessing::Macro>::iterator find_macro(std::string_view name) {
         m_key.assign(name.data(), name.size());

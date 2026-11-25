@@ -52,11 +52,11 @@ The type can be any float type, from `short short float` to `long long double`, 
 | `bernoulli(n)`, `euler_number(n)`, `tangent_number(n)`, `secant_number(n)`, `stieltjes(n)`, `eulerian_number(n, k)` | Numbered sequences |
 | `metallic_ratio(n)`, `inv_metallic_ratio(n)`, `metallic_mean(n)`, `inv_metallic_mean(n)`, `beraha(n)` | Numbered families of constants |
 
-The numbered ones take a `long int` index: `bernoulli<long float>(10)`. `eulerian_number(n, k)` takes two, and counts the permutations of n items with k ascents.
+The numbered ones take an `unsigned long int` index: `bernoulli<long float>(10)`. `eulerian_number(n, k)` takes two, and counts the permutations of n items with k ascents.
 
 ## Errors
 
-A negative index for a numbered constant, such as `bernoulli(-1)` or `eulerian_number(3, -1)`, stops the program with a runtime error.
+The index of a numbered constant is an `unsigned long int`, so `bernoulli(-1)` or `eulerian_number(3, -1)` is a compile-time error.
 
 ## Differences from C++
 

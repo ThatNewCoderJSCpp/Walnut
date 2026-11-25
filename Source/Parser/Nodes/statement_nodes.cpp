@@ -404,23 +404,31 @@ void TryCatchStatement::print(std::ostream& os, std::size_t indent) const {
     print_indent(os, indent + 1);
     os << "Try Body:\n";
     if (try_body) try_body->print(os, indent + 2);
-    print_indent(os, indent + 1);
-    os << "Catch";
+    if (catch_body) {
+        print_indent(os, indent + 1);
+        os << "Catch";
 
-    if (has_typed_catch) {
-        os << " (" << catch_type << " " << catch_name << "):\n";
-    } else {
-        os << " (" << catch_name << "):\n";
+        if (has_typed_catch) {
+            os << " (" << catch_type << " " << catch_name << "):\n";
+        } else {
+            os << " (" << catch_name << "):\n";
+        }
+
+        catch_body->print(os, indent + 2);
     }
-
-    catch_body->print(os, indent + 2);
     if (next_handler) next_handler->print(os, indent);
+    if (finally_body) {
+        print_indent(os, indent + 1);
+        os << "Finally:\n";
+        finally_body->print(os, indent + 2);
+    }
 }
 
 ASTNode* TryCatchStatement::clone_into(Arena& a) const {
-    auto* c = make_in<TryCatchStatement>(a, try_body ? clone_typed(try_body, a) : nullptr, catch_name, catch_type.clone_into(a), has_typed_catch, clone_typed(catch_body, a), line);
+    auto* c = make_in<TryCatchStatement>(a, try_body ? clone_typed(try_body, a) : nullptr, catch_name, catch_type.clone_into(a), has_typed_catch, catch_body ? clone_typed(catch_body, a) : nullptr, line);
     copy_base_to(c);
     if (next_handler) c->next_handler = static_cast<TryCatchStatement*>(next_handler->clone_into(a));
+    if (finally_body) c->finally_body = clone_typed(finally_body, a);
     return c;
 }
 
@@ -635,6 +643,7 @@ ASTNode* TemplateDeclaration::clone_into(Arena& a) const {
     c->m_declaration      = clone_child(m_declaration, a);
     c->m_is_empty_template = m_is_empty_template;
     c->m_requires_clause  = clone_child(m_requires_clause, a);
+    c->m_requires_text    = m_requires_text;
     return c;
 }
 

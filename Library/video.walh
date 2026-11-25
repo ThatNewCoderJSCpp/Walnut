@@ -57,18 +57,18 @@ safe(compile) {
                 float: volume = 1.0;
                 bool: muted = false;
                 float: rate = 1.0;
-                long int: max_queued_frames = 0;
+                unsigned long int: max_queued_frames = 0;
                 float: presentation_offset = 0.0;
                 float: audio_buffer_seconds = 1.0;
-                long int: sample_rate = 48000;
-                long int: channels = 2;
+                unsigned long int: sample_rate = 48000;
+                unsigned long int: channels = 2;
                 string: device = "";
-                long int: latency_ms = 30;
+                unsigned long int: latency_ms = 30;
                 Deinterlace: deinterlace = Deinterlace::when_interlaced;
                 DeinterlaceMode: deinterlace_mode = DeinterlaceMode::yadif;
                 bool: deinterlace_field_rate = false;
 
-                constructor() { }
+                constructor() noexcept { }
             } end struct PlayerOptions
 
             class Track;
@@ -93,13 +93,13 @@ safe(compile) {
                 } end class Api
 
                 class Track as "walnut_rt::video::track" {
-                    function native_kind(const self&) -> long int as "kind";
+                    function native_kind(const self&) -> unsigned long int as "kind";
 
                 public:
                     constructor();
                     function valid(const self&) -> bool;
-                    function index(const self&) -> long int;
-                    function id(const self&) -> long int;
+                    function index(const self&) noexcept -> unsigned long int;
+                    function id(const self&) -> unsigned long int;
 
                     function kind(const self&) -> MediaType {
                         return static_cast<MediaType>(self.native_kind());
@@ -111,19 +111,19 @@ safe(compile) {
                     function supported(const self&) -> bool;
                     function language(const self&) -> string;
                     function name(const self&) -> string;
-                    function is_default(const self&) -> bool;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function display_width(const self&) -> long int;
-                    function display_height(const self&) -> long int;
-                    function rotation(const self&) -> long int;
+                    function is_default(const self&) noexcept -> bool;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
+                    function display_width(const self&) -> unsigned long int;
+                    function display_height(const self&) -> unsigned long int;
+                    function rotation(const self&) -> unsigned long int;
                     function frame_rate(const self&) -> float;
-                    function sample_rate(const self&) -> long int;
-                    function channels(const self&) -> long int;
-                    function bits_per_sample(const self&) -> long int;
-                    function bitrate(const self&) -> long int;
+                    function sample_rate(const self&) -> unsigned long int;
+                    function channels(const self&) -> unsigned long int;
+                    function bits_per_sample(const self&) -> unsigned long int;
+                    function bitrate(const self&) -> unsigned long int;
                     function duration(const self&) -> float;
-                    function frame_count(const self&) -> long int;
+                    function frame_count(const self&) -> unsigned long int;
                     function codec_config(const self&) -> Vector<std::hardware_uint8>;
 
                     function to_string(const self&) -> string {
@@ -140,8 +140,8 @@ safe(compile) {
                 class MediaInfo as "walnut_rt::video::media_info" {
                     static function native_probe(const string&: path) -> MediaInfo as "walnut_rt::video::media_info::probe";
                     static function native_probe_bytes(const Vector<std::hardware_uint8>&: data) -> MediaInfo as "walnut_rt::video::media_info::probe_bytes";
-                    function native_track(const self&, long int: index) -> Track as "at";
-                    function native_track_count(const self&) -> long int as "track_count";
+                    function native_track(const self&, unsigned long int: index) -> Track as "at";
+                    function native_track_count(const self&) -> unsigned long int as "track_count";
 
                 public:
                     constructor();
@@ -162,25 +162,25 @@ safe(compile) {
                         return info;
                     } end function probe
 
-                    function valid(const self&) -> bool;
+                    function valid(const self&) noexcept -> bool;
                     function error(const self&) -> string;
                     function container(const self&) -> string;
                     function duration(const self&) -> float;
 
                     function tracks(const self&) -> Vector<Track> {
                         Vector<Track>: out;
-                        for (long int: i = 0; i < self.native_track_count(); i++) {
+                        for (unsigned long int: i = 0; i < self.native_track_count(); i++) {
                             out.push_back(self.native_track(i));
                         }
                         return out;
                     } end function tracks
 
-                    function track_count(const self&) -> long int {
+                    function track_count(const self&) -> unsigned long int {
                         return self.native_track_count();
                     } end function track_count
 
-                    function track(const self&, long int: index) -> Track {
-                        if (index < 0 || index >= self.native_track_count()) then {
+                    function track(const self&, unsigned long int: index) -> Track {
+                        if (index >= self.native_track_count()) then {
                             throw std::errors::video_error(static_cast<string>(`MediaInfo::track(): there is no track ${index} (the file has ${self.native_track_count()})`));
                         }
                         return self.native_track(index);
@@ -188,8 +188,8 @@ safe(compile) {
 
                     function tag(const self&, const string&: key) -> string;
                     function tag_keys(const self&) -> Vector<string>;
-                    function video_track(const self&) -> long int;
-                    function audio_track(const self&) -> long int;
+                    function video_track(const self&) -> unsigned long int;
+                    function audio_track(const self&) -> unsigned long int;
 
                     function has_video(const self&) -> bool {
                         return self.video_track() >= 0;
@@ -199,21 +199,21 @@ safe(compile) {
                         return self.audio_track() >= 0;
                     } end function has_audio
 
-                    function video_supported(const self&) -> bool;
-                    function audio_supported(const self&) -> bool;
+                    function video_supported(const self&) noexcept -> bool;
+                    function audio_supported(const self&) noexcept -> bool;
                     function video_codec(const self&) -> string;
                     function audio_codec(const self&) -> string;
                     function video_error(const self&) -> string;
                     function audio_error(const self&) -> string;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function display_width(const self&) -> long int;
-                    function display_height(const self&) -> long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
+                    function display_width(const self&) -> unsigned long int;
+                    function display_height(const self&) -> unsigned long int;
                     function display_aspect(const self&) -> float;
-                    function rotation(const self&) -> long int;
+                    function rotation(const self&) -> unsigned long int;
                     function frame_rate(const self&) -> float;
-                    function sample_rate(const self&) -> long int;
-                    function channels(const self&) -> long int;
+                    function sample_rate(const self&) -> unsigned long int;
+                    function channels(const self&) -> unsigned long int;
 
                     function to_string(const self&) -> string {
                         return static_cast<string>(`${self.container()}, ${self.duration()} s, ${self.native_track_count()} tracks`);
@@ -221,26 +221,26 @@ safe(compile) {
                 } end class MediaInfo
 
                 class Picture as "walnut_rt::video::picture" {
-                    function native_get(const self&, long int: x, long int: y) -> long int as "get";
-                    function native_save(const self&, const string&: path, long int: quality) -> string as "save";
+                    function native_get(const self&, unsigned long int: x, unsigned long int: y) -> unsigned long int as "get";
+                    function native_save(const self&, const string&: path, unsigned long int: quality) -> string as "save";
 
                 public:
                     constructor();
                     function empty(const self&) -> bool;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function serial(const self&) -> long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
+                    function serial(const self&) -> unsigned long int;
                     function time(const self&) -> float;
                     function pixels(const self&) -> Vector<std::hardware_uint8>;
 
-                    function pixel(const self&, long int: x, long int: y) -> Color {
-                        if (x < 0 || y < 0 || x >= self.width() || y >= self.height()) then {
+                    function pixel(const self&, unsigned long int: x, unsigned long int: y) -> Color {
+                        if (x >= self.width() || y >= self.height()) then {
                             throw std::errors::video_error(static_cast<string>(`Picture::pixel(): (${x}, ${y}) is outside the ${self.width()} by ${self.height()} picture`));
                         }
                         return Color::from_packed(self.native_get(x, y));
                     } end function pixel
 
-                    inline function save(const self&, const string&: path, long int: quality = 90) -> void {
+                    inline function save(const self&, const string&: path, unsigned long int: quality = 90) -> void {
                         detail::check_not_empty(self.native_save(path, quality), static_cast<string>(`can't save '${path}'`));
                     } end function save
 
@@ -250,14 +250,14 @@ safe(compile) {
                 } end class Picture
 
                 class VideoFrame as "walnut_rt::video::frame" {
-                    function native_format(const self&) -> long int as "format";
-                    function native_get(const self&, long int: x, long int: y) -> long int as "get";
-                    function native_plane(const self&, long int: index) -> Vector<std::hardware_uint8> as "plane";
-                    function native_sample(const self&, long int: index, long int: x, long int: y) -> long int as "sample";
-                    function native_save(const self&, const string&: path, long int: quality) -> string as "save";
+                    function native_format(const self&) -> unsigned long int as "format";
+                    function native_get(const self&, unsigned long int: x, unsigned long int: y) -> unsigned long int as "get";
+                    function native_plane(const self&, unsigned long int: index) -> Vector<std::hardware_uint8> as "plane";
+                    function native_sample(const self&, unsigned long int: index, unsigned long int: x, unsigned long int: y) -> unsigned long int as "sample";
+                    function native_save(const self&, const string&: path, unsigned long int: quality) -> string as "save";
 
-                    function check_plane(const self&, long int: index, const string&: what) -> void {
-                        if (index < 0 || index >= self.plane_count()) then {
+                    function check_plane(const self&, unsigned long int: index, const string&: what) -> void {
+                        if (index >= self.plane_count()) then {
                             throw std::errors::video_error(static_cast<string>(`${what}: plane ${index} doesn't exist in a ${self.format_name()} frame (${self.plane_count()} planes)`));
                         }
                     } end function check_plane
@@ -265,50 +265,50 @@ safe(compile) {
                 public:
                     constructor();
                     function empty(const self&) -> bool;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
                     function pts(const self&) -> float;
                     function keyframe(const self&) -> bool;
-                    function serial(const self&) -> long int;
+                    function serial(const self&) -> unsigned long int;
 
                     function format(const self&) -> PixelFormat {
                         return static_cast<PixelFormat>(self.native_format());
                     } end function format
 
                     function format_name(const self&) -> string;
-                    function bit_depth(const self&) -> long int;
-                    function plane_count(const self&) -> long int;
-                    function bytes_per_sample(const self&) -> long int;
-                    function plane_width(const self&, long int: index) -> long int;
-                    function plane_height(const self&, long int: index) -> long int;
-                    function sar_num(const self&) -> long int;
-                    function sar_den(const self&) -> long int;
+                    function bit_depth(const self&) -> unsigned long int;
+                    function plane_count(const self&) -> unsigned long int;
+                    function bytes_per_sample(const self&) -> unsigned long int;
+                    function plane_width(const self&, unsigned long int: index) -> unsigned long int;
+                    function plane_height(const self&, unsigned long int: index) -> unsigned long int;
+                    function sar_num(const self&) -> unsigned long int;
+                    function sar_den(const self&) -> unsigned long int;
                     function display_aspect(const self&) -> float;
                     function full_range(const self&) -> bool;
                     function color_matrix(const self&) -> string;
-                    function chroma_shift_x(const self&) -> long int;
-                    function chroma_shift_y(const self&) -> long int;
-                    function max_sample_value(const self&) -> long int;
+                    function chroma_shift_x(const self&) -> unsigned long int;
+                    function chroma_shift_y(const self&) -> unsigned long int;
+                    function max_sample_value(const self&) -> unsigned long int;
                     function interlaced(const self&) -> bool;
                     function top_field_first(const self&) -> bool;
                     function structure_name(const self&) -> string;
-                    function repeat_fields(const self&) -> long int;
+                    function repeat_fields(const self&) -> unsigned long int;
 
-                    function plane(const self&, long int: index) -> Vector<std::hardware_uint8> {
+                    function plane(const self&, unsigned long int: index) -> Vector<std::hardware_uint8> {
                         self.check_plane(index, "VideoFrame::plane()");
                         return self.native_plane(index);
                     } end function plane
 
-                    function sample(const self&, long int: index, long int: x, long int: y) -> long int {
+                    function sample(const self&, unsigned long int: index, unsigned long int: x, unsigned long int: y) -> unsigned long int {
                         self.check_plane(index, "VideoFrame::sample()");
-                        if (x < 0 || y < 0 || x >= self.plane_width(index) || y >= self.plane_height(index)) then {
+                        if (x >= self.plane_width(index) || y >= self.plane_height(index)) then {
                             throw std::errors::video_error(static_cast<string>(`VideoFrame::sample(): (${x}, ${y}) is outside plane ${index} (${self.plane_width(index)} by ${self.plane_height(index)})`));
                         }
                         return self.native_sample(index, x, y);
                     } end function sample
 
-                    function pixel(const self&, long int: x, long int: y) -> Color {
-                        if (x < 0 || y < 0 || x >= self.width() || y >= self.height()) then {
+                    function pixel(const self&, unsigned long int: x, unsigned long int: y) -> Color {
+                        if (x >= self.width() || y >= self.height()) then {
                             throw std::errors::video_error(static_cast<string>(`VideoFrame::pixel(): (${x}, ${y}) is outside the ${self.width()} by ${self.height()} frame`));
                         }
                         return Color::from_packed(self.native_get(x, y));
@@ -317,7 +317,7 @@ safe(compile) {
                     function rgba(const self&) -> Vector<std::hardware_uint8>;
                     function to_picture(const self&) -> Picture;
 
-                    inline function save(const self&, const string&: path, long int: quality = 90) -> void {
+                    inline function save(const self&, const string&: path, unsigned long int: quality = 90) -> void {
                         detail::check_not_empty(self.native_save(path, quality), static_cast<string>(`can't save '${path}'`));
                     } end function save
 
@@ -330,13 +330,13 @@ safe(compile) {
                 public:
                     constructor();
                     function valid(const self&) -> bool;
-                    function track(const self&) -> long int;
+                    function track(const self&) -> unsigned long int;
                     function pts(const self&) -> float;
                     function dts(const self&) -> float;
                     function duration(const self&) -> float;
                     function keyframe(const self&) -> bool;
-                    function position(const self&) -> long int;
-                    function size(const self&) -> long int;
+                    function position(const self&) -> unsigned long int;
+                    function size(const self&) -> unsigned long int;
                     function data(const self&) -> Vector<std::hardware_uint8>;
                     function discard_padding(const self&) -> float;
 
@@ -348,15 +348,15 @@ safe(compile) {
                 class Demuxer as "walnut_rt::video::demuxer" {
                     function native_open(self&, const string&: path) -> string as "open";
                     function native_open_bytes(self&, const Vector<std::hardware_uint8>&: data) -> string as "open_bytes";
-                    function native_track(const self&, long int: index) -> Track as "at";
-                    function native_track_count(const self&) -> long int as "track_count";
-                    function native_best(const self&, long int: kind) -> long int as "best_track";
-                    function native_select(self&, long int: index, bool: on) -> void as "select";
+                    function native_track(const self&, unsigned long int: index) -> Track as "at";
+                    function native_track_count(const self&) -> unsigned long int as "track_count";
+                    function native_best(const self&, unsigned long int: kind) -> unsigned long int as "best_track";
+                    function native_select(self&, unsigned long int: index, bool: on) -> void as "select";
                     function native_read(self&) -> Packet as "read";
                     function native_seek(self&, float: seconds, bool: before) -> bool as "seek";
 
-                    function check_track(const self&, long int: index, const string&: what) -> void {
-                        if (index < 0 || index >= self.native_track_count()) then {
+                    function check_track(const self&, unsigned long int: index, const string&: what) -> void {
+                        if (index >= self.native_track_count()) then {
                             throw std::errors::video_error(static_cast<string>(`${what}: there is no track ${index} (the file has ${self.native_track_count()})`));
                         }
                     } end function check_track
@@ -364,8 +364,8 @@ safe(compile) {
                 public:
                     constructor();
                     constructor(const Demuxer&: other) = delete;
-                    constructor(Demuxer&&: other);
-                    operator(=) function(self&, Demuxer&&: other) -> Demuxer&;
+                    constructor(Demuxer&&: other) noexcept;
+                    operator(=) function(self&, Demuxer&&: other) noexcept -> Demuxer&;
 
                     static function open(const string&: path) -> Demuxer {
                         Demuxer: d;
@@ -384,17 +384,17 @@ safe(compile) {
 
                     function tracks(const self&) -> Vector<Track> {
                         Vector<Track>: out;
-                        for (long int: i = 0; i < self.native_track_count(); i++) {
+                        for (unsigned long int: i = 0; i < self.native_track_count(); i++) {
                             out.push_back(self.native_track(i));
                         }
                         return out;
                     } end function tracks
 
-                    function track_count(const self&) -> long int {
+                    function track_count(const self&) -> unsigned long int {
                         return self.native_track_count();
                     } end function track_count
 
-                    function track(const self&, long int: index) -> Track {
+                    function track(const self&, unsigned long int: index) -> Track {
                         self.check_track(index, "Demuxer::track()");
                         return self.native_track(index);
                     } end function track
@@ -404,23 +404,23 @@ safe(compile) {
                     function tag(const self&, const string&: key) -> string;
                     function tag_keys(const self&) -> Vector<string>;
 
-                    function best_track(const self&, MediaType: kind) -> long int {
-                        return self.native_best(static_cast<long int>(kind));
+                    function best_track(const self&, MediaType: kind) -> unsigned long int {
+                        return self.native_best(static_cast<unsigned long int>(kind));
                     } end function best_track
 
-                    function select(self&, long int: index, bool: on = true) -> void {
+                    function select(self&, unsigned long int: index, bool: on = true) -> void {
                         self.check_track(index, "Demuxer::select()");
                         self.native_select(index, on);
                     } end function select
 
-                    function select_only(self&, long int: index) -> void {
+                    function select_only(self&, unsigned long int: index) -> void {
                         self.check_track(index, "Demuxer::select_only()");
-                        for (long int: i = 0; i < self.native_track_count(); i++) {
+                        for (unsigned long int: i = 0; i < self.native_track_count(); i++) {
                             self.native_select(i, i == index);
                         }
                     } end function select_only
 
-                    function selected(const self&, long int: index) -> bool;
+                    function selected(const self&, unsigned long int: index) -> bool;
 
                     function read(self&) -> Optional<Packet> {
                         Packet: p = self.native_read();
@@ -446,8 +446,8 @@ safe(compile) {
                 public:
                     constructor();
                     constructor(const VideoDecoder&: other) = delete;
-                    constructor(VideoDecoder&&: other);
-                    operator(=) function(self&, VideoDecoder&&: other) -> VideoDecoder&;
+                    constructor(VideoDecoder&&: other) noexcept;
+                    operator(=) function(self&, VideoDecoder&&: other) noexcept -> VideoDecoder&;
 
                     static function for_track(const Track&: track) -> VideoDecoder {
                         VideoDecoder: d = native_create(track);
@@ -478,10 +478,10 @@ safe(compile) {
                     function flush(self&) -> void;
                     function reset(self&) -> void;
                     function codec(const self&) -> string;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function frames_decoded(const self&) -> long int;
-                    function error_count(const self&) -> long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
+                    function frames_decoded(const self&) -> unsigned long int;
+                    function error_count(const self&) -> unsigned long int;
                 } end class VideoDecoder
 
                 class H264Decoder as "walnut_rt::video::h264_decoder" {
@@ -493,8 +493,8 @@ safe(compile) {
                 public:
                     constructor();
                     constructor(const H264Decoder&: other) = delete;
-                    constructor(H264Decoder&&: other);
-                    operator(=) function(self&, H264Decoder&&: other) -> H264Decoder&;
+                    constructor(H264Decoder&&: other) noexcept;
+                    operator(=) function(self&, H264Decoder&&: other) noexcept -> H264Decoder&;
 
                     function open(self&, const Vector<std::hardware_uint8>&: avcc) -> void {
                         detail::check_not_empty(self.native_open(avcc), "H264Decoder::open()");
@@ -523,19 +523,19 @@ safe(compile) {
                     function reset(self&) -> void;
                     function close(self&) -> void;
                     function is_open(const self&) -> bool;
-                    function profile(const self&) -> long int;
-                    function level(const self&) -> long int;
-                    function chroma_format(const self&) -> long int;
-                    function bit_depth(const self&) -> long int;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function coded_width(const self&) -> long int;
-                    function coded_height(const self&) -> long int;
+                    function profile(const self&) -> unsigned long int;
+                    function level(const self&) -> unsigned long int;
+                    function chroma_format(const self&) -> unsigned long int;
+                    function bit_depth(const self&) -> unsigned long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
+                    function coded_width(const self&) -> unsigned long int;
+                    function coded_height(const self&) -> unsigned long int;
                     function progressive(const self&) -> bool;
                     function cabac(const self&) -> bool;
                     function frame_rate(const self&) -> float;
-                    function frames_decoded(const self&) -> long int;
-                    function error_count(const self&) -> long int;
+                    function frames_decoded(const self&) -> unsigned long int;
+                    function error_count(const self&) -> unsigned long int;
                 } end class H264Decoder
 
                 class H264Reader as "walnut_rt::video::h264_reader" {
@@ -546,8 +546,8 @@ safe(compile) {
                 public:
                     constructor();
                     constructor(const H264Reader&: other) = delete;
-                    constructor(H264Reader&&: other);
-                    operator(=) function(self&, H264Reader&&: other) -> H264Reader&;
+                    constructor(H264Reader&&: other) noexcept;
+                    operator(=) function(self&, H264Reader&&: other) noexcept -> H264Reader&;
 
                     static function open(const string&: path) -> H264Reader {
                         H264Reader: r;
@@ -575,7 +575,7 @@ safe(compile) {
                 } end class H264Reader
 
                 class PlayerEvent as "walnut_rt::video::event" {
-                    function native_type(const self&) -> long int as "type";
+                    function native_type(const self&) -> unsigned long int as "type";
 
                 public:
                     constructor();
@@ -599,40 +599,40 @@ safe(compile) {
                 hidden class EventList as "walnut_rt::video::event_list" {
                 public:
                     constructor();
-                    function size(const self&) -> long int;
-                    function at(const self&, long int: index) -> PlayerEvent;
+                    function size(const self&) -> unsigned long int;
+                    function at(const self&, unsigned long int: index) -> PlayerEvent;
                 } end class EventList
 
                 class PlayerStats as "walnut_rt::video::stats" {
                 public:
                     constructor();
-                    function frames_decoded(const self&) -> long int;
-                    function frames_presented(const self&) -> long int;
-                    function frames_dropped(const self&) -> long int;
-                    function frames_skipped(const self&) -> long int;
-                    function packets_skipped(const self&) -> long int;
-                    function decode_errors(const self&) -> long int;
-                    function audio_underruns(const self&) -> long int;
-                    function queued_packets(const self&) -> long int;
-                    function queued_frames(const self&) -> long int;
+                    function frames_decoded(const self&) -> unsigned long int;
+                    function frames_presented(const self&) -> unsigned long int;
+                    function frames_dropped(const self&) -> unsigned long int;
+                    function frames_skipped(const self&) -> unsigned long int;
+                    function packets_skipped(const self&) -> unsigned long int;
+                    function decode_errors(const self&) -> unsigned long int;
+                    function audio_underruns(const self&) -> unsigned long int;
+                    function queued_packets(const self&) -> unsigned long int;
+                    function queued_frames(const self&) -> unsigned long int;
                     function audio_buffered(const self&) -> float;
                     function average_decode_ms(const self&) -> float;
                     function average_convert_ms(const self&) -> float;
-                    function audio_clock(const self&) -> bool;
-                    function frames_deinterlaced(const self&) -> long int;
-                    function deinterlacing(const self&) -> bool;
+                    function audio_clock(const self&) noexcept -> bool;
+                    function frames_deinterlaced(const self&) -> unsigned long int;
+                    function deinterlacing(const self&) noexcept -> bool;
                 } end class PlayerStats
 
                 class Player as "walnut_rt::video::player" {
-                    function native_configure(self&, bool: video, bool: audio, bool: rgba, bool: autoplay, bool: loop, bool: preserve_pitch, float: volume, bool: muted, float: rate, long int: max_queued_frames, float: presentation_offset, float: audio_buffer_seconds, long int: sample_rate, long int: channels, const string&: device, long int: latency_ms) -> void as "configure";
+                    function native_configure(self&, bool: video, bool: audio, bool: rgba, bool: autoplay, bool: loop, bool: preserve_pitch, float: volume, bool: muted, float: rate, unsigned long int: max_queued_frames, float: presentation_offset, float: audio_buffer_seconds, unsigned long int: sample_rate, unsigned long int: channels, const string&: device, unsigned long int: latency_ms) -> void as "configure";
                     function native_open(self&, const string&: path) -> string as "open";
                     function native_open_bytes(self&, const Vector<std::hardware_uint8>&: data) -> string as "open_bytes";
-                    function native_track(const self&, long int: index) -> Track as "at";
-                    function native_track_count(const self&) -> long int as "track_count";
-                    function native_select_video(self&, long int: index) -> string as "select_video_track";
-                    function native_select_audio(self&, long int: index) -> string as "select_audio_track";
+                    function native_track(const self&, unsigned long int: index) -> Track as "at";
+                    function native_track_count(const self&) -> unsigned long int as "track_count";
+                    function native_select_video(self&, unsigned long int: index) -> string as "select_video_track";
+                    function native_select_audio(self&, unsigned long int: index) -> string as "select_audio_track";
                     function native_seek(self&, float: seconds, bool: accurate) -> bool as "seek";
-                    function native_state(const self&) -> long int as "state_value";
+                    function native_state(const self&) -> unsigned long int as "state_value";
                     function native_set_rate(self&, float: rate) -> bool as "set_rate";
                     function native_poll(self&) -> EventList as "poll";
                     function native_on_event(self&, function(const PlayerEvent&) -> void: callback) -> void as "set_event_callback";
@@ -642,11 +642,11 @@ safe(compile) {
                     function native_attach(self&, const std::audio::Mixer&: mixer) -> void as "attach";
                     function native_play(self&) -> void as "play";
                     function native_set_volume(self&, float: volume) -> void as "set_volume";
-                    function native_configure_deinterlace(self&, long int: setting, long int: mode, bool: field_rate) -> void as "configure_deinterlace";
-                    function native_set_deinterlace(self&, long int: setting) -> void as "set_deinterlace_value";
-                    function native_deinterlace(const self&) -> long int as "deinterlace_value";
-                    function native_set_deinterlace_mode(self&, long int: mode, bool: field_rate) -> void as "set_deinterlace_mode_value";
-                    function native_deinterlace_mode(const self&) -> long int as "deinterlace_mode_value";
+                    function native_configure_deinterlace(self&, unsigned long int: setting, unsigned long int: mode, bool: field_rate) -> void as "configure_deinterlace";
+                    function native_set_deinterlace(self&, unsigned long int: setting) -> void as "set_deinterlace_value";
+                    function native_deinterlace(const self&) -> unsigned long int as "deinterlace_value";
+                    function native_set_deinterlace_mode(self&, unsigned long int: mode, bool: field_rate) -> void as "set_deinterlace_mode_value";
+                    function native_deinterlace_mode(const self&) -> unsigned long int as "deinterlace_mode_value";
 
                     function check_open(const self&, const string&: what) -> void {
                         if (!self.is_open()) then {
@@ -657,12 +657,12 @@ safe(compile) {
                 public:
                     constructor();
                     constructor(const Player&: other) = delete;
-                    constructor(Player&&: other);
-                    operator(=) function(self&, Player&&: other) -> Player&;
+                    constructor(Player&&: other) noexcept;
+                    operator(=) function(self&, Player&&: other) noexcept -> Player&;
 
                     function set_options(self&, const PlayerOptions&: o) -> void {
                         self.native_configure(o.video, o.audio, o.rgba, o.autoplay, o.loop, o.preserve_pitch, o.volume, o.muted, o.rate, o.max_queued_frames, o.presentation_offset, o.audio_buffer_seconds, o.sample_rate, o.channels, o.device, o.latency_ms);
-                        self.native_configure_deinterlace(static_cast<long int>(o.deinterlace), static_cast<long int>(o.deinterlace_mode), o.deinterlace_field_rate);
+                        self.native_configure_deinterlace(static_cast<unsigned long int>(o.deinterlace), static_cast<unsigned long int>(o.deinterlace_mode), o.deinterlace_field_rate);
                     } end function set_options
 
                     function open(self&, const string&: path) -> void {
@@ -689,7 +689,7 @@ safe(compile) {
 
                     function tracks(const self&) -> Vector<Track> {
                         Vector<Track>: out;
-                        for (long int: i = 0; i < self.native_track_count(); i++) {
+                        for (unsigned long int: i = 0; i < self.native_track_count(); i++) {
                             out.push_back(self.native_track(i));
                         }
                         return out;
@@ -698,22 +698,22 @@ safe(compile) {
                     function duration(const self&) -> float;
                     function has_video(const self&) -> bool;
                     function has_audio(const self&) -> bool;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function display_width(const self&) -> long int;
-                    function display_height(const self&) -> long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
+                    function display_width(const self&) -> unsigned long int;
+                    function display_height(const self&) -> unsigned long int;
                     function display_aspect(const self&) -> float;
-                    function rotation(const self&) -> long int;
+                    function rotation(const self&) -> unsigned long int;
                     function frame_rate(const self&) -> float;
-                    function video_track(const self&) -> long int;
-                    function audio_track(const self&) -> long int;
+                    function video_track(const self&) -> unsigned long int;
+                    function audio_track(const self&) -> unsigned long int;
 
-                    function select_video_track(self&, long int: index) -> void {
+                    function select_video_track(self&, unsigned long int: index) -> void {
                         self.check_open("Player::select_video_track()");
                         detail::check_not_empty(self.native_select_video(index), static_cast<string>(`can't play video track ${index}`));
                     } end function select_video_track
 
-                    function select_audio_track(self&, long int: index) -> void {
+                    function select_audio_track(self&, unsigned long int: index) -> void {
                         self.check_open("Player::select_audio_track()");
                         detail::check_not_empty(self.native_select_audio(index), static_cast<string>(`can't play audio track ${index}`));
                     } end function select_audio_track
@@ -773,7 +773,7 @@ safe(compile) {
                     function muted(const self&) -> bool;
 
                     function set_deinterlace(self&, Deinterlace: setting) -> void {
-                        self.native_set_deinterlace(static_cast<long int>(setting));
+                        self.native_set_deinterlace(static_cast<unsigned long int>(setting));
                     } end function set_deinterlace
 
                     function deinterlace(const self&) -> Deinterlace {
@@ -781,7 +781,7 @@ safe(compile) {
                     } end function deinterlace
 
                     function set_deinterlace_mode(self&, DeinterlaceMode: mode, bool: field_rate = false) -> void {
-                        self.native_set_deinterlace_mode(static_cast<long int>(mode), field_rate);
+                        self.native_set_deinterlace_mode(static_cast<unsigned long int>(mode), field_rate);
                     } end function set_deinterlace_mode
 
                     function deinterlace_mode(const self&) -> DeinterlaceMode {
@@ -796,7 +796,7 @@ safe(compile) {
                     function events(self&) -> Vector<PlayerEvent> {
                         EventList: list = self.native_poll();
                         Vector<PlayerEvent>: out;
-                        for (long int: i = 0; i < list.size(); i++) {
+                        for (unsigned long int: i = 0; i < list.size(); i++) {
                             out.push_back(list.at(i));
                         }
                         return out;
@@ -833,10 +833,10 @@ safe(compile) {
                         return Optional<Picture>(p);
                     } end function frame_rgba
 
-                    function frame_serial(const self&) -> long int;
+                    function frame_serial(const self&) -> unsigned long int;
                     function frame_time(const self&) -> float;
                     function next_frame_delay(const self&) -> float;
-                    function next_frame_delay_ms(const self&, long int: fallback_ms = 10) -> long int;
+                    function next_frame_delay_ms(const self&, unsigned long int: fallback_ms = 10) -> unsigned long int;
                     function stats(const self&) -> PlayerStats as "statistics";
 
                     function attach(self&, std::audio::Mixer&: mixer) -> void {
@@ -845,7 +845,7 @@ safe(compile) {
 
                     function detach(self&) -> void;
                     function attached(const self&) -> bool;
-                    function wait(const self&, long int: timeout_ms = -1) -> bool;
+                    function wait(const self&, unsigned long int: timeout_ms = std::npos) -> bool;
                 } end class Player
             } end extern
 

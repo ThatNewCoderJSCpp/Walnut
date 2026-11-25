@@ -53,6 +53,7 @@ namespace tokenizing {
     X(ClassKeyword, true, "class") \
     X(ContinueKeyword, true, "continue") \
     X(CatchKeyword, true, "catch") \
+    X(FinallyKeyword, true, "finally") \
     X(ConceptKeyword, true, "concept") \
     X(ConstexprKeyword, true, "constexpr") \
     X(ConstevalKeyword, true, "consteval") \

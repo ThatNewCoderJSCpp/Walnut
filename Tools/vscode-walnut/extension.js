@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const designer = require('./color-designer');
 
-const tokenTypes = ['namespace', 'class', 'struct', 'enum', 'type', 'typeParameter', 'concept', 'function', 'method', 'variable', 'parameter', 'property', 'enumMember', 'operator', 'unresolved'];
+const tokenTypes = ['namespace', 'class', 'struct', 'enum', 'type', 'typeParameter', 'concept', 'function', 'method', 'variable', 'parameter', 'property', 'enumMember', 'operator', 'unresolved', 'macro'];
 const tokenModifiers = ['declaration', 'overloaded', 'templateQualifier', 'variableTemplate'];
 const legend = new vscode.SemanticTokensLegend(tokenTypes, tokenModifiers);
 
@@ -400,6 +400,36 @@ function showErrorLines() {
     }
 }
 
+let inactiveDecoration = null;
+const inactiveRanges = new Map();
+
+function inactiveType() {
+    if (!inactiveDecoration) inactiveDecoration = vscode.window.createTextEditorDecorationType({ opacity: '0.45' });
+    return inactiveDecoration;
+}
+
+function setInactive(document, result) {
+    const list = [];
+    if (settings().get('dimInactiveCode', true)) {
+        for (const r of result.inactive || []) {
+            if (!Array.isArray(r) || r.length < 2) continue;
+            const first = Math.max(0, r[0]);
+            const last = Math.min(document.lineCount - 1, r[1]);
+            if (last < first) continue;
+            list.push(new vscode.Range(first, 0, last, document.lineAt(last).range.end.character));
+        }
+    }
+    inactiveRanges.set(document.uri.toString(), list);
+    showInactive();
+}
+
+function showInactive() {
+    for (const editor of vscode.window.visibleTextEditors) {
+        const list = inactiveRanges.get(editor.document.uri.toString());
+        if (list) editor.setDecorations(inactiveType(), list);
+    }
+}
+
 function setErrorLines(document, lines) {
     const key = document.uri.toString();
     if (lines.length) errorLines.set(key, lines); else errorLines.delete(key);
@@ -751,6 +781,10 @@ function hoverMarkdown(h, uri) {
         lines.push(`**${items.length > 1 ? many : one}:** ` + items.map(inlineCode).join(', '));
     };
 
+    if (h.expansion) {
+        md.appendMarkdown('**Expands to:**');
+        md.appendCodeblock(shorten(h.expansion), 'walnut');
+    }
     if (h.doc) md.appendMarkdown(h.doc + '  \n');
     add('Type', 'Types', h.types);
     add('Value', 'Values', h.values);
@@ -1080,6 +1114,7 @@ const provider = {
 
         if (cancel.isCancellationRequested || document.version !== version) throw new vscode.CancellationError();
         publishDiagnostics(document, result);
+        setInactive(document, result);
         storeHovers(document, result);
         storeLinks(document, result);
 
@@ -1338,6 +1373,7 @@ function activate(context) {
         vscode.languages.registerDocumentSymbolProvider(walnutSelector, symbolProvider, { label: 'Walnut' }),
         vscode.workspace.onDidCloseTextDocument(doc => { diagnostics.delete(doc.uri); lastResults.delete(doc.uri.toString()); errorLines.delete(doc.uri.toString()); hoverResults.delete(doc.uri.toString()); linkResults.delete(doc.uri.toString()); }),
         vscode.window.onDidChangeVisibleTextEditors(showErrorLines),
+        vscode.window.onDidChangeVisibleTextEditors(showInactive),
         vscode.workspace.onDidSaveTextDocument(doc => {
             if (doc.uri.scheme !== 'file') return;
             const saved = path.resolve(doc.uri.fsPath);
@@ -1359,7 +1395,7 @@ function activate(context) {
         vscode.commands.registerCommand('walnut.chooseColorTheme', chooseColorTheme),
         vscode.commands.registerCommand('walnut.saveColorsAsTheme', () => saveColorsAsTheme()),
         vscode.commands.registerCommand('walnut.openColorDesigner', openColorDesigner),
-        { dispose: () => { if (watchedColorsFile) fs.unwatchFile(watchedColorsFile); for (const child of running.values()) child.kill(); if (errorLineDecoration) errorLineDecoration.dispose(); } }
+        { dispose: () => { if (watchedColorsFile) fs.unwatchFile(watchedColorsFile); for (const child of running.values()) child.kill(); if (errorLineDecoration) errorLineDecoration.dispose(); if (inactiveDecoration) inactiveDecoration.dispose(); } }
     );
 
     watchColors();

@@ -41,6 +41,11 @@ std::string std_unit_flags(const std::string& flags) {
     std::string out = flags;
     const std::size_t at = out.find("-std=c++20");
     if (at != std::string::npos) out.replace(at, 10, "-std=c++17");
+    const std::string profile = " -DWALNUT_PROFILE";
+    for (std::size_t p = out.find(profile); p != std::string::npos; p = out.find(profile, p)) {
+        const std::size_t end = out.find(' ', p + 1);
+        out.erase(p, end == std::string::npos ? std::string::npos : end - p);
+    }
     return out;
 }
 

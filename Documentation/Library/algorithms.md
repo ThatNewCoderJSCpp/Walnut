@@ -36,7 +36,7 @@ function main() -> int {
     bool: has = std::algorithms::binary_search(v.begin(), v.end(), 7);
     long int: at = std::algorithms::lower_bound(v.begin(), v.end(), 6) - v.begin();
     std::algorithms::sort(v.begin(), v.end(), [](int: a, int: b) -> bool { return a > b; });
-    long int: odd = std::algorithms::count_if(v.begin(), v.end(), [](int: x) -> bool { return x % 2 == 1; });
+    unsigned long int: odd = std::algorithms::count_if(v.begin(), v.end(), [](int: x) -> bool { return x % 2 == 1; });
     std::io::println(v[0], " ", has, " ", at, " ", odd);
     return 0;
 } end function main
@@ -59,7 +59,7 @@ This prints `9 1 3 5`: after the second sort `v` is `9 7 5 3 1`, `7` was found, 
 |---|---|
 | `all_of(first, last, pred)`, `any_of(...)`, `none_of(...)` | Whether every, some or no element passes `pred` |
 | `equal(first, last, other)`, `equal(first, last, o_first, o_last)` | Whether two ranges hold equal elements |
-| `mismatch(first, last, o_first, o_last)` | The index of the first difference, or `-1` if the ranges are equal |
+| `mismatch(first, last, o_first, o_last)` | The index of the first difference, or `std::npos` if the ranges are equal |
 | `starts_with(first, last, p_first, p_last)`, `ends_with(...)` | Whether the range begins or ends with another one |
 | `lexicographical_compare(first, last, o_first, o_last)` | Whether the first range comes before the second, like comparing words in a dictionary |
 | `is_sorted(first, last)`, `is_sorted(first, last, comp)` | Whether the range is in order |
@@ -72,7 +72,7 @@ This prints `9 1 3 5`: after the second sort `v` is `9 7 5 3 1`, `7` was found, 
 |---|---|
 | `find(first, last, value)`, `find_if(first, last, pred)`, `find_if_not(...)` | The first match |
 | `find_last(first, last, value)`, `find_last_if(first, last, pred)` | The last match |
-| `index_of(first, last, value)`, `index_if(first, last, pred)` | The index of the first match, or `-1` |
+| `index_of(first, last, value)`, `index_if(first, last, pred)` | The index of the first match, or `std::npos` |
 | `contains(first, last, value)`, `contains_if(first, last, pred)` | Whether there is a match |
 | `adjacent_find(first, last)`, `adjacent_find(first, last, pred)` | The first of two equal neighbours |
 | `find_first_of(first, last, s_first, s_last)` | The first element that is also in the second range |
@@ -174,7 +174,7 @@ Here `three` is `6` (`1 + 2 + 3`) and `top` is `6`.
 | `accumulate(first, last, init)` | `init` plus every element, in order |
 | `accumulate(first, last, init, op)` | `op(op(op(init, a), b), c)` and so on |
 | `reduce(...)` | The same as `accumulate` |
-| `for_each(first, last, func)`, `for_each_indexed(first, last, func)` | Calls `func(x)`, or `func(index, x)`, on each element |
+| `for_each(first, last, func)`, `for_each_indexed(first, last, func)` | Calls `func(x)`, or `func(index, x)` with an `unsigned long int` index, on each element |
 
 ## Heaps
 

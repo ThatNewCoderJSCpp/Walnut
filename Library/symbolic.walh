@@ -30,7 +30,7 @@ safe(compile) {
                     function set(const string&: name, const T&: value) -> void;
                     function has(const string&: name) const -> bool;
                     function clear() -> void;
-                    function size() const -> long int;
+                    function size() const -> unsigned long int;
                 } end class Values
             } end extern
 
@@ -49,8 +49,8 @@ safe(compile) {
                         function identical(const self&, const Node&: other) -> bool;
                         function equals(const self&, const Node&: other) -> bool;
                         function depends_on(const self&, const string&: name) -> bool;
-                        function variable_count(const self&) -> long int;
-                        function variable_name(const self&, long int: index) -> string;
+                        function variable_count(const self&) -> unsigned long int;
+                        function variable_name(const self&, unsigned long int: index) -> string;
                         function numerator(const self&) -> string;
                         function denominator(const self&) -> string;
                         function to_string(const self&) -> string;
@@ -59,7 +59,7 @@ safe(compile) {
                         function simplify(const self&) -> Node;
                         function full_simplify(const self&) -> Node;
                         function derivative(const self&, const string&: name) -> Node;
-                        function nth_derivative(const self&, const string&: name, long int: order) -> Node;
+                        function nth_derivative(const self&, const string&: name, unsigned long int: order) -> Node;
                         function substitute(const self&, const string&: name, const Node&: replacement) -> Node;
                         function antiderivative(const self&, const string&: name) -> Node;
                         operator(-) function(const self&) -> Node;
@@ -74,7 +74,7 @@ safe(compile) {
                         static function symbol(const string&: name) -> Node as "walnut_rt::symbolic::variable";
                         static function number(long int: value) -> Node as "walnut_rt::symbolic::number";
                         static function parse_number(const string&: digits) -> Node as "walnut_rt::symbolic::parse_number";
-                        static function rational(long int: numerator, long int: denominator) -> Node as "walnut_rt::symbolic::rational";
+                        static function rational(long int: numerator, unsigned long int: denominator) -> Node as "walnut_rt::symbolic::rational";
                         static function from_big(const std::math::BigFloat&: value) -> Node as "walnut_rt::symbolic::from_big";
                         static function pi() -> Node as "walnut_rt::symbolic::pi";
                         static function e() -> Node as "walnut_rt::symbolic::e";
@@ -177,11 +177,11 @@ safe(compile) {
                 detail::Node: m_node;
 
             public:
-                constructor() { }
+                constructor() noexcept { }
 
                 constructor(const detail::Node&: n) : m_node(n) { }
 
-                function node(const self&) -> const detail::Node& {
+                function node(const self&) noexcept -> const detail::Node& {
                     return self.m_node;
                 } end function node
 
@@ -217,12 +217,12 @@ safe(compile) {
                     return self.m_node.depends_on(name);
                 } end function depends_on
 
-                function variable_count(const self&) -> long int {
+                function variable_count(const self&) -> unsigned long int {
                     return self.m_node.variable_count();
                 } end function variable_count
 
-                function variable_name(const self&, long int: index) -> string {
-                    if (index < 0 || index >= self.m_node.variable_count()) then {
+                function variable_name(const self&, unsigned long int: index) -> string {
+                    if (index >= self.m_node.variable_count()) then {
                         throw std::errors::symbolic_error(static_cast<string>(`variable_name: index ${index} is out of range for ${self.m_node.variable_count()} variables`));
                     }
                     return self.m_node.variable_name(index);
@@ -270,10 +270,7 @@ safe(compile) {
                     return Expression(self.m_node.derivative(name));
                 } end function derivative
 
-                function derivative(const self&, const string&: name, long int: order) -> Expression {
-                    if (order < 0) then {
-                        throw std::errors::symbolic_error(static_cast<string>(`derivative: the order ${order} is negative`));
-                    }
+                function derivative(const self&, const string&: name, unsigned long int: order) -> Expression {
                     return Expression(self.m_node.nth_derivative(name, order));
                 } end function derivative
 
@@ -393,7 +390,7 @@ safe(compile) {
                 return Expression(detail::Api::parse_number(digits));
             } end function number
 
-            function rational(long int: numerator, long int: denominator) -> Expression {
+            function rational(long int: numerator, unsigned long int: denominator) -> Expression {
                 if (denominator == 0) then {
                     throw std::errors::symbolic_error("rational: the denominator is 0");
                 }

@@ -377,9 +377,19 @@ void OwnershipChecker::try_statement(nodes::TryCatchStatement* t) {
     const Flow catch_start = join({ pre, after_try });
     std::vector<Flow> outs{ after_try };
     for (nodes::TryCatchStatement* h = t; h; h = h->next_handler) {
+        if (!h->catch_body) continue;
         m_flow = catch_start;
-        if (h->catch_body) block(h->catch_body);
+        block(h->catch_body);
         outs.push_back(m_flow);
+    }
+    if (t->finally_body) {
+        const bool continues = join(outs).live;
+        outs.push_back(catch_start);
+        m_flow = join(outs);
+        m_flow.live = true;
+        block(t->finally_body);
+        if (!continues) m_flow.live = false;
+        return;
     }
     m_flow = join(outs);
 }

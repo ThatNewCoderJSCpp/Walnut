@@ -6,7 +6,7 @@
 import module.chemistry
 ```
 
-Everything is in the namespace `std::chemistry`. Numbers cross as `short float` (C++ `double`) and counts as `long int`. Energies are in kJ/mol unless they say otherwise, lengths in picometres, temperatures in kelvin and pressures in pascals.
+Everything is in the namespace `std::chemistry`. Numbers cross as `short float` (C++ `double`) and counts and indexes as `unsigned long int`. Energies are in kJ/mol unless they say otherwise, lengths in picometres, temperatures in kelvin and pressures in pascals.
 
 ## Contents
 
@@ -69,7 +69,7 @@ Ionic names use Stock numerals for metals with more than one common charge; clas
 Fizmo keeps a table of over 150 polyatomic ions: cations (hydronium, ammonium, mercury(I), nitronium, uranyl, ...), oxyanions of every common family, organic anions, metal oxyanions and common complex ions. Each has a name, other names, its parent acid and a structure (SMILES).
 
 ```walnut
-for (long int: i = 0l; i < std::chemistry::polyatomic_ion_count(); i += 1l) {
+for (unsigned long int: i = 0; i < std::chemistry::polyatomic_ion_count(); i++) {
     std::io::println(`${std::chemistry::polyatomic_ion_formula(i)}  ${std::chemistry::polyatomic_ion_name(i)}`);
 }
 ```
@@ -77,7 +77,7 @@ for (long int: i = 0l; i < std::chemistry::polyatomic_ion_count(); i += 1l) {
 | Function | |
 |---|---|
 | `polyatomic_ion_count()`, `polyatomic_ion_name(i)`, `polyatomic_ion_formula(i)`, `polyatomic_ion_charge(i)`, `polyatomic_ion_category(i)`, `polyatomic_ion_structure(i)`, `polyatomic_ion_acid(i)` | the table |
-| `find_polyatomic_ion(name_or_formula)` | its index, or -1 |
+| `find_polyatomic_ion(name_or_formula)` | its index, or `std::npos` |
 | `ion_name(text)`, `ion_charge(text)` | reads `"Fe3+"`, `"SO42-"`, `"SO4^2-"`, `"iron(III)"`, `"sulfate"` |
 | `ionic_formula(cation, anion)` | `ionic_formula("Al3+", "sulfate")` is `"Al2(SO4)3"` |
 | `solubility(formula)` | `"soluble"`, `"slightly soluble"`, `"insoluble"` or `"reacts with water"`, from the solubility rules |

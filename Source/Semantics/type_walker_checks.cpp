@@ -1,5 +1,7 @@
 #include "Semantics/type_walker.hpp"
 #include "Semantics/type_ops.hpp"
+#include "Semantics/substitution.hpp"
+#include "Common/arena_allocator.hpp"
 #include "Parser/Nodes/node_children.hpp"
 #include <unordered_set>
 #include <algorithm>
@@ -159,11 +161,30 @@ bool TypeWalker::concept_satisfied(Symbol* cept, const TemplateArgs& args) {
     nodes::TemplateDeclaration* tmpl = cept->template_decl;
     if (!tmpl || m_constraint_depth > 64) return false;
     const auto& ps = tmpl->params();
-    if (args.size() != ps.size()) return false;
+    const bool has_pack = !ps.empty() && ps.back()->m_is_pack;
+    if (!has_pack && args.size() > ps.size()) return false;
     SubstEnv env;
 
     for (std::size_t i = 0; i < ps.size(); ++i) {
         if (!ps[i]->symbol) return false;
+        if (has_pack && i + 1 == ps.size()) {
+            std::vector<Type*> rest;
+            for (std::size_t k = i; k < args.size(); ++k) {
+                if (!args[k].is_type || !args[k].type) return false;
+                rest.push_back(args[k].type);
+            }
+            env.packs[ps[i]->symbol] = std::move(rest);
+            break;
+        }
+        if (i >= args.size()) {
+            if (!ps[i]->m_has_default_type) return false;
+            m_types.push_subst(&env);
+            Type* d = m_types.canonicalize(ps[i]->m_default_type);
+            m_types.pop_subst();
+            if (!d || d->is_error()) return false;
+            env.types[ps[i]->symbol] = d;
+            continue;
+        }
         const TemplateArg& a = args[i];
         if      (a.is_type)  env.types  [ps[i]->symbol] = a.type;
         else if (a.value)    env.values [ps[i]->symbol] = a.value;
@@ -307,17 +328,59 @@ bool TypeWalker::requires_satisfied(nodes::RequiresExpression* r) {
     if (r->scope) m_current = r->scope;
     bool ok = true;
 
+    struct SavedPack {
+        nodes::FunctionParameter* param;
+        bool expanded;
+        std::vector<Symbol*> symbols;
+    };
+    std::vector<SavedPack> saved_packs;
+    bool unbound_pack = false;
+    const SubstEnv* active = m_types.active_subst();
+
+    if (r->m_parameters && m_inst) {
+        for (nodes::FunctionParameter* p : *r->m_parameters) {
+            if (!p->is_variadic() || !p->symbol) continue;
+            Type* et = m_types.canonicalize(p->get_type());
+            std::vector<Symbol*> pks;
+            collect_pack_params(et, pks);
+            if (pks.empty()) continue;
+            bool bound = active != nullptr;
+            for (Symbol* s : pks) bound = bound && active->lookup_pack(s) != nullptr;
+            if (!bound) { unbound_pack = true; continue; }
+            std::vector<Type*> elems;
+            Type* pattern = et && et->kind() == TypeKind::PackExpansion ? et : m_types.pack_expansion(et);
+            if (!expand_into(pattern, *active, m_types, elems)) { ok = false; continue; }
+            saved_packs.push_back(SavedPack{ p, p->expanded_pack, std::vector<Symbol*>(p->pack_symbols.begin(), p->pack_symbols.end()) });
+            ArenaScope arena(m_inst->arena());
+            p->expanded_pack = true;
+            p->pack_symbols.clear();
+            for (std::size_t k = 0; k < elems.size(); ++k) {
+                Symbol* es = synthetic_symbol(std::string(p->get_name()) + "#" + std::to_string(k), elems[k], p);
+                es->kind = SymbolKind::Parameter;
+                es->owner = p->symbol->owner;
+                p->pack_symbols.push_back(es);
+            }
+        }
+    }
+
+    auto requirement_expr = [&](nodes::ASTNode* e) -> nodes::ASTNode* {
+        if (saved_packs.empty() || !e) return e;
+        ArenaScope arena(m_inst->arena());
+        return clone_resolved(e);
+    };
+
     for (auto& req : r->m_requirements) {
         if (!ok) break;
 
         switch (req.form) {
             case Form::Simple:
-                walk_expr(req.expr);
+                walk_expr(requirement_expr(req.expr));
                 break;
 
             case Form::Compound: {
-                walk_expr(req.expr);
-                Type* t = type_of(req.expr);
+                nodes::ASTNode* expr = requirement_expr(req.expr);
+                walk_expr(expr);
+                Type* t = type_of(expr);
                 if (!req.has_type_constraint || !t) break;
                 Symbol* cs = req.type.resolved;
 
@@ -337,7 +400,12 @@ bool TypeWalker::requires_satisfied(nodes::RequiresExpression* r) {
 
             case Form::Type: {
                 Type* t = m_types.canonicalize(req.type);
+                if (t && !t->is_error()) t = m_types.apply_subst(t);
                 ok = t && !t->is_error() && !contains_error(t);
+                if (ok && t->kind() == TypeKind::Dependent) {
+                    const Type* base = static_cast<const DependentType*>(t)->base();
+                    if (base && (base->kind() == TypeKind::Record || base->kind() == TypeKind::Builtin || base->kind() == TypeKind::Enum || base->kind() == TypeKind::Pointer)) ok = false;
+                }
                 break;
             }
 
@@ -349,9 +417,16 @@ bool TypeWalker::requires_satisfied(nodes::RequiresExpression* r) {
         }
     }
 
+    for (const SavedPack& sp : saved_packs) {
+        ArenaScope arena(m_inst->arena());
+        sp.param->expanded_pack = sp.expanded;
+        sp.param->pack_symbols.clear();
+        for (Symbol* s : sp.symbols) sp.param->pack_symbols.push_back(s);
+    }
+
     m_current = saved;
     const bool had_errors = trap.discard();
-    return ok && !had_errors;
+    return ok && !had_errors && !unbound_pack;
 }
 
 bool TypeWalker::constraint_holds(nodes::ASTNode* e, std::string& failed) {
@@ -456,6 +531,21 @@ bool TypeWalker::constraint_holds(nodes::ASTNode* e, std::string& failed) {
     return false;
 }
 
+bool TypeWalker::member_constraint_holds(Symbol* fn, const SubstEnv* env, std::string& failed) {
+    if (!fn || !fn->decl) return true;
+    nodes::ASTNode* clause = nullptr;
+    if (fn->decl->kind == K::FunctionDeclaration) clause = static_cast<nodes::FunctionDeclaration*>(fn->decl)->member_requires;
+    else if (fn->decl->kind == K::OperatorFunctionDeclaration) clause = static_cast<nodes::OperatorFunctionDeclaration*>(fn->decl)->member_requires;
+    if (!clause) return true;
+    if (env) m_types.push_subst(env);
+    Scope* saved = m_current;
+    if (fn->owner) m_current = fn->owner;
+    const bool ok = constraint_holds(clause, failed);
+    m_current = saved;
+    if (env) m_types.pop_subst();
+    return ok;
+}
+
 bool TypeWalker::constraints_satisfied(nodes::TemplateDeclaration* tmpl, const SubstEnv& env, std::string& failed) {
     if (!tmpl) return true;
     bool has_any = tmpl->m_requires_clause != nullptr;
@@ -551,6 +641,7 @@ CandidateMatch TypeWalker::match_with_constants(const ArenaVector<nodes::ASTNode
     if (m.viable || !nodes || nodes->size() != args.size()) return m;
     std::vector<Type*> adjusted = args;
     std::vector<bool>  changed(args.size(), false);
+    std::vector<bool>  const_ref(args.size(), false);
     bool any = false;
 
     auto adjust = [&](std::size_t i, Type* want) {
@@ -558,6 +649,7 @@ CandidateMatch TypeWalker::match_with_constants(const ArenaVector<nodes::ASTNode
         if (want->is_reference()) {
             auto* rt = static_cast<ReferenceType*>(want);
             if (rt->ref_qual() == RefQual::LValue && !rt->referent()->cv().is_const) return;
+            if (rt->ref_qual() == RefQual::LValue) const_ref[i] = true;
             want = rt->referent();
         }
         if (constant_fits((*nodes)[i], args[i], want)) { adjusted[i] = m_types.strip_cv(want); changed[i] = true; any = true; }
@@ -575,7 +667,10 @@ CandidateMatch TypeWalker::match_with_constants(const ArenaVector<nodes::ASTNode
     CandidateMatch a = match_arguments(shapes, adjusted, m_types);
     if (!a.viable) return m;
     for (std::size_t i = 0; i < a.ranks.size() && i < changed.size(); ++i) {
-        if (changed[i] && a.ranks[i] < ConversionRank::Conversion) a.ranks[i] = ConversionRank::Conversion;
+        if (!changed[i]) continue;
+        const bool walnut_int = adjusted[i] && adjusted[i]->is_builtin() && static_cast<BuiltinType*>(adjusted[i])->base() == parser_types::PrimitiveType::BaseKind::Int && !static_cast<BuiltinType*>(adjusted[i])->is_hardware();
+        const ConversionRank floor = walnut_int ? (const_ref[i] ? ConversionRank::ConstantFitConstRef : ConversionRank::ConstantFit) : ConversionRank::Conversion;
+        if (a.ranks[i] < floor) a.ranks[i] = floor;
     }
     return a;
 }
@@ -611,7 +706,7 @@ void TypeWalker::check_constant_init(nodes::VariableDeclaration* v, Type* target
         ConstEvaluator::RandomPermit permit(m_eval, v);
         raw = eval_checked(v->m_initializer, true);
     } else {
-        raw = eval_checked(v->m_initializer, true);
+        raw = eval_checked(v->m_initializer, required);
     }
     if (raw.is_error()) return;
 
@@ -621,7 +716,9 @@ void TypeWalker::check_constant_init(nodes::VariableDeclaration* v, Type* target
     }
 
     ConstValue fitted = m_eval.coerce(raw, t);
-    if (fitted.is_error()) SemanticError::not_a_constant(m_reporter, file_of(v), v->line, fail_message(fitted.fail));
+    Type* from = type_of(v->m_initializer);
+    const bool type_error = from && target && !from->is_error() && rank_conversion(from, target, m_types) == ConversionRank::None;
+    if (fitted.is_error() && !type_error) SemanticError::not_a_constant(m_reporter, file_of(v), v->line, fail_message(fitted.fail));
 }
 
 auto TypeWalker::operand_class(Type* t) -> OperandClass {
@@ -887,6 +984,13 @@ Type* TypeWalker::resolve_member_operator(Type* recv, nodes::OverloadableOperato
         if (!o->decl || o->decl->kind != K::OperatorFunctionDeclaration) continue;
         auto* od = static_cast<nodes::OperatorFunctionDeclaration*>(o->decl);
         if (od->get_overload() != wanted) continue;
+        {
+            std::string failed;
+            if (!member_constraint_holds(o, env_of_symbol(o), failed)) {
+                m_last_constraint_failure = failed;
+                continue;
+            }
+        }
         EnvGuard g(m_types, env_of_symbol(o));
         matches.push_back(match_arguments(shapes_of(o), extra, m_types));
         cands.push_back(o);
@@ -2149,7 +2253,7 @@ bool TypeWalker::breaks_out(const nodes::ASTNode* s) {
         case K::TryCatchStatement: {
             auto* t = static_cast<const nodes::TryCatchStatement*>(s);
             if (breaks_out(t->try_body)) return true;
-            for (const nodes::TryCatchStatement* h = t; h; h = h->next_handler) if (breaks_out(h->catch_body)) return true;
+            for (const nodes::TryCatchStatement* h = t; h; h = h->next_handler) if (h->catch_body && breaks_out(h->catch_body)) return true;
             return false;
         }
         default: return false;
@@ -2222,8 +2326,9 @@ bool TypeWalker::always_exits(nodes::ASTNode* s) {
 
         case K::TryCatchStatement: {
             auto* t = static_cast<nodes::TryCatchStatement*>(s);
+            if (t->finally_body && always_exits(t->finally_body)) return true;
             if (!always_exits(t->try_body)) return false;
-            for (nodes::TryCatchStatement* h = t; h; h = h->next_handler) if (!always_exits(h->catch_body)) return false;
+            for (nodes::TryCatchStatement* h = t; h; h = h->next_handler) if (h->catch_body && !always_exits(h->catch_body)) return false;
             return true;
         }
 
@@ -2346,12 +2451,165 @@ void TypeWalker::check_clamped_cast(nodes::CastExpression* c, Type* dst) {
     report_overflow(c, "this cast's value doesn't fit in '" + type_str(t) + "', so it is clamped to " + v.i->to_string());
 }
 
+namespace {
+
+const BuiltinType* integer_builtin(TypeContext& types, Type* t) {
+    using BK = parser_types::PrimitiveType::BaseKind;
+    if (t && t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+    t = types.strip_cv(t);
+    if (!t || !t->is_builtin() || t->is_dependent()) return nullptr;
+    const auto* b = static_cast<const BuiltinType*>(t);
+    return b->base() == BK::Int ? b : nullptr;
+}
+
+bool fails_to_fit(const ConstValue& v) {
+    return v.fail == ConstValue::Fail::Overflow || v.fail == ConstValue::Fail::Wrapped || v.fail == ConstValue::Fail::ShiftWidth;
+}
+
+} // namespace
+
+namespace {
+
+const parser_types::TypeInfo* declared_type_of(nodes::ASTNode* e) {
+    semantics::Symbol* s = nullptr;
+    if (e && e->kind == nodes::ASTNode::Kind::Identifier) s = static_cast<nodes::Identifier*>(e)->resolved;
+    else if (e && e->kind == nodes::ASTNode::Kind::MemberAccessExpression) s = static_cast<nodes::MemberAccessExpression*>(e)->resolved;
+    if (!s || !s->decl) return nullptr;
+    if (s->decl->kind == nodes::ASTNode::Kind::VariableDeclaration) return &static_cast<nodes::VariableDeclaration*>(s->decl)->m_type_info;
+    if (s->decl->kind == nodes::ASTNode::Kind::FunctionParameter) return &static_cast<nodes::FunctionParameter*>(s->decl)->get_type();
+    return nullptr;
+}
+
+bool spelled_unsigned_integer(nodes::ASTNode* e) {
+    const parser_types::TypeInfo* t = declared_type_of(e);
+    if (!t || !t->type || !t->type->is_primitive() || !t->indirection.empty()) return false;
+    const auto* p = static_cast<const parser_types::PrimitiveType*>(t->type);
+    return p->is_unsigned() && p->base_kind() == parser_types::PrimitiveType::BaseKind::Int;
+}
+
+} // namespace
+
+void TypeWalker::check_unsigned_comparison(nodes::BinaryExpression* b) {
+    using TK = tokenizing::Token::Kind;
+    if (!b || !b->left || !b->right || m_dead_constant > 0) return;
+    const TK op = b->op;
+    if (op != TK::LessThan && op != TK::GreaterThan && op != TK::LessEqual && op != TK::GreaterEqual && op != TK::LogicEqual && op != TK::NotEqual) return;
+    nodes::ASTNode* var = nullptr;
+    nodes::ASTNode* cst = nullptr;
+    bool var_left = true;
+    if (spelled_unsigned_integer(b->left)) { var = b->left; cst = b->right; }
+    else if (spelled_unsigned_integer(b->right)) { var = b->right; cst = b->left; var_left = false; }
+    if (!var) return;
+    const ConstValue cv = m_eval.eval(cst);
+    if (!cv.ok() || !cv.is_int()) return;
+    const bool negative = cv.i->is_negative();
+    const bool zero = cv.i->is_zero();
+    if (!negative && !zero) return;
+    TK o = op;
+    if (!var_left) {
+        if (o == TK::LessThan) o = TK::GreaterThan;
+        else if (o == TK::GreaterThan) o = TK::LessThan;
+        else if (o == TK::LessEqual) o = TK::GreaterEqual;
+        else if (o == TK::GreaterEqual) o = TK::LessEqual;
+    }
+    int verdict = -1;
+    if (negative) {
+        if (o == TK::LessThan || o == TK::LessEqual || o == TK::LogicEqual) verdict = 0;
+        else verdict = 1;
+    } else {
+        if (o == TK::GreaterEqual) verdict = 1;
+        else if (o == TK::LessThan) verdict = 0;
+    }
+    if (verdict < 0) return;
+    const std::string name = std::string(var->kind == nodes::ASTNode::Kind::Identifier ? static_cast<nodes::Identifier*>(var)->name : static_cast<nodes::MemberAccessExpression*>(var)->m_member);
+    std::string text = "'" + name + "' is unsigned, so this comparison with " + cv.i->to_string() + " is always " + (verdict ? "true" : "false");
+    if (negative) text += "; an unsigned value is never negative, so compare with std::npos or another real value";
+    else if (verdict) text += "; a loop counting down with 'i >= 0' never ends, so count down with 'i > 0' and use i - 1";
+    SemanticError::emit(m_reporter, file_of(b), b->line, "Constant", text);
+}
+
+void TypeWalker::check_bad_constants(nodes::BinaryExpression* b) {
+    using TK = tokenizing::Token::Kind;
+    if (!b || !b->left || !b->right) return;
+    if (m_dead_constant > 0) return;
+    check_unsigned_comparison(b);
+    const BuiltinType* lt = integer_builtin(m_types, type_of(b->left));
+    const BuiltinType* rt = integer_builtin(m_types, type_of(b->right));
+    if (!lt || !rt) return;
+    const BuiltinType* result = integer_builtin(m_types, type_of(b));
+    const bool assign = is_assignment_op(b->op);
+    const BuiltinType* shown = assign || !result ? lt : result;
+    const std::string tname = type_str(const_cast<BuiltinType*>(shown));
+
+    const TK op = b->op;
+    const bool shift = op == TK::DoubleLessThan || op == TK::DoubleGreaterThan || op == TK::ShiftLeftEqual || op == TK::ShiftRightEqual;
+    const bool divide = op == TK::Slash || op == TK::Percent || op == TK::SlashEqual || op == TK::PercentEqual;
+    const bool arith = op == TK::Plus || op == TK::Minus || op == TK::Asterisk || op == TK::DoubleAsterisk || shift;
+
+    const ConstValue rv = m_eval.eval(b->right);
+    const bool right_known = rv.ok() && rv.is_int();
+
+    if (shift && right_known) {
+        const unsigned bits = bit_width_of_rank(shown->width());
+        if (rv.i->is_negative()) {
+            SemanticError::emit(m_reporter, file_of(b), b->line, "Constant", "can't shift by " + rv.i->to_string() + ": a shift count can't be negative");
+            return;
+        }
+        if (bits && *rv.i >= WideInt(std::uint64_t(bits))) {
+            SemanticError::emit(m_reporter, file_of(b), b->line, "Constant", "can't shift a '" + tname + "' by " + rv.i->to_string() + ": it has " + std::to_string(bits) + " bits, so the count must be 0 to " + std::to_string(bits - 1) + "; cast the left side to a wider type first");
+            return;
+        }
+    }
+
+    if (divide && right_known && rv.i->is_zero()) {
+        SemanticError::emit(m_reporter, file_of(b), b->line, "Constant", std::string(op == TK::Percent || op == TK::PercentEqual ? "remainder" : "division") + " by zero: the right side is always 0");
+        return;
+    }
+
+    if (!arith || assign || !right_known) return;
+    const ConstValue lv = m_eval.eval(b->left);
+    if (!lv.ok() || !lv.is_int()) return;
+    const ConstValue v = m_eval.eval(b);
+    if (!fails_to_fit(v)) return;
+    if (v.fail == ConstValue::Fail::Wrapped) {
+        SemanticError::emit(m_reporter, file_of(b), b->line, "Constant", "this constant goes below zero, which '" + tname + "' can't hold; use a signed type, or check the order of the operands");
+        return;
+    }
+    SemanticError::emit(m_reporter, file_of(b), b->line, "Constant", "this constant doesn't fit in '" + tname + "'; use a wider type, such as by writing a literal with a suffix like 'l' or casting one side first");
+}
+
+void TypeWalker::check_bad_constants(nodes::UnaryExpression* u) {
+    using TK = tokenizing::Token::Kind;
+    if (!u || !u->operand || u->op != TK::Minus) return;
+    if (m_dead_constant > 0) return;
+    const BuiltinType* t = integer_builtin(m_types, type_of(u));
+    if (!t) return;
+    const ConstValue inner = m_eval.eval(u->operand);
+    if (!inner.ok() || !inner.is_int()) return;
+    const ConstValue v = m_eval.eval(u);
+    if (!fails_to_fit(v)) return;
+    SemanticError::emit(m_reporter, file_of(u), u->line, "Constant", "negating this constant doesn't give a value '" + type_str(const_cast<BuiltinType*>(t)) + "' can hold");
+}
+
+void TypeWalker::check_constant_index(nodes::SubscriptExpression* s, Type* arr) {
+    if (!s || !arr || !arr->is_array()) return;
+    if (m_dead_constant > 0) return;
+    const auto extent = static_cast<ArrayType*>(arr)->extent();
+    if (!extent) return;
+    const ConstValue iv = m_eval.eval(s->m_index);
+    if (!iv.ok() || !iv.is_int()) return;
+    if (iv.i->is_negative() || *iv.i >= WideInt(std::uint64_t(*extent))) {
+        SemanticError::emit(m_reporter, file_of(s), s->line, "Constant", "index " + iv.i->to_string() + " is out of range for an array of " + std::to_string(*extent) + " elements, which has indexes 0 to " + (*extent ? std::to_string(*extent - 1) : std::string("none")));
+    }
+}
+
 ConstValue TypeWalker::eval_checked(nodes::ASTNode* e, bool required) {
     ConstValue v = m_eval.eval(e);
     if (!e) return v;
 
     if (v.is_error()) {
-        if (required) SemanticError::not_a_constant(m_reporter, file_of(e), e->line, fail_message(v.fail));
+        const bool already = fails_to_fit(v) && (e->kind == K::BinaryExpression || (e->kind == K::UnaryExpression && static_cast<nodes::UnaryExpression*>(e)->op == tokenizing::Token::Kind::Minus));
+        if (required && !already) SemanticError::not_a_constant(m_reporter, file_of(e), e->line, fail_message(v.fail));
         return v;
     }
 
@@ -2363,7 +2621,7 @@ ConstValue TypeWalker::eval_checked(nodes::ASTNode* e, bool required) {
             break;
 
         case ConstValue::Fail::Wrapped:
-            report_overflow(e, "constant expression went below zero: " + std::string(fail_message(v.fail)));
+            if (e->kind != K::BinaryExpression && e->kind != K::UnaryExpression) report_overflow(e, "constant expression went below zero: " + std::string(fail_message(v.fail)));
             break;
 
         case ConstValue::Fail::Undefined:

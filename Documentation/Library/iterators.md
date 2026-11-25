@@ -66,7 +66,7 @@ for (Back: it = Back::first(data, count); it != Back::past(data, count); ++it) {
 }
 ```
 
-A `Pointer` going backwards starts at index `count - 1` and stops at `-1`.
+A `Pointer` going backwards keeps an index one past the element it reads, as C++'s `reverse_iterator` does: it starts at `count`, reads the element at `index - 1`, and stops at 0, so its index never goes negative. `position()` gives the element's own index.
 
 ## Going backwards
 
@@ -97,7 +97,7 @@ These take an `iterable<T>`: an array, a string, a generator, a container, a `Ra
 | `count_if(items, test)` | How many pass `test`, a `std::Predicate<T>` |
 | `any_of(items, test)`, `all_of(...)`, `none_of(...)` | Whether some, every or no element passes `test` |
 | `contains(items, value)` | Whether an element equals `value` |
-| `index_of(items, value)`, `index_if(items, test)` | The position of the first match, or `-1` |
+| `index_of(items, value)`, `index_if(items, test)` | The position of the first match, or `std::npos` |
 | `sum(items)` | The elements added up, starting from `T()` |
 | `fold(items, start, step)` | `step(step(start, a), b)` and so on; `step` takes the running value and an element |
 | `min_of(items)`, `max_of(items)`, each with an optional `std::Compare<T>` | The smallest or largest element; throws `std::errors::empty_range` when there are none |
@@ -145,7 +145,7 @@ This prints `1.ann 2.bob 3.cy ann=31 bob=25 cy=40` and then `10 7 4 1 31 40 -6 1
 | Function | Gives, one at a time |
 |---|---|
 | `range(stop)`, `range(start, stop)`, `range(start, stop, step)` | The `long int`s from `start` (or `0`) up to but not including `stop`, `step` apart; a negative `step` counts down, and a `step` of `0` throws `std::errors::empty_range` |
-| `enumerate(items)`, `enumerate(items, start)` | A `Numbered<T>` for each element, with fields `index` (from `start`, or `0`) and `value` |
+| `enumerate(items)`, `enumerate(items, start)` | A `Numbered<T>` for each element, with fields `index` (an `unsigned long int`, from `start`, or `0`) and `value` |
 | `zip(a, b)` | A `Zipped<A, B>` with fields `first` and `second`, pairing elements until either side runs out |
 | `chain(a, b)` | The elements of `a`, then those of `b` |
 | `take(items, n)`, `skip(items, n)` | The first `n` elements, or all but the first `n` |

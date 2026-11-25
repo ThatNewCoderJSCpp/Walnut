@@ -5,21 +5,21 @@ namespace std {
                 extern "C++" from "<walnut_threading.hpp>" {
                     class Api as "walnut_rt::threading::api" {
                     public:
-                        static function sleep_for(long int: milliseconds) -> void as "walnut_rt::threading::sleep_for";
-                        static function sleep_for_micros(long int: microseconds) -> void as "walnut_rt::threading::sleep_for_micros";
+                        static function sleep_for(unsigned long int: milliseconds) -> void as "walnut_rt::threading::sleep_for";
+                        static function sleep_for_micros(unsigned long int: microseconds) -> void as "walnut_rt::threading::sleep_for_micros";
                         static function yield_now() -> void as "walnut_rt::threading::yield";
                         static function current_id() -> unsigned long int as "walnut_rt::threading::current_id";
-                        static function hardware_threads() -> long int as "walnut_rt::threading::hardware_threads";
+                        static function hardware_threads() -> unsigned long int as "walnut_rt::threading::hardware_threads";
                     } end class Api
                 } end extern
             } end namespace detail
 
             namespace this_thread {
-                function sleep_for(long int: milliseconds) -> void {
+                function sleep_for(unsigned long int: milliseconds) -> void {
                     detail::Api::sleep_for(milliseconds);
                 } end function sleep_for
 
-                function sleep_for_micros(long int: microseconds) -> void {
+                function sleep_for_micros(unsigned long int: microseconds) -> void {
                     detail::Api::sleep_for_micros(microseconds);
                 } end function sleep_for_micros
 
@@ -32,7 +32,7 @@ namespace std {
                 } end function id
             } end namespace this_thread
 
-            function hardware_threads() -> long int {
+            function hardware_threads() -> unsigned long int {
                 return detail::Api::hardware_threads();
             } end function hardware_threads
 
@@ -42,8 +42,8 @@ namespace std {
                     constructor();
                     constructor(function() -> void: body);
                     constructor(const Thread&: other) = delete;
-                    constructor(Thread&&: other);
-                    operator(=) function(self&, Thread&&: other) -> Thread&;
+                    constructor(Thread&&: other) noexcept;
+                    operator(=) function(self&, Thread&&: other) noexcept -> Thread&;
                     function join(self&) -> void;
                     function detach(self&) -> void;
                     function joinable(const self&) -> bool;
@@ -75,7 +75,7 @@ namespace std {
                     function lock(self&) -> void;
                     function unlock(self&) -> void;
                     function try_lock(self&) -> bool;
-                    function try_lock_for(self&, long int: milliseconds) -> bool as "walnut_rt::threading::try_lock_for";
+                    function try_lock_for(self&, unsigned long int: milliseconds) -> bool as "walnut_rt::threading::try_lock_for";
                 } end class TimedMutex
 
                 class RecursiveTimedMutex as "std::recursive_timed_mutex" {
@@ -85,7 +85,7 @@ namespace std {
                     function lock(self&) -> void;
                     function unlock(self&) -> void;
                     function try_lock(self&) -> bool;
-                    function try_lock_for(self&, long int: milliseconds) -> bool as "walnut_rt::threading::try_lock_for";
+                    function try_lock_for(self&, unsigned long int: milliseconds) -> bool as "walnut_rt::threading::try_lock_for";
                 } end class RecursiveTimedMutex
 
                 class SharedMutex as "std::shared_mutex" {
@@ -99,8 +99,18 @@ namespace std {
                     function unlock_shared(self&) -> void;
                     function try_lock_shared(self&) -> bool;
                 } end class SharedMutex
+            } end extern
+
+            template <typename M>
+            concept Lockable = std::traits::is_same<M, Mutex> || std::traits::is_same<M, RecursiveMutex> || std::traits::is_same<M, TimedMutex> || std::traits::is_same<M, RecursiveTimedMutex> || std::traits::is_same<M, SharedMutex>
+
+            template <typename M>
+            concept SharedLockable = std::traits::is_same<M, SharedMutex>
+
+            extern "C++" from "<walnut_threading.hpp>" {
 
                 template <typename M>
+                requires Lockable<M>
                 class LockGuard as "walnut_rt::threading::lock_guard" {
                 public:
                     constructor(const LockGuard&: other) = delete;
@@ -108,6 +118,7 @@ namespace std {
                 } end class LockGuard
 
                 template <typename M>
+                requires Lockable<M>
                 class UniqueLock as "walnut_rt::threading::unique_lock" {
                 public:
                     constructor();
@@ -121,6 +132,7 @@ namespace std {
                 } end class UniqueLock
 
                 template <typename M>
+                requires SharedLockable<M>
                 class SharedLock as "walnut_rt::threading::shared_lock" {
                 public:
                     constructor();
@@ -139,20 +151,20 @@ namespace std {
                     constructor(const ConditionVariable&: other) = delete;
                     function wait(self&, UniqueLock<Mutex>&: lock) -> void;
                     function wait(self&, UniqueLock<Mutex>&: lock, function() -> bool: ready) -> void;
-                    function wait_for(self&, UniqueLock<Mutex>&: lock, long int: milliseconds) -> bool;
-                    function wait_for(self&, UniqueLock<Mutex>&: lock, long int: milliseconds, function() -> bool: ready) -> bool;
+                    function wait_for(self&, UniqueLock<Mutex>&: lock, unsigned long int: milliseconds) -> bool;
+                    function wait_for(self&, UniqueLock<Mutex>&: lock, unsigned long int: milliseconds, function() -> bool: ready) -> bool;
                     function wait(self&, UniqueLock<TimedMutex>&: lock) -> void;
                     function wait(self&, UniqueLock<TimedMutex>&: lock, function() -> bool: ready) -> void;
-                    function wait_for(self&, UniqueLock<TimedMutex>&: lock, long int: milliseconds) -> bool;
-                    function wait_for(self&, UniqueLock<TimedMutex>&: lock, long int: milliseconds, function() -> bool: ready) -> bool;
+                    function wait_for(self&, UniqueLock<TimedMutex>&: lock, unsigned long int: milliseconds) -> bool;
+                    function wait_for(self&, UniqueLock<TimedMutex>&: lock, unsigned long int: milliseconds, function() -> bool: ready) -> bool;
                     function wait(self&, UniqueLock<SharedMutex>&: lock) -> void;
                     function wait(self&, UniqueLock<SharedMutex>&: lock, function() -> bool: ready) -> void;
-                    function wait_for(self&, UniqueLock<SharedMutex>&: lock, long int: milliseconds) -> bool;
-                    function wait_for(self&, UniqueLock<SharedMutex>&: lock, long int: milliseconds, function() -> bool: ready) -> bool;
+                    function wait_for(self&, UniqueLock<SharedMutex>&: lock, unsigned long int: milliseconds) -> bool;
+                    function wait_for(self&, UniqueLock<SharedMutex>&: lock, unsigned long int: milliseconds, function() -> bool: ready) -> bool;
                     function wait(self&, SharedLock<SharedMutex>&: lock) -> void;
                     function wait(self&, SharedLock<SharedMutex>&: lock, function() -> bool: ready) -> void;
-                    function wait_for(self&, SharedLock<SharedMutex>&: lock, long int: milliseconds) -> bool;
-                    function wait_for(self&, SharedLock<SharedMutex>&: lock, long int: milliseconds, function() -> bool: ready) -> bool;
+                    function wait_for(self&, SharedLock<SharedMutex>&: lock, unsigned long int: milliseconds) -> bool;
+                    function wait_for(self&, SharedLock<SharedMutex>&: lock, unsigned long int: milliseconds, function() -> bool: ready) -> bool;
                     function notify_one(self&) -> void;
                     function notify_all(self&) -> void;
                 } end class ConditionVariable
@@ -194,7 +206,7 @@ namespace std {
                 constexpr bool: atomic_bits = std::traits::is_builtin_integer<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>;
 
                 template <typename T>
-                using atomic_delta = std::traits::conditional<std::traits::is_pointer<T>, long int, T>;
+                using atomic_delta = std::traits::conditional<std::traits::is_pointer<T>, unsigned long int, T>;
 
                 extern "C++" from "<walnut_threading.hpp>" {
                     template <typename T>
@@ -203,23 +215,23 @@ namespace std {
                         constructor();
                         constructor(const T&: value);
                         constructor(const NativeAtomic&: other) = delete;
-                        function load_with(const self&, long int: order) -> T;
-                        function store_with(self&, const T&: value, long int: order) -> void;
-                        function exchange_with(self&, const T&: value, long int: order) -> T;
-                        function compare_exchange_with(self&, T&: expected, const T&: desired, bool: weak, long int: order) -> bool;
-                        function fetch_add_with(self&, const atomic_delta<T>&: value, long int: order) -> T;
-                        function fetch_sub_with(self&, const atomic_delta<T>&: value, long int: order) -> T;
-                        function add_with(self&, const atomic_delta<T>&: value, long int: order) -> T;
-                        function sub_with(self&, const atomic_delta<T>&: value, long int: order) -> T;
-                        function fetch_and_with(self&, const T&: value, long int: order) -> T;
-                        function fetch_or_with(self&, const T&: value, long int: order) -> T;
-                        function fetch_xor_with(self&, const T&: value, long int: order) -> T;
-                        function and_with(self&, const T&: value, long int: order) -> T;
-                        function or_with(self&, const T&: value, long int: order) -> T;
-                        function xor_with(self&, const T&: value, long int: order) -> T;
-                        function fetch_min_with(self&, const T&: value, long int: order) -> T;
-                        function fetch_max_with(self&, const T&: value, long int: order) -> T;
-                        function wait_with(const self&, const T&: old, long int: order) -> void;
+                        function load_with(const self&, unsigned long int: order) -> T;
+                        function store_with(self&, const T&: value, unsigned long int: order) -> void;
+                        function exchange_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function compare_exchange_with(self&, T&: expected, const T&: desired, bool: weak, unsigned long int: order) -> bool;
+                        function fetch_add_with(self&, const atomic_delta<T>&: value, unsigned long int: order) -> T;
+                        function fetch_sub_with(self&, const atomic_delta<T>&: value, unsigned long int: order) -> T;
+                        function add_with(self&, const atomic_delta<T>&: value, unsigned long int: order) -> T;
+                        function sub_with(self&, const atomic_delta<T>&: value, unsigned long int: order) -> T;
+                        function fetch_and_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function fetch_or_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function fetch_xor_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function and_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function or_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function xor_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function fetch_min_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function fetch_max_with(self&, const T&: value, unsigned long int: order) -> T;
+                        function wait_with(const self&, const T&: old, unsigned long int: order) -> void;
                         function notify(const self&) -> void;
                         function lock_free(const self&) -> bool;
                     } end class NativeAtomic
@@ -245,11 +257,11 @@ namespace std {
             class SpinGuard {
                 SpinLock*: held;
             public:
-                constructor(SpinLock&: l) : held = &l {
+                constructor(SpinLock&: l) noexcept : held = &l {
                     self.held->lock();
                 }
                 constructor(const SpinGuard&: other) = delete;
-                destructor() {
+                destructor() noexcept {
                     held->unlock();
                 }
             } end class SpinGuard
@@ -265,24 +277,24 @@ namespace std {
                     constructor(const T&: v) : value = v { }
                     constructor(const LockedAtomic&: other) = delete;
 
-                    function load_with(const self&, long int: order) -> T {
+                    function load_with(const self&, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         return self.value;
                     } end function load_with
 
-                    function store_with(self&, const T&: v, long int: order) -> void {
+                    function store_with(self&, const T&: v, unsigned long int: order) -> void {
                         SpinGuard: g(self.guard);
                         self.value = v;
                     } end function store_with
 
-                    function exchange_with(self&, const T&: v, long int: order) -> T {
+                    function exchange_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         T: old = self.value;
                         self.value = v;
                         return old;
                     } end function exchange_with
 
-                    function compare_exchange_with(self&, T&: expected, const T&: desired, bool: weak, long int: order) -> bool {
+                    function compare_exchange_with(self&, T&: expected, const T&: desired, bool: weak, unsigned long int: order) -> bool {
                         SpinGuard: g(self.guard);
                         if (self.value == expected) then {
                             self.value = desired;
@@ -292,72 +304,72 @@ namespace std {
                         return false;
                     } end function compare_exchange_with
 
-                    function fetch_add_with(self&, const atomic_delta<T>&: d, long int: order) -> T {
+                    function fetch_add_with(self&, const atomic_delta<T>&: d, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         T: old = self.value;
                         self.value = self.value + d;
                         return old;
                     } end function fetch_add_with
 
-                    function fetch_sub_with(self&, const atomic_delta<T>&: d, long int: order) -> T {
+                    function fetch_sub_with(self&, const atomic_delta<T>&: d, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         T: old = self.value;
                         self.value = self.value - d;
                         return old;
                     } end function fetch_sub_with
 
-                    function add_with(self&, const atomic_delta<T>&: d, long int: order) -> T {
+                    function add_with(self&, const atomic_delta<T>&: d, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         self.value = self.value + d;
                         return self.value;
                     } end function add_with
 
-                    function sub_with(self&, const atomic_delta<T>&: d, long int: order) -> T {
+                    function sub_with(self&, const atomic_delta<T>&: d, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         self.value = self.value - d;
                         return self.value;
                     } end function sub_with
 
-                    function fetch_and_with(self&, const T&: v, long int: order) -> T {
+                    function fetch_and_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         T: old = self.value;
                         self.value = self.value & v;
                         return old;
                     } end function fetch_and_with
 
-                    function fetch_or_with(self&, const T&: v, long int: order) -> T {
+                    function fetch_or_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         T: old = self.value;
                         self.value = self.value | v;
                         return old;
                     } end function fetch_or_with
 
-                    function fetch_xor_with(self&, const T&: v, long int: order) -> T {
+                    function fetch_xor_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         T: old = self.value;
                         self.value = self.value ^ v;
                         return old;
                     } end function fetch_xor_with
 
-                    function and_with(self&, const T&: v, long int: order) -> T {
+                    function and_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         self.value = self.value & v;
                         return self.value;
                     } end function and_with
 
-                    function or_with(self&, const T&: v, long int: order) -> T {
+                    function or_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         self.value = self.value | v;
                         return self.value;
                     } end function or_with
 
-                    function xor_with(self&, const T&: v, long int: order) -> T {
+                    function xor_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         self.value = self.value ^ v;
                         return self.value;
                     } end function xor_with
 
-                    function fetch_min_with(self&, const T&: v, long int: order) -> T {
+                    function fetch_min_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         T: old = self.value;
                         if (v < self.value) then {
@@ -366,7 +378,7 @@ namespace std {
                         return old;
                     } end function fetch_min_with
 
-                    function fetch_max_with(self&, const T&: v, long int: order) -> T {
+                    function fetch_max_with(self&, const T&: v, unsigned long int: order) -> T {
                         SpinGuard: g(self.guard);
                         T: old = self.value;
                         if (self.value < v) then {
@@ -375,7 +387,7 @@ namespace std {
                         return old;
                     } end function fetch_max_with
 
-                    function wait_with(const self&, const T&: old, long int: order) -> void {
+                    function wait_with(const self&, const T&: old, unsigned long int: order) -> void {
                         Parker::park_while(static_cast<const void*>(this), [&]() -> bool {
                             return self.load_with(order) == old;
                         });
@@ -398,72 +410,72 @@ namespace std {
                 std::traits::conditional<detail::native_atomic<T>, detail::NativeAtomic<T>, detail::LockedAtomic<T>>: cell;
 
             public:
-                constructor() { }
+                constructor() noexcept { }
 
                 constructor(const T&: value) : cell(value) { }
 
                 constructor(const Atomic&: other) = delete;
 
                 function load(const self&, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
-                    return self.cell.load_with(static_cast<long int>(order));
+                    return self.cell.load_with(static_cast<unsigned long int>(order));
                 } end function load
 
                 function store(self&, const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> void {
-                    self.cell.store_with(value, static_cast<long int>(order));
+                    self.cell.store_with(value, static_cast<unsigned long int>(order));
                 } end function store
 
                 function exchange(self&, const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
-                    return self.cell.exchange_with(value, static_cast<long int>(order));
+                    return self.cell.exchange_with(value, static_cast<unsigned long int>(order));
                 } end function exchange
 
                 function compare_exchange(self&, T&: expected, const T&: desired, MemoryOrder: order = MemoryOrder::seq_cst) -> bool {
                     static_assert(std::concepts::equality_comparable<T>, "Atomic::compare_exchange needs a type that can be compared with ==");
-                    return self.cell.compare_exchange_with(expected, desired, false, static_cast<long int>(order));
+                    return self.cell.compare_exchange_with(expected, desired, false, static_cast<unsigned long int>(order));
                 } end function compare_exchange
 
                 function compare_exchange_weak(self&, T&: expected, const T&: desired, MemoryOrder: order = MemoryOrder::seq_cst) -> bool {
                     static_assert(std::concepts::equality_comparable<T>, "Atomic::compare_exchange_weak needs a type that can be compared with ==");
-                    return self.cell.compare_exchange_with(expected, desired, true, static_cast<long int>(order));
+                    return self.cell.compare_exchange_with(expected, desired, true, static_cast<unsigned long int>(order));
                 } end function compare_exchange_weak
 
                 function fetch_add(self&, const detail::atomic_delta<T>&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
                     static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic::fetch_add needs a number or a pointer");
-                    return self.cell.fetch_add_with(value, static_cast<long int>(order));
+                    return self.cell.fetch_add_with(value, static_cast<unsigned long int>(order));
                 } end function fetch_add
 
                 function fetch_sub(self&, const detail::atomic_delta<T>&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
                     static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic::fetch_sub needs a number or a pointer");
-                    return self.cell.fetch_sub_with(value, static_cast<long int>(order));
+                    return self.cell.fetch_sub_with(value, static_cast<unsigned long int>(order));
                 } end function fetch_sub
 
                 function fetch_and(self&, const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
                     static_assert(detail::atomic_bits<T>, "Atomic::fetch_and needs an integer");
-                    return self.cell.fetch_and_with(value, static_cast<long int>(order));
+                    return self.cell.fetch_and_with(value, static_cast<unsigned long int>(order));
                 } end function fetch_and
 
                 function fetch_or(self&, const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
                     static_assert(detail::atomic_bits<T>, "Atomic::fetch_or needs an integer");
-                    return self.cell.fetch_or_with(value, static_cast<long int>(order));
+                    return self.cell.fetch_or_with(value, static_cast<unsigned long int>(order));
                 } end function fetch_or
 
                 function fetch_xor(self&, const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
                     static_assert(detail::atomic_bits<T>, "Atomic::fetch_xor needs an integer");
-                    return self.cell.fetch_xor_with(value, static_cast<long int>(order));
+                    return self.cell.fetch_xor_with(value, static_cast<unsigned long int>(order));
                 } end function fetch_xor
 
                 function fetch_min(self&, const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
                     static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic::fetch_min needs a number or a pointer");
-                    return self.cell.fetch_min_with(value, static_cast<long int>(order));
+                    return self.cell.fetch_min_with(value, static_cast<unsigned long int>(order));
                 } end function fetch_min
 
                 function fetch_max(self&, const T&: value, MemoryOrder: order = MemoryOrder::seq_cst) -> T {
                     static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic::fetch_max needs a number or a pointer");
-                    return self.cell.fetch_max_with(value, static_cast<long int>(order));
+                    return self.cell.fetch_max_with(value, static_cast<unsigned long int>(order));
                 } end function fetch_max
 
                 function wait(const self&, const T&: old, MemoryOrder: order = MemoryOrder::seq_cst) -> void {
                     static_assert(std::concepts::equality_comparable<T>, "Atomic::wait needs a type that can be compared with ==");
-                    self.cell.wait_with(old, static_cast<long int>(order));
+                    self.cell.wait_with(old, static_cast<unsigned long int>(order));
                 } end function wait
 
                 function notify_one(const self&) -> void {
@@ -492,7 +504,7 @@ namespace std {
                     return self.cell.add_with(static_cast<detail::atomic_delta<T>>(1), 4);
                 }
 
-                operator(++) function(self&, int: unused) -> T {
+                operator(++) function(self&, unsigned int: unused) -> T {
                     static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic '++' needs a number or a pointer");
                     return self.cell.fetch_add_with(static_cast<detail::atomic_delta<T>>(1), 4);
                 }
@@ -502,7 +514,7 @@ namespace std {
                     return self.cell.sub_with(static_cast<detail::atomic_delta<T>>(1), 4);
                 }
 
-                operator(--) function(self&, int: unused) -> T {
+                operator(--) function(self&, unsigned int: unused) -> T {
                     static_assert(detail::atomic_number<T> || std::traits::is_pointer<T>, "Atomic '--' needs a number or a pointer");
                     return self.cell.fetch_sub_with(static_cast<detail::atomic_delta<T>>(1), 4);
                 }

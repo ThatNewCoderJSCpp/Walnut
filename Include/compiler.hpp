@@ -82,6 +82,9 @@ private:
     std::vector<AnalyzedUnit> m_units;
     FileId                    m_main_file = INVALID_FILE;
     std::unordered_map<FileId, std::unordered_map<std::string, FileId>> m_file_imports;
+    bool m_record_macros = false;
+    std::vector<preprocessing::MacroUse> m_macro_uses;
+    std::vector<preprocessing::InactiveRange> m_inactive;
 
 public:
     explicit CompilerPipeline(
@@ -107,6 +110,9 @@ public:
     const SourceManager& get_sources() const noexcept { return sources; }
     const std::vector<AnalyzedUnit>& analyzed_units() const noexcept { return m_units; }
     const std::unordered_map<FileId, std::unordered_map<std::string, FileId>>& file_imports() const noexcept { return m_file_imports; }
+    void record_macros() noexcept { m_record_macros = true; }
+    const std::vector<preprocessing::MacroUse>& macro_uses() const noexcept { return m_macro_uses; }
+    const std::vector<preprocessing::InactiveRange>& inactive_ranges() const noexcept { return m_inactive; }
     FileId main_file() const noexcept { return m_main_file; }
     semantics::TypeContext& mutable_types() noexcept { return types; }
     semantics::Instantiator& mutable_instantiator() noexcept { return instantiator; }
@@ -373,6 +379,7 @@ public:
             for (const auto& dir : m_include_dirs) pp.add_include_dir(dir);
             for (const auto& [name, value] : m_defines) pp.define(name, value);
             if (m_native_args) pp.set_native_args(m_native_args);
+            pp.record_macros(m_record_macros);
             driver::ModuleLoader loader(sources, pp, reporter, ast_arena);
             for (const auto& dir : m_module_dirs) loader.add_module_dir(dir);
             std::vector<FileId> roots{ *main_id };
@@ -398,6 +405,10 @@ public:
 
             loader.load_all(roots);
             m_file_imports = loader.file_edges();
+            if (m_record_macros) {
+                m_macro_uses = pp.macro_uses();
+                m_inactive = pp.inactive_ranges();
+            }
 
             if (const driver::ParsedUnit* root = loader.unit(*main_id)) { ast = root->ast; }
             driver::FrontPass front(reporter, ast_arena);

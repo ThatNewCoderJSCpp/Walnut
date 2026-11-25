@@ -152,7 +152,7 @@ fs::path exe_output_path(const Options& o) {
 }
 
 std::string finalize_cpp(const std::string& raw, const Options& o, const std::string& cpp_name, std::vector<LineMapEntry>& map) {
-    const bool keep_markers = o.debug == DebugMode::Walnut || !o.safety.empty();
+    const bool keep_markers = o.debug == DebugMode::Walnut || !o.safety.empty() || o.profile;
     std::string escaped_name;
     for (char c : cpp_name) { if (c == '\\' || c == '"') escaped_name += '\\'; escaped_name += c; }
 

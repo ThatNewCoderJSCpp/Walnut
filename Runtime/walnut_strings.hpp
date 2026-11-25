@@ -125,7 +125,7 @@ inline void find_all(const std::string& s, const N& needle, V& out) {
     if (n.empty()) return;
     std::size_t at = s.find(n);
     while (at != std::string::npos) {
-        out.push_back(cp_at(s, at));
+        out.push_back(walnut_rt::from_native<typename V::value_type>(cp_at(s, at)));
         at = s.find(n, at + n.size());
     }
 }

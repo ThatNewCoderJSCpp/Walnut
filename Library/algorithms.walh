@@ -35,9 +35,9 @@ namespace std {
                     b = std::move(held);
                 } end function swap_values
 
-                function depth_limit(long int: n) -> int {
-                    int: depth = 0;
-                    for (long int: k = n; k > 1; k /= 2) {
+                function depth_limit(unsigned long int: n) noexcept -> unsigned int {
+                    unsigned int: depth = 0;
+                    for (unsigned long int: k = n; k > 1; k /= 2) {
                         depth += 2;
                     }
                     return depth + 4;
@@ -45,10 +45,10 @@ namespace std {
             } end safe
 
             template <typename It, typename E>
-            function sift_down(It: first, long int: root, long int: count, const std::Compare<E>&: comp) -> void {
-                long int: parent = root;
+            function sift_down(It: first, unsigned long int: root, unsigned long int: count, const std::Compare<E>&: comp) -> void {
+                unsigned long int: parent = root;
                 while (parent * 2 + 1 < count) {
-                    long int: child = parent * 2 + 1;
+                    unsigned long int: child = parent * 2 + 1;
                     if (child + 1 < count && comp(first[child], first[child + 1])) then {
                         child += 1;
                     }
@@ -61,10 +61,10 @@ namespace std {
             } end function sift_down
 
             template <typename It, typename E>
-            function sift_up(It: first, long int: index, const std::Compare<E>&: comp) -> void {
-                long int: child = index;
+            function sift_up(It: first, unsigned long int: index, const std::Compare<E>&: comp) -> void {
+                unsigned long int: child = index;
                 while (child > 0) {
-                    const long int: parent = (child - 1) / 2;
+                    const unsigned long int: parent = (child - 1) / 2;
                     if (!comp(first[parent], first[child])) then {
                         return;
                     }
@@ -74,11 +74,11 @@ namespace std {
             } end function sift_up
 
             template <typename It, typename E>
-            function insertion(It: first, long int: lo, long int: hi, const std::Compare<E>&: comp) -> void {
-                for (long int: i = lo + 1; i < hi; i++) {
+            function insertion(It: first, unsigned long int: lo, unsigned long int: hi, const std::Compare<E>&: comp) -> void {
+                for (unsigned long int: i = lo + 1; i < hi; i++) {
                     if (comp(first[i], first[i - 1])) then {
                         auto: held = std::move(first[i]);
-                        long int: j = i;
+                        unsigned long int: j = i;
                         while (j > lo && comp(held, first[j - 1])) {
                             first[j] = std::move(first[j - 1]);
                             j -= 1;
@@ -89,26 +89,27 @@ namespace std {
             } end function insertion
 
             template <typename It, typename E>
-            function heapify(It: first, long int: count, const std::Compare<E>&: comp) -> void {
-                for (long int: start = count / 2 - 1; start >= 0; start--) {
+            function heapify(It: first, unsigned long int: count, const std::Compare<E>&: comp) -> void {
+                for (unsigned long int: start = count / 2; start > 0;) {
+                    start--;
                     sift_down(first, start, count, comp);
                 }
             } end function heapify
 
             template <typename It, typename E>
-            function heap(It: first, long int: count, const std::Compare<E>&: comp) -> void {
+            function heap(It: first, unsigned long int: count, const std::Compare<E>&: comp) -> void {
                 if (count < 2) then {
                     return;
                 }
                 heapify(first, count, comp);
-                for (long int: last = count - 1; last > 0; last--) {
+                for (unsigned long int: last = count - 1; last > 0; last--) {
                     swap_values(first[0], first[last]);
                     sift_down(first, 0, last, comp);
                 }
             } end function heap
 
             template <typename It, typename E>
-            function median_to_front(It: first, long int: a, long int: b, long int: c, const std::Compare<E>&: comp) -> void {
+            function median_to_front(It: first, unsigned long int: a, unsigned long int: b, unsigned long int: c, const std::Compare<E>&: comp) -> void {
                 if (comp(first[b], first[a])) then {
                     swap_values(first[a], first[b]);
                 }
@@ -122,9 +123,9 @@ namespace std {
             } end function median_to_front
 
             template <typename It, typename E>
-            function partition_around_first(It: first, long int: lo, long int: hi, const std::Compare<E>&: comp) -> long int {
-                long int: i = lo + 1;
-                long int: j = hi - 1;
+            function partition_around_first(It: first, unsigned long int: lo, unsigned long int: hi, const std::Compare<E>&: comp) -> unsigned long int {
+                unsigned long int: i = lo + 1;
+                unsigned long int: j = hi - 1;
                 while (true) {
                     while (i <= j && comp(first[i], first[lo])) {
                         i += 1;
@@ -144,10 +145,10 @@ namespace std {
             } end function partition_around_first
 
             template <typename It, typename E>
-            function intro(It: first, long int: lo, long int: hi, int: depth, const std::Compare<E>&: comp) -> void {
-                long int: a = lo;
-                long int: b = hi;
-                int: budget = depth;
+            function intro(It: first, unsigned long int: lo, unsigned long int: hi, unsigned int: depth, const std::Compare<E>&: comp) -> void {
+                unsigned long int: a = lo;
+                unsigned long int: b = hi;
+                unsigned int: budget = depth;
                 while (b - a > 16) {
                     if (budget == 0) then {
                         heap(first + a, b - a, comp);
@@ -155,7 +156,7 @@ namespace std {
                     }
                     budget -= 1;
                     median_to_front(first, a, a + (b - a) / 2, b - 1, comp);
-                    const long int: p = partition_around_first(first, a, b, comp);
+                    const unsigned long int: p = partition_around_first(first, a, b, comp);
                     if (p - a < b - p - 1) then {
                         intro(first, a, p, budget, comp);
                         a = p + 1;
@@ -168,15 +169,15 @@ namespace std {
             } end function intro
 
             template <typename It, typename V, typename E>
-            function merge_pass(It: first, long int: lo, long int: mid, long int: hi, V*: buffer, const std::Compare<E>&: comp) -> void {
-                long int: n = 0;
-                for (long int: k = lo; k < mid; k++) {
+            function merge_pass(It: first, unsigned long int: lo, unsigned long int: mid, unsigned long int: hi, V*: buffer, const std::Compare<E>&: comp) -> void {
+                unsigned long int: n = 0;
+                for (unsigned long int: k = lo; k < mid; k++) {
                     buffer[n] = std::move(first[k]);
                     n += 1;
                 }
-                long int: i = 0;
-                long int: j = mid;
-                long int: out = lo;
+                unsigned long int: i = 0;
+                unsigned long int: j = mid;
+                unsigned long int: out = lo;
                 while (i < n && j < hi) {
                     if (comp(first[j], buffer[i])) then {
                         first[out] = std::move(first[j]);
@@ -195,12 +196,12 @@ namespace std {
             } end function merge_pass
 
             template <typename It, typename V, typename E>
-            function merge_rec(It: first, long int: lo, long int: hi, V*: buffer, const std::Compare<E>&: comp) -> void {
+            function merge_rec(It: first, unsigned long int: lo, unsigned long int: hi, V*: buffer, const std::Compare<E>&: comp) -> void {
                 if (hi - lo <= 16) then {
                     insertion(first, lo, hi, comp);
                     return;
                 }
-                const long int: mid = lo + (hi - lo) / 2;
+                const unsigned long int: mid = lo + (hi - lo) / 2;
                 merge_rec(first, lo, mid, buffer, comp);
                 merge_rec(first, mid, hi, buffer, comp);
                 if (comp(first[mid], first[mid - 1])) then {
@@ -210,12 +211,12 @@ namespace std {
 
             safe(compile) {
                 template <typename It, typename E>
-                function select(It: first, long int: lo, long int: hi, long int: k, const std::Compare<E>&: comp) -> void {
-                    long int: a = lo;
-                    long int: b = hi;
+                function select(It: first, unsigned long int: lo, unsigned long int: hi, unsigned long int: k, const std::Compare<E>&: comp) -> void {
+                    unsigned long int: a = lo;
+                    unsigned long int: b = hi;
                     while (b - a > 16) {
                         median_to_front(first, a, a + (b - a) / 2, b - 1, comp);
-                        const long int: p = partition_around_first(first, a, b, comp);
+                        const unsigned long int: p = partition_around_first(first, a, b, comp);
                         if (p == k) then {
                             return;
                         }
@@ -230,15 +231,15 @@ namespace std {
             } end safe
 
             template <typename It, typename E>
-            function quick(It: first, long int: lo, long int: hi, const std::Compare<E>&: comp) -> void {
-                long int: a = lo;
-                long int: b = hi;
+            function quick(It: first, unsigned long int: lo, unsigned long int: hi, const std::Compare<E>&: comp) -> void {
+                unsigned long int: a = lo;
+                unsigned long int: b = hi;
                 while (b - a > 16) {
                     median_to_front(first, a, a + (b - a) / 2, b - 1, comp);
                     auto: pivot = first[a];
-                    long int: lt = a;
-                    long int: i = a + 1;
-                    long int: gt = b;
+                    unsigned long int: lt = a;
+                    unsigned long int: i = a + 1;
+                    unsigned long int: gt = b;
                     while (i < gt) {
                         if (comp(first[i], pivot)) then {
                             swap_values(first[lt], first[i]);
@@ -264,11 +265,12 @@ namespace std {
         } end namespace detail
 
         template <typename It>
-        function distance(It: first, It: last) -> long int {
+        requires std::concepts::iterator<It>
+        function distance(It: first, It: last) noexcept -> unsigned long int {
             if constexpr (std::concepts::random_access_iterator<It>) then {
-                return static_cast<long int>(last - first);
+                return static_cast<unsigned long int>(last - first);
             } else then {
-                long int: n = 0;
+                unsigned long int: n = 0;
                 for (It: it = first; it != last; ++it) {
                     n += 1;
                 }
@@ -277,12 +279,13 @@ namespace std {
         } end function distance
 
         template <typename It>
-        function next(It: it, long int: n = 1) -> It {
+        requires std::concepts::iterator<It>
+        function next(It: it, unsigned long int: n = 1) -> It {
             if constexpr (std::concepts::random_access_iterator<It>) then {
                 return it + n;
             } else then {
                 It: out = it;
-                for (long int: k = 0; k < n; k++) {
+                for (unsigned long int: k = 0; k < n; k++) {
                     ++out;
                 }
                 return out;
@@ -290,18 +293,21 @@ namespace std {
         } end function next
 
         template <typename It>
-        function prev(It: it, long int: n = 1) -> It {
+        requires std::concepts::iterator<It>
+        function prev(It: it, unsigned long int: n = 1) -> It {
             return it - n;
         } end function prev
 
         safe(compile) {
             template <typename It>
-            function iter_swap(It: a, It: b) -> void {
+            requires std::concepts::iterator<It>
+            function iter_swap(It: a, It: b) noexcept -> void {
                 detail::swap_values(*a, *b);
             } end function iter_swap
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function for_each(It: first, It: last, std::Action<E>: func) -> std::Action<E> {
             for (It: it = first; it != last; ++it) {
                 func(*it);
@@ -310,8 +316,9 @@ namespace std {
         } end function for_each
 
         template <typename It, typename E>
-        function for_each_indexed(It: first, It: last, function(long int, E&) -> void: func) -> function(long int, E&) -> void {
-            long int: i = 0;
+        requires std::concepts::iterator<It>
+        function for_each_indexed(It: first, It: last, function(unsigned long int, E&) -> void: func) -> function(unsigned long int, E&) -> void {
+            unsigned long int: i = 0;
             for (It: it = first; it != last; ++it) {
                 func(i, *it);
                 i += 1;
@@ -320,8 +327,9 @@ namespace std {
         } end function for_each_indexed
 
         template <typename It, typename T>
-        function count(It: first, It: last, const T&: value) -> long int {
-            long int: n = 0;
+        requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a == v; })
+        function count(It: first, It: last, const T&: value) -> unsigned long int {
+            unsigned long int: n = 0;
             for (It: it = first; it != last; ++it) {
                 if (*it == value) then {
                     n += 1;
@@ -331,8 +339,9 @@ namespace std {
         } end function count
 
         template <typename It, typename E>
-        function count_if(It: first, It: last, std::Predicate<E>: pred) -> long int {
-            long int: n = 0;
+        requires std::concepts::iterator<It>
+        function count_if(It: first, It: last, std::Predicate<E>: pred) -> unsigned long int {
+            unsigned long int: n = 0;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
                     n += 1;
@@ -342,6 +351,7 @@ namespace std {
         } end function count_if
 
         template <typename It, typename T>
+        requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a == v; })
         function find(It: first, It: last, const T&: value) -> It {
             for (It: it = first; it != last; ++it) {
                 if (*it == value) then {
@@ -352,6 +362,7 @@ namespace std {
         } end function find
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function find_if(It: first, It: last, std::Predicate<E>: pred) -> It {
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
@@ -362,6 +373,7 @@ namespace std {
         } end function find_if
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function find_if_not(It: first, It: last, std::Predicate<E>: pred) -> It {
             for (It: it = first; it != last; ++it) {
                 if (!pred(*it)) then {
@@ -372,6 +384,7 @@ namespace std {
         } end function find_if_not
 
         template <typename It, typename T>
+        requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a == v; })
         function find_last(It: first, It: last, const T&: value) -> It {
             It: found = last;
             for (It: it = first; it != last; ++it) {
@@ -383,6 +396,7 @@ namespace std {
         } end function find_last
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function find_last_if(It: first, It: last, std::Predicate<E>: pred) -> It {
             It: found = last;
             for (It: it = first; it != last; ++it) {
@@ -394,42 +408,47 @@ namespace std {
         } end function find_last_if
 
         template <typename It, typename T>
-        function index_of(It: first, It: last, const T&: value) -> long int {
-            long int: i = 0;
+        requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a == v; })
+        function index_of(It: first, It: last, const T&: value) -> unsigned long int {
+            unsigned long int: i = 0;
             for (It: it = first; it != last; ++it) {
                 if (*it == value) then {
                     return i;
                 }
                 i += 1;
             }
-            return -1;
+            return std::npos;
         } end function index_of
 
         template <typename It, typename E>
-        function index_if(It: first, It: last, std::Predicate<E>: pred) -> long int {
-            long int: i = 0;
+        requires std::concepts::iterator<It>
+        function index_if(It: first, It: last, std::Predicate<E>: pred) -> unsigned long int {
+            unsigned long int: i = 0;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
                     return i;
                 }
                 i += 1;
             }
-            return -1;
+            return std::npos;
         } end function index_if
 
         safe(compile) {
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a == v; })
             function contains(It: first, It: last, const T&: value) -> bool {
                 return find(first, last, value) != last;
             } end function contains
 
             template <typename It, typename E>
+            requires std::concepts::iterator<It>
             function contains_if(It: first, It: last, std::Predicate<E>: pred) -> bool {
                 return find_if(first, last, pred) != last;
             } end function contains_if
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function all_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
             for (It: it = first; it != last; ++it) {
                 if (!pred(*it)) then {
@@ -441,17 +460,20 @@ namespace std {
 
         safe(compile) {
             template <typename It, typename E>
+            requires std::concepts::iterator<It>
             function any_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
                 return find_if(first, last, pred) != last;
             } end function any_of
 
             template <typename It, typename E>
+            requires std::concepts::iterator<It>
             function none_of(It: first, It: last, std::Predicate<E>: pred) -> bool {
                 return find_if(first, last, pred) == last;
             } end function none_of
         } end safe
 
         template <typename It>
+        requires std::concepts::iterator<It> && (requires (It: a) { *a == *a; })
         function adjacent_find(It: first, It: last) -> It {
             if (first == last) then {
                 return last;
@@ -470,6 +492,7 @@ namespace std {
         } end function adjacent_find
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function adjacent_find(It: first, It: last, function(const E&, const E&) -> bool: pred) -> It {
             if (first == last) then {
                 return last;
@@ -488,6 +511,7 @@ namespace std {
         } end function adjacent_find
 
         template <typename It, typename Other>
+        requires std::concepts::iterator<It> && std::concepts::iterator<Other> && (requires (It: a, Other: b) { *a == *b; })
         function find_first_of(It: first, It: last, Other: s_first, Other: s_last) -> It {
             for (It: it = first; it != last; ++it) {
                 for (Other: s = s_first; s != s_last; ++s) {
@@ -500,6 +524,7 @@ namespace std {
         } end function find_first_of
 
         template <typename It, typename Other>
+        requires std::concepts::iterator<It> && std::concepts::iterator<Other> && (requires (It: a, Other: b) { *a == *b; })
         function search(It: first, It: last, Other: s_first, Other: s_last) -> It {
             if (s_first == s_last) then {
                 return first;
@@ -522,11 +547,12 @@ namespace std {
         } end function search
 
         template <typename It, typename T>
-        function search_n(It: first, It: last, long int: n, const T&: value) -> It {
+        requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a == v; })
+        function search_n(It: first, It: last, unsigned long int: n, const T&: value) -> It {
             if (n <= 0) then {
                 return first;
             }
-            long int: run = 0;
+            unsigned long int: run = 0;
             It: start = first;
             for (It: it = first; it != last; ++it) {
                 if (*it == value) then {
@@ -545,6 +571,7 @@ namespace std {
         } end function search_n
 
         template <typename A, typename B>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (A: a, B: b) { *a == *b; })
         function equal(A: first, A: last, B: other) -> bool {
             B: b = other;
             for (A: a = first; a != last; ++a) {
@@ -557,6 +584,7 @@ namespace std {
         } end function equal
 
         template <typename A, typename B>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (A: a, B: b) { *a == *b; })
         function equal(A: first, A: last, B: o_first, B: o_last) -> bool {
             A: a = first;
             B: b = o_first;
@@ -571,10 +599,11 @@ namespace std {
         } end function equal
 
         template <typename A, typename B>
-        function mismatch(A: first, A: last, B: o_first, B: o_last) -> long int {
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (A: a, B: b) { *a == *b; })
+        function mismatch(A: first, A: last, B: o_first, B: o_last) -> unsigned long int {
             A: a = first;
             B: b = o_first;
-            long int: i = 0;
+            unsigned long int: i = 0;
             while (a != last && b != o_last) {
                 if (!(*a == *b)) then {
                     return i;
@@ -584,12 +613,13 @@ namespace std {
                 i += 1;
             }
             if (a == last && b == o_last) then {
-                return -1;
+                return std::npos;
             }
             return i;
         } end function mismatch
 
         template <typename A, typename B>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (A: a, B: b) { *a == *b; })
         function starts_with(A: first, A: last, B: p_first, B: p_last) -> bool {
             A: a = first;
             for (B: b = p_first; b != p_last; ++b) {
@@ -603,9 +633,10 @@ namespace std {
 
         safe(compile) {
             template <typename A, typename B>
+            requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (A: a, B: b) { *a == *b; })
             function ends_with(A: first, A: last, B: s_first, B: s_last) -> bool {
-                const long int: n = distance(first, last);
-                const long int: m = distance(s_first, s_last);
+                const unsigned long int: n = distance(first, last);
+                const unsigned long int: m = distance(s_first, s_last);
                 if (m > n) then {
                     return false;
                 }
@@ -614,6 +645,7 @@ namespace std {
         } end safe
 
         template <typename A, typename B>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (A: a, B: b) { *a < *b; *b < *a; })
         function lexicographical_compare(A: first, A: last, B: o_first, B: o_last) -> bool {
             A: a = first;
             B: b = o_first;
@@ -631,6 +663,7 @@ namespace std {
         } end function lexicographical_compare
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function min_element(It: first, It: last, std::Compare<E>: comp) -> It {
             if (first == last) then {
                 return last;
@@ -649,6 +682,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function min_element(It: first, It: last) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return min_element(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -656,6 +690,7 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function max_element(It: first, It: last, std::Compare<E>: comp) -> It {
             if (first == last) then {
                 return last;
@@ -674,23 +709,27 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function max_element(It: first, It: last) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return max_element(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
             } end function max_element
 
             template <typename It, typename E>
+            requires std::concepts::iterator<It>
             function minmax_element(It: first, It: last, std::Compare<E>: comp) -> Range<It> {
                 return Range<It>(min_element(first, last, comp), max_element(first, last, comp));
             } end function minmax_element
 
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function minmax_element(It: first, It: last) -> Range<It> {
                 return Range<It>(min_element(first, last), max_element(first, last));
             } end function minmax_element
         } end safe
 
         template <typename It, typename T>
+        requires std::concepts::iterator<It> && (requires (T: t, It: a) { t = t + *a; })
         function accumulate(It: first, It: last, T: init) -> T {
             T: total = std::move(init);
             for (It: it = first; it != last; ++it) {
@@ -700,6 +739,7 @@ namespace std {
         } end function accumulate
 
         template <typename It, typename T, typename E>
+        requires std::concepts::iterator<It>
         function accumulate(It: first, It: last, T: init, std::Combine<T, E>: op) -> T {
             T: total = std::move(init);
             for (It: it = first; it != last; ++it) {
@@ -710,17 +750,20 @@ namespace std {
 
         safe(compile) {
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (T: t, It: a) { t = t + *a; })
             function reduce(It: first, It: last, T: init) -> T {
                 return accumulate(first, last, init);
             } end function reduce
 
             template <typename It, typename T, typename E>
+            requires std::concepts::iterator<It>
             function reduce(It: first, It: last, T: init, std::Combine<T, E>: op) -> T {
                 return accumulate(first, last, init, op);
             } end function reduce
         } end safe
 
         template <typename It, typename Out>
+        requires std::concepts::iterator<It> && (requires (Out: o) { *o; ++o; }) && (requires (It: a, Out: o) { *o = *a + *a; })
         function prefix_sum(It: first, It: last, Out: out) -> Out {
             if (first == last) then {
                 return out;
@@ -741,6 +784,7 @@ namespace std {
         } end function prefix_sum
 
         template <typename It, typename T>
+        requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a = v; })
         function fill(It: first, It: last, const T&: value) -> void {
             for (It: it = first; it != last; ++it) {
                 *it = value;
@@ -748,6 +792,7 @@ namespace std {
         } end function fill
 
         template <typename It, typename T>
+        requires std::concepts::iterator<It> && (requires (It: a, T: t) { *a = t; ++t; })
         function iota(It: first, It: last, T: start) -> void {
             T: value = start;
             for (It: it = first; it != last; ++it) {
@@ -757,6 +802,7 @@ namespace std {
         } end function iota
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function generate(It: first, It: last, std::Supplier<E>: gen) -> void {
             for (It: it = first; it != last; ++it) {
                 *it = gen();
@@ -764,6 +810,7 @@ namespace std {
         } end function generate
 
         template <typename It, typename Out>
+        requires std::concepts::iterator<It> && (requires (Out: o) { *o; ++o; }) && (requires (It: a, Out: o) { *o = *a; })
         function copy(It: first, It: last, Out: out) -> Out {
             Out: o = out;
             for (It: it = first; it != last; ++it) {
@@ -774,10 +821,11 @@ namespace std {
         } end function copy
 
         template <typename It, typename Out>
-        function copy_n(It: first, long int: n, Out: out) -> Out {
+        requires std::concepts::iterator<It> && (requires (Out: o) { *o; ++o; }) && (requires (It: a, Out: o) { *o = *a; })
+        function copy_n(It: first, unsigned long int: n, Out: out) -> Out {
             It: it = first;
             Out: o = out;
-            for (long int: k = 0; k < n; k++) {
+            for (unsigned long int: k = 0; k < n; k++) {
                 *o = *it;
                 ++o;
                 ++it;
@@ -786,6 +834,7 @@ namespace std {
         } end function copy_n
 
         template <typename It, typename Out, typename E>
+        requires std::concepts::iterator<It> && (requires (Out: o) { *o; ++o; })
         function copy_if(It: first, It: last, Out: out, std::Predicate<E>: pred) -> Out {
             Out: o = out;
             for (It: it = first; it != last; ++it) {
@@ -798,6 +847,7 @@ namespace std {
         } end function copy_if
 
         template <typename It, typename Out>
+        requires std::concepts::iterator<It> && (requires (Out: o) { *o; ++o; }) && (requires (It: a, Out: o) { *o = *a; })
         function move_to(It: first, It: last, Out: out) -> Out {
             Out: o = out;
             for (It: it = first; it != last; ++it) {
@@ -808,6 +858,7 @@ namespace std {
         } end function move_to
 
         template <typename It, typename Out, typename E, typename U>
+        requires std::concepts::iterator<It> && (requires (Out: o) { *o; ++o; })
         function transform(It: first, It: last, Out: out, std::Transform<E, U>: op) -> Out {
             Out: o = out;
             for (It: it = first; it != last; ++it) {
@@ -818,6 +869,7 @@ namespace std {
         } end function transform
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function transform_in_place(It: first, It: last, std::Transform<E, E>: op) -> void {
             for (It: it = first; it != last; ++it) {
                 *it = op(*it);
@@ -825,8 +877,9 @@ namespace std {
         } end function transform_in_place
 
         template <typename It, typename T>
-        function replace(It: first, It: last, const T&: old_value, const T&: new_value) -> long int {
-            long int: n = 0;
+        requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a == v; *a = v; })
+        function replace(It: first, It: last, const T&: old_value, const T&: new_value) -> unsigned long int {
+            unsigned long int: n = 0;
             for (It: it = first; it != last; ++it) {
                 if (*it == old_value) then {
                     *it = new_value;
@@ -837,8 +890,9 @@ namespace std {
         } end function replace
 
         template <typename It, typename T, typename E>
-        function replace_if(It: first, It: last, std::Predicate<E>: pred, const T&: new_value) -> long int {
-            long int: n = 0;
+        requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a = v; })
+        function replace_if(It: first, It: last, std::Predicate<E>: pred, const T&: new_value) -> unsigned long int {
+            unsigned long int: n = 0;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
                     *it = new_value;
@@ -849,6 +903,7 @@ namespace std {
         } end function replace_if
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function remove_if(It: first, It: last, std::Predicate<E>: pred) -> It {
             It: out = find_if(first, last, pred);
             if (out == last) then {
@@ -868,6 +923,7 @@ namespace std {
 
         safe(compile) {
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a == v; })
             function remove(It: first, It: last, const T&: value) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return remove_if(first, last, [&value](const V&: x) -> bool { return x == value; });
@@ -875,6 +931,7 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function unique(It: first, It: last, function(const E&, const E&) -> bool: same) -> It {
             if (first == last) then {
                 return last;
@@ -897,6 +954,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a == *a; })
             function unique(It: first, It: last) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return unique(first, last, [](const V&: a, const V&: b) -> bool { return a == b; });
@@ -904,8 +962,9 @@ namespace std {
         } end safe
 
         template <typename It>
+        requires std::concepts::iterator<It>
         function reverse(It: first, It: last) -> void {
-            long int: n = distance(first, last);
+            unsigned long int: n = distance(first, last);
             if (n < 2) then {
                 return;
             }
@@ -921,6 +980,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It>
             function rotate(It: first, It: middle, It: last) -> It {
                 if (first == middle) then {
                     return last;
@@ -928,7 +988,7 @@ namespace std {
                 if (middle == last) then {
                     return first;
                 }
-                const long int: moved = distance(middle, last);
+                const unsigned long int: moved = distance(middle, last);
                 reverse(first, middle);
                 reverse(middle, last);
                 reverse(first, last);
@@ -936,28 +996,31 @@ namespace std {
             } end function rotate
 
             template <typename It>
-            function rotate_left(It: first, It: last, long int: n = 1) -> void {
-                const long int: size = distance(first, last);
+            requires std::concepts::iterator<It>
+            function rotate_left(It: first, It: last, unsigned long int: n = 1) -> void {
+                const unsigned long int: size = distance(first, last);
                 if (size < 2) then {
                     return;
                 }
-                const long int: k = ((n % size) + size) % size;
+                const unsigned long int: k = static_cast<unsigned long int>(n % static_cast<unsigned long int>(size));
                 if (k != 0) then {
                     rotate(first, next(first, k), last);
                 }
             } end function rotate_left
 
             template <typename It>
-            function rotate_right(It: first, It: last, long int: n = 1) -> void {
-                const long int: size = distance(first, last);
+            requires std::concepts::iterator<It>
+            function rotate_right(It: first, It: last, unsigned long int: n = 1) -> void {
+                const unsigned long int: size = distance(first, last);
                 if (size < 2) then {
                     return;
                 }
-                rotate_left(first, last, size - ((n % size) + size) % size);
+                rotate_left(first, last, size - n % size);
             } end function rotate_right
         } end safe
 
         template <typename A, typename B>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B>
         function swap_ranges(A: first, A: last, B: other) -> B {
             B: b = other;
             for (A: a = first; a != last; ++a) {
@@ -968,15 +1031,17 @@ namespace std {
         } end function swap_ranges
 
         template <typename It>
+        requires std::concepts::iterator<It>
         function shuffle(It: first, It: last) -> void {
-            const long int: n = distance(first, last);
-            for (long int: i = n - 1; i > 0; i--) {
-                const long int: j = std::random::random_int<long int>(0, i);
+            const unsigned long int: n = distance(first, last);
+            for (unsigned long int: i = n - 1; i > 0; i--) {
+                const unsigned long int: j = std::random::random_int<unsigned long int>(0, i);
                 detail::swap_values(first[i], first[j]);
             }
         } end function shuffle
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function partition(It: first, It: last, std::Predicate<E>: pred) -> It {
             It: out = find_if_not(first, last, pred);
             if (out == last) then {
@@ -995,15 +1060,16 @@ namespace std {
         } end function partition
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function stable_partition(It: first, It: last, std::Predicate<E>: pred) -> It {
             using V = std::traits::decay<typeof(*first)>;
-            const long int: n = distance(first, last);
+            const unsigned long int: n = distance(first, last);
             if (n == 0) then {
                 return first;
             }
             V*: rejected = new V[n];
-            long int: kept = 0;
-            long int: dropped = 0;
+            unsigned long int: kept = 0;
+            unsigned long int: dropped = 0;
             It: out = first;
             for (It: it = first; it != last; ++it) {
                 if (pred(*it)) then {
@@ -1018,7 +1084,7 @@ namespace std {
                 }
             }
             It: o = out;
-            for (long int: k = 0; k < dropped; k++) {
+            for (unsigned long int: k = 0; k < dropped; k++) {
                 *o = std::move(rejected[k]);
                 ++o;
             }
@@ -1027,6 +1093,7 @@ namespace std {
         } end function stable_partition
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function is_partitioned(It: first, It: last, std::Predicate<E>: pred) -> bool {
             It: it = find_if_not(first, last, pred);
             while (it != last) {
@@ -1039,6 +1106,7 @@ namespace std {
         } end function is_partitioned
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function is_sorted_until(It: first, It: last, std::Compare<E>: comp) -> It {
             if (first == last) then {
                 return last;
@@ -1058,25 +1126,29 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function is_sorted_until(It: first, It: last) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return is_sorted_until(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
             } end function is_sorted_until
 
             template <typename It, typename E>
+            requires std::concepts::iterator<It>
             function is_sorted(It: first, It: last, std::Compare<E>: comp) -> bool {
                 return is_sorted_until(first, last, comp) == last;
             } end function is_sorted
 
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function is_sorted(It: first, It: last) -> bool {
                 return is_sorted_until(first, last) == last;
             } end function is_sorted
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (n < 2) then {
                 return;
             }
@@ -1085,18 +1157,21 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
             } end function sort
 
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function sort_descending(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 sort(first, last, [](const V&: a, const V&: b) -> bool { return b < a; });
             } end function sort_descending
 
             template <typename It, typename E, typename K>
+            requires std::concepts::iterator<It>
             function sort_by(It: first, It: last, std::Transform<E, K>: key) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 sort(first, last, [&key](const V&: a, const V&: b) -> bool { return key(a) < key(b); });
@@ -1104,9 +1179,10 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function stable_sort(It: first, It: last, std::Compare<E>: comp) -> void {
             using V = std::traits::decay<typeof(*first)>;
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (n < 2) then {
                 return;
             }
@@ -1117,35 +1193,41 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function stable_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 stable_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
             } end function stable_sort
 
             template <typename It, typename E, typename K>
+            requires std::concepts::iterator<It>
             function stable_sort_by(It: first, It: last, std::Transform<E, K>: key) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 stable_sort(first, last, [&key](const V&: a, const V&: b) -> bool { return key(a) < key(b); });
             } end function stable_sort_by
 
             template <typename It, typename E>
+            requires std::concepts::iterator<It>
             function merge_sort(It: first, It: last, std::Compare<E>: comp) -> void {
                 stable_sort(first, last, comp);
             } end function merge_sort
 
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function merge_sort(It: first, It: last) -> void {
                 stable_sort(first, last);
             } end function merge_sort
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function quick_sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            detail::quick(first, 0, static_cast<long int>(last - first), comp);
+            detail::quick(first, 0, static_cast<unsigned long int>(last - first), comp);
         } end function quick_sort
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function quick_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 quick_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1153,12 +1235,14 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function heap_sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            detail::heap(first, static_cast<long int>(last - first), comp);
+            detail::heap(first, static_cast<unsigned long int>(last - first), comp);
         } end function heap_sort
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function heap_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 heap_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1166,12 +1250,14 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function insertion_sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            detail::insertion(first, 0, static_cast<long int>(last - first), comp);
+            detail::insertion(first, 0, static_cast<unsigned long int>(last - first), comp);
         } end function insertion_sort
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function insertion_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 insertion_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1179,11 +1265,12 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function selection_sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            const long int: n = static_cast<long int>(last - first);
-            for (long int: i = 0; i + 1 < n; i++) {
-                long int: best = i;
-                for (long int: j = i + 1; j < n; j++) {
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
+            for (unsigned long int: i = 0; i + 1 < n; i++) {
+                unsigned long int: best = i;
+                for (unsigned long int: j = i + 1; j < n; j++) {
                     if (comp(first[j], first[best])) then {
                         best = j;
                     }
@@ -1196,6 +1283,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function selection_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 selection_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1203,11 +1291,12 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function bubble_sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            long int: stop = static_cast<long int>(last - first);
+            unsigned long int: stop = static_cast<unsigned long int>(last - first);
             while (stop > 1) {
-                long int: last_swap = 0;
-                for (long int: i = 1; i < stop; i++) {
+                unsigned long int: last_swap = 0;
+                for (unsigned long int: i = 1; i < stop; i++) {
                     if (comp(first[i], first[i - 1])) then {
                         detail::swap_values(first[i], first[i - 1]);
                         last_swap = i;
@@ -1219,6 +1308,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function bubble_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 bubble_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1226,16 +1316,17 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function cocktail_sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (n < 2) then {
                 return;
             }
-            long int: lo = 0;
-            long int: hi = n - 1;
+            unsigned long int: lo = 0;
+            unsigned long int: hi = n - 1;
             while (lo < hi) {
-                long int: moved = lo;
-                for (long int: i = lo; i < hi; i++) {
+                unsigned long int: moved = lo;
+                for (unsigned long int: i = lo; i < hi; i++) {
                     if (comp(first[i + 1], first[i])) then {
                         detail::swap_values(first[i], first[i + 1]);
                         moved = i;
@@ -1246,7 +1337,7 @@ namespace std {
                     break;
                 }
                 moved = hi;
-                for (long int: i = hi; i > lo; i--) {
+                for (unsigned long int: i = hi; i > lo; i--) {
                     if (comp(first[i], first[i - 1])) then {
                         detail::swap_values(first[i], first[i - 1]);
                         moved = i;
@@ -1258,6 +1349,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function cocktail_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 cocktail_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1265,9 +1357,10 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function gnome_sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            const long int: n = static_cast<long int>(last - first);
-            long int: i = 1;
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
+            unsigned long int: i = 1;
             while (i < n) {
                 if (i == 0 || !comp(first[i], first[i - 1])) then {
                     i += 1;
@@ -1280,6 +1373,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function gnome_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 gnome_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1287,16 +1381,17 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function shell_sort(It: first, It: last, std::Compare<E>: comp) -> void {
-            const long int: n = static_cast<long int>(last - first);
-            long int: gap = 1;
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
+            unsigned long int: gap = 1;
             while (gap < n / 3) {
                 gap = gap * 3 + 1;
             }
             while (gap >= 1) {
-                for (long int: i = gap; i < n; i++) {
+                for (unsigned long int: i = gap; i < n; i++) {
                     auto: held = std::move(first[i]);
-                    long int: j = i;
+                    unsigned long int: j = i;
                     while (j >= gap && comp(held, first[j - gap])) {
                         first[j] = std::move(first[j - gap]);
                         j -= gap;
@@ -1309,6 +1404,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function shell_sort(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 shell_sort(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1316,15 +1412,16 @@ namespace std {
         } end safe
 
         template <typename It>
+        requires std::concepts::iterator<It> && (requires (It: a) { requires std::traits::is_integer<std::traits::discard_cv<typeof(*a)>> || std::traits::is_char<std::traits::discard_cv<typeof(*a)>>; })
         function counting_sort(It: first, It: last, bool: descending = false) -> void {
             static_assert(std::traits::is_builtin_integer<std::traits::decay<typeof(*first)>>, "counting_sort needs a range of integers or chars");
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (n < 2) then {
                 return;
             }
             long long int: lo = static_cast<long long int>(first[0]);
             long long int: hi = lo;
-            for (long int: i = 1; i < n; i++) {
+            for (unsigned long int: i = 1; i < n; i++) {
                 const long long int: v = static_cast<long long int>(first[i]);
                 if (v < lo) then {
                     lo = v;
@@ -1333,7 +1430,7 @@ namespace std {
                     hi = v;
                 }
             }
-            const long long int: span = hi - lo + 1;
+            const unsigned long long int: span = static_cast<unsigned long long int>(hi - lo) + 1;
             if (span > 4 * n + 1024) then {
                 sort(first, last);
                 if (descending) then {
@@ -1341,22 +1438,22 @@ namespace std {
                 }
                 return;
             }
-            long int*: counts = new long int[span];
-            for (long long int: k = 0; k < span; k++) {
+            unsigned long int*: counts = new unsigned long int[span];
+            for (unsigned long long int: k = 0; k < span; k++) {
                 counts[k] = 0;
             }
-            for (long int: i = 0; i < n; i++) {
-                counts[static_cast<long long int>(first[i]) - lo] += 1;
+            for (unsigned long int: i = 0; i < n; i++) {
+                counts[static_cast<unsigned long long int>(static_cast<long long int>(first[i]) - lo)] += 1;
             }
             using V = std::traits::decay<typeof(*first)>;
-            long int: out = 0;
-            for (long long int: k = 0; k < span; k++) {
-                const long long int: slot = descending ? span - 1 - k : k;
-                for (long int: m = counts[slot]; m > 0; m--) {
+            unsigned long int: out = 0;
+            for (unsigned long long int: k = 0; k < span; k++) {
+                const unsigned long long int: slot = descending ? span - 1 - k : k;
+                for (unsigned long int: m = counts[slot]; m > 0; m--) {
                     if constexpr (std::traits::is_char<V>) then {
-                        first[out] = '\0' + static_cast<long int>(slot + lo);
+                        first[out] = '\0' + static_cast<long int>(static_cast<long long int>(slot) + lo);
                     } else then {
-                        first[out] = static_cast<V>(slot + lo);
+                        first[out] = static_cast<V>(static_cast<long long int>(slot) + lo);
                     }
                     out += 1;
                 }
@@ -1365,15 +1462,16 @@ namespace std {
         } end function counting_sort
 
         template <typename It>
+        requires std::concepts::iterator<It> && (requires (It: a) { requires std::traits::is_integer<std::traits::discard_cv<typeof(*a)>> || std::traits::is_char<std::traits::discard_cv<typeof(*a)>>; })
         function radix_sort(It: first, It: last) -> void {
             using V = std::traits::decay<typeof(*first)>;
             static_assert(std::traits::is_builtin_integer<V>, "radix_sort needs a range of integers or chars");
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (n < 2) then {
                 return;
             }
             long long int: lo = static_cast<long long int>(first[0]);
-            for (long int: i = 1; i < n; i++) {
+            for (unsigned long int: i = 1; i < n; i++) {
                 if (static_cast<long long int>(first[i]) < lo) then {
                     lo = static_cast<long long int>(first[i]);
                 }
@@ -1381,36 +1479,36 @@ namespace std {
             unsigned long long int*: keys = new unsigned long long int[n];
             unsigned long long int*: scratch = new unsigned long long int[n];
             unsigned long long int: top = 0;
-            for (long int: i = 0; i < n; i++) {
+            for (unsigned long int: i = 0; i < n; i++) {
                 keys[i] = static_cast<unsigned long long int>(static_cast<long long int>(first[i]) - lo);
                 if (keys[i] > top) then {
                     top = keys[i];
                 }
             }
-            long int*: counts = new long int[256];
-            for (int: shift = 0; shift < 64 && (top >> shift) > 0; shift += 8) {
-                for (int: b = 0; b < 256; b++) {
+            unsigned long int*: counts = new unsigned long int[256];
+            for (unsigned int: shift = 0; shift < 64 && (top >> shift) > 0; shift += 8) {
+                for (unsigned int: b = 0; b < 256; b++) {
                     counts[b] = 0;
                 }
-                for (long int: i = 0; i < n; i++) {
-                    counts[static_cast<long int>((keys[i] >> shift) & 255)] += 1;
+                for (unsigned long int: i = 0; i < n; i++) {
+                    counts[(keys[i] >> shift) & 255] += 1;
                 }
-                long int: total = 0;
-                for (int: b = 0; b < 256; b++) {
-                    const long int: c = counts[b];
+                unsigned long int: total = 0;
+                for (unsigned int: b = 0; b < 256; b++) {
+                    const unsigned long int: c = counts[b];
                     counts[b] = total;
                     total += c;
                 }
-                for (long int: i = 0; i < n; i++) {
-                    const long int: b = static_cast<long int>((keys[i] >> shift) & 255);
+                for (unsigned long int: i = 0; i < n; i++) {
+                    const unsigned long long int: b = (keys[i] >> shift) & 255;
                     scratch[counts[b]] = keys[i];
                     counts[b] += 1;
                 }
-                for (long int: i = 0; i < n; i++) {
+                for (unsigned long int: i = 0; i < n; i++) {
                     keys[i] = scratch[i];
                 }
             }
-            for (long int: i = 0; i < n; i++) {
+            for (unsigned long int: i = 0; i < n; i++) {
                 if constexpr (std::traits::is_char<V>) then {
                     first[i] = '\0' + static_cast<long int>(static_cast<long long int>(keys[i]) + lo);
                 } else then {
@@ -1423,20 +1521,21 @@ namespace std {
         } end function radix_sort
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function partial_sort(It: first, It: middle, It: last, std::Compare<E>: comp) -> void {
-            const long int: k = static_cast<long int>(middle - first);
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: k = static_cast<unsigned long int>(middle - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (k <= 0) then {
                 return;
             }
             detail::heapify(first, k, comp);
-            for (long int: i = k; i < n; i++) {
+            for (unsigned long int: i = k; i < n; i++) {
                 if (comp(first[i], first[0])) then {
                     detail::swap_values(first[i], first[0]);
                     detail::sift_down(first, 0, k, comp);
                 }
             }
-            for (long int: end_index = k - 1; end_index > 0; end_index--) {
+            for (unsigned long int: end_index = k - 1; end_index > 0; end_index--) {
                 detail::swap_values(first[0], first[end_index]);
                 detail::sift_down(first, 0, end_index, comp);
             }
@@ -1444,6 +1543,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function partial_sort(It: first, It: middle, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 partial_sort(first, middle, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1451,10 +1551,11 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function nth_element(It: first, It: nth, It: last, std::Compare<E>: comp) -> void {
-            const long int: n = static_cast<long int>(last - first);
-            const long int: k = static_cast<long int>(nth - first);
-            if (k < 0 || k >= n) then {
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
+            const unsigned long int: k = static_cast<unsigned long int>(nth - first);
+            if (k >= n) then {
                 return;
             }
             detail::select(first, 0, n, k, comp);
@@ -1462,6 +1563,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function nth_element(It: first, It: nth, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 nth_element(first, nth, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1469,12 +1571,14 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function make_heap(It: first, It: last, std::Compare<E>: comp) -> void {
-            detail::heapify(first, static_cast<long int>(last - first), comp);
+            detail::heapify(first, static_cast<unsigned long int>(last - first), comp);
         } end function make_heap
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function make_heap(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 make_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1482,8 +1586,9 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function push_heap(It: first, It: last, std::Compare<E>: comp) -> void {
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (n > 1) then {
                 detail::sift_up(first, n - 1, comp);
             }
@@ -1491,6 +1596,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function push_heap(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 push_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1498,8 +1604,9 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function pop_heap(It: first, It: last, std::Compare<E>: comp) -> void {
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (n > 1) then {
                 detail::swap_values(first[0], first[n - 1]);
                 detail::sift_down(first, 0, n - 1, comp);
@@ -1508,6 +1615,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function pop_heap(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 pop_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1515,8 +1623,9 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function sort_heap(It: first, It: last, std::Compare<E>: comp) -> void {
-            for (long int: n = static_cast<long int>(last - first); n > 1; n--) {
+            for (unsigned long int: n = static_cast<unsigned long int>(last - first); n > 1; n--) {
                 detail::swap_values(first[0], first[n - 1]);
                 detail::sift_down(first, 0, n - 1, comp);
             }
@@ -1524,6 +1633,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function sort_heap(It: first, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 sort_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1531,9 +1641,10 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function is_heap(It: first, It: last, std::Compare<E>: comp) -> bool {
-            const long int: n = static_cast<long int>(last - first);
-            for (long int: i = 1; i < n; i++) {
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
+            for (unsigned long int: i = 1; i < n; i++) {
                 if (comp(first[(i - 1) / 2], first[i])) then {
                     return false;
                 }
@@ -1543,6 +1654,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function is_heap(It: first, It: last) -> bool {
                 using V = std::traits::decay<typeof(*first)>;
                 return is_heap(first, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1550,11 +1662,12 @@ namespace std {
         } end safe
 
         template <typename It, typename T, typename E>
+        requires std::concepts::iterator<It>
         function lower_bound(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
-            long int: lo = 0;
-            long int: hi = static_cast<long int>(last - first);
+            unsigned long int: lo = 0;
+            unsigned long int: hi = static_cast<unsigned long int>(last - first);
             while (lo < hi) {
-                const long int: mid = lo + (hi - lo) / 2;
+                const unsigned long int: mid = lo + (hi - lo) / 2;
                 if (comp(first[mid], value)) then {
                     lo = mid + 1;
                 } else then {
@@ -1566,6 +1679,7 @@ namespace std {
 
         safe(compile) {
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a < v; v < *a; })
             function lower_bound(It: first, It: last, const T&: value) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return lower_bound(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1573,11 +1687,12 @@ namespace std {
         } end safe
 
         template <typename It, typename T, typename E>
+        requires std::concepts::iterator<It>
         function upper_bound(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
-            long int: lo = 0;
-            long int: hi = static_cast<long int>(last - first);
+            unsigned long int: lo = 0;
+            unsigned long int: hi = static_cast<unsigned long int>(last - first);
             while (lo < hi) {
-                const long int: mid = lo + (hi - lo) / 2;
+                const unsigned long int: mid = lo + (hi - lo) / 2;
                 if (comp(value, first[mid])) then {
                     hi = mid;
                 } else then {
@@ -1589,34 +1704,40 @@ namespace std {
 
         safe(compile) {
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a < v; v < *a; })
             function upper_bound(It: first, It: last, const T&: value) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return upper_bound(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
             } end function upper_bound
 
             template <typename It, typename T, typename E>
+            requires std::concepts::iterator<It>
             function equal_range(It: first, It: last, const T&: value, std::Compare<E>: comp) -> Range<It> {
                 return Range<It>(lower_bound(first, last, value, comp), upper_bound(first, last, value, comp));
             } end function equal_range
 
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a < v; v < *a; })
             function equal_range(It: first, It: last, const T&: value) -> Range<It> {
                 return Range<It>(lower_bound(first, last, value), upper_bound(first, last, value));
             } end function equal_range
 
             template <typename It, typename T, typename E>
+            requires std::concepts::iterator<It>
             function binary_search(It: first, It: last, const T&: value, std::Compare<E>: comp) -> bool {
                 It: it = lower_bound(first, last, value, comp);
                 return it != last && !comp(value, *it);
             } end function binary_search
 
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a < v; v < *a; })
             function binary_search(It: first, It: last, const T&: value) -> bool {
                 It: it = lower_bound(first, last, value);
                 return it != last && !(value < *it);
             } end function binary_search
 
             template <typename It, typename T, typename E>
+            requires std::concepts::iterator<It>
             function binary_find(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
                 It: it = lower_bound(first, last, value, comp);
                 if (it != last && !comp(value, *it)) then {
@@ -1626,6 +1747,7 @@ namespace std {
             } end function binary_find
 
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a < v; v < *a; })
             function binary_find(It: first, It: last, const T&: value) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return binary_find(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1633,17 +1755,18 @@ namespace std {
         } end safe
 
         template <typename It, typename T, typename E>
+        requires std::concepts::iterator<It>
         function exponential_search(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (n == 0) then {
                 return last;
             }
-            long int: bound = 1;
+            unsigned long int: bound = 1;
             while (bound < n && comp(first[bound], value)) {
                 bound *= 2;
             }
-            const long int: lo = bound / 2;
-            const long int: hi = bound + 1 < n ? bound + 1 : n;
+            const unsigned long int: lo = bound / 2;
+            const unsigned long int: hi = bound + 1 < n ? bound + 1 : n;
             It: it = lower_bound(first + lo, first + hi, value, comp);
             if (it != first + hi && !comp(value, *it)) then {
                 return it;
@@ -1653,6 +1776,7 @@ namespace std {
 
         safe(compile) {
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a < v; v < *a; })
             function exponential_search(It: first, It: last, const T&: value) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return exponential_search(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1662,8 +1786,12 @@ namespace std {
         template <typename It, typename T>
         requires std::traits::is_arithmetic<T>
         function interpolation_search(It: first, It: last, const T&: value) -> It {
-            long int: lo = 0;
-            long int: hi = static_cast<long int>(last - first) - 1;
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
+            if (n == 0) then {
+                return last;
+            }
+            unsigned long int: lo = 0;
+            unsigned long int: hi = n - 1;
             while (lo <= hi && !(value < first[lo]) && !(first[hi] < value)) {
                 if (first[hi] == first[lo]) then {
                     if (first[lo] == value) then {
@@ -1673,7 +1801,7 @@ namespace std {
                 }
                 const float: span = static_cast<float>(first[hi]) - static_cast<float>(first[lo]);
                 const float: offset = (static_cast<float>(value) - static_cast<float>(first[lo])) / span;
-                long int: pos = lo + static_cast<long int>(offset * static_cast<float>(hi - lo));
+                unsigned long int: pos = lo + static_cast<unsigned long int>(offset * static_cast<float>(hi - lo));
                 if (pos < lo) then {
                     pos = lo;
                 }
@@ -1686,6 +1814,9 @@ namespace std {
                 if (first[pos] < value) then {
                     lo = pos + 1;
                 } else then {
+                    if (pos == 0) then {
+                        return last;
+                    }
                     hi = pos - 1;
                 }
             }
@@ -1693,19 +1824,20 @@ namespace std {
         } end function interpolation_search
 
         template <typename It, typename T, typename E>
+        requires std::concepts::iterator<It>
         function fibonacci_search(It: first, It: last, const T&: value, std::Compare<E>: comp) -> It {
-            const long int: n = static_cast<long int>(last - first);
-            long int: fib2 = 0;
-            long int: fib1 = 1;
-            long int: fib = 1;
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
+            unsigned long int: fib2 = 0;
+            unsigned long int: fib1 = 1;
+            unsigned long int: fib = 1;
             while (fib < n) {
                 fib2 = fib1;
                 fib1 = fib;
                 fib = fib1 + fib2;
             }
-            long int: offset = -1;
+            unsigned long int: lo = 0;
             while (fib > 1) {
-                long int: i = offset + fib2;
+                unsigned long int: i = lo + fib2 - 1;
                 if (i > n - 1) then {
                     i = n - 1;
                 }
@@ -1713,7 +1845,7 @@ namespace std {
                     fib = fib1;
                     fib1 = fib2;
                     fib2 = fib - fib1;
-                    offset = i;
+                    lo = i + 1;
                 } else if (comp(value, first[i])) then {
                     fib = fib2;
                     fib1 = fib1 - fib2;
@@ -1722,14 +1854,15 @@ namespace std {
                     return first + i;
                 }
             }
-            if (fib1 == 1 && offset + 1 < n && !comp(first[offset + 1], value) && !comp(value, first[offset + 1])) then {
-                return first + (offset + 1);
+            if (fib1 == 1 && lo < n && !comp(first[lo], value) && !comp(value, first[lo])) then {
+                return first + lo;
             }
             return last;
         } end function fibonacci_search
 
         safe(compile) {
             template <typename It, typename T>
+            requires std::concepts::iterator<It> && (requires (It: a, const T&: v) { *a < v; v < *a; })
             function fibonacci_search(It: first, It: last, const T&: value) -> It {
                 using V = std::traits::decay<typeof(*first)>;
                 return fibonacci_search(first, last, value, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1737,6 +1870,7 @@ namespace std {
         } end safe
 
         template <typename A, typename B, typename Out, typename E>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (Out: o) { *o; ++o; })
         function merge(A: first, A: last, B: o_first, B: o_last, Out: out, std::Compare<E>: comp) -> Out {
             A: a = first;
             B: b = o_first;
@@ -1766,6 +1900,7 @@ namespace std {
 
         safe(compile) {
             template <typename A, typename B, typename Out>
+            requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (Out: o) { *o; ++o; }) && (requires (A: a, B: b) { *a < *b; *b < *a; })
             function merge(A: first, A: last, B: o_first, B: o_last, Out: out) -> Out {
                 using V = std::traits::decay<typeof(*first)>;
                 return merge(first, last, o_first, o_last, out, [](const V&: x, const V&: y) -> bool { return x < y; });
@@ -1773,10 +1908,11 @@ namespace std {
         } end safe
 
         template <typename It, typename E>
+        requires std::concepts::iterator<It>
         function inplace_merge(It: first, It: middle, It: last, std::Compare<E>: comp) -> void {
             using V = std::traits::decay<typeof(*first)>;
-            const long int: mid = static_cast<long int>(middle - first);
-            const long int: n = static_cast<long int>(last - first);
+            const unsigned long int: mid = static_cast<unsigned long int>(middle - first);
+            const unsigned long int: n = static_cast<unsigned long int>(last - first);
             if (mid <= 0 || mid >= n) then {
                 return;
             }
@@ -1787,6 +1923,7 @@ namespace std {
 
         safe(compile) {
             template <typename It>
+            requires std::concepts::iterator<It> && (requires (It: a) { *a < *a; })
             function inplace_merge(It: first, It: middle, It: last) -> void {
                 using V = std::traits::decay<typeof(*first)>;
                 inplace_merge(first, middle, last, [](const V&: a, const V&: b) -> bool { return a < b; });
@@ -1794,6 +1931,7 @@ namespace std {
         } end safe
 
         template <typename A, typename B, typename Out>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (Out: o) { *o; ++o; }) && (requires (A: a, B: b) { *a < *b; *b < *a; })
         function set_union(A: first, A: last, B: o_first, B: o_last, Out: out) -> Out {
             A: a = first;
             B: b = o_first;
@@ -1817,6 +1955,7 @@ namespace std {
         } end function set_union
 
         template <typename A, typename B, typename Out>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (Out: o) { *o; ++o; }) && (requires (A: a, B: b) { *a < *b; *b < *a; })
         function set_intersection(A: first, A: last, B: o_first, B: o_last, Out: out) -> Out {
             A: a = first;
             B: b = o_first;
@@ -1837,6 +1976,7 @@ namespace std {
         } end function set_intersection
 
         template <typename A, typename B, typename Out>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (Out: o) { *o; ++o; }) && (requires (A: a, B: b) { *a < *b; *b < *a; })
         function set_difference(A: first, A: last, B: o_first, B: o_last, Out: out) -> Out {
             A: a = first;
             B: b = o_first;
@@ -1860,6 +2000,7 @@ namespace std {
         } end function set_difference
 
         template <typename A, typename B>
+        requires std::concepts::iterator<A> && std::concepts::iterator<B> && (requires (A: a, B: b) { *a < *b; *b < *a; })
         function includes(A: first, A: last, B: o_first, B: o_last) -> bool {
             A: a = first;
             for (B: b = o_first; b != o_last; ++b) {
@@ -1907,13 +2048,13 @@ namespace std {
 
             template <typename C, typename T>
             requires std::concepts::iterable<C>
-            function count(C&&: items, const T&: value) -> long int {
+            function count(C&&: items, const T&: value) -> unsigned long int {
                 return count(items.begin(), items.end(), value);
             } end function count
 
             template <typename C, typename E>
             requires std::concepts::iterable<C>
-            function count_if(C&&: items, std::Predicate<E>: pred) -> long int {
+            function count_if(C&&: items, std::Predicate<E>: pred) -> unsigned long int {
                 return count_if(items.begin(), items.end(), pred);
             } end function count_if
 

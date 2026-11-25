@@ -622,15 +622,18 @@ void NameResolver::build(nodes::ASTNode* node) {
             build(s->get_try_body());
 
             for (nodes::TryCatchStatement* h = s; h; h = h->next_handler) {
+                if (!h->is_handler()) continue;
                 if (h->is_typed_catch()) { resolve_type(h->catch_type, h); }
                 build(h->get_catch_body());
             }
+            if (s->finally_body) build(s->finally_body);
             break;
         }
 
         case K::FunctionDeclaration: {
             auto* fn = static_cast<nodes::FunctionDeclaration*>(node);
             Scope* saved = m_current;
+            walk_expr(fn->member_requires);
             if (Scope* fs = inner_of(fn->symbol)) { m_current = fs; }
             resolve_type(fn->get_return_type(), fn);
             resolve_params(fn->get_parameters());
@@ -642,6 +645,7 @@ void NameResolver::build(nodes::ASTNode* node) {
         case K::OperatorFunctionDeclaration: {
             auto* op = static_cast<nodes::OperatorFunctionDeclaration*>(node);
             Scope* saved = m_current;
+            walk_expr(op->member_requires);
             if (Scope* fs = inner_of(op->symbol)) { m_current = fs; }
             resolve_type(mut(op->get_return_type()), op);
             if (op->is_conversion()) { resolve_type(mut(op->get_conversion_type()), op); }

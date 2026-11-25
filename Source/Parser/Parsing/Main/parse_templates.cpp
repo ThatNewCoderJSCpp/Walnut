@@ -286,8 +286,10 @@ nodes::ASTNode* Parser::parse_template_declaration() {
         decl->set_empty_template(true);   
     }
 
+    const char* requires_start = current_token().data();
     if (match(tokenizing::Token::Kind::RequiresKeyword)) {
         decl->set_requires_clause(parse_expression());
+        decl->m_requires_text = source_between(requires_start, current_token().data());
     }
 
     m_list_level         = m_template_list_level;

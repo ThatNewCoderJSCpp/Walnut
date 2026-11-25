@@ -19,11 +19,11 @@ safe(compile) {
             static constexpr bool: value = V;
             using value_type = bool;
 
-            constexpr operator(bool) function(const self&) {
+            constexpr operator(bool) function(const self&) noexcept {
                 return V;
             }
 
-            constexpr operator(()) function(const self&) -> bool {
+            constexpr operator(()) function(const self&) noexcept -> bool {
                 return V;
             }
         } end struct bool_constant
@@ -148,36 +148,43 @@ safe(compile) {
         using hardware_uint = hardware_uint32;
 
         template <typename T>
+        requires std::traits::has_operator<std::traits::op::less, T>
         function less_than(const T&: a, const T&: b) -> bool {
             return a < b;
         } end function less_than
 
         template <typename T>
+        requires std::traits::has_operator<std::traits::op::less, T>
         function leq(const T&: a, const T&: b) -> bool {
             return !(b < a);
         } end function leq
 
         template <typename T>
+        requires std::traits::has_operator<std::traits::op::less, T>
         function greater_than(const T&: a, const T&: b) -> bool {
             return b < a;
         } end function greater_than
 
         template <typename T>
+        requires std::traits::has_operator<std::traits::op::less, T>
         function geq(const T&: a, const T&: b) -> bool {
             return !(a < b);
         } end function geq
 
         template <typename T>
+        requires std::traits::has_operator<std::traits::op::equal, T>
         function equal(const T&: a, const T&: b) -> bool {
             return a == b;
         } end function equal
 
         template <typename T>
+        requires std::traits::has_operator<std::traits::op::equal, T>
         function not_equal(const T&: a, const T&: b) -> bool {
             return !(a == b);
         } end function not_equal
 
         template <typename T, typename K>
+        requires std::traits::has_operator<std::traits::op::less, K>
         function by(std::Transform<T, K>: key) -> std::Compare<T> {
             return [key](const T&: a, const T&: b) -> bool { return key(a) < key(b); };
         } end function by
@@ -538,6 +545,14 @@ safe(compile) {
                 struct is_hashable inherits std::bool_constant<(std::concepts::hashable<T>)> {
                 } end struct is_hashable
 
+                template <typename T>
+                struct is_container inherits std::bool_constant<(std::traits::is_fixed_array<T> || (std::traits::is_class<T> && __can_for_each(T) && std::concepts::sized<T>))> {
+                } end struct is_container
+
+                template <typename T>
+                struct is_stringifiable inherits std::bool_constant<((std::traits::is_class<T> && std::concepts::has_to_string<T>) || std::traits::is_arithmetic<T> || std::traits::is_bool<T> || std::traits::is_char<T> || std::traits::is_text_like<T> || std::traits::is_enum<T> || std::traits::is_dynamic<T>)> {
+                } end struct is_stringifiable
+
                 template <typename Derived, typename Base>
                 struct is_derived_from inherits std::bool_constant<(std::traits::is_base_of<Base, Derived>)> {
                 } end struct is_derived_from
@@ -800,6 +815,70 @@ safe(compile) {
             template <typename T>
             constexpr bool: is_hashable = std::traits::extend::is_hashable<T>::value;
 
+            template <typename T>
+            constexpr bool: is_container = std::traits::extend::is_container<T>::value;
+
+            template <typename T>
+            constexpr bool: is_stringifiable = std::traits::extend::is_stringifiable<T>::value;
+
+            template <typename T>
+            constexpr bool: can_for_each = __can_for_each(T);
+
+            template <typename F, typename... Args>
+            constexpr bool: is_callable = __is_callable(F, Args...);
+
+            template <typename F>
+            constexpr bool: is_function_like = __is_function_like(F);
+
+            template <typename Op, typename A, typename... B>
+            constexpr bool: has_operator = __has_operator(Op, A, B...);
+
+            template <typename Op, typename A, typename... B>
+            constexpr bool: overloads_operator = __overloads_operator(Op, A, B...);
+
+            namespace op {
+                struct add {} end struct add
+                struct subtract {} end struct subtract
+                struct multiply {} end struct multiply
+                struct divide {} end struct divide
+                struct modulo {} end struct modulo
+                struct power {} end struct power
+                struct equal {} end struct equal
+                struct not_equal {} end struct not_equal
+                struct less {} end struct less
+                struct greater {} end struct greater
+                struct less_equal {} end struct less_equal
+                struct greater_equal {} end struct greater_equal
+                struct logical_and {} end struct logical_and
+                struct logical_or {} end struct logical_or
+                struct logical_not {} end struct logical_not
+                struct bit_and {} end struct bit_and
+                struct bit_or {} end struct bit_or
+                struct bit_xor {} end struct bit_xor
+                struct bit_not {} end struct bit_not
+                struct shift_left {} end struct shift_left
+                struct shift_right {} end struct shift_right
+                struct assign {} end struct assign
+                struct add_assign {} end struct add_assign
+                struct subtract_assign {} end struct subtract_assign
+                struct multiply_assign {} end struct multiply_assign
+                struct divide_assign {} end struct divide_assign
+                struct modulo_assign {} end struct modulo_assign
+                struct power_assign {} end struct power_assign
+                struct bit_and_assign {} end struct bit_and_assign
+                struct bit_or_assign {} end struct bit_or_assign
+                struct bit_xor_assign {} end struct bit_xor_assign
+                struct shift_left_assign {} end struct shift_left_assign
+                struct shift_right_assign {} end struct shift_right_assign
+                struct negate {} end struct negate
+                struct positive {} end struct positive
+                struct increment {} end struct increment
+                struct decrement {} end struct decrement
+                struct dereference {} end struct dereference
+                struct subscript {} end struct subscript
+                struct call {} end struct call
+            } end namespace op
+
             template <typename A, typename B>
             constexpr bool: is_same = std::traits::extend::is_same<A, B>::value;
 
@@ -834,16 +913,16 @@ safe(compile) {
             constexpr int: float_rank = __float_rank(T);
 
             template <typename T>
-            constexpr int: integer_bits = __integer_bits(T);
+            constexpr unsigned int: integer_bits = __integer_bits(T);
 
             template <typename T>
-            constexpr int: float_bits = __float_bits(T);
+            constexpr unsigned int: float_bits = __float_bits(T);
 
             template <typename T>
-            constexpr int: float_mantissa_bits = __float_mantissa_bits(T);
+            constexpr unsigned int: float_mantissa_bits = __float_mantissa_bits(T);
 
             template <typename T>
-            constexpr int: float_exponent_bits = __float_exponent_bits(T);
+            constexpr unsigned int: float_exponent_bits = __float_exponent_bits(T);
 
             template <typename T>
             constexpr bool: is_hardware = __is_hardware(T);
@@ -855,7 +934,7 @@ safe(compile) {
             constexpr bool: is_hardware_float = __is_hardware(T) && __is_float(T);
 
             template <typename T>
-            constexpr int: array_extent = __array_extent(T);
+            constexpr unsigned int: array_extent = __array_extent(T);
 
             template <typename T>
             constexpr __underlying_type(T): enum_min = __enum_min(T);
@@ -951,13 +1030,13 @@ safe(compile) {
                 using type = T;
                 using unsigned_type = std::traits::make_unsigned<T>;
                 using signed_type = std::traits::make_signed<T>;
-                static constexpr int: bits = __integer_bits(T);
-                static constexpr int: bytes = (__integer_bits(T) + 7) / 8;
+                static constexpr unsigned int: bits = __integer_bits(T);
+                static constexpr unsigned int: bytes = (__integer_bits(T) + 7) / 8;
                 static constexpr int: rank = __integer_rank(T);
                 static constexpr bool: is_signed = __is_signed(T);
-                static constexpr int: digits = (__is_signed(T) && __is_hardware(T)) ? __integer_bits(T) - 1 : __integer_bits(T);
-                static constexpr int: digits10 = digits * 30103 / 100000;
-                static constexpr int: radix = 2;
+                static constexpr unsigned int: digits = (__is_signed(T) && __is_hardware(T)) ? __integer_bits(T) - 1 : __integer_bits(T);
+                static constexpr unsigned int: digits10 = digits * 30103 / 100000;
+                static constexpr unsigned int: radix = 2;
                 static constexpr bool: has_special_values = !__is_hardware(T);
                 static constexpr bool: is_hardware = __is_hardware(T);
                 static constexpr T: max = (__is_signed(T) && __is_hardware(T)) ? static_cast<T>(~static_cast<std::traits::make_unsigned<T>>(0) >> 1) : static_cast<T>(~static_cast<std::traits::make_unsigned<T>>(0));
@@ -974,20 +1053,20 @@ safe(compile) {
             struct float_traits {
                 static_assert(__is_float(T), "float_traits is only for the built-in float types; use integer_traits for integer types");
                 using type = T;
-                static constexpr int: bits = __float_bits(T);
-                static constexpr int: bytes = __float_bits(T) / 8;
+                static constexpr unsigned int: bits = __float_bits(T);
+                static constexpr unsigned int: bytes = __float_bits(T) / 8;
                 static constexpr int: rank = __float_rank(T);
                 static constexpr bool: is_signed = __is_signed(T);
-                static constexpr int: mantissa_bits = __float_mantissa_bits(T);
-                static constexpr int: exponent_bits = __float_exponent_bits(T);
-                static constexpr int: digits = __float_mantissa_bits(T) + 1;
-                static constexpr int: digits10 = (__float_mantissa_bits(T)) * 30103 / 100000;
-                static constexpr int: max_digits10 = 2 + (__float_mantissa_bits(T) + 1) * 30103 / 100000;
-                static constexpr int: radix = 2;
-                static constexpr int: exponent_bias = (1 << (__float_exponent_bits(T) - 1)) - 1;
-                static constexpr int: max_exponent = exponent_bias;
-                static constexpr int: min_exponent = 1 - exponent_bias;
-                static constexpr int: max_exponent10 = static_cast<int>(static_cast<long int>(max_exponent) * 30103 / 100000);
+                static constexpr unsigned int: mantissa_bits = __float_mantissa_bits(T);
+                static constexpr unsigned int: exponent_bits = __float_exponent_bits(T);
+                static constexpr unsigned int: digits = __float_mantissa_bits(T) + 1;
+                static constexpr unsigned int: digits10 = (__float_mantissa_bits(T)) * 30103 / 100000;
+                static constexpr unsigned int: max_digits10 = 2 + (__float_mantissa_bits(T) + 1) * 30103 / 100000;
+                static constexpr unsigned int: radix = 2;
+                static constexpr unsigned int: exponent_bias = (1u << (__float_exponent_bits(T) - 1)) - 1;
+                static constexpr unsigned int: max_exponent = exponent_bias;
+                static constexpr int: min_exponent = 1 - static_cast<int>(exponent_bias);
+                static constexpr unsigned int: max_exponent10 = static_cast<unsigned int>(static_cast<unsigned long int>(max_exponent) * 30103 / 100000);
                 static constexpr int: min_exponent10 = static_cast<int>(static_cast<long int>(min_exponent) * 30103 / 100000);
                 static constexpr bool: has_infinity = true;
                 static constexpr bool: has_nan = true;
@@ -1034,20 +1113,20 @@ safe(compile) {
             struct numeric_traits {
                 static_assert(__is_integer(T), "numeric_traits is only for the built-in integer and float types");
                 using type = T;
-                static constexpr int: bits = integer_traits<T>::bits;
-                static constexpr int: bytes = integer_traits<T>::bytes;
+                static constexpr unsigned int: bits = integer_traits<T>::bits;
+                static constexpr unsigned int: bytes = integer_traits<T>::bytes;
                 static constexpr bool: is_signed = integer_traits<T>::is_signed;
                 static constexpr bool: is_integer = true;
                 static constexpr bool: is_exact = true;
                 static constexpr bool: is_bounded = true;
-                static constexpr int: radix = 2;
-                static constexpr int: digits = integer_traits<T>::digits;
-                static constexpr int: digits10 = integer_traits<T>::digits10;
-                static constexpr int: max_digits10 = 0;
+                static constexpr unsigned int: radix = 2;
+                static constexpr unsigned int: digits = integer_traits<T>::digits;
+                static constexpr unsigned int: digits10 = integer_traits<T>::digits10;
+                static constexpr unsigned int: max_digits10 = 0;
                 static constexpr int: min_exponent = 0;
-                static constexpr int: max_exponent = 0;
+                static constexpr unsigned int: max_exponent = 0;
                 static constexpr int: min_exponent10 = 0;
-                static constexpr int: max_exponent10 = 0;
+                static constexpr unsigned int: max_exponent10 = 0;
                 static constexpr bool: has_infinity = !__is_hardware(T);
                 static constexpr bool: has_nan = !__is_hardware(T);
                 static constexpr bool: has_subnormals = false;
@@ -1089,20 +1168,20 @@ safe(compile) {
             template <typename T>
             struct numeric_traits<T, true> {
                 using type = T;
-                static constexpr int: bits = float_traits<T>::bits;
-                static constexpr int: bytes = float_traits<T>::bytes;
+                static constexpr unsigned int: bits = float_traits<T>::bits;
+                static constexpr unsigned int: bytes = float_traits<T>::bytes;
                 static constexpr bool: is_signed = float_traits<T>::is_signed;
                 static constexpr bool: is_integer = false;
                 static constexpr bool: is_exact = false;
                 static constexpr bool: is_bounded = true;
-                static constexpr int: radix = 2;
-                static constexpr int: digits = float_traits<T>::digits;
-                static constexpr int: digits10 = float_traits<T>::digits10;
-                static constexpr int: max_digits10 = float_traits<T>::max_digits10;
+                static constexpr unsigned int: radix = 2;
+                static constexpr unsigned int: digits = float_traits<T>::digits;
+                static constexpr unsigned int: digits10 = float_traits<T>::digits10;
+                static constexpr unsigned int: max_digits10 = float_traits<T>::max_digits10;
                 static constexpr int: min_exponent = float_traits<T>::min_exponent;
-                static constexpr int: max_exponent = float_traits<T>::max_exponent;
+                static constexpr unsigned int: max_exponent = float_traits<T>::max_exponent;
                 static constexpr int: min_exponent10 = float_traits<T>::min_exponent10;
-                static constexpr int: max_exponent10 = float_traits<T>::max_exponent10;
+                static constexpr unsigned int: max_exponent10 = float_traits<T>::max_exponent10;
                 static constexpr bool: has_infinity = true;
                 static constexpr bool: has_nan = true;
                 static constexpr bool: has_subnormals = true;
@@ -1145,6 +1224,12 @@ safe(compile) {
         namespace concepts {
             template <typename T, typename U>
             concept same_as = std::traits::is_same<T, U>
+
+            template <typename T, typename U>
+            concept same_as_ignoring_cv = std::traits::is_same_ignoring_cv<T, U>
+
+            template <typename T, typename U>
+            concept same_as_decayed = std::traits::is_same_decayed<T, U>
 
             template <typename From, typename To>
             concept convertible_to = std::traits::is_convertible<From, To>
@@ -1227,6 +1312,24 @@ safe(compile) {
             template <typename T>
             concept has_to_string = requires (T: value) { value.to_string(); }
 
+            template <typename T>
+            concept sized = requires (const T&: value) { value.size(); }
+
+            template <typename T>
+            concept container = std::traits::is_container<T>
+
+            template <typename T>
+            concept for_each_able = std::traits::can_for_each<T>
+
+            template <typename T>
+            concept stringifiable = std::traits::is_stringifiable<T>
+
+            template <typename F, typename... Args>
+            concept callable = std::traits::is_callable<F, Args...>
+
+            template <typename F>
+            concept function_like = std::traits::is_function_like<F>
+
             template <typename C>
             concept iterable = requires (C: items) { items.begin(); items.end(); }
 
@@ -1244,10 +1347,10 @@ safe(compile) {
             public:
                 constructor();
                 constructor(T...: items);
-                function size() const -> long int;
+                function size() const -> unsigned long int;
                 function begin() const -> const T*;
                 function end() const -> const T*;
-                function at(long int: index) const -> const T&;
+                function at(unsigned long int: index) const -> const T&;
 
                 function empty() const -> bool {
                     return size() == 0;
@@ -1257,7 +1360,7 @@ safe(compile) {
                     return begin();
                 } end function data
 
-                operator([]) function(long int: index) const -> const T& {
+                operator([]) function(unsigned long int: index) const -> const T& {
                     return at(index);
                 }
             } end class initializer_list
@@ -1286,6 +1389,8 @@ safe(compile) {
                 } end function what
             } end class match_error
         } end namespace errors
+
+        inline constexpr unsigned long int: npos = 18446744073709551615;
 
         template <typename T>
         constexpr function move(T&: value) noexcept -> T&& {
@@ -1381,7 +1486,7 @@ safe(compile) {
                     if (special_value(x)) then {
                         return -1;
                     }
-                    constexpr int: m = std::traits::float_traits<T>::mantissa_bits;
+                    constexpr unsigned int: m = std::traits::float_traits<T>::mantissa_bits;
                     if constexpr (m < 61) then {
                         return float_whole_parity<T, long int>(x, want_parity);
                     } else if constexpr (m < 125) then {
@@ -1609,6 +1714,7 @@ safe(compile) {
             } end function element_of
 
             template <typename T, typename... Ts>
+            requires (requires (const T&: value, const Ts&...: options) { ((value == options) || ... || false); })
             function equals_any(const T&: value, const Ts&...: options) -> bool {
                 return ((value == options) || ... || false);
             } end function equals_any
@@ -1643,11 +1749,11 @@ safe(compile) {
                 } end function view_as
 
                 template <typename A>
-                function pack_tail(const A&: items, long int: skip) -> {
+                function pack_tail(const A&: items, unsigned long int: skip) -> {
                     using T = std::traits::discard_cv<std::traits::discard_ref<typeof(items[0])>>;
-                    long int: count = countof(items) > skip ? countof(items) - skip : 0;
+                    unsigned long int: count = countof(items) > skip ? countof(items) - skip : 0u;
                     array[count] T: rest;
-                    for (long int: i = 0; i < count; i++) {
+                    for (unsigned long int: i = 0; i < count; i++) {
                         rest[i] = items[i + skip];
                     }
                     return rest;
@@ -1659,7 +1765,75 @@ safe(compile) {
             } end namespace detail
         } end namespace core
 
+        hidden namespace detail_benchmark {
+            extern "C++" {
+                class Native as "walnut_rt::bench::api" {
+                public:
+                    static function now() -> unsigned long int as "walnut_rt::bench::steady_nanos";
+                    static function duration(unsigned long int: ns) -> string as "walnut_rt::bench::duration_text";
+                    static function report(const string&: line) -> void as "walnut_rt::bench::report";
+                } end class Native
+            } end extern
+        } end namespace detail_benchmark
+
+        struct BenchmarkResult {
+            string: name;
+            unsigned long int: runs = 0;
+            unsigned long int: total_ns = 0;
+            unsigned long int: best_ns = 0;
+            unsigned long int: worst_ns = 0;
+
+            function average_ns(const self&) noexcept -> unsigned long int {
+                return self.runs > 0 ? self.total_ns / self.runs : 0ul;
+            } end function average_ns
+
+            function runs_per_second(const self&) noexcept -> unsigned long int {
+                return self.total_ns > 0 ? self.runs * 1000000000 / self.total_ns : 0ul;
+            } end function runs_per_second
+
+            function to_string(const self&) -> string {
+                string: out = self.name.size() > 0 ? self.name + ": " : "";
+                out += detail_benchmark::Native::duration(self.average_ns()) + " per run (best " + detail_benchmark::Native::duration(self.best_ns);
+                out += ", worst " + detail_benchmark::Native::duration(self.worst_ns) + ", " + std::core::to_string(self.runs) + (self.runs == 1 ? " run)" : " runs)");
+                return out;
+            } end function to_string
+        } end struct BenchmarkResult
+
+        function benchmark(function() -> void: work, unsigned long int: runs = 0) -> BenchmarkResult {
+            BenchmarkResult: result;
+            const unsigned long int: first = detail_benchmark::Native::now();
+            work();
+            const unsigned long int: once = detail_benchmark::Native::now() - first;
+            unsigned long int: count = runs;
+            if (count == 0) then {
+                const unsigned long int: target = 200000000;
+                count = once > 0 ? target / once : 1000000ul;
+                if (count < 1) then { count = 1; }
+                if (count > 1000000) then { count = 1000000; }
+            }
+            result.runs = count;
+            result.best_ns = std::npos;
+            for (unsigned long int: i = 0; i < count; i += 1) {
+                const unsigned long int: start = detail_benchmark::Native::now();
+                work();
+                const unsigned long int: spent = detail_benchmark::Native::now() - start;
+                result.total_ns += spent;
+                if (spent < result.best_ns) then { result.best_ns = spent; }
+                if (spent > result.worst_ns) then { result.worst_ns = spent; }
+            }
+            if (result.best_ns == std::npos) then { result.best_ns = 0; }
+            return result;
+        } end function benchmark
+
+        function benchmark(const string&: name, function() -> void: work, unsigned long int: runs = 0) -> BenchmarkResult {
+            BenchmarkResult: result = benchmark(work, runs);
+            result.name = name;
+            detail_benchmark::Native::report(result.to_string());
+            return result;
+        } end function benchmark
+
         template <typename E>
+        requires std::traits::is_enum<E>
         class Flags {
             static_assert(std::traits::is_enum<E>, "std::Flags needs an enum type, such as Flags<Permission>");
             static_assert(std::traits::enum_max<E> <= 2047, "std::Flags uses each enumerator's value as a bit position, so every enumerator has to be at most 2047");
@@ -1668,21 +1842,21 @@ safe(compile) {
             using enum_type = E;
             using word_type = std::traits::conditional<(std::traits::enum_max<E> < 8), std::hardware_uint8, std::traits::conditional<(std::traits::enum_max<E> < 16), std::hardware_uint16, std::traits::conditional<(std::traits::enum_max<E> < 32), std::hardware_uint32, std::hardware_uint64>>>;
             using mask_type = std::traits::conditional<(std::traits::enum_max<E> < 64), word_type, unsigned long long integer>;
-            static constexpr long int: word_bits = std::traits::integer_bits<word_type>;
-            static constexpr long int: word_count = static_cast<long int>(std::traits::enum_max<E>) / std::traits::integer_bits<word_type> + 1;
+            static constexpr unsigned long int: word_bits = std::traits::integer_bits<word_type>;
+            static constexpr unsigned long int: word_count = static_cast<unsigned long int>(std::traits::enum_max<E>) / std::traits::integer_bits<word_type> + 1;
 
         private:
             array[word_count] word_type: m_words;
 
-            static function index_of(E: e) -> long int {
-                return static_cast<long int>(e);
+            static function index_of(E: e) -> unsigned long int {
+                return static_cast<unsigned long int>(e);
             } end function index_of
 
-            static function word_bit(long int: index) -> word_type {
+            static function word_bit(unsigned long int: index) -> word_type {
                 return static_cast<word_type>(static_cast<word_type>(1) << static_cast<word_type>(index % word_bits));
             } end function word_bit
 
-            static function known_word(long int: w) -> word_type {
+            static function known_word(unsigned long int: w) -> word_type {
                 if constexpr (word_count == 1) then {
                     return static_cast<word_type>(std::traits::enum_bits<E>);
                 } else then {
@@ -1692,8 +1866,8 @@ safe(compile) {
                 }
             } end function known_word
 
-            static function bits_in(word_type: w) -> int {
-                int: n = 0;
+            static function bits_in(word_type: w) -> unsigned int {
+                unsigned int: n = 0;
                 while (w != static_cast<word_type>(0)) {
                     w = static_cast<word_type>(w & static_cast<word_type>(w - static_cast<word_type>(1)));
                     n += 1;
@@ -1701,8 +1875,8 @@ safe(compile) {
                 return n;
             } end function bits_in
 
-            static function lowest_bit(word_type: w) -> long int {
-                long int: i = 0;
+            static function lowest_bit(word_type: w) -> unsigned long int {
+                unsigned long int: i = 0;
                 while ((w & static_cast<word_type>(1)) == static_cast<word_type>(0)) {
                     w = static_cast<word_type>(w >> static_cast<word_type>(1));
                     i += 1;
@@ -1710,9 +1884,8 @@ safe(compile) {
                 return i;
             } end function lowest_bit
 
-            function next_on(const self&, long int: after) -> long int {
-                long int: start = after + 1;
-                long int: w = start / word_bits;
+            function first_on(const self&, unsigned long int: start) -> unsigned long int {
+                unsigned long int: w = start / word_bits;
                 if (w >= word_count) then {
                     return word_count * word_bits;
                 }
@@ -1728,10 +1901,10 @@ safe(compile) {
                     current = self.m_words[w];
                 }
                 return word_count * word_bits;
-            } end function next_on
+            } end function first_on
 
-            function combine(self&, const Flags&: other, int: how) -> Flags& {
-                for (long int: w = 0; w < word_count; w++) {
+            function combine(self&, const Flags&: other, unsigned int: how) -> Flags& {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     if (how == 0) then {
                         self.m_words[w] = static_cast<word_type>(self.m_words[w] | other.m_words[w]);
                     } else if (how == 1) then {
@@ -1755,16 +1928,16 @@ safe(compile) {
             class Step {
             public:
                 const Flags*: owner;
-                long int: at;
+                unsigned long int: at;
 
-                constructor(const Flags*: o, long int: a) : owner = o, at = a { }
+                constructor(const Flags*: o, unsigned long int: a) : owner = o, at = a { }
 
                 operator(!=) function(const self&, const Step&: other) -> bool {
                     return self.at != other.at;
                 }
 
                 operator(++) function(self&) -> Step& {
-                    self.at = self.owner->next_on(self.at);
+                    self.at = self.owner->first_on(self.at + 1);
                     return self;
                 }
 
@@ -1774,13 +1947,13 @@ safe(compile) {
             } end class Step
 
             constructor() {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     self.m_words[w] = static_cast<word_type>(0);
                 }
             }
 
             constructor(E...: values) {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     self.m_words[w] = static_cast<word_type>(0);
                 }
                 for (E: value in values) {
@@ -1794,7 +1967,7 @@ safe(compile) {
                     out.m_words[0] = static_cast<word_type>(mask & known_word(0));
                 } else then {
                     const unsigned long long integer: low = (static_cast<unsigned long long integer>(1) << static_cast<unsigned long long integer>(word_bits)) - static_cast<unsigned long long integer>(1);
-                    for (long int: w = 0; w < word_count; w++) {
+                    for (unsigned long int: w = 0; w < word_count; w++) {
                         const unsigned long long integer: part = (mask >> static_cast<unsigned long long integer>(w * word_bits)) & low;
                         out.m_words[w] = static_cast<word_type>(static_cast<word_type>(part) & known_word(w));
                     }
@@ -1817,7 +1990,7 @@ safe(compile) {
                     return self.m_words[0];
                 } else then {
                     unsigned long long integer: out = 0;
-                    for (long int: w = 0; w < word_count; w++) {
+                    for (unsigned long int: w = 0; w < word_count; w++) {
                         out = out | (static_cast<unsigned long long integer>(self.m_words[w]) << static_cast<unsigned long long integer>(w * word_bits));
                     }
                     return out;
@@ -1825,7 +1998,7 @@ safe(compile) {
             } end function mask
 
             function set(self&, E: e) -> Flags& {
-                const long int: i = index_of(e);
+                const unsigned long int: i = index_of(e);
                 self.m_words[i / word_bits] = static_cast<word_type>(self.m_words[i / word_bits] | word_bit(i));
                 return self;
             } end function set
@@ -1838,40 +2011,40 @@ safe(compile) {
             } end function set
 
             function clear(self&, E: e) -> Flags& {
-                const long int: i = index_of(e);
+                const unsigned long int: i = index_of(e);
                 self.m_words[i / word_bits] = static_cast<word_type>(self.m_words[i / word_bits] & static_cast<word_type>(~word_bit(i)));
                 return self;
             } end function clear
 
             function toggle(self&, E: e) -> Flags& {
-                const long int: i = index_of(e);
+                const unsigned long int: i = index_of(e);
                 self.m_words[i / word_bits] = static_cast<word_type>(self.m_words[i / word_bits] ^ word_bit(i));
                 return self;
             } end function toggle
 
             function set_all(self&) -> Flags& {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     self.m_words[w] = known_word(w);
                 }
                 return self;
             } end function set_all
 
             function clear_all(self&) -> Flags& {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     self.m_words[w] = static_cast<word_type>(0);
                 }
                 return self;
             } end function clear_all
 
             function toggle_all(self&) -> Flags& {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     self.m_words[w] = static_cast<word_type>(self.m_words[w] ^ known_word(w));
                 }
                 return self;
             } end function toggle_all
 
             function is_on(const self&, E: e) -> bool {
-                const long int: i = index_of(e);
+                const unsigned long int: i = index_of(e);
                 return (self.m_words[i / word_bits] & word_bit(i)) != static_cast<word_type>(0);
             } end function is_on
 
@@ -1880,7 +2053,7 @@ safe(compile) {
             } end function is_off
 
             function has_any(const self&, const Flags&: other) -> bool {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     if ((self.m_words[w] & other.m_words[w]) != static_cast<word_type>(0)) then {
                         return true;
                     }
@@ -1898,7 +2071,7 @@ safe(compile) {
             } end function has_any
 
             function has_all(const self&, const Flags&: other) -> bool {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     if ((self.m_words[w] & other.m_words[w]) != other.m_words[w]) then {
                         return false;
                     }
@@ -1936,16 +2109,16 @@ safe(compile) {
                 return other.has_all(self);
             } end function is_subset_of
 
-            function count(const self&) -> int {
-                int: n = 0;
-                for (long int: w = 0; w < word_count; w++) {
+            function count(const self&) -> unsigned int {
+                unsigned int: n = 0;
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     n += bits_in(self.m_words[w]);
                 }
                 return n;
             } end function count
 
             function empty(const self&) -> bool {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     if (self.m_words[w] != static_cast<word_type>(0)) then {
                         return false;
                     }
@@ -1954,7 +2127,7 @@ safe(compile) {
             } end function empty
 
             function full(const self&) -> bool {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     if (self.m_words[w] != known_word(w)) then {
                         return false;
                     }
@@ -1963,7 +2136,7 @@ safe(compile) {
             } end function full
 
             function begin(const self&) -> Step {
-                return Step(&self, self.next_on(-1));
+                return Step(&self, self.first_on(0));
             } end function begin
 
             function end(const self&) -> Step {
@@ -1982,7 +2155,7 @@ safe(compile) {
             } end function to_string
 
             operator(==) function(const self&, const Flags&: other) -> bool {
-                for (long int: w = 0; w < word_count; w++) {
+                for (unsigned long int: w = 0; w < word_count; w++) {
                     if (self.m_words[w] != other.m_words[w]) then {
                         return false;
                     }

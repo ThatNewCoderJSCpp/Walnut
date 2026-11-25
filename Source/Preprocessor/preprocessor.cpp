@@ -1,4 +1,5 @@
 #include "Preprocessor/preprocessor.hpp"
+#include <cctype>
 #include "Lexer/numeric_literal.hpp"
 #include "Common/file_kind.hpp"
 #include "Preprocessor/native_headers.hpp"
@@ -21,6 +22,7 @@ tokenizing::TokenStream Preprocessor::preprocess(FileId main) {
     m_out.reserve(m_sm.size(main) / 5 + 64);
     m_pragma_once.clear();
     m_cond.clear();
+    m_inactive_from = 0;
     m_cur_file = main;
     run_file(main, 0);
     m_out.push_back(Token(Kind::End, m_out.empty() ? 0u : m_out.back().line()));
@@ -48,6 +50,8 @@ void Preprocessor::run_file(FileId file, unsigned int depth) {
     Reader r{ toks, n, 0 };
     m_out.reserve(m_out.size() + n);
     const std::size_t cond_base = m_cond.size();
+    const std::uint32_t saved_inactive = m_inactive_from;
+    m_inactive_from = 0;
 
     while (!r.at_end()) {
         const Token& t = r.cur();
@@ -60,12 +64,26 @@ void Preprocessor::run_file(FileId file, unsigned int depth) {
         if (!emitting()) { r.adv(); continue; }
         if (t.is(Kind::ExternKeyword) && import_native_headers(r, file, depth)) continue;
         if (!is_expandable(t)) { emit(t); r.adv(); continue; }
+        const Token name = t;
         PPVec seed;
         seed.push_back(ppt(t));
         r.adv();
         PPVec expanded = expand(std::move(seed), &r);
+        if (m_record) {
+            std::vector<Token> shown;
+            for (const PPToken& pt : expanded) if (!pt.placemarker) shown.push_back(pt.tok);
+            record_use(name, display_tokens(shown.data(), shown.size()));
+        }
         for (PPToken& pt : expanded) if (!pt.placemarker) emit(pt.tok);
     }
+
+    if (m_record && m_inactive_from) {
+        std::uint32_t last = 1;
+        const char* data = m_sm.data(file);
+        for (std::size_t i = 0, n = m_sm.size(file); i < n; ++i) if (data[i] == '\n') ++last;
+        if (last >= m_inactive_from) m_inactive.push_back(InactiveRange{ file, m_inactive_from, last });
+    }
+    m_inactive_from = saved_inactive;
 
     if (m_cond.size() != cond_base) {
         m_reporter.report(ErrorPhase::Preprocessor, 0, "unterminated #if (missing #endif)");
@@ -158,13 +176,57 @@ void Preprocessor::handle_directive(Reader& r, FileId file, unsigned int depth) 
     if (rest.empty()) return;
     const std::string_view name = rest[0].lexeme();
     TokenVec body(rest.begin() + 1, rest.end());
-    if (name == "if")     { do_if(eval_condition(body, line));    return; }
-    if (name == "ifdef")  { do_if(name_defined(body, line));      return; }
-    if (name == "ifndef") { do_if(!name_defined(body, line));     return; }
-    if (name == "elif")   { do_elif(body, line);                  return; }
-    if (name == "else")   { do_else(line);                        return; }
-    if (name == "endif")  { do_endif(line);                       return; }
+    const bool conditional = name == "if" || name == "ifdef" || name == "ifndef" || name == "elif" || name == "else" || name == "endif";
+    if (conditional) {
+        const bool before = emitting();
+        if (m_record && name != "else" && name != "endif" && (before || name == "elif")) record_directive_names(body, file);
+        if (name == "if")          do_if(eval_condition(body, line));
+        else if (name == "ifdef")  do_if(name_defined(body, line));
+        else if (name == "ifndef") do_if(!name_defined(body, line));
+        else if (name == "elif")   do_elif(body, line);
+        else if (name == "else")   do_else(line);
+        else                       do_endif(line);
+        if (m_record) cond_changed(before, line, file);
+        return;
+    }
     if (!emitting()) return;
+    if (m_record && (name == "define" || name == "undef") && !body.empty() && body[0].is(Kind::Identifier) && body[0].file_id() == file) {
+        if (name == "undef") {
+            auto it = find_macro(body[0].lexeme());
+            MacroUse u;
+            u.file = file;
+            u.line = body[0].line();
+            u.at = body[0].data();
+            u.length = static_cast<std::uint32_t>(body[0].length());
+            u.name = std::string(body[0].lexeme());
+            u.defined = it != m_macros.end();
+            if (u.defined) u.definition = definition_text(u.name, it->second);
+            m_uses.push_back(std::move(u));
+        }
+    }
+    if (m_record && name == "define" && !body.empty() && body[0].is(Kind::Identifier)) {
+        do_define(body, file, line);
+        auto it = find_macro(body[0].lexeme());
+        if (it != m_macros.end()) {
+            MacroUse u;
+            u.file = file;
+            u.line = body[0].line();
+            u.at = body[0].data();
+            u.length = static_cast<std::uint32_t>(body[0].length());
+            u.name = std::string(body[0].lexeme());
+            u.definition = definition_text(u.name, it->second);
+            if (!it->second.function_like && !it->second.body.empty()) {
+                PPVec seed;
+                seed.push_back(ppt(body[0]));
+                PPVec expanded = expand(std::move(seed), nullptr);
+                std::vector<Token> shown;
+                for (const PPToken& pt : expanded) if (!pt.placemarker) shown.push_back(pt.tok);
+                u.expansion = display_tokens(shown.data(), shown.size());
+            }
+            m_uses.push_back(std::move(u));
+        }
+        return;
+    }
     if (name == "define")  { do_define(body, file, line);         return; }
     if (name == "undef")   { do_undef(body, line);                return; }
     if (name == "include") { do_include(body, file, line, depth); return; }
@@ -818,6 +880,106 @@ std::string Preprocessor::join_until(const TokenVec& body, std::size_t start, Ki
     }
 
     return s;
+}
+
+std::string Preprocessor::display(const Token& t) {
+    const std::string_view lx = t.lexeme();
+    if (t.is(Kind::String) && (lx.empty() || lx.front() != '"')) return "\"" + std::string(lx) + "\"";
+    if (t.is(Kind::Character) && (lx.empty() || lx.front() != '\'')) return "'" + std::string(lx) + "'";
+    return std::string(lx);
+}
+
+std::string Preprocessor::display_tokens(const Token* toks, std::size_t n) {
+    std::string s;
+    const auto tight_after = [](std::string_view x) { return x == "(" || x == "[" || x == "." || x == "!" || x == "~" || x == "::" || x == "->"; };
+    const auto tight_before = [](std::string_view x) { return x == ")" || x == "]" || x == "," || x == ";" || x == "." || x == "::" || x == "->" || x == "(" || x == "[" || x == "++" || x == "--"; };
+    std::string_view prev;
+    bool prev_name = false;
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::string text = display(toks[i]);
+        const std::string_view lx = toks[i].lexeme();
+        const bool is_name = toks[i].is(Kind::Identifier);
+        if (i) {
+            bool space = true;
+            if (tight_after(prev)) space = false;
+            if (tight_before(lx) && !(lx == "(" && !prev_name && prev != ")" && prev != "]")) space = false;
+            if ((lx == "(" || lx == "[") && (prev_name || prev == ")" || prev == "]")) space = false;
+            if (lx == ";" || lx == "," || (lx == ":" && !prev.empty() && (std::isalnum(static_cast<unsigned char>(prev.back())) || prev.back() == '_' || prev.back() == '>' || prev.back() == '&' || prev.back() == '*'))) space = false;
+            if (prev == ";" || prev == ",") space = true;
+            if (space) s += ' ';
+        }
+        s += text;
+        prev = lx;
+        prev_name = is_name;
+        if (s.size() > 4000) { s += " \xE2\x80\xA6"; break; }
+    }
+    return s;
+}
+
+std::string Preprocessor::definition_text(std::string_view name, const Macro& m) const {
+    std::string s = "#define " + std::string(name);
+    if (m.function_like) {
+        s += "(";
+        for (std::size_t i = 0; i < m.params.size(); ++i) s += (i ? ", " : "") + m.params[i];
+        if (m.variadic) s += m.params.empty() ? "..." : ", ...";
+        s += ")";
+    }
+    if (!m.body.empty()) s += " " + display_tokens(m.body.data(), m.body.size());
+    return s;
+}
+
+void Preprocessor::record_use(const Token& name, std::string expansion) {
+    if (name.file_id() == INVALID_FILE) return;
+    MacroUse u;
+    u.file = static_cast<FileId>(name.file_id());
+    u.line = name.line();
+    u.at = name.data();
+    u.length = static_cast<std::uint32_t>(name.length());
+    u.name = std::string(name.lexeme());
+    auto it = find_macro(u.name);
+    if (it != m_macros.end()) u.definition = definition_text(u.name, it->second);
+    else if (is_builtin_name(u.name)) u.definition = u.name + " (built in)";
+    else return;
+    u.expansion = std::move(expansion);
+    m_uses.push_back(std::move(u));
+}
+
+void Preprocessor::record_directive_names(const TokenVec& body, FileId file) {
+    for (std::size_t i = 0; i < body.size(); ++i) {
+        const Token& t = body[i];
+        if (!t.is(Kind::Identifier) || t.lexeme() == "defined" || t.file_id() != file) continue;
+        MacroUse u;
+        u.file = file;
+        u.line = t.line();
+        u.at = t.data();
+        u.length = static_cast<std::uint32_t>(t.length());
+        u.name = std::string(t.lexeme());
+        auto it = find_macro(u.name);
+        u.defined = it != m_macros.end() || is_builtin_name(u.name);
+        if (it != m_macros.end()) {
+            u.definition = definition_text(u.name, it->second);
+            const bool after_defined = (i >= 1 && body[i - 1].lexeme() == "defined") || (i >= 2 && body[i - 1].is(Kind::LeftParen) && body[i - 2].lexeme() == "defined");
+            if (!it->second.function_like && !after_defined) {
+                PPVec seed;
+                seed.push_back(ppt(t));
+                PPVec expanded = expand(std::move(seed), nullptr);
+                std::vector<Token> shown;
+                for (const PPToken& pt : expanded) if (!pt.placemarker) shown.push_back(pt.tok);
+                u.expansion = display_tokens(shown.data(), shown.size());
+            }
+        }
+        m_uses.push_back(std::move(u));
+    }
+}
+
+void Preprocessor::cond_changed(bool before, std::uint32_t line, FileId file) {
+    const bool after = emitting();
+    if (before && !after) {
+        m_inactive_from = line + 1;
+    } else if (!before && after) {
+        if (m_inactive_from && line > m_inactive_from) m_inactive.push_back(InactiveRange{ file, m_inactive_from, line - 1 });
+        m_inactive_from = 0;
+    }
 }
 
 std::string Preprocessor::spell(const TokenVec& toks) {

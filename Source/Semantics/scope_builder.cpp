@@ -172,7 +172,7 @@ void ScopeBuilder::build(ASTNode* node) {
     switch (node->kind) {
         case K::NamespaceDeclaration:        build_namespace  (static_cast<nodes::NamespaceDeclaration*>(node));        break;
         case K::TemplateDeclaration:         build_template   (static_cast<nodes::TemplateDeclaration*>(node));         break;
-        case K::OperatorFunctionDeclaration: build_operator   (static_cast<nodes::OperatorFunctionDeclaration*>(node)); break;
+        case K::OperatorFunctionDeclaration: walk_expr(static_cast<nodes::OperatorFunctionDeclaration*>(node)->member_requires); build_operator(static_cast<nodes::OperatorFunctionDeclaration*>(node)); break;
         case K::ConstructorDeclaration:      build_constructor(static_cast<nodes::ConstructorDeclaration*>(node));      break;
         case K::DestructorDeclaration:       build_destructor (static_cast<nodes::DestructorDeclaration*>(node));       break;
             
@@ -210,6 +210,7 @@ void ScopeBuilder::build(ASTNode* node) {
             check_declaration_modifiers(f->get_modifiers(), kValidFunctionMods, m_reporter, f, "function");
             check_qualifier_conflicts(f->qualifiers(), m_reporter, f, "function");
             check_cross_conflicts(f->get_modifiers(), f->qualifiers(), m_reporter, f, "function");
+            walk_expr(f->member_requires);
             build_function(f);
             break;
         }
@@ -293,6 +294,7 @@ void ScopeBuilder::build(ASTNode* node) {
             build(static_cast<ASTNode*>(s->get_try_body()));
 
             for (nodes::TryCatchStatement* h = s; h; h = h->next_handler) {
+                if (!h->is_handler()) continue;
                 push_scope(Scope::Kind::Block);
                 if (h->is_typed_catch() && !h->get_catch_name().empty()) { if (Symbol* cs = declare(*m_current, h->get_catch_name(), SymbolKind::Variable, h, false)) cs->type = &h->catch_type; }
 
@@ -303,6 +305,8 @@ void ScopeBuilder::build(ASTNode* node) {
 
                 pop_scope();
             }
+
+            if (s->finally_body) build(static_cast<ASTNode*>(s->finally_body));
 
             break;
         }

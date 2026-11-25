@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <charconv>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -216,7 +217,7 @@ private:
 struct registry {
     std::mutex                           lock;
     std::vector<std::unique_ptr<device>> items;
-    std::vector<std::int64_t>            free_ids;
+    std::vector<std::uint64_t>           free_ids;
 
     registry() {
         items.emplace_back(new file_device(stdin, false));
@@ -224,20 +225,20 @@ struct registry {
         items.emplace_back(new file_device(stderr, false));
     }
 
-    std::int64_t add(device* d) {
+    std::uint64_t add(device* d) {
         std::lock_guard<std::mutex> g(lock);
-        if (!free_ids.empty()) { const std::int64_t id = free_ids.back(); free_ids.pop_back(); items[static_cast<std::size_t>(id)].reset(d); return id; }
+        if (!free_ids.empty()) { const std::uint64_t id = free_ids.back(); free_ids.pop_back(); items[static_cast<std::size_t>(id)].reset(d); return id; }
         items.emplace_back(d);
-        return static_cast<std::int64_t>(items.size() - 1);
+        return static_cast<std::uint64_t>(items.size() - 1);
     }
 
-    device* get(std::int64_t id) {
+    device* get(std::uint64_t id) {
         std::lock_guard<std::mutex> g(lock);
-        if (id < 0 || static_cast<std::size_t>(id) >= items.size()) return nullptr;
+        if (static_cast<std::size_t>(id) >= items.size()) return nullptr;
         return items[static_cast<std::size_t>(id)].get();
     }
 
-    void remove(std::int64_t id) {
+    void remove(std::uint64_t id) {
         std::lock_guard<std::mutex> g(lock);
         if (id < 3 || static_cast<std::size_t>(id) >= items.size() || !items[static_cast<std::size_t>(id)]) return;
         items[static_cast<std::size_t>(id)].reset();
@@ -255,10 +256,10 @@ inline std::mutex& sync_mutex() {
     return *m;
 }
 
-inline std::int64_t file_open(const std::string& path, std::int64_t mode) {
+inline std::uint64_t file_open(const std::string& path, std::uint64_t mode) {
     const bool app = mode & 1, bin = mode & 2, in = mode & 4, out = mode & 8, trunc = mode & 16, noreplace = mode & 64;
     std::string m;
-    if (noreplace && out) { if (std::FILE* probe = std::fopen(path.c_str(), "rb")) { std::fclose(probe); return -1; } }
+    if (noreplace && out) { if (std::FILE* probe = std::fopen(path.c_str(), "rb")) { std::fclose(probe); return std::numeric_limits<std::uint64_t>::max(); } }
     if (app)                    m = in ? "a+" : "a";
     else if (in && out && trunc) m = "w+";
     else if (in && out)          m = "r+";
@@ -266,13 +267,13 @@ inline std::int64_t file_open(const std::string& path, std::int64_t mode) {
     else                         m = "r";
     if (bin) m += 'b';
     std::FILE* f = std::fopen(path.c_str(), m.c_str());
-    if (!f) return -1;
-    const std::int64_t id = devices().add(new file_device(f, true));
+    if (!f) return std::numeric_limits<std::uint64_t>::max();
+    const std::uint64_t id = devices().add(new file_device(f, true));
     if (mode & 32) devices().get(id)->seek(0, 2, true, true);
     return id;
 }
 
-inline bool device_close(std::int64_t id) {
+inline bool device_close(std::uint64_t id) {
     device* d = devices().get(id);
     if (!d) return false;
     d->flush();
@@ -280,61 +281,61 @@ inline bool device_close(std::int64_t id) {
     return true;
 }
 
-inline std::int64_t string_open(const std::string& initial, std::int64_t mode) {
+inline std::uint64_t string_open(const std::string& initial, std::uint64_t mode) {
     return devices().add(new string_device(initial, (mode & 1) != 0, (mode & 33) != 0));
 }
 
-inline std::string string_get(std::int64_t id) {
+inline std::string string_get(std::uint64_t id) {
     if (auto* d = dynamic_cast<string_device*>(devices().get(id))) return d->str();
     return std::string();
 }
 
-inline void string_set(std::int64_t id, const std::string& s, std::int64_t mode) {
+inline void string_set(std::uint64_t id, const std::string& s, std::uint64_t mode) {
     if (auto* d = dynamic_cast<string_device*>(devices().get(id))) d->set_str(s, (mode & 33) != 0);
 }
 
-inline bool device_write(std::int64_t id, const std::string& bytes) {
+inline bool device_write(std::uint64_t id, const std::string& bytes) {
     device* d = devices().get(id);
     return d && d->write(bytes);
 }
 
-inline bool device_flush(std::int64_t id) {
+inline bool device_flush(std::uint64_t id) {
     device* d = devices().get(id);
     return d && d->flush();
 }
 
-inline bool device_peek_ok(std::int64_t id) {
+inline bool device_peek_ok(std::uint64_t id) {
     device* d = devices().get(id);
     return d && d->peek_ok();
 }
 
-inline char32_t device_peek(std::int64_t id) {
+inline char32_t device_peek(std::uint64_t id) {
     device* d = devices().get(id);
     return d ? d->peek() : char32_t(0);
 }
 
-inline void device_bump(std::int64_t id) {
+inline void device_bump(std::uint64_t id) {
     if (device* d = devices().get(id)) d->bump();
 }
 
-inline bool device_unget(std::int64_t id) {
+inline bool device_unget(std::uint64_t id) {
     device* d = devices().get(id);
     return d && d->unget();
 }
 
-inline std::string device_read(std::int64_t id, std::int64_t count) {
+inline std::string device_read(std::uint64_t id, std::uint64_t count) {
     device* d = devices().get(id);
-    return d ? d->read_bytes(count) : std::string();
+    return d ? d->read_bytes(static_cast<std::int64_t>(count)) : std::string();
 }
 
-inline std::int64_t device_seek(std::int64_t id, std::int64_t off, std::int64_t dir, std::int64_t which) {
+inline std::uint64_t device_seek(std::uint64_t id, std::int64_t off, std::uint64_t dir, std::uint64_t which) {
     device* d = devices().get(id);
-    return d ? d->seek(off, static_cast<int>(dir), (which & 4) != 0, (which & 8) != 0) : -1;
+    return d ? static_cast<std::uint64_t>(d->seek(off, static_cast<int>(dir), (which & 4) != 0, (which & 8) != 0)) : std::numeric_limits<std::uint64_t>::max();
 }
 
-inline std::int64_t device_available(std::int64_t id) {
+inline std::uint64_t device_available(std::uint64_t id) {
     device* d = devices().get(id);
-    return d ? d->available() : 0;
+    return d ? static_cast<std::uint64_t>(d->available()) : 0;
 }
 
 inline void sync_acquire() { sync_mutex().lock(); }
@@ -361,7 +362,7 @@ inline std::string format_u64_digits(std::uint64_t m, std::int64_t base, bool up
     return digits;
 }
 
-inline std::string format_int64(std::int64_t v, std::int64_t base, bool upper, bool showbase, bool showpos) {
+inline std::string format_int64(std::int64_t v, std::uint64_t base, bool upper, bool showbase, bool showpos) {
     const bool neg = v < 0;
     const std::uint64_t m = neg ? 0ull - static_cast<std::uint64_t>(v) : static_cast<std::uint64_t>(v);
     std::string digits = format_u64_digits(m, base, upper);
@@ -370,13 +371,13 @@ inline std::string format_int64(std::int64_t v, std::int64_t base, bool upper, b
     return showpos ? "+" + digits : digits;
 }
 
-inline std::string format_uint64(std::uint64_t v, std::int64_t base, bool upper, bool showbase, bool showpos) {
+inline std::string format_uint64(std::uint64_t v, std::uint64_t base, bool upper, bool showbase, bool showpos) {
     std::string digits = format_u64_digits(v, base, upper);
     if (showbase) digits = with_base_prefix(digits, base, upper);
     return showpos ? "+" + digits : digits;
 }
 
-inline std::string format_int(walnut_rt::i2048 v, std::int64_t base, bool upper, bool showbase, bool showpos) {
+inline std::string format_int(walnut_rt::i2048 v, std::uint64_t base, bool upper, bool showbase, bool showpos) {
     if (v.is_special()) return v.to_string();
     const bool neg = v.is_negative();
     std::string digits = v.raw().abs().to_string(base);
@@ -386,7 +387,7 @@ inline std::string format_int(walnut_rt::i2048 v, std::int64_t base, bool upper,
     return showpos ? "+" + digits : digits;
 }
 
-inline std::string format_uint(walnut_rt::u2048 v, std::int64_t base, bool upper, bool showbase, bool showpos) {
+inline std::string format_uint(walnut_rt::u2048 v, std::uint64_t base, bool upper, bool showbase, bool showpos) {
     if (v.is_special()) return v.to_string();
     std::string digits = v.raw().to_string(base);
     if (upper) digits = upper_ascii(digits);
@@ -463,12 +464,14 @@ inline std::string hardware_text(H h, std::int64_t precision, std::int64_t style
     return buf;
 }
 
-inline std::string format_float(walnut_rt::f2048 v, std::int64_t bits, std::int64_t precision, std::int64_t style, bool upper, bool showpos, bool showpoint) {
+inline std::string format_float(walnut_rt::f2048 v, std::uint64_t bits, std::uint64_t precision_u, std::uint64_t style_u, bool hardware, bool upper, bool showpos, bool showpoint) {
+    const std::int64_t precision = static_cast<std::int64_t>(precision_u);
+    const std::int64_t style = static_cast<std::int64_t>(style_u);
     std::string out;
 
-    if (bits < 0) {
+    if (hardware) {
         const double d = walnut_rt::cast<double>(v);
-        out = bits == -32 ? hardware_text(static_cast<float>(d), precision, style) : hardware_text(d, precision, style);
+        out = bits == 32 ? hardware_text(static_cast<float>(d), precision, style) : hardware_text(d, precision, style);
         if (std::isfinite(d)) out = widen_exponent(out);
         if (showpoint && std::isfinite(d) && out.find_first_of(".e") == std::string::npos) out += ".";
         if (upper) out = upper_ascii(out);
@@ -525,7 +528,7 @@ inline bool digits_ok(const std::string& s, std::int64_t base, bool allow_sign) 
     return true;
 }
 
-inline std::string strip_base_prefix(const std::string& s, std::int64_t& base) {
+inline std::string strip_base_prefix(const std::string& s, std::uint64_t& base) {
     std::size_t i = 0;
     std::string sign;
     if (!s.empty() && (s[0] == '-' || s[0] == '+')) { sign = s.substr(0, 1); i = 1; }
@@ -543,7 +546,7 @@ inline std::string strip_base_prefix(const std::string& s, std::int64_t& base) {
     return s;
 }
 
-inline bool parse_int_ok(const std::string& s, std::int64_t base) {
+inline bool parse_int_ok(const std::string& s, std::uint64_t base) {
     walnut_rt::special_kind k;
     if (special_word(s, k)) return true;
     if (base != 0 && (base < 2 || base > 36)) return false;
@@ -551,7 +554,7 @@ inline bool parse_int_ok(const std::string& s, std::int64_t base) {
     return digits_ok(body, base, true);
 }
 
-inline walnut_rt::i2048 parse_int(const std::string& s, std::int64_t base) {
+inline walnut_rt::i2048 parse_int(const std::string& s, std::uint64_t base) {
     walnut_rt::special_kind k;
     if (special_word(s, k)) return walnut_rt::i2048::from_kind(k);
     if (!parse_int_ok(s, base)) return walnut_rt::i2048::undefined();
@@ -561,7 +564,7 @@ inline walnut_rt::i2048 parse_int(const std::string& s, std::int64_t base) {
     return walnut_rt::i2048(mp::int2048(clean, base));
 }
 
-inline bool parse_uint_ok(const std::string& s, std::int64_t base) {
+inline bool parse_uint_ok(const std::string& s, std::uint64_t base) {
     walnut_rt::special_kind k;
     if (special_word(s, k)) return k != walnut_rt::special_kind::neg_inf;
     if (base != 0 && (base < 2 || base > 36)) return false;
@@ -569,7 +572,7 @@ inline bool parse_uint_ok(const std::string& s, std::int64_t base) {
     return digits_ok(body, base, false) || (body.size() > 1 && body[0] == '+' && digits_ok(body.substr(1), base, false));
 }
 
-inline walnut_rt::u2048 parse_uint(const std::string& s, std::int64_t base) {
+inline walnut_rt::u2048 parse_uint(const std::string& s, std::uint64_t base) {
     walnut_rt::special_kind k;
     if (special_word(s, k)) return walnut_rt::u2048::from_kind(k);
     if (!parse_uint_ok(s, base)) return walnut_rt::u2048::undefined();

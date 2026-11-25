@@ -318,7 +318,7 @@ A `WebSocket` is made with `WebSocket::connect(url, timeout_ms = 30000)` (a `ws:
 | Method | Does |
 |---|---|
 | `send_text(text)`, `send_binary(data)` | Sends a message |
-| `receive(timeout_ms = -1)` | Waits for the next message (-1 waits as long as it takes). Gives a `Message` with `data()`, `is_text()`, `is_binary()` and `ok()`, which is `false` when nothing came |
+| `receive(timeout_ms = std::npos)` | Waits for the next message (`std::npos` waits as long as it takes). Gives a `Message` with `data()`, `is_text()`, `is_binary()` and `ok()`, which is `false` when nothing came |
 | `on_message(callback)` | Calls `callback` with each `Message` instead of keeping it for `receive` |
 | `close(code = 1000, reason = "")` | Closes it and waits for the other side |
 | `is_open()`, `close_code()`, `close_reason()`, `error()`, `remote_address()` | |

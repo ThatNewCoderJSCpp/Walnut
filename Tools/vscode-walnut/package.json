@@ -179,6 +179,11 @@
                     "default": true,
                     "description": "Show what a name, call or operator is when the mouse is over it: its declaration, its type, and its value when the compiler can work it out at compile time."
                 },
+                "walnut.dimInactiveCode": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Fade the lines that an #if, #ifdef, #elif or #else leaves out, the way C and C++ code is shown."
+                },
                 "walnut.highlightDelay": {
                     "type": "number",
                     "default": 300,

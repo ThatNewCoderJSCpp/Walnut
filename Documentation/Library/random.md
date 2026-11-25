@@ -49,6 +49,7 @@ function main() -> int {
 | `random_int<T>()` | Any value of the integer type `T` |
 | `random_float(lo, hi)` | A float between `lo` and `hi`, of the same float type as the bounds |
 | `random_float<T>()` | A float of type `T` from `0` up to (but not including) `1` |
+| `random_float(lo, hi, decimals)` | A number with at most `decimals` digits after the point, from `lo` to `hi` including both, each possible value equally likely: `random_float(1.0, 9.99, 2u)` gives prices such as `3.61` or `9.99`. `decimals` can be any `unsigned int`. Every value the float type can tell apart counts, so `random_float(0.0, 1.0, 30u)` works with a `double` and the wider float types take even more; once `decimals` is finer than the type can store near the bounds, the result is an ordinary random float rounded to the nearest number with that many decimals. If no such number lies between the bounds, such as `random_float(0.12, 0.125, 2u)`, it's a runtime error |
 
 - Every integer and float width works, from `short short int` to `long long integer` and from `short short float` to `long long double`. Wide types get random bits for their whole width, not just 64 of them.
 - The bounds can be given in either order.

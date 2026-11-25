@@ -319,8 +319,8 @@ public:
 
     const std::string& data() const { return m_data; }
     const std::string& host() const { return m_host; }
-    long long port() const { return m_port; }
-    bool empty() const { return m_data.empty(); }
+    long long port() const noexcept { return m_port; }
+    bool empty() const noexcept { return m_data.empty(); }
 
 private:
     std::string m_data;
@@ -553,7 +553,7 @@ public:
         return r;
     }
 
-    long long status() const { return m_status; }
+    long long status() const noexcept { return m_status; }
     std::string status_text() const { return m_status_text.empty() ? std::string(fn::http::status_text(static_cast<int>(m_status))) : m_status_text; }
     std::string body() const { return m_body; }
     std::string url() const { return m_url; }
@@ -648,8 +648,8 @@ public:
     login_check() = default;
     explicit login_check(const fgd::LoginCheck& c) : m_c(c) {}
 
-    bool allowed() const { return m_c.allowed; }
-    long long status() const { return m_c.status; }
+    bool allowed() const noexcept { return m_c.allowed; }
+    long long status() const noexcept { return m_c.status; }
     long long retry_after_ms() const { return static_cast<long long>(m_c.retry_after.count()); }
     long long delay_ms() const { return static_cast<long long>(m_c.delay.count()); }
     std::string reason() const { return m_c.reason; }
@@ -1048,7 +1048,7 @@ public:
         fn::run_for(std::chrono::milliseconds(20));
     }
 
-    bool is_listening() const { return m_state->listening; }
+    bool is_listening() const noexcept { return m_state->listening; }
 
 private:
     struct state {
@@ -1070,9 +1070,9 @@ public:
     message(std::string d, bool binary, bool ok) : m_data(std::move(d)), m_binary(binary), m_ok(ok) {}
 
     const std::string& data() const { return m_data; }
-    bool is_binary() const { return m_binary; }
+    bool is_binary() const noexcept { return m_binary; }
     bool is_text() const { return !m_binary; }
-    bool ok() const { return m_ok; }
+    bool ok() const noexcept { return m_ok; }
 
 private:
     std::string m_data;
@@ -1137,7 +1137,7 @@ public:
     }
 
     bool is_open() const { return m_state->sock && m_state->sock.is_open(); }
-    long long close_code() const { return m_state->close_code; }
+    long long close_code() const noexcept { return m_state->close_code; }
     std::string close_reason() const { return m_state->close_reason; }
     std::string error() const { return m_state->error; }
     std::string remote_address() const { return m_state->sock ? m_state->sock.remote_address() : std::string(); }

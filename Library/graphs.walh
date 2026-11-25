@@ -19,15 +19,19 @@ safe(compile) {
         namespace graphs {
             enum Direction { undirected, directed }
 
+            template <typename W>
+            concept Weight = std::traits::is_number<std::traits::discard_cv<W>>
+
             template <typename W = float>
+            requires Weight<W>
             struct Edge {
-                long int: source = -1;
-                long int: target = -1;
+                unsigned long int: source = std::npos;
+                unsigned long int: target = std::npos;
                 W: weight = static_cast<W>(1);
 
                 constructor() { }
 
-                constructor(long int: source_node, long int: target_node, const W&: edge_weight) : source = source_node, target = target_node, weight = edge_weight { }
+                constructor(unsigned long int: source_node, unsigned long int: target_node, const W&: edge_weight) : source = source_node, target = target_node, weight = edge_weight { }
 
                 operator(==) function(const self&, const Edge&: o) -> bool {
                     return self.source == o.source && self.target == o.target && self.weight == o.weight;
@@ -47,18 +51,19 @@ safe(compile) {
             } end struct Edge
 
             template <typename W = float>
+            requires Weight<W>
             class Path {
-                std::collections::Vector<long int>: steps;
+                std::collections::Vector<unsigned long int>: steps;
                 W: total = static_cast<W>(0);
 
             public:
                 constructor() { }
 
-                constructor(long int: start) {
+                constructor(unsigned long int: start) {
                     self.steps.push_back(start);
                 }
 
-                constructor(const std::collections::Vector<long int>&: nodes, const W&: cost) : steps = nodes, total = cost { }
+                constructor(const std::collections::Vector<unsigned long int>&: nodes, const W&: cost) : steps = nodes, total = cost { }
 
                 function found(const self&) -> bool {
                     return !self.steps.empty();
@@ -72,7 +77,7 @@ safe(compile) {
                     return self.steps.empty();
                 } end function empty
 
-                function nodes(const self&) -> const std::collections::Vector<long int>& {
+                function nodes(const self&) -> const std::collections::Vector<unsigned long int>& {
                     return self.steps;
                 } end function nodes
 
@@ -80,49 +85,49 @@ safe(compile) {
                     return self.total;
                 } end function cost
 
-                function node_count(const self&) -> long int {
+                function node_count(const self&) -> unsigned long int {
                     return self.steps.size();
                 } end function node_count
 
-                function edge_count(const self&) -> long int {
+                function edge_count(const self&) -> unsigned long int {
                     return self.steps.empty() ? 0 : self.steps.size() - 1;
                 } end function edge_count
 
-                function size(const self&) -> long int {
+                function size(const self&) -> unsigned long int {
                     return self.steps.size();
                 } end function size
 
-                function front(const self&) -> long int {
+                function front(const self&) -> unsigned long int {
                     if (self.steps.empty()) then {
                         throw std::errors::graph_error("front() of an empty path");
                     }
                     return self.steps[0];
                 } end function front
 
-                function back(const self&) -> long int {
+                function back(const self&) -> unsigned long int {
                     if (self.steps.empty()) then {
                         throw std::errors::graph_error("back() of an empty path");
                     }
-                    return self.steps[self.steps.size() - 1];
+                    return self.steps[static_cast<unsigned long int>(self.steps.size() - 1)];
                 } end function back
 
-                function start(const self&) -> long int {
+                function start(const self&) -> unsigned long int {
                     return self.front();
                 } end function start
 
-                function goal(const self&) -> long int {
+                function goal(const self&) -> unsigned long int {
                     return self.back();
                 } end function goal
 
-                operator([]) function(const self&, long int: index) -> long int {
-                    if (index < 0 || index >= self.steps.size()) then {
+                operator([]) function(const self&, unsigned long int: index) -> unsigned long int {
+                    if (index >= self.steps.size()) then {
                         throw std::errors::graph_error(static_cast<string>(`index ${index} is out of range for a path of ${self.steps.size()} nodes`));
                     }
                     return self.steps[index];
                 }
 
-                function contains(const self&, long int: node) -> bool {
-                    for (long int: n in self.steps) {
+                function contains(const self&, unsigned long int: node) -> bool {
+                    for (unsigned long int: n in self.steps) {
                         if (n == node) then {
                             return true;
                         }
@@ -131,8 +136,8 @@ safe(compile) {
                 } end function contains
 
                 function is_simple(const self&) -> bool {
-                    for (long int: i = 0; i < self.steps.size(); i++) {
-                        for (long int: j = i + 1; j < self.steps.size(); j++) {
+                    for (unsigned long int: i = 0; i < self.steps.size(); i++) {
+                        for (unsigned long int: j = i + 1; j < self.steps.size(); j++) {
                             if (self.steps[i] == self.steps[j]) then {
                                 return false;
                             }
@@ -142,10 +147,10 @@ safe(compile) {
                 } end function is_simple
 
                 function is_cycle(const self&) -> bool {
-                    return self.steps.size() > 1 && self.steps[0] == self.steps[self.steps.size() - 1];
+                    return self.steps.size() > 1 && self.steps[0] == self.steps[static_cast<unsigned long int>(self.steps.size() - 1)];
                 } end function is_cycle
 
-                function extend(self&, long int: next, const W&: step_cost = static_cast<W>(1)) -> Path& {
+                function extend(self&, unsigned long int: next, const W&: step_cost = static_cast<W>(1)) -> Path& {
                     if (!self.steps.empty()) then {
                         self.total += step_cost;
                     }
@@ -154,18 +159,19 @@ safe(compile) {
                 } end function extend
 
                 function reversed(const self&) -> Path {
-                    std::collections::Vector<long int>: out;
-                    for (long int: i = self.steps.size() - 1; i >= 0; i--) {
+                    std::collections::Vector<unsigned long int>: out;
+                    for (unsigned long int: i = self.steps.size(); i > 0;) {
+                        i--;
                         out.push_back(self.steps[i]);
                     }
                     return Path(out, self.total);
                 } end function reversed
 
-                function begin(const self&) -> const long int* {
+                function begin(const self&) -> const unsigned long int* {
                     return self.steps.begin();
                 } end function begin
 
-                function end(const self&) -> const long int* {
+                function end(const self&) -> const unsigned long int* {
                     return self.steps.end();
                 } end function end
 
@@ -182,7 +188,7 @@ safe(compile) {
                         return "(no path)";
                     }
                     string: out;
-                    for (long int: i = 0; i < self.steps.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.steps.size(); i++) {
                         if (i > 0) then {
                             out += " -> ";
                         }
@@ -193,113 +199,117 @@ safe(compile) {
             } end class Path
 
             struct Traversal {
-                std::collections::Vector<long int>: order;
-                std::collections::Vector<long int>: depth;
-                std::collections::Vector<long int>: parent;
+                std::collections::Vector<unsigned long int>: order;
+                std::collections::Vector<unsigned long int>: depth;
+                std::collections::Vector<unsigned long int>: parent;
                 bool: has_cycle = false;
-                std::collections::Vector<long int>: cycle;
-                std::collections::Vector<long int>: loop_from;
-                std::collections::Vector<long int>: loop_to;
+                std::collections::Vector<unsigned long int>: cycle;
+                std::collections::Vector<unsigned long int>: loop_from;
+                std::collections::Vector<unsigned long int>: loop_to;
 
-                function loop_count(const self&) -> long int {
+                function loop_count(const self&) -> unsigned long int {
                     return self.loop_from.size();
                 } end function loop_count
 
-                function loop(const self&, long int: index) -> std::collections::Vector<long int> {
-                    std::collections::Vector<long int>: back;
-                    if (index < 0 || index >= self.loop_from.size()) then {
+                function loop(const self&, unsigned long int: index) -> std::collections::Vector<unsigned long int> {
+                    std::collections::Vector<unsigned long int>: back;
+                    if (index >= self.loop_from.size()) then {
                         return back;
                     }
-                    long int: walk = self.loop_from[index];
-                    while (walk >= 0) {
+                    unsigned long int: walk = self.loop_from[index];
+                    while (walk != std::npos) {
                         back.push_back(walk);
                         if (walk == self.loop_to[index]) then {
                             break;
                         }
                         walk = self.parent[walk];
                     }
-                    std::collections::Vector<long int>: out;
-                    for (long int: i = back.size() - 1; i >= 0; i--) {
+                    std::collections::Vector<unsigned long int>: out;
+                    for (unsigned long int: i = back.size(); i > 0;) {
+                        i--;
                         out.push_back(back[i]);
                     }
                     out.push_back(self.loop_to[index]);
                     return out;
                 } end function loop
 
-                function loops(const self&) -> std::collections::Vector<std::collections::Vector<long int>> {
-                    std::collections::Vector<std::collections::Vector<long int>>: out;
-                    for (long int: i = 0; i < self.loop_from.size(); i++) {
+                function loops(const self&) -> std::collections::Vector<std::collections::Vector<unsigned long int>> {
+                    std::collections::Vector<std::collections::Vector<unsigned long int>>: out;
+                    for (unsigned long int: i = 0; i < self.loop_from.size(); i++) {
                         out.push_back(self.loop(i));
                     }
                     return out;
                 } end function loops
 
-                function reached(const self&, long int: node) -> bool {
-                    return node >= 0 && node < self.depth.size() && self.depth[node] >= 0;
+                function reached(const self&, unsigned long int: node) -> bool {
+                    return node < self.depth.size() && self.depth[node] != std::npos;
                 } end function reached
 
-                function depth_of(const self&, long int: node) -> long int {
-                    return self.reached(node) ? self.depth[node] : -1;
+                function depth_of(const self&, unsigned long int: node) -> unsigned long int {
+                    return self.reached(node) ? self.depth[node] : std::npos;
                 } end function depth_of
 
-                function parent_of(const self&, long int: node) -> long int {
-                    return self.reached(node) ? self.parent[node] : -1;
+                function parent_of(const self&, unsigned long int: node) -> unsigned long int {
+                    return self.reached(node) ? self.parent[node] : std::npos;
                 } end function parent_of
 
-                function path_to(const self&, long int: node) -> std::collections::Vector<long int> {
-                    std::collections::Vector<long int>: out;
+                function path_to(const self&, unsigned long int: node) -> std::collections::Vector<unsigned long int> {
+                    std::collections::Vector<unsigned long int>: out;
                     if (!self.reached(node)) then {
                         return out;
                     }
-                    long int: at = node;
-                    while (at >= 0) {
+                    unsigned long int: at = node;
+                    while (at != std::npos) {
                         out.push_back(at);
                         at = self.parent[at];
                     }
-                    std::collections::Vector<long int>: forward;
-                    for (long int: i = out.size() - 1; i >= 0; i--) {
+                    std::collections::Vector<unsigned long int>: forward;
+                    for (unsigned long int: i = out.size(); i > 0;) {
+                        i--;
                         forward.push_back(out[i]);
                     }
                     return forward;
                 } end function path_to
 
-                function count(const self&) -> long int {
+                function count(const self&) -> unsigned long int {
                     return self.order.size();
                 } end function count
             } end struct Traversal
 
             template <typename W = float>
+            requires Weight<W>
             struct Distances {
                 std::collections::Vector<W>: distance;
                 std::collections::Vector<bool>: reached;
-                std::collections::Vector<long int>: parent;
+                std::collections::Vector<unsigned long int>: parent;
                 bool: has_negative_cycle = false;
 
-                function reachable(const self&, long int: node) -> bool {
-                    return node >= 0 && node < self.reached.size() && self.reached[node];
+                function reachable(const self&, unsigned long int: node) -> bool {
+                    return node < self.reached.size() && self.reached[node];
                 } end function reachable
 
-                function distance_to(const self&, long int: node) -> W {
+                function distance_to(const self&, unsigned long int: node) -> W {
                     if (!self.reachable(node)) then {
                         throw std::errors::graph_error(static_cast<string>(`node ${node} can't be reached`));
                     }
                     return self.distance[node];
                 } end function distance_to
 
-                function path_to(const self&, long int: node) -> Path<W> {
+                function path_to(const self&, unsigned long int: node) -> Path<W> {
                     if (!self.reachable(node)) then {
                         return Path<W>();
                     }
-                    std::collections::Vector<long int>: back;
-                    long int: at = node;
-                    long int: guard = 0;
-                    while (at >= 0 && guard <= self.parent.size()) {
+                    std::collections::Vector<unsigned long int>: back;
+                    unsigned long int: at = node;
+                    unsigned long int: guard = 0;
+                    while (at != std::npos && guard <= self.parent.size()) {
                         back.push_back(at);
                         at = self.parent[at];
                         guard++;
                     }
-                    std::collections::Vector<long int>: forward;
-                    for (long int: i = back.size() - 1; i >= 0; i--) {
+                    std::collections::Vector<unsigned long int>: forward;
+                    for (unsigned long int: i = back.size(); i > 0;) {
+                        i--;
                         forward.push_back(back[i]);
                     }
                     return Path<W>(forward, self.distance[node]);
@@ -310,23 +320,23 @@ safe(compile) {
                 extern "C++" from "<walnut_threading.hpp>" {
                     class ClaimTable as "walnut_rt::threading::claim_table" {
                     public:
-                        constructor(long int: count) explicit;
+                        constructor(unsigned long int: count) explicit;
                         constructor(const ClaimTable&: other) = delete;
-                        function mark(self&, long int: node) noexcept -> void;
-                        function take_first(self&, long int: node) noexcept -> bool;
+                        function mark(self&, unsigned long int: node) noexcept -> void;
+                        function take_first(self&, unsigned long int: node) noexcept -> bool;
                     } end class ClaimTable
                 } end extern
 
-                constexpr long int: parallel_grain = 512;
+                constexpr unsigned long int: parallel_grain = 512;
 
                 template <typename G>
-                function run_parts(long int: parts, G&: work) -> void {
+                function run_parts(unsigned long int: parts, G&: work) -> void {
                     if (parts <= 1) then {
                         work(0);
                         return;
                     }
                     std::collections::Vector<std::threading::Thread>: helpers;
-                    for (long int: p = 1; p < parts; p++) {
+                    for (unsigned long int: p = 1; p < parts; p++) {
                         helpers.push_back(std::threading::Thread([&work, p]() -> void {
                             work(p);
                         }));
@@ -342,7 +352,7 @@ safe(compile) {
                 template <typename W>
                 struct HeapItem {
                     W: cost;
-                    long int: node = 0;
+                    unsigned long int: node = 0;
                 } end struct HeapItem
 
                 template <typename W>
@@ -354,14 +364,14 @@ safe(compile) {
                         return self.items.empty();
                     } end function empty
 
-                    function push(self&, const W&: cost, long int: node) -> void {
+                    function push(self&, const W&: cost, unsigned long int: node) -> void {
                         HeapItem<W>: item;
                         item.cost = cost;
                         item.node = node;
                         self.items.push_back(item);
-                        long int: i = self.items.size() - 1;
+                        unsigned long int: i = self.items.size() - 1;
                         while (i > 0) {
-                            const long int: up = (i - 1) / 2;
+                            const unsigned long int: up = (i - 1) / 2;
                             if (!(self.items[i].cost < self.items[up].cost)) then {
                                 break;
                             }
@@ -374,13 +384,13 @@ safe(compile) {
 
                     function pop(self&) -> HeapItem<W> {
                         const HeapItem<W>: top = self.items[0];
-                        self.items[0] = self.items[self.items.size() - 1];
+                        self.items[0] = self.items[static_cast<unsigned long int>(self.items.size() - 1)];
                         self.items.pop_back();
-                        long int: i = 0;
+                        unsigned long int: i = 0;
                         while (true) {
-                            const long int: l = i * 2 + 1;
-                            const long int: r = l + 1;
-                            long int: best = i;
+                            const unsigned long int: l = i * 2 + 1;
+                            const unsigned long int: r = l + 1;
+                            unsigned long int: best = i;
                             if (l < self.items.size() && self.items[l].cost < self.items[best].cost) then {
                                 best = l;
                             }
@@ -399,9 +409,10 @@ safe(compile) {
                     } end function pop
                 } end class MinHeap
 
-                function reverse_ids(const std::collections::Vector<long int>&: ids) -> std::collections::Vector<long int> {
-                    std::collections::Vector<long int>: out;
-                    for (long int: i = ids.size() - 1; i >= 0; i--) {
+                function reverse_ids(const std::collections::Vector<unsigned long int>&: ids) -> std::collections::Vector<unsigned long int> {
+                    std::collections::Vector<unsigned long int>: out;
+                    for (unsigned long int: i = ids.size(); i > 0;) {
+                        i--;
                         out.push_back(ids[i]);
                     }
                     return out;
@@ -409,22 +420,23 @@ safe(compile) {
             } end namespace detail
 
             template <typename T, typename W = float>
+            requires Weight<W>
             class Graph {
                 bool: is_directed_graph = false;
                 std::collections::Vector<T>: node_values;
                 std::collections::Vector<std::collections::Vector<Edge<W>>>: adjacency;
 
-                function check(const self&, long int: node) -> void {
-                    if (node < 0 || node >= self.node_values.size()) then {
+                function check(const self&, unsigned long int: node) -> void {
+                    if (node >= self.node_values.size()) then {
                         throw std::errors::graph_error(static_cast<string>(`node ${node} isn't in this graph, which has ${self.node_values.size()} nodes`));
                     }
                 } end function check
 
-                function link(self&, long int: source, long int: target, const W&: weight) -> void {
+                function link(self&, unsigned long int: source, unsigned long int: target, const W&: weight) -> void {
                     self.adjacency[source].push_back(Edge<W>(source, target, weight));
                 } end function link
 
-                function unlink(self&, long int: source, long int: target) -> bool {
+                function unlink(self&, unsigned long int: source, unsigned long int: target) -> bool {
                     std::collections::Vector<Edge<W>>: kept;
                     bool: removed = false;
                     for (const Edge<W>&: e in self.adjacency[source]) {
@@ -438,7 +450,7 @@ safe(compile) {
                     return removed;
                 } end function unlink
 
-                function edge_cost(const self&, long int: source, long int: target) -> W {
+                function edge_cost(const self&, unsigned long int: source, unsigned long int: target) -> W {
                     bool: seen = false;
                     W: best = static_cast<W>(0);
                     for (const Edge<W>&: e in self.adjacency[source]) {
@@ -450,23 +462,23 @@ safe(compile) {
                     return best;
                 } end function edge_cost
 
-                function rebuild(const self&, const std::collections::Vector<long int>&: parent, long int: start, long int: goal) -> Path<W> {
-                    std::collections::Vector<long int>: back;
-                    long int: at = goal;
-                    while (at >= 0) {
+                function rebuild(const self&, const std::collections::Vector<unsigned long int>&: parent, unsigned long int: start, unsigned long int: goal) -> Path<W> {
+                    std::collections::Vector<unsigned long int>: back;
+                    unsigned long int: at = goal;
+                    while (at != std::npos) {
                         back.push_back(at);
                         if (at == start) then {
                             break;
                         }
                         at = parent[at];
                     }
-                    if (back.empty() || back[back.size() - 1] != start) then {
+                    if (back.empty() || back[static_cast<unsigned long int>(back.size() - 1)] != start) then {
                         return Path<W>();
                     }
-                    const std::collections::Vector<long int>: forward = detail::reverse_ids(back);
+                    const std::collections::Vector<unsigned long int>: forward = detail::reverse_ids(back);
                     Path<W>: out(start);
-                    for (long int: i = 1; i < forward.size(); i++) {
-                        out.extend(forward[i], self.edge_cost(forward[i - 1], forward[i]));
+                    for (unsigned long int: i = 1; i < forward.size(); i++) {
+                        out.extend(forward[i], self.edge_cost(forward[static_cast<unsigned long int>(i - 1)], forward[i]));
                     }
                     return out;
                 } end function rebuild
@@ -499,21 +511,21 @@ safe(compile) {
                     return self.is_directed_graph;
                 } end function is_directed
 
-                function add_node(self&, const T&: value) -> long int {
+                function add_node(self&, const T&: value) -> unsigned long int {
                     self.node_values.push_back(value);
                     self.adjacency.push_back(std::collections::Vector<Edge<W>>());
                     return self.node_values.size() - 1;
                 } end function add_node
 
-                function add_nodes(self&, const std::collections::Vector<T>&: values) -> std::collections::Vector<long int> {
-                    std::collections::Vector<long int>: ids;
+                function add_nodes(self&, const std::collections::Vector<T>&: values) -> std::collections::Vector<unsigned long int> {
+                    std::collections::Vector<unsigned long int>: ids;
                     for (const T&: v in values) {
                         ids.push_back(self.add_node(v));
                     }
                     return ids;
                 } end function add_nodes
 
-                function add_edge(self&, long int: source, long int: target, const W&: weight = static_cast<W>(1)) -> void {
+                function add_edge(self&, unsigned long int: source, unsigned long int: target, const W&: weight = static_cast<W>(1)) -> void {
                     self.check(source);
                     self.check(target);
                     self.link(source, target, weight);
@@ -522,11 +534,11 @@ safe(compile) {
                     }
                 } end function add_edge
 
-                function connect(self&, long int: source, long int: target, const W&: weight = static_cast<W>(1)) -> void {
+                function connect(self&, unsigned long int: source, unsigned long int: target, const W&: weight = static_cast<W>(1)) -> void {
                     self.add_edge(source, target, weight);
                 } end function connect
 
-                function remove_edge(self&, long int: source, long int: target) -> bool {
+                function remove_edge(self&, unsigned long int: source, unsigned long int: target) -> bool {
                     self.check(source);
                     self.check(target);
                     const bool: removed = self.unlink(source, target);
@@ -536,7 +548,7 @@ safe(compile) {
                     return removed;
                 } end function remove_edge
 
-                function set_weight(self&, long int: source, long int: target, const W&: weight) -> void {
+                function set_weight(self&, unsigned long int: source, unsigned long int: target, const W&: weight) -> void {
                     self.check(source);
                     self.check(target);
                     if (!self.has_edge(source, target)) then {
@@ -557,7 +569,7 @@ safe(compile) {
                     }
                 } end function set_weight
 
-                function has_edge(const self&, long int: source, long int: target) -> bool {
+                function has_edge(const self&, unsigned long int: source, unsigned long int: target) -> bool {
                     if (!self.contains(source) || !self.contains(target)) then {
                         return false;
                     }
@@ -569,22 +581,22 @@ safe(compile) {
                     return false;
                 } end function has_edge
 
-                function weight(const self&, long int: source, long int: target) -> W {
+                function weight(const self&, unsigned long int: source, unsigned long int: target) -> W {
                     if (!self.has_edge(source, target)) then {
                         throw std::errors::graph_error(static_cast<string>(`there's no edge from ${source} to ${target}`));
                     }
                     return self.edge_cost(source, target);
                 } end function weight
 
-                function contains(const self&, long int: node) -> bool {
-                    return node >= 0 && node < self.node_values.size();
+                function contains(const self&, unsigned long int: node) -> bool {
+                    return node < self.node_values.size();
                 } end function contains
 
-                function node_count(const self&) -> long int {
+                function node_count(const self&) -> unsigned long int {
                     return self.node_values.size();
                 } end function node_count
 
-                function size(const self&) -> long int {
+                function size(const self&) -> unsigned long int {
                     return self.node_values.size();
                 } end function size
 
@@ -592,10 +604,10 @@ safe(compile) {
                     return self.node_values.empty();
                 } end function empty
 
-                function edge_count(const self&) -> long int {
-                    long int: total = 0;
-                    long int: loops = 0;
-                    for (long int: i = 0; i < self.adjacency.size(); i++) {
+                function edge_count(const self&) -> unsigned long int {
+                    unsigned long int: total = 0;
+                    unsigned long int: loops = 0;
+                    for (unsigned long int: i = 0; i < self.adjacency.size(); i++) {
                         for (const Edge<W>&: e in self.adjacency[i]) {
                             total++;
                             if (e.target == i) then {
@@ -606,21 +618,21 @@ safe(compile) {
                     return self.is_directed_graph ? total : (total - loops) / 2 + loops;
                 } end function edge_count
 
-                function value(self&, long int: node) -> T& {
+                function value(self&, unsigned long int: node) -> T& {
                     self.check(node);
                     return self.node_values[node];
                 } end function value
 
-                function value(const self&, long int: node) -> const T& {
+                function value(const self&, unsigned long int: node) -> const T& {
                     self.check(node);
                     return self.node_values[node];
                 } end function value
 
-                operator([]) function(self&, long int: node) -> T& {
+                operator([]) function(self&, unsigned long int: node) -> T& {
                     return self.value(node);
                 }
 
-                operator([]) function(const self&, long int: node) -> const T& {
+                operator([]) function(const self&, unsigned long int: node) -> const T& {
                     return self.value(node);
                 }
 
@@ -628,17 +640,17 @@ safe(compile) {
                     return self.node_values;
                 } end function values
 
-                function nodes(const self&) -> std::collections::Vector<long int> {
-                    std::collections::Vector<long int>: out;
-                    for (long int: i = 0; i < self.node_values.size(); i++) {
+                function nodes(const self&) -> std::collections::Vector<unsigned long int> {
+                    std::collections::Vector<unsigned long int>: out;
+                    for (unsigned long int: i = 0; i < self.node_values.size(); i++) {
                         out.push_back(i);
                     }
                     return out;
                 } end function nodes
 
-                function find(const self&, const T&: value) -> std::collections::Vector<long int> {
-                    std::collections::Vector<long int>: out;
-                    for (long int: i = 0; i < self.node_values.size(); i++) {
+                function find(const self&, const T&: value) -> std::collections::Vector<unsigned long int> {
+                    std::collections::Vector<unsigned long int>: out;
+                    for (unsigned long int: i = 0; i < self.node_values.size(); i++) {
                         if (self.node_values[i] == value) then {
                             out.push_back(i);
                         }
@@ -646,24 +658,24 @@ safe(compile) {
                     return out;
                 } end function find
 
-                function find_first(const self&, const T&: value) -> long int {
-                    for (long int: i = 0; i < self.node_values.size(); i++) {
+                function find_first(const self&, const T&: value) -> unsigned long int {
+                    for (unsigned long int: i = 0; i < self.node_values.size(); i++) {
                         if (self.node_values[i] == value) then {
                             return i;
                         }
                     }
-                    return -1;
+                    return std::npos;
                 } end function find_first
 
-                function edges_from(const self&, long int: node) -> std::collections::Vector<Edge<W>> {
+                function edges_from(const self&, unsigned long int: node) -> std::collections::Vector<Edge<W>> {
                     self.check(node);
                     return self.adjacency[node];
                 } end function edges_from
 
-                function edges_to(const self&, long int: node) -> std::collections::Vector<Edge<W>> {
+                function edges_to(const self&, unsigned long int: node) -> std::collections::Vector<Edge<W>> {
                     self.check(node);
                     std::collections::Vector<Edge<W>>: out;
-                    for (long int: i = 0; i < self.adjacency.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.adjacency.size(); i++) {
                         for (const Edge<W>&: e in self.adjacency[i]) {
                             if (e.target == node) then {
                                 out.push_back(e);
@@ -675,7 +687,7 @@ safe(compile) {
 
                 function edges(const self&) -> std::collections::Vector<Edge<W>> {
                     std::collections::Vector<Edge<W>>: out;
-                    for (long int: i = 0; i < self.adjacency.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.adjacency.size(); i++) {
                         for (const Edge<W>&: e in self.adjacency[i]) {
                             if (self.is_directed_graph || e.source <= e.target) then {
                                 out.push_back(e);
@@ -685,19 +697,19 @@ safe(compile) {
                     return out;
                 } end function edges
 
-                function neighbors(const self&, long int: node) -> std::collections::Vector<long int> {
+                function neighbors(const self&, unsigned long int: node) -> std::collections::Vector<unsigned long int> {
                     self.check(node);
-                    std::collections::Vector<long int>: out;
+                    std::collections::Vector<unsigned long int>: out;
                     for (const Edge<W>&: e in self.adjacency[node]) {
                         out.push_back(e.target);
                     }
                     return out;
                 } end function neighbors
 
-                function predecessors(const self&, long int: node) -> std::collections::Vector<long int> {
+                function predecessors(const self&, unsigned long int: node) -> std::collections::Vector<unsigned long int> {
                     self.check(node);
-                    std::collections::Vector<long int>: out;
-                    for (long int: i = 0; i < self.adjacency.size(); i++) {
+                    std::collections::Vector<unsigned long int>: out;
+                    for (unsigned long int: i = 0; i < self.adjacency.size(); i++) {
                         for (const Edge<W>&: e in self.adjacency[i]) {
                             if (e.target == node) then {
                                 out.push_back(i);
@@ -708,16 +720,16 @@ safe(compile) {
                     return out;
                 } end function predecessors
 
-                function out_degree(const self&, long int: node) -> long int {
+                function out_degree(const self&, unsigned long int: node) -> unsigned long int {
                     self.check(node);
                     return self.adjacency[node].size();
                 } end function out_degree
 
-                function in_degree(const self&, long int: node) -> long int {
+                function in_degree(const self&, unsigned long int: node) -> unsigned long int {
                     return self.edges_to(node).size();
                 } end function in_degree
 
-                function degree(const self&, long int: node) -> long int {
+                function degree(const self&, unsigned long int: node) -> unsigned long int {
                     return self.is_directed_graph ? self.in_degree(node) + self.out_degree(node) : self.out_degree(node);
                 } end function degree
 
@@ -731,7 +743,7 @@ safe(compile) {
                     for (const T&: v in self.node_values) {
                         out.add_node(v);
                     }
-                    for (long int: i = 0; i < self.adjacency.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.adjacency.size(); i++) {
                         for (const Edge<W>&: e in self.adjacency[i]) {
                             if (self.is_directed_graph) then {
                                 out.link(e.target, e.source, e.weight);
@@ -743,24 +755,24 @@ safe(compile) {
                     return out;
                 } end function reversed
 
-                function breadth_first_search(const self&, long int: start) -> Traversal {
+                function breadth_first_search(const self&, unsigned long int: start) -> Traversal {
                     self.check(start);
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     Traversal: out;
-                    out.depth = std::collections::Vector<long int>::filled(n, -1);
-                    out.parent = std::collections::Vector<long int>::filled(n, -1);
-                    std::collections::Vector<long int>: queue;
-                    long int: head = 0;
+                    out.depth = std::collections::Vector<unsigned long int>::filled(n, std::npos);
+                    out.parent = std::collections::Vector<unsigned long int>::filled(n, std::npos);
+                    std::collections::Vector<unsigned long int>: queue;
+                    unsigned long int: head = 0;
                     out.depth[start] = 0;
                     queue.push_back(start);
                     while (head < queue.size()) {
-                        const long int: at = queue[head];
+                        const unsigned long int: at = queue[head];
                         head++;
                         out.order.push_back(at);
                         for (const Edge<W>&: e in self.adjacency[at]) {
-                            if (out.depth[e.target] < 0) then {
-                                out.depth[e.target] = out.depth[at] + 1;
-                                out.parent[e.target] = at;
+                            if (out.depth[static_cast<unsigned long int>(e.target)] == std::npos) then {
+                                out.depth[static_cast<unsigned long int>(e.target)] = out.depth[at] + 1;
+                                out.parent[static_cast<unsigned long int>(e.target)] = at;
                                 queue.push_back(e.target);
                             }
                         }
@@ -768,27 +780,27 @@ safe(compile) {
                     return out;
                 } end function breadth_first_search
 
-                function breadth_first_search(const self&, long int: start, function(long int, long int) -> bool: visit) -> Traversal {
+                function breadth_first_search(const self&, unsigned long int: start, function(unsigned long int, unsigned long int) -> bool: visit) -> Traversal {
                     self.check(start);
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     Traversal: out;
-                    out.depth = std::collections::Vector<long int>::filled(n, -1);
-                    out.parent = std::collections::Vector<long int>::filled(n, -1);
-                    std::collections::Vector<long int>: queue;
-                    long int: head = 0;
+                    out.depth = std::collections::Vector<unsigned long int>::filled(n, std::npos);
+                    out.parent = std::collections::Vector<unsigned long int>::filled(n, std::npos);
+                    std::collections::Vector<unsigned long int>: queue;
+                    unsigned long int: head = 0;
                     out.depth[start] = 0;
                     queue.push_back(start);
                     while (head < queue.size()) {
-                        const long int: at = queue[head];
+                        const unsigned long int: at = queue[head];
                         head++;
                         out.order.push_back(at);
                         if (!visit(at, out.depth[at])) then {
                             break;
                         }
                         for (const Edge<W>&: e in self.adjacency[at]) {
-                            if (out.depth[e.target] < 0) then {
-                                out.depth[e.target] = out.depth[at] + 1;
-                                out.parent[e.target] = at;
+                            if (out.depth[static_cast<unsigned long int>(e.target)] == std::npos) then {
+                                out.depth[static_cast<unsigned long int>(e.target)] = out.depth[at] + 1;
+                                out.parent[static_cast<unsigned long int>(e.target)] = at;
                                 queue.push_back(e.target);
                             }
                         }
@@ -796,43 +808,40 @@ safe(compile) {
                     return out;
                 } end function breadth_first_search
 
-                function parallel_breadth_first_search(const self&, long int: start, long int: threads = 0) -> Traversal {
-                    return self.parallel_breadth_first_search(start, [](long int: node, long int: depth) -> bool { return true; }, threads);
+                function parallel_breadth_first_search(const self&, unsigned long int: start, unsigned long int: threads = 0) -> Traversal {
+                    return self.parallel_breadth_first_search(start, [](unsigned long int: node, unsigned long int: depth) -> bool { return true; }, threads);
                 } end function parallel_breadth_first_search
 
-                function parallel_breadth_first_search(const self&, long int: start, function(long int, long int) -> bool: visit, long int: threads = 0) -> Traversal {
+                function parallel_breadth_first_search(const self&, unsigned long int: start, function(unsigned long int, unsigned long int) -> bool: visit, unsigned long int: threads = 0) -> Traversal {
                     self.check(start);
-                    if (threads < 0) then {
-                        throw std::errors::graph_error(static_cast<string>(`parallel_breadth_first_search: can't use ${threads} threads`));
-                    }
-                    const long int: n = self.node_values.size();
-                    const long int: workers = threads > 0 ? threads : std::threading::hardware_threads();
+                    const unsigned long int: n = self.node_values.size();
+                    const unsigned long int: workers = static_cast<unsigned long int>(threads > 0 ? threads : std::threading::hardware_threads());
                     Traversal: out;
-                    out.depth = std::collections::Vector<long int>::filled(n, -1);
-                    out.parent = std::collections::Vector<long int>::filled(n, -1);
+                    out.depth = std::collections::Vector<unsigned long int>::filled(n, std::npos);
+                    out.parent = std::collections::Vector<unsigned long int>::filled(n, std::npos);
                     detail::ClaimTable: claims(n);
                     claims.mark(start);
                     out.depth[start] = 0;
-                    std::collections::Vector<long int>: frontier;
+                    std::collections::Vector<unsigned long int>: frontier;
                     frontier.push_back(start);
-                    long int: level = 0;
+                    unsigned long int: level = 0;
 
                     while (!frontier.empty()) {
-                        for (long int: node in frontier) {
+                        for (unsigned long int: node in frontier) {
                             out.order.push_back(node);
                         }
-                        const long int: count = frontier.size();
-                        long int: parts = count / detail::parallel_grain;
+                        const unsigned long int: count = frontier.size();
+                        unsigned long int: parts = count / detail::parallel_grain;
                         if (parts > workers) then {
                             parts = workers;
                         }
                         if (parts < 1) then {
                             parts = 1;
                         }
-                        std::collections::Vector<std::collections::Vector<long int>>: found = std::collections::Vector<std::collections::Vector<long int>>::filled(parts, std::collections::Vector<long int>());
+                        std::collections::Vector<std::collections::Vector<unsigned long int>>: found = std::collections::Vector<std::collections::Vector<unsigned long int>>::filled(parts, std::collections::Vector<unsigned long int>());
 
                         bool: stopped = false;
-                        for (long int: node in frontier) {
+                        for (unsigned long int: node in frontier) {
                             if (!visit(node, level)) then {
                                 stopped = true;
                             }
@@ -841,17 +850,17 @@ safe(compile) {
                             break;
                         }
 
-                        auto: expanding = [&](long int: part) -> void {
-                            const long int: lo = count * part / parts;
-                            const long int: hi = count * (part + 1) / parts;
-                            std::collections::Vector<long int>&: mine = found[part];
-                            for (long int: i = lo; i < hi; i++) {
-                                const long int: at = frontier[i];
+                        auto: expanding = [&](unsigned long int: part) -> void {
+                            const unsigned long int: lo = count * part / parts;
+                            const unsigned long int: hi = count * (part + 1) / parts;
+                            std::collections::Vector<unsigned long int>&: mine = found[part];
+                            for (unsigned long int: i = lo; i < hi; i++) {
+                                const unsigned long int: at = frontier[i];
                                 for (const Edge<W>&: e in self.adjacency[at]) {
                                     if (claims.take_first(e.target)) then {
                                         mine.push_back(e.target);
-                                        out.depth[e.target] = level + 1;
-                                        out.parent[e.target] = at;
+                                        out.depth[static_cast<unsigned long int>(e.target)] = level + 1;
+                                        out.parent[static_cast<unsigned long int>(e.target)] = at;
                                     }
                                 }
                             }
@@ -860,8 +869,8 @@ safe(compile) {
 
                         level++;
                         frontier.clear();
-                        for (const std::collections::Vector<long int>&: piece in found) {
-                            for (long int: node in piece) {
+                        for (const std::collections::Vector<unsigned long int>&: piece in found) {
+                            for (unsigned long int: node in piece) {
                                 frontier.push_back(node);
                             }
                         }
@@ -869,19 +878,19 @@ safe(compile) {
                     return out;
                 } end function parallel_breadth_first_search
 
-                function depth_first_search(const self&, long int: start) -> Traversal {
-                    return self.depth_first_search(start, [](long int: node, long int: depth) -> bool { return true; });
+                function depth_first_search(const self&, unsigned long int: start) -> Traversal {
+                    return self.depth_first_search(start, [](unsigned long int: node, unsigned long int: depth) -> bool { return true; });
                 } end function depth_first_search
 
-                function depth_first_search(const self&, long int: start, function(long int, long int) -> bool: visit) -> Traversal {
+                function depth_first_search(const self&, unsigned long int: start, function(unsigned long int, unsigned long int) -> bool: visit) -> Traversal {
                     self.check(start);
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     Traversal: out;
-                    out.depth = std::collections::Vector<long int>::filled(n, -1);
-                    out.parent = std::collections::Vector<long int>::filled(n, -1);
-                    std::collections::Vector<int>: state = std::collections::Vector<int>::filled(n, 0);
-                    std::collections::Vector<long int>: stack;
-                    std::collections::Vector<long int>: cursor;
+                    out.depth = std::collections::Vector<unsigned long int>::filled(n, std::npos);
+                    out.parent = std::collections::Vector<unsigned long int>::filled(n, std::npos);
+                    std::collections::Vector<unsigned int>: state = std::collections::Vector<unsigned int>::filled(n, 0);
+                    std::collections::Vector<unsigned long int>: stack;
+                    std::collections::Vector<unsigned long int>: cursor;
                     std::collections::Vector<bool>: skipped_parent;
                     out.depth[start] = 0;
                     state[start] = 1;
@@ -893,36 +902,36 @@ safe(compile) {
                     cursor.push_back(0);
                     skipped_parent.push_back(false);
                     while (!stack.empty()) {
-                        const long int: top = stack.size() - 1;
-                        const long int: at = stack[top];
+                        const unsigned long int: top = stack.size() - 1;
+                        const unsigned long int: at = stack[top];
                         if (cursor[top] < self.adjacency[at].size()) then {
-                            const Edge<W>: e = self.adjacency[at][cursor[top]];
+                            const Edge<W>: e = self.adjacency[at][static_cast<unsigned long int>(cursor[static_cast<unsigned long int>(top)])];
                             cursor[top] = cursor[top] + 1;
                             if (!self.is_directed_graph && e.target == out.parent[at] && !skipped_parent[top]) then {
                                 skipped_parent[top] = true;
                                 continue;
                             }
-                            if (state[e.target] == 0) then {
-                                state[e.target] = 1;
-                                out.depth[e.target] = out.depth[at] + 1;
-                                out.parent[e.target] = at;
+                            if (state[static_cast<unsigned long int>(e.target)] == 0) then {
+                                state[static_cast<unsigned long int>(e.target)] = 1;
+                                out.depth[static_cast<unsigned long int>(e.target)] = out.depth[at] + 1;
+                                out.parent[static_cast<unsigned long int>(e.target)] = at;
                                 out.order.push_back(e.target);
-                                if (!visit(e.target, out.depth[e.target])) then {
+                                if (!visit(e.target, out.depth[static_cast<unsigned long int>(e.target)])) then {
                                     return out;
                                 }
                                 stack.push_back(e.target);
                                 cursor.push_back(0);
                                 skipped_parent.push_back(false);
-                            } else if (state[e.target] == 1) then {
+                            } else if (state[static_cast<unsigned long int>(e.target)] == 1) then {
                                 out.loop_from.push_back(at);
                                 out.loop_to.push_back(e.target);
                                 if (out.has_cycle) then {
                                     continue;
                                 }
                                 out.has_cycle = true;
-                                std::collections::Vector<long int>: back;
-                                long int: walk = at;
-                                while (walk >= 0) {
+                                std::collections::Vector<unsigned long int>: back;
+                                unsigned long int: walk = at;
+                                while (walk != std::npos) {
                                     back.push_back(walk);
                                     if (walk == e.target) then {
                                         break;
@@ -942,21 +951,21 @@ safe(compile) {
                     return out;
                 } end function depth_first_search
 
-                function depth_first_postorder(const self&, long int: start) -> std::collections::Vector<long int> {
+                function depth_first_postorder(const self&, unsigned long int: start) -> std::collections::Vector<unsigned long int> {
                     self.check(start);
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     std::collections::Vector<bool>: seen = std::collections::Vector<bool>::filled(n, false);
-                    std::collections::Vector<long int>: order;
-                    std::collections::Vector<long int>: stack;
-                    std::collections::Vector<long int>: cursor;
+                    std::collections::Vector<unsigned long int>: order;
+                    std::collections::Vector<unsigned long int>: stack;
+                    std::collections::Vector<unsigned long int>: cursor;
                     seen[start] = true;
                     stack.push_back(start);
                     cursor.push_back(0);
                     while (!stack.empty()) {
-                        const long int: top = stack.size() - 1;
-                        const long int: at = stack[top];
+                        const unsigned long int: top = stack.size() - 1;
+                        const unsigned long int: at = stack[top];
                         if (cursor[top] < self.adjacency[at].size()) then {
-                            const long int: next = self.adjacency[at][cursor[top]].target;
+                            const unsigned long int: next = self.adjacency[at][cursor[top]].target;
                             cursor[top] = cursor[top] + 1;
                             if (!seen[next]) then {
                                 seen[next] = true;
@@ -972,16 +981,16 @@ safe(compile) {
                     return order;
                 } end function depth_first_postorder
 
-                function reachable(const self&, long int: source, long int: target) -> bool {
+                function reachable(const self&, unsigned long int: source, unsigned long int: target) -> bool {
                     self.check(target);
                     return self.breadth_first_search(source).reached(target);
                 } end function reachable
 
-                function hop_distances(const self&, long int: start) -> std::collections::Vector<long int> {
+                function hop_distances(const self&, unsigned long int: start) -> std::collections::Vector<unsigned long int> {
                     return self.breadth_first_search(start).depth;
                 } end function hop_distances
 
-                function breadth_first_path(const self&, long int: start, long int: goal) -> Path<W> {
+                function breadth_first_path(const self&, unsigned long int: start, unsigned long int: goal) -> Path<W> {
                     self.check(goal);
                     const Traversal: t = self.breadth_first_search(start);
                     if (!t.reached(goal)) then {
@@ -990,45 +999,45 @@ safe(compile) {
                     return self.rebuild(t.parent, start, goal);
                 } end function breadth_first_path
 
-                function depth_first_path(const self&, long int: start, long int: goal) -> Path<W> {
+                function depth_first_path(const self&, unsigned long int: start, unsigned long int: goal) -> Path<W> {
                     self.check(goal);
-                    const Traversal: t = self.depth_first_search(start, [goal](long int: node, long int: depth) -> bool { return node != goal; });
+                    const Traversal: t = self.depth_first_search(start, [goal](unsigned long int: node, unsigned long int: depth) -> bool { return node != goal; });
                     if (!t.reached(goal)) then {
                         return Path<W>();
                     }
                     return self.rebuild(t.parent, start, goal);
                 } end function depth_first_path
 
-                function shortest_distances(const self&, long int: start) -> Distances<W> {
+                function shortest_distances(const self&, unsigned long int: start) -> Distances<W> {
                     self.check(start);
                     if (self.has_negative_weight()) then {
                         return self.bellman_ford(start);
                     }
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     Distances<W>: out;
                     out.distance = std::collections::Vector<W>::filled(n, static_cast<W>(0));
                     out.reached = std::collections::Vector<bool>::filled(n, false);
-                    out.parent = std::collections::Vector<long int>::filled(n, -1);
+                    out.parent = std::collections::Vector<unsigned long int>::filled(n, std::npos);
                     std::collections::Vector<bool>: done = std::collections::Vector<bool>::filled(n, false);
                     detail::MinHeap<W>: open;
                     out.reached[start] = true;
                     open.push(static_cast<W>(0), start);
                     while (!open.empty()) {
                         const detail::HeapItem<W>: item = open.pop();
-                        const long int: at = item.node;
+                        const unsigned long int: at = item.node;
                         if (done[at]) then {
                             continue;
                         }
                         done[at] = true;
                         for (const Edge<W>&: e in self.adjacency[at]) {
-                            if (done[e.target]) then {
+                            if (done[static_cast<unsigned long int>(e.target)]) then {
                                 continue;
                             }
                             const W: candidate = out.distance[at] + e.weight;
-                            if (!out.reached[e.target] || candidate < out.distance[e.target]) then {
-                                out.reached[e.target] = true;
-                                out.distance[e.target] = candidate;
-                                out.parent[e.target] = at;
+                            if (!out.reached[static_cast<unsigned long int>(e.target)] || candidate < out.distance[static_cast<unsigned long int>(e.target)]) then {
+                                out.reached[static_cast<unsigned long int>(e.target)] = true;
+                                out.distance[static_cast<unsigned long int>(e.target)] = candidate;
+                                out.parent[static_cast<unsigned long int>(e.target)] = at;
                                 open.push(candidate, e.target);
                             }
                         }
@@ -1036,29 +1045,29 @@ safe(compile) {
                     return out;
                 } end function shortest_distances
 
-                function bellman_ford(const self&, long int: start) -> Distances<W> {
+                function bellman_ford(const self&, unsigned long int: start) -> Distances<W> {
                     self.check(start);
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     Distances<W>: out;
                     out.distance = std::collections::Vector<W>::filled(n, static_cast<W>(0));
                     out.reached = std::collections::Vector<bool>::filled(n, false);
-                    out.parent = std::collections::Vector<long int>::filled(n, -1);
+                    out.parent = std::collections::Vector<unsigned long int>::filled(n, std::npos);
                     out.reached[start] = true;
-                    for (long int: round = 0; round < n; round++) {
+                    for (unsigned long int: round = 0; round < n; round++) {
                         bool: changed = false;
-                        for (long int: at = 0; at < n; at++) {
+                        for (unsigned long int: at = 0; at < n; at++) {
                             if (!out.reached[at]) then {
                                 continue;
                             }
                             for (const Edge<W>&: e in self.adjacency[at]) {
                                 const W: candidate = out.distance[at] + e.weight;
-                                if (!out.reached[e.target] || candidate < out.distance[e.target]) then {
+                                if (!out.reached[static_cast<unsigned long int>(e.target)] || candidate < out.distance[static_cast<unsigned long int>(e.target)]) then {
                                     if (round == n - 1) then {
                                         out.has_negative_cycle = true;
                                     }
-                                    out.reached[e.target] = true;
-                                    out.distance[e.target] = candidate;
-                                    out.parent[e.target] = at;
+                                    out.reached[static_cast<unsigned long int>(e.target)] = true;
+                                    out.distance[static_cast<unsigned long int>(e.target)] = candidate;
+                                    out.parent[static_cast<unsigned long int>(e.target)] = at;
                                     changed = true;
                                 }
                             }
@@ -1070,7 +1079,7 @@ safe(compile) {
                     return out;
                 } end function bellman_ford
 
-                function shortest_path(const self&, long int: start, long int: goal) -> Path<W> {
+                function shortest_path(const self&, unsigned long int: start, unsigned long int: goal) -> Path<W> {
                     self.check(goal);
                     const Distances<W>: d = self.shortest_distances(start);
                     if (d.has_negative_cycle) then {
@@ -1080,19 +1089,19 @@ safe(compile) {
                 } end function shortest_path
 
                 template <typename H>
-                function a_star(const self&, long int: start, long int: goal, H: heuristic) -> Path<W> {
+                function a_star(const self&, unsigned long int: start, unsigned long int: goal, H: heuristic) -> Path<W> {
                     self.check(start);
                     self.check(goal);
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     std::collections::Vector<W>: best = std::collections::Vector<W>::filled(n, static_cast<W>(0));
                     std::collections::Vector<bool>: known = std::collections::Vector<bool>::filled(n, false);
                     std::collections::Vector<bool>: done = std::collections::Vector<bool>::filled(n, false);
-                    std::collections::Vector<long int>: parent = std::collections::Vector<long int>::filled(n, -1);
+                    std::collections::Vector<unsigned long int>: parent = std::collections::Vector<unsigned long int>::filled(n, std::npos);
                     detail::MinHeap<W>: open;
                     known[start] = true;
                     open.push(static_cast<W>(heuristic(start)), start);
                     while (!open.empty()) {
-                        const long int: at = open.pop().node;
+                        const unsigned long int: at = open.pop().node;
                         if (done[at]) then {
                             continue;
                         }
@@ -1101,14 +1110,14 @@ safe(compile) {
                             return self.rebuild(parent, start, goal);
                         }
                         for (const Edge<W>&: e in self.adjacency[at]) {
-                            if (done[e.target]) then {
+                            if (done[static_cast<unsigned long int>(e.target)]) then {
                                 continue;
                             }
                             const W: candidate = best[at] + e.weight;
-                            if (!known[e.target] || candidate < best[e.target]) then {
-                                known[e.target] = true;
-                                best[e.target] = candidate;
-                                parent[e.target] = at;
+                            if (!known[static_cast<unsigned long int>(e.target)] || candidate < best[static_cast<unsigned long int>(e.target)]) then {
+                                known[static_cast<unsigned long int>(e.target)] = true;
+                                best[static_cast<unsigned long int>(e.target)] = candidate;
+                                parent[static_cast<unsigned long int>(e.target)] = at;
                                 open.push(candidate + static_cast<W>(heuristic(e.target)), e.target);
                             }
                         }
@@ -1116,7 +1125,7 @@ safe(compile) {
                     return Path<W>();
                 } end function a_star
 
-                function all_simple_paths(const self&, long int: start, long int: goal, long int: max_edges = -1) -> std::collections::Vector<Path<W>> {
+                function all_simple_paths(const self&, unsigned long int: start, unsigned long int: goal, unsigned long int: max_edges = 9223372036854775807) -> std::collections::Vector<Path<W>> {
                     self.check(start);
                     self.check(goal);
                     std::collections::Vector<Path<W>>: out;
@@ -1124,31 +1133,31 @@ safe(compile) {
                         out.push_back(Path<W>(start));
                         return out;
                     }
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     std::collections::Vector<bool>: on_path = std::collections::Vector<bool>::filled(n, false);
-                    std::collections::Vector<long int>: stack;
-                    std::collections::Vector<long int>: cursor;
+                    std::collections::Vector<unsigned long int>: stack;
+                    std::collections::Vector<unsigned long int>: cursor;
                     std::collections::Vector<W>: costs;
                     stack.push_back(start);
                     cursor.push_back(0);
                     costs.push_back(static_cast<W>(0));
                     on_path[start] = true;
                     while (!stack.empty()) {
-                        const long int: top = stack.size() - 1;
-                        const long int: at = stack[top];
-                        if (cursor[top] < self.adjacency[at].size() && (max_edges < 0 || top < max_edges)) then {
+                        const unsigned long int: top = stack.size() - 1;
+                        const unsigned long int: at = stack[top];
+                        if (cursor[top] < self.adjacency[at].size() && (top < max_edges)) then {
                             const Edge<W>: e = self.adjacency[at][cursor[top]];
                             cursor[top] = cursor[top] + 1;
-                            if (on_path[e.target]) then {
+                            if (on_path[static_cast<unsigned long int>(e.target)]) then {
                                 continue;
                             }
                             if (e.target == goal) then {
-                                std::collections::Vector<long int>: nodes = stack;
+                                std::collections::Vector<unsigned long int>: nodes = stack;
                                 nodes.push_back(goal);
                                 out.push_back(Path<W>(nodes, costs[top] + e.weight));
                                 continue;
                             }
-                            on_path[e.target] = true;
+                            on_path[static_cast<unsigned long int>(e.target)] = true;
                             stack.push_back(e.target);
                             cursor.push_back(0);
                             costs.push_back(costs[top] + e.weight);
@@ -1162,17 +1171,17 @@ safe(compile) {
                     return out;
                 } end function all_simple_paths
 
-                function connected_components(const self&) -> std::collections::Vector<std::collections::Vector<long int>> {
-                    const long int: n = self.node_values.size();
-                    std::collections::Vector<std::collections::Vector<long int>>: out;
+                function connected_components(const self&) -> std::collections::Vector<std::collections::Vector<unsigned long int>> {
+                    const unsigned long int: n = self.node_values.size();
+                    std::collections::Vector<std::collections::Vector<unsigned long int>>: out;
                     std::collections::Vector<bool>: seen = std::collections::Vector<bool>::filled(n, false);
                     const Graph: both = self.is_directed_graph ? self.undirected_copy() : *this;
-                    for (long int: s = 0; s < n; s++) {
+                    for (unsigned long int: s = 0; s < n; s++) {
                         if (seen[s]) then {
                             continue;
                         }
                         const Traversal: t = both.breadth_first_search(s);
-                        for (long int: id in t.order) {
+                        for (unsigned long int: id in t.order) {
                             seen[id] = true;
                         }
                         out.push_back(t.order);
@@ -1185,7 +1194,7 @@ safe(compile) {
                     for (const T&: v in self.node_values) {
                         out.add_node(v);
                     }
-                    for (long int: i = 0; i < self.adjacency.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.adjacency.size(); i++) {
                         for (const Edge<W>&: e in self.adjacency[i]) {
                             if (!self.is_directed_graph && e.target < e.source) then {
                                 continue;
@@ -1200,24 +1209,24 @@ safe(compile) {
                     return self.connected_components().size() <= 1;
                 } end function is_connected
 
-                function strongly_connected_components(const self&) -> std::collections::Vector<std::collections::Vector<long int>> {
-                    const long int: n = self.node_values.size();
+                function strongly_connected_components(const self&) -> std::collections::Vector<std::collections::Vector<unsigned long int>> {
+                    const unsigned long int: n = self.node_values.size();
                     std::collections::Vector<bool>: seen = std::collections::Vector<bool>::filled(n, false);
-                    std::collections::Vector<long int>: finish;
-                    for (long int: s = 0; s < n; s++) {
+                    std::collections::Vector<unsigned long int>: finish;
+                    for (unsigned long int: s = 0; s < n; s++) {
                         if (seen[s]) then {
                             continue;
                         }
-                        std::collections::Vector<long int>: stack;
-                        std::collections::Vector<long int>: cursor;
+                        std::collections::Vector<unsigned long int>: stack;
+                        std::collections::Vector<unsigned long int>: cursor;
                         seen[s] = true;
                         stack.push_back(s);
                         cursor.push_back(0);
                         while (!stack.empty()) {
-                            const long int: top = stack.size() - 1;
-                            const long int: at = stack[top];
+                            const unsigned long int: top = stack.size() - 1;
+                            const unsigned long int: at = stack[top];
                             if (cursor[top] < self.adjacency[at].size()) then {
-                                const long int: next = self.adjacency[at][cursor[top]].target;
+                                const unsigned long int: next = self.adjacency[at][cursor[top]].target;
                                 cursor[top] = cursor[top] + 1;
                                 if (!seen[next]) then {
                                     seen[next] = true;
@@ -1233,23 +1242,24 @@ safe(compile) {
                     }
                     const Graph: back = self.reversed();
                     std::collections::Vector<bool>: assigned = std::collections::Vector<bool>::filled(n, false);
-                    std::collections::Vector<std::collections::Vector<long int>>: out;
-                    for (long int: i = finish.size() - 1; i >= 0; i--) {
-                        const long int: s = finish[i];
+                    std::collections::Vector<std::collections::Vector<unsigned long int>>: out;
+                    for (unsigned long int: i = finish.size(); i > 0;) {
+                        i--;
+                        const unsigned long int: s = finish[i];
                         if (assigned[s]) then {
                             continue;
                         }
-                        std::collections::Vector<long int>: component;
-                        std::collections::Vector<long int>: todo;
+                        std::collections::Vector<unsigned long int>: component;
+                        std::collections::Vector<unsigned long int>: todo;
                         todo.push_back(s);
                         assigned[s] = true;
                         while (!todo.empty()) {
-                            const long int: at = todo[todo.size() - 1];
+                            const unsigned long int: at = todo[static_cast<unsigned long int>(todo.size() - 1)];
                             todo.pop_back();
                             component.push_back(at);
                             for (const Edge<W>&: e in back.adjacency[at]) {
-                                if (!assigned[e.target]) then {
-                                    assigned[e.target] = true;
+                                if (!assigned[static_cast<unsigned long int>(e.target)]) then {
+                                    assigned[static_cast<unsigned long int>(e.target)] = true;
                                     todo.push_back(e.target);
                                 }
                             }
@@ -1259,32 +1269,32 @@ safe(compile) {
                     return out;
                 } end function strongly_connected_components
 
-                function topological_sort(const self&) -> std::collections::Vector<long int> {
+                function topological_sort(const self&) -> std::collections::Vector<unsigned long int> {
                     if (!self.is_directed_graph) then {
                         throw std::errors::graph_error("topological_sort() needs a directed graph");
                     }
-                    const long int: n = self.node_values.size();
-                    std::collections::Vector<long int>: incoming = std::collections::Vector<long int>::filled(n, 0);
-                    for (long int: i = 0; i < n; i++) {
+                    const unsigned long int: n = self.node_values.size();
+                    std::collections::Vector<unsigned long int>: incoming = std::collections::Vector<unsigned long int>::filled(n, 0);
+                    for (unsigned long int: i = 0; i < n; i++) {
                         for (const Edge<W>&: e in self.adjacency[i]) {
-                            incoming[e.target] = incoming[e.target] + 1;
+                            incoming[static_cast<unsigned long int>(e.target)] = incoming[static_cast<unsigned long int>(e.target)] + 1;
                         }
                     }
-                    std::collections::Vector<long int>: ready;
-                    for (long int: i = 0; i < n; i++) {
+                    std::collections::Vector<unsigned long int>: ready;
+                    for (unsigned long int: i = 0; i < n; i++) {
                         if (incoming[i] == 0) then {
                             ready.push_back(i);
                         }
                     }
-                    std::collections::Vector<long int>: order;
-                    long int: head = 0;
+                    std::collections::Vector<unsigned long int>: order;
+                    unsigned long int: head = 0;
                     while (head < ready.size()) {
-                        const long int: at = ready[head];
+                        const unsigned long int: at = ready[head];
                         head++;
                         order.push_back(at);
                         for (const Edge<W>&: e in self.adjacency[at]) {
-                            incoming[e.target] = incoming[e.target] - 1;
-                            if (incoming[e.target] == 0) then {
+                            incoming[static_cast<unsigned long int>(e.target)] = incoming[static_cast<unsigned long int>(e.target)] - 1;
+                            if (incoming[static_cast<unsigned long int>(e.target)] == 0) then {
                                 ready.push_back(e.target);
                             }
                         }
@@ -1296,21 +1306,21 @@ safe(compile) {
                 } end function topological_sort
 
                 function find_cycle(const self&) -> Path<W> {
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     std::collections::Vector<bool>: covered = std::collections::Vector<bool>::filled(n, false);
-                    for (long int: s = 0; s < n; s++) {
+                    for (unsigned long int: s = 0; s < n; s++) {
                         if (covered[s]) then {
                             continue;
                         }
                         const Traversal: t = self.depth_first_search(s);
                         if (t.has_cycle) then {
                             Path<W>: out(t.cycle[0]);
-                            for (long int: i = 1; i < t.cycle.size(); i++) {
-                                out.extend(t.cycle[i], self.edge_cost(t.cycle[i - 1], t.cycle[i]));
+                            for (unsigned long int: i = 1; i < t.cycle.size(); i++) {
+                                out.extend(t.cycle[i], self.edge_cost(t.cycle[static_cast<unsigned long int>(i - 1)], t.cycle[i]));
                             }
                             return out;
                         }
-                        for (long int: id in t.order) {
+                        for (unsigned long int: id in t.order) {
                             covered[id] = true;
                         }
                     }
@@ -1333,25 +1343,25 @@ safe(compile) {
                 } end function is_tree
 
                 function is_bipartite(const self&) -> bool {
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     const Graph: both = self.is_directed_graph ? self.undirected_copy() : *this;
-                    std::collections::Vector<int>: side = std::collections::Vector<int>::filled(n, -1);
-                    for (long int: s = 0; s < n; s++) {
-                        if (side[s] >= 0) then {
+                    std::collections::Vector<unsigned long int>: side = std::collections::Vector<unsigned long int>::filled(n, std::npos);
+                    for (unsigned long int: s = 0; s < n; s++) {
+                        if (side[s] != std::npos) then {
                             continue;
                         }
                         side[s] = 0;
-                        std::collections::Vector<long int>: queue;
-                        long int: head = 0;
+                        std::collections::Vector<unsigned long int>: queue;
+                        unsigned long int: head = 0;
                         queue.push_back(s);
                         while (head < queue.size()) {
-                            const long int: at = queue[head];
+                            const unsigned long int: at = queue[head];
                             head++;
                             for (const Edge<W>&: e in both.adjacency[at]) {
-                                if (side[e.target] < 0) then {
-                                    side[e.target] = 1 - side[at];
+                                if (side[static_cast<unsigned long int>(e.target)] == std::npos) then {
+                                    side[static_cast<unsigned long int>(e.target)] = 1 - side[at];
                                     queue.push_back(e.target);
-                                } else if (side[e.target] == side[at]) then {
+                                } else if (side[static_cast<unsigned long int>(e.target)] == side[at]) then {
                                     return false;
                                 }
                             }
@@ -1361,29 +1371,29 @@ safe(compile) {
                 } end function is_bipartite
 
                 function minimum_spanning_tree(const self&) -> std::collections::Vector<Edge<W>> {
-                    const long int: n = self.node_values.size();
+                    const unsigned long int: n = self.node_values.size();
                     std::collections::Vector<Edge<W>>: all = self.undirected_copy().edges();
-                    for (long int: i = 1; i < all.size(); i++) {
-                        long int: j = i;
-                        while (j > 0 && all[j].weight < all[j - 1].weight) {
+                    for (unsigned long int: i = 1; i < all.size(); i++) {
+                        unsigned long int: j = i;
+                        while (j > 0 && all[j].weight < all[static_cast<unsigned long int>(j - 1)].weight) {
                             const Edge<W>: held = all[j];
-                            all[j] = all[j - 1];
-                            all[j - 1] = held;
+                            all[j] = all[static_cast<unsigned long int>(j - 1)];
+                            all[static_cast<unsigned long int>(j - 1)] = held;
                             j--;
                         }
                     }
-                    std::collections::Vector<long int>: root;
-                    for (long int: i = 0; i < n; i++) {
+                    std::collections::Vector<unsigned long int>: root;
+                    for (unsigned long int: i = 0; i < n; i++) {
                         root.push_back(i);
                     }
                     std::collections::Vector<Edge<W>>: out;
                     for (const Edge<W>&: e in all) {
-                        long int: a = e.source;
+                        unsigned long int: a = e.source;
                         while (root[a] != a) {
                             root[a] = root[root[a]];
                             a = root[a];
                         }
-                        long int: b = e.target;
+                        unsigned long int: b = e.target;
                         while (root[b] != b) {
                             root[b] = root[root[b]];
                             b = root[b];
@@ -1398,15 +1408,15 @@ safe(compile) {
 
                 function path_values(const self&, const Path<W>&: path) -> std::collections::Vector<T> {
                     std::collections::Vector<T>: out;
-                    for (long int: id in path.nodes()) {
+                    for (unsigned long int: id in path.nodes()) {
                         out.push_back(self.value(id));
                     }
                     return out;
                 } end function path_values
 
                 function path_is_valid(const self&, const Path<W>&: path) -> bool {
-                    for (long int: i = 1; i < path.node_count(); i++) {
-                        if (!self.has_edge(path[i - 1], path[i])) then {
+                    for (unsigned long int: i = 1; i < path.node_count(); i++) {
+                        if (!self.has_edge(path[static_cast<unsigned long int>(i - 1)], path[i])) then {
                             return false;
                         }
                     }
@@ -1424,11 +1434,13 @@ safe(compile) {
             } end class Graph
 
             template <typename T, typename W = float>
+            requires Weight<W>
             function directed_graph() -> Graph<T, W> {
                 return Graph<T, W>(Direction::directed);
             } end function directed_graph
 
             template <typename T, typename W = float>
+            requires Weight<W>
             function undirected_graph() -> Graph<T, W> {
                 return Graph<T, W>(Direction::undirected);
             } end function undirected_graph

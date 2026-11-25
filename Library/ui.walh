@@ -37,14 +37,14 @@ safe(compile) {
 
 
                 class Label as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
                     function take_submitted(self&) -> bool;
                     static function native_make(const string&: t) -> Label as "walnut_rt::gfx::ui_label";
-                    function native_set_color(self&, long int: rgba) -> void as "set_color";
-                    function native_set_align(self&, long int: a) -> void as "set_align";
+                    function native_set_color(self&, unsigned long int: rgba) -> void as "set_color";
+                    function native_set_align(self&, unsigned long int: a) -> void as "set_align";
 
                 public:
                     constructor();
@@ -98,18 +98,18 @@ safe(compile) {
                     } end function set_color
 
                     function set_align(self&, Align: a) -> void {
-                        self.native_set_align(static_cast<long int>(a));
+                        self.native_set_align(static_cast<unsigned long int>(a));
                     } end function set_align
                 } end class Label
 
                 class Button as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
                     function take_submitted(self&) -> bool;
                     static function native_make(const string&: t) -> Button as "walnut_rt::gfx::ui_button";
-                    function native_set_style(self&, long int: s) -> void as "set_button_style";
+                    function native_set_style(self&, unsigned long int: s) -> void as "set_button_style";
 
                 public:
                     constructor();
@@ -157,7 +157,7 @@ safe(compile) {
                     function click(self&) -> void;
 
                     function set_style(self&, ButtonStyle: s) -> void {
-                        self.native_set_style(static_cast<long int>(s));
+                        self.native_set_style(static_cast<unsigned long int>(s));
                     } end function set_style
 
                     function clicked(self&) -> bool {
@@ -166,7 +166,7 @@ safe(compile) {
                 } end class Button
 
                 class Checkbox as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -225,7 +225,7 @@ safe(compile) {
                 } end class Checkbox
 
                 class Toggle as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -284,7 +284,7 @@ safe(compile) {
                 } end class Toggle
 
                 class Slider as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -344,7 +344,7 @@ safe(compile) {
                     function set_value(self&, float: v) -> void;
                     function set_range(self&, float: min_value, float: max_value) -> void;
                     function set_step(self&, float: step) -> void;
-                    function set_show_value(self&, bool: on, long int: decimals = 2) -> void;
+                    function set_show_value(self&, bool: on, unsigned long int: decimals = 2) -> void;
                     function dragging(const self&) -> bool;
 
                     function changed(self&) -> bool {
@@ -357,13 +357,13 @@ safe(compile) {
                 } end class Slider
 
                 class ProgressBar as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
                     function take_submitted(self&) -> bool;
                     static function native_make(float: v) -> ProgressBar as "walnut_rt::gfx::ui_progress";
-                    function native_set_color(self&, long int: rgba) -> void as "set_color";
+                    function native_set_color(self&, unsigned long int: rgba) -> void as "set_color";
 
                 public:
                     constructor();
@@ -418,13 +418,13 @@ safe(compile) {
                 } end class ProgressBar
 
                 class Spinner as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
                     function take_submitted(self&) -> bool;
                     static function native_make(float: size) -> Spinner as "walnut_rt::gfx::ui_spinner";
-                    function native_set_color(self&, long int: rgba) -> void as "set_color";
+                    function native_set_color(self&, unsigned long int: rgba) -> void as "set_color";
 
                 public:
                     constructor();
@@ -473,7 +473,7 @@ safe(compile) {
                 } end class Spinner
 
                 class Dropdown as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -523,10 +523,10 @@ safe(compile) {
 
                     function add_item(self&, const string&: item) -> void;
                     function set_items(self&, const std::collections::Vector<string>&: items) -> void;
-                    function item_count(const self&) -> long int;
-                    function selected(const self&) -> long int;
+                    function item_count(const self&) -> unsigned long int;
+                    function selected(const self&) -> unsigned long int;
                     function selected_text(const self&) -> string;
-                    function set_selected(self&, long int: index) -> void;
+                    function set_selected(self&, unsigned long int: index) -> void;
                     function set_placeholder(self&, const string&: t) -> void;
                     function set_searchable(self&, bool: on) -> void;
 
@@ -536,7 +536,7 @@ safe(compile) {
                 } end class Dropdown
 
                 class TextField as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -591,7 +591,7 @@ safe(compile) {
                     function set_text(self&, const string&: t) -> void;
                     function text_value(const self&) -> string as "text";
                     function set_placeholder(self&, const string&: t) -> void;
-                    function set_max_length(self&, long int: length) -> void;
+                    function set_max_length(self&, unsigned long int: length) -> void;
                     function set_password(self&, bool: on) -> void;
                     function set_read_only(self&, bool: on) -> void;
                     function set_allowed_chars(self&, const string&: chars) -> void;
@@ -607,7 +607,7 @@ safe(compile) {
                 } end class TextField
 
                 class IntField as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -686,7 +686,7 @@ safe(compile) {
                 } end class IntField
 
                 class FloatField as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -742,7 +742,7 @@ safe(compile) {
                     function set_value(self&, float: v) -> void;
                     function set_range(self&, float: min_value, float: max_value) -> void;
                     function set_step(self&, float: step) -> void;
-                    function set_decimals(self&, long int: decimals) -> void;
+                    function set_decimals(self&, unsigned long int: decimals) -> void;
                     function set_spin_buttons(self&, bool: on) -> void;
 
                     function changed(self&) -> bool {
@@ -755,14 +755,14 @@ safe(compile) {
                 } end class FloatField
 
                 class ColorPicker as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
                     function take_submitted(self&) -> bool;
-                    static function native_make(long int: rgba, bool: alpha) -> ColorPicker as "walnut_rt::gfx::ui_color_picker";
-                    function native_set_color(self&, long int: rgba) -> void as "set_color";
-                    function native_color(const self&) -> long int as "color_value";
+                    static function native_make(unsigned long int: rgba, bool: alpha) -> ColorPicker as "walnut_rt::gfx::ui_color_picker";
+                    function native_set_color(self&, unsigned long int: rgba) -> void as "set_color";
+                    function native_color(const self&) -> unsigned long int as "color_value";
 
                 public:
                     constructor();
@@ -821,7 +821,7 @@ safe(compile) {
                 } end class ColorPicker
 
                 class Separator as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -871,7 +871,7 @@ safe(compile) {
                 } end class Separator
 
                 class Spacer as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -921,17 +921,17 @@ safe(compile) {
                 } end class Spacer
 
                 class Stack as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
                     function take_submitted(self&) -> bool;
                     function native_add(self&, const Widget&: child) -> bool as "add";
                     function native_remove(self&, const Widget&: child) -> bool as "remove";
-                    function native_set_background(self&, long int: rgba) -> void as "set_background";
-                    function native_set_border(self&, long int: rgba) -> void as "set_border";
-                    function native_set_cross_align(self&, long int: a) -> void as "set_cross_align";
-                    function native_set_main_align(self&, long int: a) -> void as "set_main_align";
+                    function native_set_background(self&, unsigned long int: rgba) -> void as "set_background";
+                    function native_set_border(self&, unsigned long int: rgba) -> void as "set_border";
+                    function native_set_cross_align(self&, unsigned long int: a) -> void as "set_cross_align";
+                    function native_set_main_align(self&, unsigned long int: a) -> void as "set_main_align";
                     static function native_vertical(float: spacing) -> Stack as "walnut_rt::gfx::ui_vstack";
                     static function native_horizontal(float: spacing) -> Stack as "walnut_rt::gfx::ui_hstack";
 
@@ -992,7 +992,7 @@ safe(compile) {
                         return native_remove(child.widget());
                     } end function remove
 
-                    function child_count(const self&) -> long int;
+                    function child_count(const self&) -> unsigned long int;
                     function set_spacing(self&, float: spacing) -> void;
                     function set_padding(self&, float: padding) -> void;
                     function set_radius(self&, float: radius) -> void;
@@ -1006,26 +1006,26 @@ safe(compile) {
                     } end function set_border
 
                     function set_cross_align(self&, Align: a) -> void {
-                        self.native_set_cross_align(static_cast<long int>(a));
+                        self.native_set_cross_align(static_cast<unsigned long int>(a));
                     } end function set_cross_align
 
                     function set_main_align(self&, Align: a) -> void {
-                        self.native_set_main_align(static_cast<long int>(a));
+                        self.native_set_main_align(static_cast<unsigned long int>(a));
                     } end function set_main_align
                 } end class Stack
 
                 class Panel as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
                     function take_submitted(self&) -> bool;
                     function native_add(self&, const Widget&: child) -> bool as "add";
                     function native_remove(self&, const Widget&: child) -> bool as "remove";
-                    function native_set_background(self&, long int: rgba) -> void as "set_background";
-                    function native_set_border(self&, long int: rgba) -> void as "set_border";
-                    function native_set_cross_align(self&, long int: a) -> void as "set_cross_align";
-                    function native_set_main_align(self&, long int: a) -> void as "set_main_align";
+                    function native_set_background(self&, unsigned long int: rgba) -> void as "set_background";
+                    function native_set_border(self&, unsigned long int: rgba) -> void as "set_border";
+                    function native_set_cross_align(self&, unsigned long int: a) -> void as "set_cross_align";
+                    function native_set_main_align(self&, unsigned long int: a) -> void as "set_main_align";
                     static function native_make(bool: horizontal) -> Panel as "walnut_rt::gfx::ui_panel";
 
                 public:
@@ -1081,7 +1081,7 @@ safe(compile) {
                         return native_remove(child.widget());
                     } end function remove
 
-                    function child_count(const self&) -> long int;
+                    function child_count(const self&) -> unsigned long int;
                     function set_spacing(self&, float: spacing) -> void;
                     function set_padding(self&, float: padding) -> void;
                     function set_radius(self&, float: radius) -> void;
@@ -1095,16 +1095,16 @@ safe(compile) {
                     } end function set_border
 
                     function set_cross_align(self&, Align: a) -> void {
-                        self.native_set_cross_align(static_cast<long int>(a));
+                        self.native_set_cross_align(static_cast<unsigned long int>(a));
                     } end function set_cross_align
 
                     function set_main_align(self&, Align: a) -> void {
-                        self.native_set_main_align(static_cast<long int>(a));
+                        self.native_set_main_align(static_cast<unsigned long int>(a));
                     } end function set_main_align
                 } end class Panel
 
                 class ScrollView as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -1165,7 +1165,7 @@ safe(compile) {
                 } end class ScrollView
 
                 class TabView as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -1214,9 +1214,9 @@ safe(compile) {
                         return self.native_rect(3);
                     } end function height
 
-                    function tab_count(const self&) -> long int;
-                    function selected(const self&) -> long int;
-                    function set_selected(self&, long int: index) -> void;
+                    function tab_count(const self&) -> unsigned long int;
+                    function selected(const self&) -> unsigned long int;
+                    function set_selected(self&, unsigned long int: index) -> void;
 
                     template <typename W>
                     function add_tab(const string&: title, const W&: page) -> void {
@@ -1229,7 +1229,7 @@ safe(compile) {
                 } end class TabView
 
                 class RadioButton as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -1277,7 +1277,7 @@ safe(compile) {
                 } end class RadioButton
 
                 class RadioGroup as "walnut_rt::gfx::ui_widget" {
-                    function native_rect(const self&, long int: which) -> float as "rect";
+                    function native_rect(const self&, unsigned long int: which) -> float as "rect";
                     function take_clicked(self&) -> bool;
                     function take_changed(self&) -> bool;
                     function take_released(self&) -> bool;
@@ -1341,7 +1341,7 @@ safe(compile) {
                 class Ui as "walnut_rt::gfx::ui" {
                     function native_add(self&, const Widget&: child) -> bool as "add";
                     function native_remove(self&, const Widget&: child) -> bool as "remove";
-                    function native_set_accent(self&, long int: rgba) -> void as "set_accent";
+                    function native_set_accent(self&, unsigned long int: rgba) -> void as "set_accent";
                     function native_root(const self&) -> Stack as "root";
                     function valid(const self&) -> bool;
 

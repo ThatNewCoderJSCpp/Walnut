@@ -8,35 +8,36 @@ safe(compile) {
 
             extern "C++" from "<walnut_numerics.hpp>" {
                 template <typename T>
+                requires Float<T>
                 class OdeSolution as "walnut_rt::numerics::ode_solution" {
                 public:
-                    function size() const -> long int as "walnut_rt::numerics::solution_size";
+                    function size() const -> unsigned long int as "walnut_rt::numerics::solution_size";
                     function ok() const -> bool as "walnut_rt::numerics::solution_ok";
                     function message() const -> string as "walnut_rt::numerics::solution_message";
-                    function steps() const -> long int as "walnut_rt::numerics::solution_steps";
-                    function rejected() const -> long int as "walnut_rt::numerics::solution_rejected";
-                    function evaluations() const -> long int as "walnut_rt::numerics::solution_evaluations";
+                    function steps() const -> unsigned long int as "walnut_rt::numerics::solution_steps";
+                    function rejected() const -> unsigned long int as "walnut_rt::numerics::solution_rejected";
+                    function evaluations() const -> unsigned long int as "walnut_rt::numerics::solution_evaluations";
                     function stopped_by_event() const -> bool as "walnut_rt::numerics::solution_stopped";
-                    function time(long int: i) const -> T as "walnut_rt::numerics::solution_time";
-                    function state(long int: i) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_state";
-                    function rate(long int: i) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_rate";
+                    function time(unsigned long int: i) const -> T as "walnut_rt::numerics::solution_time";
+                    function state(unsigned long int: i) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_state";
+                    function rate(unsigned long int: i) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_rate";
                     function final_time() const -> T as "walnut_rt::numerics::solution_final_time";
                     function final_state() const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_final_state";
                     function at(const T&: time) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_at";
                     function times() const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_times";
-                    function component(long int: k) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_component";
-                    function event_count() const -> long int as "walnut_rt::numerics::solution_event_count";
-                    function event_time(long int: i) const -> T as "walnut_rt::numerics::solution_event_time";
-                    function event_state(long int: i) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_event_state";
+                    function component(unsigned long int: k) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_component";
+                    function event_count() const -> unsigned long int as "walnut_rt::numerics::solution_event_count";
+                    function event_time(unsigned long int: i) const -> T as "walnut_rt::numerics::solution_event_time";
+                    function event_state(unsigned long int: i) const -> std::collections::Vector<T> as "walnut_rt::numerics::solution_event_state";
                 } end class OdeSolution
 
                 template <typename T>
                 class SparseMatrix as "walnut_rt::numerics::sparse_matrix" {
                 public:
-                    constructor(long int: size) as "walnut_rt::numerics::make_sparse<T>";
-                    function add(long int: row, long int: column, const T&: value) -> void as "walnut_rt::numerics::sparse_add";
-                    function size() const -> long int as "walnut_rt::numerics::sparse_size";
-                    function entries() const -> long int as "walnut_rt::numerics::sparse_entries";
+                    constructor(unsigned long int: size) as "walnut_rt::numerics::make_sparse<T>";
+                    function add(unsigned long int: row, unsigned long int: column, const T&: value) -> void as "walnut_rt::numerics::sparse_add";
+                    function size() const -> unsigned long int as "walnut_rt::numerics::sparse_size";
+                    function entries() const -> unsigned long int as "walnut_rt::numerics::sparse_entries";
                     function multiply(const std::collections::Vector<T>&: x) const -> std::collections::Vector<T> as "walnut_rt::numerics::sparse_multiply";
                     function solve(const std::collections::Vector<T>&: b, const string&: method) const -> std::collections::Vector<T> as "walnut_rt::numerics::sparse_solve";
                 } end class SparseMatrix
@@ -46,10 +47,10 @@ safe(compile) {
                 public:
                     static function solve_adaptive(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, const T&: rtol, const T&: atol) -> OdeSolution<T> as "walnut_rt::numerics::solve_adaptive<T>";
                     static function solve_stiff(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, const T&: rtol, const T&: atol) -> OdeSolution<T> as "walnut_rt::numerics::solve_stiff<T>";
-                    static function solve_fixed(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, long int: steps, const string&: method) -> OdeSolution<T> as "walnut_rt::numerics::solve_fixed<T>";
+                    static function solve_fixed(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, unsigned long int: steps, const string&: method) -> OdeSolution<T> as "walnut_rt::numerics::solve_fixed<T>";
                     static function solve_until(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, function(T, std::collections::Vector<T>) -> T: event, long int: direction, const T&: rtol, const T&: atol) -> OdeSolution<T> as "walnut_rt::numerics::solve_until<T>";
-                    static function solve_symplectic(function(T, std::collections::Vector<T>, std::collections::Vector<T>) -> std::collections::Vector<T>: acceleration, const T&: t0, const std::collections::Vector<T>&: q0, const std::collections::Vector<T>&: v0, const T&: t1, long int: steps, const string&: method) -> OdeSolution<T> as "walnut_rt::numerics::solve_symplectic<T>";
-                    static function newton(function(std::collections::Vector<T>) -> std::collections::Vector<T>: f, const std::collections::Vector<T>&: x0, const T&: tolerance, long int: max_iterations) -> std::collections::Vector<T> as "walnut_rt::numerics::newton<T>";
+                    static function solve_symplectic(function(T, std::collections::Vector<T>, std::collections::Vector<T>) -> std::collections::Vector<T>: acceleration, const T&: t0, const std::collections::Vector<T>&: q0, const std::collections::Vector<T>&: v0, const T&: t1, unsigned long int: steps, const string&: method) -> OdeSolution<T> as "walnut_rt::numerics::solve_symplectic<T>";
+                    static function newton(function(std::collections::Vector<T>) -> std::collections::Vector<T>: f, const std::collections::Vector<T>&: x0, const T&: tolerance, unsigned long int: max_iterations) -> std::collections::Vector<T> as "walnut_rt::numerics::newton<T>";
                     static function solve_linear(const std::collections::Vector<std::collections::Vector<T>>&: a, const std::collections::Vector<T>&: b) -> std::collections::Vector<T> as "walnut_rt::numerics::solve_linear<T>";
                 } end class Native
             } end extern
@@ -80,13 +81,13 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function solve_fixed(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, long int: steps, const string&: method) -> OdeSolution<T> {
+            function solve_fixed(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, unsigned long int: steps, const string&: method) -> OdeSolution<T> {
                 return Native<T>::solve_fixed(f, t0, y0, t1, steps, method);
             } end function solve_fixed
 
             template <typename T>
             requires Float<T>
-            function solve_fixed(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, long int: steps) -> OdeSolution<T> {
+            function solve_fixed(function(T, std::collections::Vector<T>) -> std::collections::Vector<T>: f, const T&: t0, const std::collections::Vector<T>&: y0, const T&: t1, unsigned long int: steps) -> OdeSolution<T> {
                 return Native<T>::solve_fixed(f, t0, y0, t1, steps, "rk4");
             } end function solve_fixed
 
@@ -104,19 +105,19 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function solve_symplectic(function(T, std::collections::Vector<T>, std::collections::Vector<T>) -> std::collections::Vector<T>: acceleration, const T&: t0, const std::collections::Vector<T>&: q0, const std::collections::Vector<T>&: v0, const T&: t1, long int: steps, const string&: method) -> OdeSolution<T> {
+            function solve_symplectic(function(T, std::collections::Vector<T>, std::collections::Vector<T>) -> std::collections::Vector<T>: acceleration, const T&: t0, const std::collections::Vector<T>&: q0, const std::collections::Vector<T>&: v0, const T&: t1, unsigned long int: steps, const string&: method) -> OdeSolution<T> {
                 return Native<T>::solve_symplectic(acceleration, t0, q0, v0, t1, steps, method);
             } end function solve_symplectic
 
             template <typename T>
             requires Float<T>
-            function solve_symplectic(function(T, std::collections::Vector<T>, std::collections::Vector<T>) -> std::collections::Vector<T>: acceleration, const T&: t0, const std::collections::Vector<T>&: q0, const std::collections::Vector<T>&: v0, const T&: t1, long int: steps) -> OdeSolution<T> {
+            function solve_symplectic(function(T, std::collections::Vector<T>, std::collections::Vector<T>) -> std::collections::Vector<T>: acceleration, const T&: t0, const std::collections::Vector<T>&: q0, const std::collections::Vector<T>&: v0, const T&: t1, unsigned long int: steps) -> OdeSolution<T> {
                 return Native<T>::solve_symplectic(acceleration, t0, q0, v0, t1, steps, "verlet");
             } end function solve_symplectic
 
             template <typename T>
             requires Float<T>
-            function newton(function(std::collections::Vector<T>) -> std::collections::Vector<T>: f, const std::collections::Vector<T>&: x0, const T&: tolerance, long int: max_iterations) -> std::collections::Vector<T> {
+            function newton(function(std::collections::Vector<T>) -> std::collections::Vector<T>: f, const std::collections::Vector<T>&: x0, const T&: tolerance, unsigned long int: max_iterations) -> std::collections::Vector<T> {
                 return Native<T>::newton(f, x0, tolerance, max_iterations);
             } end function newton
 

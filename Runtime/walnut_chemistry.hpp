@@ -54,39 +54,39 @@ public:
     explicit element(long long z) : m_e(&element_of(z)) {}
     explicit element(const std::string& symbol_or_name) : m_e(&element_of(symbol_or_name)) {}
 
-    long long atomic_number() const { return m_e->atomic_number; }
+    long long atomic_number() const noexcept { return m_e->atomic_number; }
     std::string symbol() const { return m_e->symbol; }
     std::string name() const { return m_e->name; }
-    long long group() const { return m_e->group; }
-    long long period() const { return m_e->period; }
+    long long group() const noexcept { return m_e->group; }
+    long long period() const noexcept { return m_e->period; }
     std::string block() const { return m_e->block_name(); }
     std::string category() const { return m_e->category_name(); }
     std::string classification() const { return m_e->classification_name(); }
     bool is_metal() const { return m_e->is_metal(); }
     bool is_metalloid() const { return m_e->is_metalloid(); }
     bool is_nonmetal() const { return m_e->is_nonmetal(); }
-    bool is_stable() const { return m_e->is_stable; }
+    bool is_stable() const noexcept { return m_e->is_stable; }
     bool is_noble_gas() const { return m_e->is_noble_gas(); }
-    double molar_mass() const { return m_e->atomic_weight; }
-    double molar_mass_uncertainty() const { return m_e->atomic_weight_uncertainty; }
+    double molar_mass() const noexcept { return m_e->atomic_weight; }
+    double molar_mass_uncertainty() const noexcept { return m_e->atomic_weight_uncertainty; }
     long long mass_number() const { return m_e->mass_number(); }
     long long neutrons() const { return m_e->neutrons(); }
-    double electronegativity() const { return m_e->electronegativity_pauling; }
-    double electron_affinity() const { return m_e->electron_affinity; }
+    double electronegativity() const noexcept { return m_e->electronegativity_pauling; }
+    double electron_affinity() const noexcept { return m_e->electron_affinity; }
     double ionization_energy(long long n) const { return m_e->ionization_energy(static_cast<int>(n)); }
     long long ionization_energy_count() const { return static_cast<long long>(m_e->ionization_energies().size()); }
-    double covalent_radius() const { return m_e->covalent_radius; }
-    double atomic_radius() const { return m_e->atomic_radius; }
-    double van_der_waals_radius() const { return m_e->van_der_waals_radius; }
-    double metallic_radius() const { return m_e->metallic_radius; }
+    double covalent_radius() const noexcept { return m_e->covalent_radius; }
+    double atomic_radius() const noexcept { return m_e->atomic_radius; }
+    double van_der_waals_radius() const noexcept { return m_e->van_der_waals_radius; }
+    double metallic_radius() const noexcept { return m_e->metallic_radius; }
     double ionic_radius(long long charge, long long coordination) const {
         const fc::IonicRadius* r = m_e->ionic_radius(static_cast<int>(charge), static_cast<int>(coordination));
         return r ? r->ionic_radius : fc::NO_VALUE;
     }
-    double melting_point() const { return m_e->melting_point; }
-    double boiling_point() const { return m_e->boiling_point; }
-    double density() const { return m_e->density; }
-    double atomization_enthalpy() const { return m_e->atomization_enthalpy; }
+    double melting_point() const noexcept { return m_e->melting_point; }
+    double boiling_point() const noexcept { return m_e->boiling_point; }
+    double density() const noexcept { return m_e->density; }
+    double atomization_enthalpy() const noexcept { return m_e->atomization_enthalpy; }
     std::string standard_state() const { return fc::to_string(m_e->standard_state); }
     std::string electron_configuration() const { return m_e->electron_configuration; }
     std::string full_electron_configuration() const { return m_e->full_electron_configuration(); }
@@ -204,8 +204,8 @@ public:
     prediction() = default;
     explicit prediction(const std::string& reactants) : m_p(fc::predict_products(reactants)) {}
 
-    bool ok() const { return m_p.ok; }
-    bool no_reaction() const { return m_p.no_reaction; }
+    bool ok() const noexcept { return m_p.ok; }
+    bool no_reaction() const noexcept { return m_p.no_reaction; }
     std::string equation() const { return m_p.equation(false); }
     std::string unicode() const { return m_p.equation(true); }
     std::string kind() const { return m_p.kind; }
@@ -307,16 +307,16 @@ public:
     std::string structure() const { return fc::to_string(m_c.structure); }
     std::string structure_reason() const { return m_c.structure_reason; }
     double lattice_energy() const { return m_c.lattice_energy(); }
-    double born_lande() const { return m_c.lattice_energy_born_lande; }
-    double born_mayer() const { return m_c.lattice_energy_born_mayer; }
-    double kapustinskii() const { return m_c.lattice_energy_kapustinskii; }
-    double born_haber() const { return m_c.lattice_energy_born_haber; }
-    double lattice_constant() const { return m_c.cell.a; }
-    double density() const { return m_c.density; }
-    double radius_ratio() const { return m_c.radius_ratio; }
-    long long cation_coordination() const { return m_c.cation_coordination; }
-    long long anion_coordination() const { return m_c.anion_coordination; }
-    double percent_ionic() const { return m_c.percent_ionic; }
+    double born_lande() const noexcept { return m_c.lattice_energy_born_lande; }
+    double born_mayer() const noexcept { return m_c.lattice_energy_born_mayer; }
+    double kapustinskii() const noexcept { return m_c.lattice_energy_kapustinskii; }
+    double born_haber() const noexcept { return m_c.lattice_energy_born_haber; }
+    double lattice_constant() const noexcept { return m_c.cell.a; }
+    double density() const noexcept { return m_c.density; }
+    double radius_ratio() const noexcept { return m_c.radius_ratio; }
+    long long cation_coordination() const noexcept { return m_c.cation_coordination; }
+    long long anion_coordination() const noexcept { return m_c.anion_coordination; }
+    double percent_ionic() const noexcept { return m_c.percent_ionic; }
     std::string solubility() const { return fc::to_string(m_c.solubility.solubility); }
     std::string steps() const { return join(m_c.steps, "\n"); }
 
@@ -350,13 +350,13 @@ public:
     std::string formula() const { return m_c.formula; }
     std::string structure() const { return fc::to_string(m_c.structure); }
     std::string type() const { return fc::to_string(m_c.type); }
-    double lattice_constant() const { return m_c.lattice_constant; }
-    double density() const { return m_c.density; }
-    double packing_fraction() const { return m_c.packing_fraction; }
-    long long coordination() const { return m_c.coordination; }
-    double fermi_energy() const { return m_c.fermi_energy; }
-    double melting_point() const { return m_c.melting_point; }
-    double valence_electrons_per_atom() const { return m_c.valence_electrons_per_atom; }
+    double lattice_constant() const noexcept { return m_c.lattice_constant; }
+    double density() const noexcept { return m_c.density; }
+    double packing_fraction() const noexcept { return m_c.packing_fraction; }
+    long long coordination() const noexcept { return m_c.coordination; }
+    double fermi_energy() const noexcept { return m_c.fermi_energy; }
+    double melting_point() const noexcept { return m_c.melting_point; }
+    double valence_electrons_per_atom() const noexcept { return m_c.valence_electrons_per_atom; }
     std::string notes() const { return join(m_c.notes, "\n"); }
 
 private:
@@ -368,7 +368,7 @@ public:
     phase_diagram() = default;
     explicit phase_diagram(const std::string& substance) : m_d(fc::phase_diagram(fc::find_phase_properties(substance))) {}
 
-    bool ok() const { return m_d.ok; }
+    bool ok() const noexcept { return m_d.ok; }
     std::string name() const { return m_d.properties.name; }
     std::string phase_at(double t, double p) const { return fc::to_string(m_d.phase_at(t, p)); }
     std::string describe(double t, double p) const { return m_d.describe(t, p); }
@@ -377,10 +377,10 @@ public:
     double melting_pressure(double t) const { return m_d.melting_pressure(t); }
     double boiling_temperature(double p) const { return m_d.boiling_temperature(p); }
     double melting_temperature(double p) const { return m_d.melting_temperature(p); }
-    double triple_temperature() const { return m_d.triple.t; }
-    double triple_pressure() const { return m_d.triple.p; }
-    double critical_temperature() const { return m_d.critical.t; }
-    double critical_pressure() const { return m_d.critical.p; }
+    double triple_temperature() const noexcept { return m_d.triple.t; }
+    double triple_pressure() const noexcept { return m_d.triple.p; }
+    double critical_temperature() const noexcept { return m_d.critical.t; }
+    double critical_pressure() const noexcept { return m_d.critical.p; }
     std::string notes() const { return join(m_d.notes, "\n"); }
 
 private:

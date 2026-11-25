@@ -17,7 +17,8 @@ Everything is in the namespace `std::memory`.
 5. [EnableSharedFromThis](#enablesharedfromthis)
 6. [Arenas](#arenas)
 7. [Tracking memory](#tracking-memory)
-8. [Errors](#errors)
+8. [Copying and moving items](#copying-and-moving-items)
+9. [Errors](#errors)
 
 ## Smart pointers
 
@@ -291,9 +292,29 @@ With `walnut run --leak-check nodes.wal` this prints:
 | `gc_running()` | Whether the program was built with `--gc` |
 | `collect_garbage()` | Runs the garbage collector now and gives how many objects it freed; `0` without `--gc` |
 
-- When nothing is recorded, the numbers are `-1`.
-- With `--gc` alone, `live_objects()` and `live_bytes()` count every block the collector looks after, including ones the library made, and `peak_bytes()` and `allocations_made()` are `-1`; add `--leak-check` for the full picture.
+- When nothing is recorded, the numbers are `std::npos`.
+- With `--gc` alone, `live_objects()` and `live_bytes()` count every block the collector looks after, including ones the library made, and `peak_bytes()` and `allocations_made()` are `std::npos`; add `--leak-check` for the full picture.
 - Objects in an [`Arena`](#arenas) aren't made with `new`, so they aren't counted; the arena's own `bytes_used()` and `object_count()` report them.
+
+## Copying and moving items
+
+`memmove` and `memcopy` copy a run of items from one place to another, like C's functions of the same names. The count is in items, not bytes, so the size of the type is taken care of.
+
+| Function | Does |
+|---|---|
+| `memmove(to, source, count)` | Copies `count` items from the pointer `source` to the pointer `to`, and gives back `to`. The two ranges may overlap: it copies as if through a separate buffer, so shifting items along inside one array works |
+| `memcopy(to, source, count)` | The same for ranges that don't overlap. It checks, and stops the program with an error if they do, instead of quietly mixing up the items the way C's `memcpy` can. `memcpy` is the same function under C's name |
+| `memmove(to, to_start, source, source_start, count)` | Copies items between two `std::collections::Vector`s (or within one), checking that both ranges fit; a range that doesn't fit throws `std::errors::pointer_error` |
+| `memcopy(to, to_start, source, source_start, count)` | The same, for ranges that don't overlap |
+
+```walnut
+import module.memory
+
+std::collections::Vector<int>: v = { 0, 1, 2, 3, 4, 5, 6, 7 };
+std::memory::memmove(v, 2, v, 0, 5);
+```
+
+That leaves `v` as `0 1 0 1 2 3 4 7`. Use `memmove` unless you know the ranges are separate; `memcopy` is only a little faster, since it can copy front to back without checking which way round the ranges are. Plain-data types (numbers, and classes made of them) are copied byte for byte; anything else is copied item by item with its copy assignment, so a `string` or a class with a pointer inside stays correct. A negative count or a null pointer with a count above zero stops the program with an error.
 
 ## Errors
 

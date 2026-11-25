@@ -90,11 +90,11 @@ public:
         });
     }
 
-    std::vector<long long> nearest_distances(const std::string& word, long long max_distance, long long limit) const {
+    std::vector<walnut_rt::u64> nearest_distances(const std::string& word, long long max_distance, long long limit) const {
         return with([&](const auto& t) {
-            std::vector<long long> out;
+            std::vector<walnut_rt::u64> out;
             if (max_distance < 0) return out;
-            for (const auto& [k, d] : t.nearest(word, static_cast<std::size_t>(max_distance), limit_of(limit))) out.push_back(static_cast<long long>(d));
+            for (const auto& [k, d] : t.nearest(word, static_cast<std::size_t>(max_distance), limit_of(limit))) out.push_back(walnut_rt::u64(static_cast<unsigned long long>(d)));
             return out;
         });
     }
@@ -109,8 +109,8 @@ public:
     explicit set(bool ignore_case) : m_map(ignore_case) {}
 
     bool ignores_case() const noexcept { return m_map.ignores_case(); }
-    long long size() const { return m_map.size(); }
-    bool empty() const { return m_map.empty(); }
+    long long size() const noexcept { return m_map.size(); }
+    bool empty() const noexcept { return m_map.empty(); }
     void clear() { m_map.clear(); }
     bool insert(const std::string& word) { return m_map.insert(word, true); }
     bool contains(const std::string& word) const { return m_map.contains(word); }
@@ -122,7 +122,7 @@ public:
     std::string complete(const std::string& prefix) const { return m_map.complete(prefix); }
     long long longest_prefix_of(const std::string& text) const { return m_map.longest_prefix_of(text); }
     std::vector<std::string> nearest(const std::string& word, long long max_distance, long long limit) const { return m_map.nearest(word, max_distance, limit); }
-    std::vector<long long> nearest_distances(const std::string& word, long long max_distance, long long limit) const { return m_map.nearest_distances(word, max_distance, limit); }
+    std::vector<walnut_rt::u64> nearest_distances(const std::string& word, long long max_distance, long long limit) const { return m_map.nearest_distances(word, max_distance, limit); }
 
 private:
     map<bool> m_map;

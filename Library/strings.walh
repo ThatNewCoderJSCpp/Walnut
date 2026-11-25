@@ -8,26 +8,26 @@ safe(compile) {
                     template <typename S, typename N = S>
                     class Native as "walnut_rt::str::ttag" {
                     public:
-                        static function find_from(const S&: s, const N&: needle, long int: start) -> long int as "walnut_rt::str::find_from";
-                        static function rfind(const S&: s, const N&: needle) -> long int as "walnut_rt::str::rfind";
-                        static function find_nth(const S&: s, const N&: needle, long int: nth) -> long int as "walnut_rt::str::find_nth";
-                        static function find_all(const S&: s, const N&: needle, std::collections::Vector<long int>&: out) -> void as "walnut_rt::str::find_all";
-                        static function count(const S&: s, const N&: needle) -> long int as "walnut_rt::str::count";
-                        static function find_first_of(const S&: s, const S&: chars) -> long int as "walnut_rt::str::find_first_of";
-                        static function find_last_of(const S&: s, const S&: chars) -> long int as "walnut_rt::str::find_last_of";
-                        static function find_first_not_of(const S&: s, const S&: chars) -> long int as "walnut_rt::str::find_first_not_of";
-                        static function find_last_not_of(const S&: s, const S&: chars) -> long int as "walnut_rt::str::find_last_not_of";
+                        static function find_from(const S&: s, const N&: needle, unsigned long int: start) -> unsigned long int as "walnut_rt::str::find_from";
+                        static function rfind(const S&: s, const N&: needle) -> unsigned long int as "walnut_rt::str::rfind";
+                        static function find_nth(const S&: s, const N&: needle, unsigned long int: nth) -> unsigned long int as "walnut_rt::str::find_nth";
+                        static function find_all(const S&: s, const N&: needle, std::collections::Vector<unsigned long int>&: out) -> void as "walnut_rt::str::find_all";
+                        static function count(const S&: s, const N&: needle) -> unsigned long int as "walnut_rt::str::count";
+                        static function find_first_of(const S&: s, const S&: chars) -> unsigned long int as "walnut_rt::str::find_first_of";
+                        static function find_last_of(const S&: s, const S&: chars) -> unsigned long int as "walnut_rt::str::find_last_of";
+                        static function find_first_not_of(const S&: s, const S&: chars) -> unsigned long int as "walnut_rt::str::find_first_not_of";
+                        static function find_last_not_of(const S&: s, const S&: chars) -> unsigned long int as "walnut_rt::str::find_last_not_of";
                         static function contains_any(const S&: s, const S&: chars) -> bool as "walnut_rt::str::contains_any";
                         static function split(const S&: s, const N&: separator, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split";
-                        static function split_n(const S&: s, const N&: separator, long int: limit, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split_n";
+                        static function split_n(const S&: s, const N&: separator, unsigned long int: limit, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split_n";
                         static function split_whitespace(const S&: s, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split_whitespace";
                         static function split_any(const S&: s, const S&: chars, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::split_any";
                         static function lines(const S&: s, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::lines";
                         static function words(const S&: s, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::words";
-                        static function chunks(const S&: s, long int: size, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::chunks";
+                        static function chunks(const S&: s, unsigned long int: size, std::collections::Vector<S>&: out) -> void as "walnut_rt::str::chunks";
                         static function chars(const S&: s, std::collections::Vector<char>&: out) -> void as "walnut_rt::str::chars";
                         static function join(const std::collections::Vector<S>&: parts, const N&: separator) -> S as "walnut_rt::str::join";
-                        static function replace_n(const S&: s, const N&: old_text, const N&: new_text, long int: limit) -> S as "walnut_rt::str::replace_n";
+                        static function replace_n(const S&: s, const N&: old_text, const N&: new_text, unsigned long int: limit) -> S as "walnut_rt::str::replace_n";
                         static function replace_last(const S&: s, const N&: old_text, const N&: new_text) -> S as "walnut_rt::str::replace_last";
                         static function remove(const S&: s, const N&: needle) -> S as "walnut_rt::str::remove";
                         static function remove_prefix(const S&: s, const N&: prefix) -> S as "walnut_rt::str::remove_prefix";
@@ -42,19 +42,19 @@ safe(compile) {
                         static function title_case(const S&: s) -> S as "walnut_rt::str::title_case";
                         static function swap_case(const S&: s) -> S as "walnut_rt::str::swap_case";
                         static function reverse(const S&: s) -> S as "walnut_rt::str::reverse";
-                        static function repeated(const S&: s, long int: times) -> S as "walnut_rt::str::repeated";
-                        static function pad_left(const S&: s, long int: width, char: fill) -> S as "walnut_rt::str::pad_left";
-                        static function pad_right(const S&: s, long int: width, char: fill) -> S as "walnut_rt::str::pad_right";
-                        static function center(const S&: s, long int: width, char: fill) -> S as "walnut_rt::str::center";
-                        static function zfill(const S&: s, long int: width) -> S as "walnut_rt::str::zfill";
-                        static function insert(const S&: s, long int: index, const S&: piece) -> S as "walnut_rt::str::insert";
-                        static function erase(const S&: s, long int: index, long int: count) -> S as "walnut_rt::str::erase";
-                        static function slice(const S&: s, long int: start, long int: stop) -> S as "walnut_rt::str::slice";
-                        static function left(const S&: s, long int: count) -> S as "walnut_rt::str::left";
-                        static function right(const S&: s, long int: count) -> S as "walnut_rt::str::right";
-                        static function truncate(const S&: s, long int: width, const S&: ellipsis) -> S as "walnut_rt::str::truncate";
-                        static function indent(const S&: s, long int: count) -> S as "walnut_rt::str::indent";
-                        static function wrap(const S&: s, long int: width) -> S as "walnut_rt::str::wrap";
+                        static function repeated(const S&: s, unsigned long int: times) -> S as "walnut_rt::str::repeated";
+                        static function pad_left(const S&: s, unsigned long int: width, char: fill) -> S as "walnut_rt::str::pad_left";
+                        static function pad_right(const S&: s, unsigned long int: width, char: fill) -> S as "walnut_rt::str::pad_right";
+                        static function center(const S&: s, unsigned long int: width, char: fill) -> S as "walnut_rt::str::center";
+                        static function zfill(const S&: s, unsigned long int: width) -> S as "walnut_rt::str::zfill";
+                        static function insert(const S&: s, unsigned long int: index, const S&: piece) -> S as "walnut_rt::str::insert";
+                        static function erase(const S&: s, unsigned long int: index, unsigned long int: count) -> S as "walnut_rt::str::erase";
+                        static function slice(const S&: s, unsigned long int: start, unsigned long int: stop) -> S as "walnut_rt::str::slice";
+                        static function left(const S&: s, unsigned long int: count) -> S as "walnut_rt::str::left";
+                        static function right(const S&: s, unsigned long int: count) -> S as "walnut_rt::str::right";
+                        static function truncate(const S&: s, unsigned long int: width, const S&: ellipsis) -> S as "walnut_rt::str::truncate";
+                        static function indent(const S&: s, unsigned long int: count) -> S as "walnut_rt::str::indent";
+                        static function wrap(const S&: s, unsigned long int: width) -> S as "walnut_rt::str::wrap";
                         static function normalize_whitespace(const S&: s) -> S as "walnut_rt::str::normalize_whitespace";
                         static function camel_to_snake(const S&: s) -> S as "walnut_rt::str::camel_to_snake";
                         static function snake_to_camel(const S&: s) -> S as "walnut_rt::str::snake_to_camel";
@@ -74,11 +74,11 @@ safe(compile) {
                         static function is_number(const S&: s) -> bool as "walnut_rt::str::is_number";
                         static function is_palindrome(const S&: s) -> bool as "walnut_rt::str::is_palindrome";
                         static function matches_glob(const S&: s, const S&: pattern) -> bool as "walnut_rt::str::matches_glob";
-                        static function levenshtein(const S&: a, const S&: b) -> long int as "walnut_rt::str::levenshtein";
+                        static function levenshtein(const S&: a, const S&: b) -> unsigned long int as "walnut_rt::str::levenshtein";
                         static function common_prefix(const S&: a, const S&: b) -> S as "walnut_rt::str::common_prefix";
                         static function common_suffix(const S&: a, const S&: b) -> S as "walnut_rt::str::common_suffix";
-                        static function word_count(const S&: s) -> long int as "walnut_rt::str::word_count";
-                        static function line_count(const S&: s) -> long int as "walnut_rt::str::line_count";
+                        static function word_count(const S&: s) -> unsigned long int as "walnut_rt::str::word_count";
+                        static function line_count(const S&: s) -> unsigned long int as "walnut_rt::str::line_count";
                         static function equals_ignore_case(const S&: a, const S&: b) -> bool as "walnut_rt::str::equals_ignore_case";
                         static function compare_ignore_case(const S&: a, const S&: b) -> long int as "walnut_rt::str::compare_ignore_case";
                         static function starts_with_ignore_case(const S&: s, const S&: prefix) -> bool as "walnut_rt::str::starts_with_ignore_case";
@@ -106,45 +106,45 @@ safe(compile) {
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function find(const S&: s, const N&: needle) -> long int {
+            function find(const S&: s, const N&: needle) -> unsigned long int {
                 return detail::Native<S, N>::find_from(s, needle, 0);
             } end function find
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function find_from(const S&: s, const N&: needle, long int: start) -> long int {
+            function find_from(const S&: s, const N&: needle, unsigned long int: start) -> unsigned long int {
                 return detail::Native<S, N>::find_from(s, needle, start);
             } end function find_from
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function rfind(const S&: s, const N&: needle) -> long int {
+            function rfind(const S&: s, const N&: needle) -> unsigned long int {
                 return detail::Native<S, N>::rfind(s, needle);
             } end function rfind
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function find_last(const S&: s, const N&: needle) -> long int {
+            function find_last(const S&: s, const N&: needle) -> unsigned long int {
                 return detail::Native<S, N>::rfind(s, needle);
             } end function find_last
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function find_nth(const S&: s, const N&: needle, long int: nth) -> long int {
+            function find_nth(const S&: s, const N&: needle, unsigned long int: nth) -> unsigned long int {
                 return detail::Native<S, N>::find_nth(s, needle, nth);
             } end function find_nth
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function find_all(const S&: s, const N&: needle) -> std::collections::Vector<long int> {
-                std::collections::Vector<long int>: out;
+            function find_all(const S&: s, const N&: needle) -> std::collections::Vector<unsigned long int> {
+                std::collections::Vector<unsigned long int>: out;
                 detail::Native<S, N>::find_all(s, needle, out);
                 return out;
             } end function find_all
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function count(const S&: s, const N&: needle) -> long int {
+            function count(const S&: s, const N&: needle) -> unsigned long int {
                 return detail::Native<S, N>::count(s, needle);
             } end function count
 
@@ -156,25 +156,25 @@ safe(compile) {
 
             template <typename S>
             requires std::traits::is_string<S>
-            function find_first_of(const S&: s, const S&: chars) -> long int {
+            function find_first_of(const S&: s, const S&: chars) -> unsigned long int {
                 return detail::Native<S>::find_first_of(s, chars);
             } end function find_first_of
 
             template <typename S>
             requires std::traits::is_string<S>
-            function find_last_of(const S&: s, const S&: chars) -> long int {
+            function find_last_of(const S&: s, const S&: chars) -> unsigned long int {
                 return detail::Native<S>::find_last_of(s, chars);
             } end function find_last_of
 
             template <typename S>
             requires std::traits::is_string<S>
-            function find_first_not_of(const S&: s, const S&: chars) -> long int {
+            function find_first_not_of(const S&: s, const S&: chars) -> unsigned long int {
                 return detail::Native<S>::find_first_not_of(s, chars);
             } end function find_first_not_of
 
             template <typename S>
             requires std::traits::is_string<S>
-            function find_last_not_of(const S&: s, const S&: chars) -> long int {
+            function find_last_not_of(const S&: s, const S&: chars) -> unsigned long int {
                 return detail::Native<S>::find_last_not_of(s, chars);
             } end function find_last_not_of
 
@@ -206,7 +206,7 @@ safe(compile) {
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function split_n(const S&: s, const N&: separator, long int: limit) -> std::collections::Vector<S> {
+            function split_n(const S&: s, const N&: separator, unsigned long int: limit) -> std::collections::Vector<S> {
                 std::collections::Vector<S>: out;
                 detail::Native<S, N>::split_n(s, separator, limit, out);
                 return out;
@@ -246,7 +246,7 @@ safe(compile) {
 
             template <typename S>
             requires std::traits::is_string<S>
-            function chunks(const S&: s, long int: size) -> std::collections::Vector<S> {
+            function chunks(const S&: s, unsigned long int: size) -> std::collections::Vector<S> {
                 std::collections::Vector<S>: out;
                 detail::Native<S>::chunks(s, size, out);
                 return out;
@@ -281,7 +281,7 @@ safe(compile) {
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
             function replace(const S&: s, const N&: old_text, const N&: new_text) -> S {
-                return detail::Native<S, N>::replace_n(s, old_text, new_text, -1);
+                return detail::Native<S, N>::replace_n(s, old_text, new_text, std::npos);
             } end function replace
 
             template <typename S, typename N>
@@ -298,7 +298,7 @@ safe(compile) {
 
             template <typename S, typename N>
             requires std::traits::is_string<S> && (std::traits::is_string<N> || std::traits::is_char<N>)
-            function replace_n(const S&: s, const N&: old_text, const N&: new_text, long int: limit) -> S {
+            function replace_n(const S&: s, const N&: old_text, const N&: new_text, unsigned long int: limit) -> S {
                 return detail::Native<S, N>::replace_n(s, old_text, new_text, limit);
             } end function replace_n
 
@@ -442,91 +442,91 @@ safe(compile) {
 
             template <typename S>
             requires std::traits::is_string<S>
-            function repeated(const S&: s, long int: times) -> S {
+            function repeated(const S&: s, unsigned long int: times) -> S {
                 return detail::Native<S>::repeated(s, times);
             } end function repeated
 
             template <typename S>
             requires std::traits::is_string<S>
-            function pad_left(const S&: s, long int: width, char: fill = ' ') -> S {
+            function pad_left(const S&: s, unsigned long int: width, char: fill = ' ') -> S {
                 return detail::Native<S>::pad_left(s, width, fill);
             } end function pad_left
 
             template <typename S>
             requires std::traits::is_string<S>
-            function pad_right(const S&: s, long int: width, char: fill = ' ') -> S {
+            function pad_right(const S&: s, unsigned long int: width, char: fill = ' ') -> S {
                 return detail::Native<S>::pad_right(s, width, fill);
             } end function pad_right
 
             template <typename S>
             requires std::traits::is_string<S>
-            function center(const S&: s, long int: width, char: fill = ' ') -> S {
+            function center(const S&: s, unsigned long int: width, char: fill = ' ') -> S {
                 return detail::Native<S>::center(s, width, fill);
             } end function center
 
             template <typename S>
             requires std::traits::is_string<S>
-            function zfill(const S&: s, long int: width) -> S {
+            function zfill(const S&: s, unsigned long int: width) -> S {
                 return detail::Native<S>::zfill(s, width);
             } end function zfill
 
             template <typename S>
             requires std::traits::is_string<S>
-            function insert(const S&: s, long int: index, const S&: piece) -> S {
+            function insert(const S&: s, unsigned long int: index, const S&: piece) -> S {
                 return detail::Native<S>::insert(s, index, piece);
             } end function insert
 
             template <typename S>
             requires std::traits::is_string<S>
-            function erase(const S&: s, long int: index, long int: count = 1) -> S {
+            function erase(const S&: s, unsigned long int: index, unsigned long int: count = 1) -> S {
                 return detail::Native<S>::erase(s, index, count);
             } end function erase
 
             template <typename S>
             requires std::traits::is_string<S>
-            function slice(const S&: s, long int: start, long int: stop) -> S {
+            function slice(const S&: s, unsigned long int: start, unsigned long int: stop) -> S {
                 return detail::Native<S>::slice(s, start, stop);
             } end function slice
 
             template <typename S>
             requires std::traits::is_string<S>
-            function substring(const S&: s, long int: start, long int: stop) -> S {
+            function substring(const S&: s, unsigned long int: start, unsigned long int: stop) -> S {
                 return detail::Native<S>::slice(s, start, stop);
             } end function substring
 
             template <typename S>
             requires std::traits::is_string<S>
-            function left(const S&: s, long int: count) -> S {
+            function left(const S&: s, unsigned long int: count) -> S {
                 return detail::Native<S>::left(s, count);
             } end function left
 
             template <typename S>
             requires std::traits::is_string<S>
-            function right(const S&: s, long int: count) -> S {
+            function right(const S&: s, unsigned long int: count) -> S {
                 return detail::Native<S>::right(s, count);
             } end function right
 
             template <typename S>
             requires std::traits::is_string<S>
-            function truncate(const S&: s, long int: width) -> S {
+            function truncate(const S&: s, unsigned long int: width) -> S {
                 return detail::Native<S>::truncate(s, width, static_cast<S>("..."));
             } end function truncate
 
             template <typename S>
             requires std::traits::is_string<S>
-            function truncate(const S&: s, long int: width, const S&: ellipsis) -> S {
+            function truncate(const S&: s, unsigned long int: width, const S&: ellipsis) -> S {
                 return detail::Native<S>::truncate(s, width, ellipsis);
             } end function truncate
 
             template <typename S>
             requires std::traits::is_string<S>
-            function indent(const S&: s, long int: count) -> S {
+            function indent(const S&: s, unsigned long int: count) -> S {
                 return detail::Native<S>::indent(s, count);
             } end function indent
 
             template <typename S>
             requires std::traits::is_string<S>
-            function wrap(const S&: s, long int: width) -> S {
+            function wrap(const S&: s, unsigned long int: width) -> S {
                 return detail::Native<S>::wrap(s, width);
             } end function wrap
 
@@ -604,13 +604,13 @@ safe(compile) {
 
             template <typename S>
             requires std::traits::is_string<S>
-            function levenshtein(const S&: a, const S&: b) -> long int {
+            function levenshtein(const S&: a, const S&: b) -> unsigned long int {
                 return detail::Native<S>::levenshtein(a, b);
             } end function levenshtein
 
             template <typename S>
             requires std::traits::is_string<S>
-            function distance(const S&: a, const S&: b) -> long int {
+            function distance(const S&: a, const S&: b) -> unsigned long int {
                 return detail::Native<S>::levenshtein(a, b);
             } end function distance
 
@@ -628,13 +628,13 @@ safe(compile) {
 
             template <typename S>
             requires std::traits::is_string<S>
-            function word_count(const S&: s) -> long int {
+            function word_count(const S&: s) -> unsigned long int {
                 return detail::Native<S>::word_count(s);
             } end function word_count
 
             template <typename S>
             requires std::traits::is_string<S>
-            function line_count(const S&: s) -> long int {
+            function line_count(const S&: s) -> unsigned long int {
                 return detail::Native<S>::line_count(s);
             } end function line_count
 
@@ -670,8 +670,8 @@ safe(compile) {
 
             template <typename S>
             requires std::traits::is_string<S>
-            function count_if(const S&: s, std::Predicate<char>: pred) -> long int {
-                long int: n = 0;
+            function count_if(const S&: s, std::Predicate<char>: pred) -> unsigned long int {
+                unsigned long int: n = 0;
                 for (char: c in s) {
                     if (pred(c)) then {
                         n += 1;
@@ -710,15 +710,15 @@ safe(compile) {
 
             template <typename S>
             requires std::traits::is_string<S>
-            function find_if(const S&: s, std::Predicate<char>: pred) -> long int {
-                long int: i = 0;
+            function find_if(const S&: s, std::Predicate<char>: pred) -> unsigned long int {
+                unsigned long int: i = 0;
                 for (char: c in s) {
                     if (pred(c)) then {
                         return i;
                     }
                     i += 1;
                 }
-                return -1;
+                return std::npos;
             } end function find_if
 
             template <typename S>
@@ -777,7 +777,7 @@ safe(compile) {
 
             template <typename S>
             requires std::traits::is_string<S>
-            function char_at(const S&: s, long int: index) -> char {
+            function char_at(const S&: s, unsigned long int: index) -> char {
                 return s[index];
             } end function char_at
 

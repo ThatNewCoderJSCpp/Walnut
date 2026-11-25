@@ -100,13 +100,13 @@ This prints `apple fig fig pear pear` and `pears: 2, kinds: 3`.
 
 ## What every container has
 
-- `size()` gives the number of elements as a `long int`, and `empty()` is `true` when there are none.
+- `size()` gives the number of elements as an `unsigned long int`, and `empty()` is `true` when there are none. Every size, count, capacity and index in this module is an `unsigned long int`; a `long int` has to be cast (`v[static_cast<unsigned long int>(i)]`), so a negative index can't slip in.
 - `clear()` removes every element (not on `Span`, which doesn't own its elements).
 - `for (T: x in c)` visits every element in order. Containers that hand out references (`Vector`, `DynamicArray`, `SmallVector`, `Span`, `LinkedList`, `Deque`, `UnorderedMap`, `Map`) let the loop change elements with `T&: x`. See [Looping over your own classes](../../documentation.md#looping-over-your-own-classes) for how this works.
 - `for (T: x in c.backwards())` visits them from the last to the first, without copying. `rbegin()` and `rend()` give the iterators it uses, and each container names its iterator types `Iterator` and `ReverseIterator`; they come from [iterators](iterators.md#going-backwards).
 - Containers that own their elements copy deeply: `Vector<int>: b = a;` makes an independent copy. Moving one with `std::move` takes over its memory and leaves the source empty.
-- Indexes are `long int`, start at `0`, and are checked: an index out of range throws a [`std::errors::collection_error`](#errors), and so does taking an element from an empty container.
-- `Vector`, `DynamicArray` and `SmallVector` also take a [hardware integer](../../documentation.md#hardware-numbers) in `[]`, such as `std::hardware_int`, and check it with plain machine arithmetic, so `v[i]` in a tight loop costs about what it does in C++. It is checked the same way and throws the same error. Indexing with a Walnut integer uses the `long int` version.
+- Indexes are `unsigned long int`, start at `0`, and are checked: an index out of range throws a [`std::errors::collection_error`](#errors), and so does taking an element from an empty container.
+- `Vector`, `DynamicArray` and `SmallVector` also take a [hardware integer](../../documentation.md#hardware-numbers) in `[]`, such as `std::hardware_int`, and check it with plain machine arithmetic, so `v[i]` in a tight loop costs about what it does in C++. It is checked the same way and throws the same error. A negative hardware index throws a `collection_error` too. Indexing with a Walnut integer uses the `unsigned long int` version.
 - `find(value)` gives the index of the first match, or `undefined` when there is none (check with `i is undefined`). `contains(value)` gives a `bool`.
 
 ## Vector
@@ -120,7 +120,7 @@ function main() -> int {
     v.insert(0, 7);
     int: last = v.pop_back();
     v.sort();
-    long int: where = v.find(9);
+    unsigned long int: where = v.find(9);
     bool: has = v.contains(4);
     auto: zeros = std::collections::Vector<int>::filled(3, 0);
     return 0;
@@ -156,7 +156,7 @@ A `Vector<T>` is a C++ `std::vector`, so it grows and moves its elements the sam
 import module.collections
 
 function main() -> int {
-    long int: n = 4;
+    unsigned long int: n = 4;
     std::collections::DynamicArray<int>: grid(n, -1);
     grid[2] = 5;
     grid.push_front(9);
@@ -395,7 +395,7 @@ This prints `figs=9 apples=2 pears=5` and then `9 2 apples`.
 |---|---|
 | `m[key]`, `at(key)`, `get(key, fallback)`, `find(key)` | The same as on [`UnorderedMap`](#unorderedmap); `m[key]` adds a new key at the end |
 | `set(key, value)`, `insert(key, value)` | Add or replace, or add only if new; a key that is already there keeps its place |
-| `contains(key)`, `index_of(key)` | Whether the key is there, and its position (`-1` if it isn't) |
+| `contains(key)`, `index_of(key)` | Whether the key is there, and its position (`std::npos` if it isn't) |
 | `entry(i)` | The `Pair<K, V>` at position `i` |
 | `first()`, `last()` | The oldest and newest entries |
 | `remove(key)`, `pop(key)` | Remove a key; `pop` gives its value back and throws if the key is missing |
@@ -428,7 +428,7 @@ Here `seen` holds `5 1 3 7` in that order, `fresh` is `true`, `both` holds `3`, 
 
 ## Counter
 
-`Counter<T>` counts how many times each value was seen, like Python's `collections.Counter`. It is an `OrderedMap<T, long int>` underneath, so ties in `most_common` keep the order the values were first seen in.
+`Counter<T>` counts how many times each value was seen, like Python's `collections.Counter`. It is an `OrderedMap<T, unsigned long int>` underneath, so ties in `most_common` keep the order the values were first seen in.
 
 ```walnut
 import module.collections
@@ -456,19 +456,19 @@ This prints `i:4 s:4` and then `1 0 7 cy`.
 |---|---|
 | `Counter<T>: c;`, `Counter<T>: c(a, b, ...)`, `Counter<T>::of(items)` | An empty counter, one that counts the given values, or one that counts everything in an [`iterable`](../../documentation.md#iterable-parameters) such as a string, array or container |
 | `add(x)`, `add(x, n)`, `add_all(items)` | Count `x` once or `n` times, or everything in `items`; `add` gives the new count |
-| `subtract(x)`, `subtract(x, n)` | Take one or `n` away; counts can go to zero or below |
+| `subtract(x)`, `subtract(x, n)` | Take one or `n` away; a count stops at zero, because counts are unsigned |
 | `set(x, n)` | Set a count |
 | `count(x)`, `c[x]` | The count, `0` for a value never seen; neither adds `x` |
 | `contains(x)`, `remove(x)`, `clear()` | Check for, forget, or forget every value |
 | `size()`, `total()` | How many different values, and the sum of all counts |
-| `most_common()`, `most_common(n)`, `least_common(n)` | `Vector<Pair<T, long int>>` sorted by count |
+| `most_common()`, `most_common(n)`, `least_common(n)` | `Vector<Pair<T, unsigned long int>>` sorted by count |
 | `elements()` | A `Vector<T>` with each value repeated as many times as its count |
 | `keys()` | The values seen, in first-seen order |
 | `drop_zeros()` | Remove values whose count is zero or less; gives how many were removed |
 | `merge(other)` | Add another counter's counts to this one |
 | `==`, `!=` | The same values with the same counts |
 
-Looping over a counter gives a `const Pair<T, long int>&` for each value, in first-seen order.
+Looping over a counter gives a `const Pair<T, unsigned long int>&` for each value, in first-seen order.
 
 ## DefaultMap
 
@@ -518,7 +518,7 @@ function main() -> int {
 
     std::collections::Set<int>: s{5, 1, 4, 1};
     int: smallest = s[0];
-    long int: place = s.index_of(5);
+    unsigned long int: place = s.index_of(5);
     int: after = *s.upper_bound(1);
     return 0;
 } end function main
@@ -547,9 +547,9 @@ function main() -> int {
     words["value"] = 3;
 
     std::collections::Vector<string>: ve = words.keys_with_prefix("ve");
-    long int: count = words.count_prefix("v");
+    unsigned long int: count = words.count_prefix("v");
     string: rest = words.complete("vect");
-    long int: longest = words.longest_prefix_of("values!");
+    unsigned long int: longest = words.longest_prefix_of("values!");
     std::collections::Vector<string>: guesses = words.nearest("vectr", 2);
 
     std::collections::Trie: names = std::collections::Trie::ignoring_case();
@@ -590,7 +590,7 @@ Here `ve` is `{"vec", "vector"}`, `count` is `3`, `rest` is `"vector"` (the only
 
 ## Cache
 
-`Cache<K, V>` is a map with a size limit. When it's full, adding a key forgets the entry that was used least recently, so the cache keeps what a program keeps asking for. Use it for results that are expensive to make and likely to be asked for again: loaded files, rendered images, parsed documents, answers from a server.
+`Cache<K, V>` is a map with a size limit. When it's full, adding a key forgets the entry that was used least recently, so the cache keeps what a program keeps asking for. Use it for results that are expensive to make and likely to be asked for again: loaded files, rendered images, parsed documents, answers from a server. For values that should be made on first use by a loader, rebuilt when a version changes, or evicted by how long they take to make, see `LazyCache` in [cache](cache.md).
 
 ```walnut
 import module.collections
@@ -719,7 +719,7 @@ Here `on` and `same` are `true`, the loop prints `1`, `4` and `9`, and the last 
 | `count()`, `empty()`, `full()` | How many bits are on, whether none are, whether all are |
 | `has_any(other)`, `has_all(other)`, `has_none(other)`, `includes(other)`, `is_subset_of(other)` | Comparisons with another `Bitset<N>` |
 | `find_first()`, `find_next(i)` | The first bit that is on, or the first after `i`. `N` if there isn't one |
-| `for (long int: i in b)` | Goes through the bits that are on, lowest first |
+| `for (unsigned long int: i in b)` | Goes through the bits that are on, lowest first |
 | `to_string()`, `to_mask()` | The bits as `0`s and `1`s with bit 0 last, or as a 64-bit unsigned integer (throws if a bit at 64 or above is on) |
 | `\|`, `&`, `^`, `-`, `~`, `<<`, `>>` | Union, common bits, bits in exactly one, bits of the left without the right, every bit flipped, and shifts that drop bits pushed past either end |
 | `\|=`, `&=`, `^=`, `-=`, `<<=`, `>>=`, `==`, `!=` | The same, changing the left side, and comparing |
@@ -738,10 +738,10 @@ function main() -> int {
     std::collections::Vector<int>: v{8, 3, 5, 3, 9, 1};
     v.sort([](int: a, int: b) -> bool { return a > b; });
     v.sort();
-    long int: slot = v.insert_sorted(4);
-    long int: big = v.count_if([](int: x) -> bool { return x > 4; });
-    long int: dropped = v.remove_if([](int: x) -> bool { return x % 2 == 0; });
-    long int: repeats = v.unique();
+    unsigned long int: slot = v.insert_sorted(4);
+    unsigned long int: big = v.count_if([](int: x) -> bool { return x > 4; });
+    unsigned long int: dropped = v.remove_if([](int: x) -> bool { return x % 2 == 0; });
+    unsigned long int: repeats = v.unique();
     auto: words = v.map([](int: x) -> string { return std::core::to_string(x); });
     int: total = v.sum();
     return 0;
@@ -774,12 +774,12 @@ Here `slot` is `3`, `big` is `3`, `dropped` is `2` (the `4` and the `8`), `repea
 |---|---|
 | `binary_search(value)` | Whether a sorted container has `value` |
 | `lower_bound(value)`, `upper_bound(value)` | The first and last index where `value` could go in a sorted container |
-| `binary_find(value)` | The index of `value` in a sorted container, or `-1` |
-| `find_if(pred)`, `find_last(value)`, `find_last_if(pred)` | The index of a match, or `-1` |
-| `find_all(value)` | A `Vector<long int>` of every index holding `value` |
+| `binary_find(value)` | The index of `value` in a sorted container, or `std::npos` |
+| `find_if(pred)`, `find_last(value)`, `find_last_if(pred)` | The index of a match, or `std::npos` |
+| `find_all(value)` | A `Vector<unsigned long int>` of every index holding `value` |
 | `count(value)`, `count_if(pred)` | How many match |
 | `contains_if(pred)`, `all_of(pred)`, `any_of(pred)`, `none_of(pred)` | `bool` |
-| `min()`, `max()`, `min_index()`, `max_index()` | The smallest or largest element, or its index (`-1` when empty) |
+| `min()`, `max()`, `min_index()`, `max_index()` | The smallest or largest element, or its index (`std::npos` when empty) |
 | `starts_with(other)`, `ends_with(other)` | Whether it begins or ends with the elements of another container of the same kind |
 
 **Changing and building**
@@ -805,7 +805,7 @@ Here `slot` is `3`, `big` is `3`, `dropped` is `2` (the `4` and the `8`), `repea
 | `distinct()` | A copy with every repeat removed |
 | `replace(old_value, new_value)`, `replace_if(pred, value)` | Replaces matches; gives how many |
 | `transform(func)` | Replaces each element `x` with `func(x)` |
-| `for_each(func)`, `for_each_indexed(func)` | Calls `func(x)`, or `func(index, x)`, for each element; `x` is a reference, so `func` can change it |
+| `for_each(func)`, `for_each_indexed(func)` | Calls `func(x)`, or `func(index, x)` with an `unsigned long int` index, for each element; `x` is a reference, so `func` can change it |
 | `swap_items(i, j)` | Swaps two elements |
 | `filter(pred)` | A copy holding the elements that pass `pred` |
 | `map(func)` | A `Vector` of `func(x)` for each element |
@@ -828,11 +828,11 @@ import module.collections
 function main() -> int {
     std::collections::Vector<int>: v{5, 12, 7, 30, 2, 18};
     auto: big = v.where([](int: x) -> bool { return x > 6; });
-    long int: how_many = big.count();
-    long int: first = big.first_index();
+    unsigned long int: how_many = big.count();
+    unsigned long int: first = big.first_index();
     int: largest = big.max_value();
     big.where([](int: x) -> bool { return x % 2 == 0; }).transform([](int: x) -> int { return x / 2; });
-    long int: gone = v.where(2).remove();
+    unsigned long int: gone = v.where(2).remove();
     return 0;
 } end function main
 ```
@@ -844,7 +844,7 @@ Here `how_many` is `4` (`12 7 30 18`), `first` is `1`, `largest` is `30`, the ev
 
 **Narrowing**, each giving a new query: `where(pred)`, `where(value)`, `where_not(pred)`, `where_indexed(pred)` (with `pred(index, x)`), `first(n)`, `take(n)`, `last(n)`, `skip(n)`, `skip_last(n)`, `slice(a, b)` (by position in the query), `range(lo, hi)` (by index in the container), `step(n)`, `even()`, `odd()`, `invert()` (everything not picked), `or_where(pred)`, `union_with(q)`, `intersect_with(q)` and `except(q)`.
 
-**Reading**: `count()`, `size()`, `empty()`, `index(k)` and `indices()` (positions in the container), `first_index()` and `last_index()` (`-1` when empty), `contains_index(i)`, `q[k]`, `at(k)`, `first_value()`, `last_value()`, `values()` (a container of the same kind), `to_vector()`, `count_if(pred)`, `all_of(pred)`, `any_of(pred)`, `none_of(pred)`, `sum()`, `min_index()`, `max_index()`, `min_value()`, `max_value()` and `map(func)`.
+**Reading**: `count()`, `size()`, `empty()`, `index(k)` and `indices()` (positions in the container), `first_index()` and `last_index()` (`std::npos` when empty), `contains_index(i)`, `q[k]`, `at(k)`, `first_value()`, `last_value()`, `values()` (a container of the same kind), `to_vector()`, `count_if(pred)`, `all_of(pred)`, `any_of(pred)`, `none_of(pred)`, `sum()`, `min_index()`, `max_index()`, `min_value()`, `max_value()` and `map(func)`.
 
 **Changing** the picked elements in their places: `for_each(func)`, `for_each_indexed(func)`, `transform(func)`, `replace(value)`, `fill(value)`, `sort()`, `sort(comp)`, `sort_descending()`, `stable_sort()`, `sort_by(key)`, `reverse()`, `rotate_left(n)`, `rotate_right(n)` and `shuffle()`. Sorting a query sorts only the picked elements, among the positions they already have.
 
@@ -918,6 +918,7 @@ function main() -> int {
 - Every container needs to be able to create its element type without arguments (`T()`) and to assign it, because it sets aside space for elements before they are filled in.
 - `find`, `contains`, `remove` and `==` need `==` on the element type.
 - `sort`, `PriorityQueue`, `Map` and `Set` need `<`. `sort` uses C++'s `std::sort` for numbers, `bool`, `char`, enums and strings, and a Walnut introsort, built on the class's own `<`, for classes.
-- `UnorderedMap`, `UnorderedSet` and the keys of `Cache` need `==` and [`hash_of`](#hashing).
+- `UnorderedMap`, `UnorderedSet`, `OrderedMap`, `OrderedSet`, `Counter`, `DefaultMap` and the keys of `Cache` need `==` and [`hash_of`](#hashing). The concept `std::collections::HashKey<T>` checks that `hash_of` works for `T`.
+- `sum` needs `+`, and `counting_sort` and `radix_sort` need integers or chars.
 
-A method that needs an operator is only checked when it's used, so `Vector<Point>` works even if `Point` has no `<`, as long as `sort()` isn't called on it.
+A method that needs an operator has a `requires` line, so it's only checked when it's used: `Vector<Point>` works even if `Point` has no `<`, as long as `sort()` isn't called on it. Calling it anyway gives an error at your call, such as `constraints not satisfied for 'sort': std::traits::has_operator<less, Point> is not satisfied`. A container whose whole job needs an operator, such as `Map` without `<` or `UnorderedSet` without a hash, gives that error where you name the type.

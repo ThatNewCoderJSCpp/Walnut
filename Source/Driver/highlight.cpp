@@ -362,8 +362,37 @@ std::string template_parameter_text(const N::TemplateParameter* p, S::TypeContex
     return out + template_default(p, types);
 }
 
+std::string squeeze(std::string_view text) {
+    std::string out;
+    bool space = false;
+    for (const char c : text) {
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') { space = !out.empty(); continue; }
+        if (space) out += ' ';
+        space = false;
+        out += c;
+    }
+    return out;
+}
+
+std::string constraint_text(const S::Symbol* s) {
+    if (!s) return std::string();
+    std::string out;
+    if (s->template_decl) out = squeeze(s->template_decl->m_requires_text);
+
+    std::string_view member;
+    if (s->decl && s->decl->kind == K::FunctionDeclaration) member = static_cast<const N::FunctionDeclaration*>(s->decl)->member_requires_text;
+    if (s->decl && s->decl->kind == K::OperatorFunctionDeclaration) member = static_cast<const N::OperatorFunctionDeclaration*>(s->decl)->member_requires_text;
+    if (!member.empty()) {
+        const std::string m = squeeze(member);
+        out = out.empty() ? m : out + "\n" + m;
+    }
+
+    return out;
+}
+
 std::string template_prefix(const S::Symbol* s, S::TypeContext* types) {
-    if (!s || !s->template_decl) return std::string();
+    const std::string constraint = constraint_text(s);
+    if (!s || !s->template_decl) return constraint.empty() ? std::string() : constraint + "\n";
     std::string out = "template <";
     bool first = true;
 
@@ -378,7 +407,8 @@ std::string template_prefix(const S::Symbol* s, S::TypeContext* types) {
         out += template_default(p, types);
     }
 
-    if (first) return std::string();
+    if (first) return constraint.empty() ? std::string() : constraint + "\n";
+    if (!constraint.empty()) return out + ">\n" + constraint + "\n";
     return out + "> ";
 }
 
@@ -422,6 +452,10 @@ std::string record_name_of(const S::Symbol* s) {
 std::string function_signature(const S::Symbol* s, S::TypeContext* types) {
     s = follow(s);
     if (!s || !s->decl) return std::string();
+    if (!s->template_decl && types && types->instance_primary_hook) {
+        const S::Symbol* p = types->instance_primary_hook(const_cast<S::Symbol*>(s));
+        if (p && p != s && p->template_decl && p->decl && p->decl->kind == s->decl->kind) s = p;
+    }
 
     if (s->decl->kind == K::FunctionDeclaration) return template_prefix(s, types) + signature(static_cast<const N::FunctionDeclaration*>(s->decl), types);
 
@@ -497,6 +531,7 @@ constexpr KeywordDoc k_keyword_docs[] = {
     { TK::ClassKeyword, "keyword", "class Name { ... } end class Name", "Declares a class, closed with `end class Name`. Members are `private` until an access section says otherwise." },
     { TK::ContinueKeyword, "keyword", "continue;", "Skips to the next iteration of the innermost loop. `continue label;` acts on the labelled loop instead." },
     { TK::CatchKeyword, "keyword", "catch (const T&: e) { ... }", "Handles exceptions of a given type after a `try` block. `catch (...)` catches anything and must come last." },
+    { TK::FinallyKeyword, "keyword", "try { ... } catch (...) { ... } finally { ... }", "Runs after a `try` block and its handlers however they're left: normally, by `return`, `break` or `continue`, or by an exception. It can't `return`, and `break`/`continue` can't leave it. `try { ... } finally { ... }` with no handlers is allowed." },
     { TK::ConceptKeyword, "keyword", "concept Addable = requires (T: a, T: b) { a + b; }", "Defines a named requirement on a type, used in place of `typename` or in a `requires` clause. The body can be a `requires` block, a trait, another concept, or a combination with `&&`, `||` and `!`; it has no `;` after it." },
     { TK::ConstexprKeyword, "keyword", "constexpr int: size = 4;", "Marks a variable as a compile-time constant (its initializer must be constant) or a function as able to run while compiling. `if constexpr` keeps only the branch whose condition is true." },
     { TK::ConstevalKeyword, "keyword", "", "Function qualifier, written after the parameter list, meaning the function must always be evaluated at compile time." },
@@ -563,7 +598,7 @@ constexpr KeywordDoc k_keyword_docs[] = {
     { TK::RepeatKeyword, "keyword", "repeat;", "Runs the current loop iteration again from the top of the body, without checking the condition or running the `for` increment. `repeat label;` acts on a labelled loop." },
     { TK::ReinterpretCastKeyword, "operator", "reinterpret_cast<void*>(&storage[0])", "Converts pointer to pointer, or pointer to and from integer, reinterpreting the bits." },
     { TK::ReturnKeyword, "keyword", "return value;", "Leaves the function, giving its result. A `void` function needs no `return`, and returning a local variable moves it automatically." },
-    { TK::RequiresKeyword, "keyword", "requires Number<T> && std::traits::is_integer<T>", "Adds a constraint to a template, written after `template <...>`. In a concept, `requires (params) { expressions; }` checks that the expressions compile." },
+    { TK::RequiresKeyword, "keyword", "requires Number<T> && std::traits::is_integer<T>", "Adds a constraint to a template, written after `template <...>`, or to one method or operator of a class, written on the line before it so the method only exists when the constraint holds. In a concept, `requires (params) { expressions; }` checks that the expressions compile." },
     { TK::StaticKeyword, "keyword", "static int: counter = 0;", "Gives a variable one copy for the whole program (a local keeps its value between calls). In a class, `static` fields and methods belong to the class and are reached as `Class::name`." },
     { TK::StaticCastKeyword, "operator", "static_cast<int>(3.99)", "The general explicit conversion: number to number (including narrowing and signed/unsigned), enum and integer, `char` to integer, `string` and `text`, base to derived class, and explicit conversion operators. It never turns a number into a `char` or `bool`." },
     { TK::StaticAssertKeyword, "operator", "static_assert(condition, \"message\");", "Stops compilation when the condition is false. The message is required." },
@@ -969,6 +1004,7 @@ public:
 
             case K::TryCatchStatement:
                 for (auto* h = static_cast<N::TryCatchStatement*>(n); h; h = h->next_handler) {
+                    if (!h->is_handler()) continue;
                     type(h->catch_type);
                     declare(h->catch_name, nullptr, "variable");
                 }
@@ -1079,7 +1115,7 @@ public:
         };
 
         for (const auto& [at, h] : m_hovers) {
-            if (h.code.empty() && h.types.empty() && h.values.empty() && h.results.empty() && h.doc.empty()) continue;
+            if (h.code.empty() && h.types.empty() && h.values.empty() && h.results.empty() && h.doc.empty() && h.expansion.empty()) continue;
             if (!first) out << ",";
             first = false;
             const Position p = position(at, h.len);
@@ -1091,8 +1127,12 @@ public:
             list("values", h.values);
             list("results", h.results);
             if (!h.doc.empty()) out << ",\"doc\":" << json_string(h.doc);
+            if (!h.expansion.empty()) out << ",\"expansion\":" << json_string(h.expansion);
             out << "}";
         }
+
+        out << "],\"inactive\":[";
+        for (std::size_t i = 0; i < m_inactive.size(); ++i) out << (i ? "," : "") << "[" << m_inactive[i].first << "," << m_inactive[i].second << "]";
 
         out << "],\"locations\":[";
         first = true;
@@ -1160,9 +1200,11 @@ private:
         std::vector<std::string> results;
         bool                     guess = false;
         std::string              doc;
+        std::string              expansion;
     };
 
     std::map<std::size_t, Hover> m_hovers;
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> m_inactive;
 
     struct Location {
         std::size_t   file = 0;
@@ -1585,6 +1627,35 @@ public:
         return it != m_hovers.end() && !it->second.code.empty();
     }
 
+    void macros(const std::vector<preprocessing::MacroUse>& uses, const std::vector<preprocessing::InactiveRange>& ranges, FileId main) {
+        for (const preprocessing::MacroUse& u : uses) {
+            if (u.file != main || !u.at || !u.length) continue;
+            const std::string_view at(u.at, u.length);
+            if (!inside(at.data(), at.size())) continue;
+            add(at, "macro", 0, 100);
+            Hover& h = m_hovers[offset(at.data())];
+            h.len = u.length;
+            h.rank = 100;
+            h.types.clear();
+            h.values.clear();
+            h.results.clear();
+            h.overloads.clear();
+            if (!u.defined) {
+                h.code = u.name;
+                h.doc = "**Not defined** at this point, so `defined(" + u.name + ")` is false here.";
+                h.expansion.clear();
+                continue;
+            }
+            h.code = u.definition;
+            h.doc.clear();
+            h.expansion = u.expansion;
+        }
+        for (const preprocessing::InactiveRange& r : ranges) {
+            if (r.file != main || r.first == 0 || r.last < r.first) continue;
+            m_inactive.emplace_back(r.first - 1, r.last - 1);
+        }
+    }
+
     void words() {
         const char* p = m_begin;
         const char* line_start = m_begin;
@@ -1891,7 +1962,7 @@ public:
                 if (s->decl && s->decl->kind == K::VariableDeclaration) mods = prefix(static_cast<const N::VariableDeclaration*>(s->decl)->get_type_info().modifiers);
                 const std::string t = symbol_type(s, use);
                 const std::string shown = mods.find("constexpr") != std::string::npos ? without_const(t) : t;
-                code = mods + (shown.empty() ? std::string() : shown + ": ") + qualified_name(s);
+                code = template_prefix(s, m_types) + mods + (shown.empty() ? std::string() : shown + ": ") + qualified_name(s);
                 if (s->decl && s->decl->kind == K::VariableDeclaration) {
                     const auto* v = static_cast<const N::VariableDeclaration*>(s->decl);
                     if (v->m_initializer) {
@@ -1956,7 +2027,7 @@ public:
                 }
                 break;
             }
-            case S::SymbolKind::Concept:       code = "concept " + qualified_name(s); break;
+            case S::SymbolKind::Concept:       code = template_prefix(s, m_types) + "concept " + qualified_name(s); break;
             case S::SymbolKind::TemplateParam:
                 if (s->decl && s->decl->kind == K::TemplateParameter) code = "(template parameter) " + template_parameter_text(static_cast<const N::TemplateParameter*>(s->decl), m_types);
                 else code = "template parameter " + std::string(s->name);
@@ -2254,6 +2325,7 @@ std::string highlight_json(CompilerPipeline& compiler) {
         if (I.decl) c.walk_instantiation(I.decl);
     });
 
+    c.macros(compiler.macro_uses(), compiler.inactive_ranges(), *main);
     c.words();
     instantiator.evaluator().hide_random = hid_random;
     instantiator.freeze(was_frozen);

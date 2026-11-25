@@ -34,8 +34,36 @@
 #endif
 #endif
 
-#if defined(WALNUT_SAFETY)
+#if defined(WALNUT_CHECK_LOOPS) || defined(WALNUT_CHECK_RECURSION)
+#define WALNUT_GUARDS 1
+#endif
+
+#if defined(WALNUT_GUARDS) && !defined(WALNUT_SAFETY)
+#define WALNUT_SAFETY 1
+#endif
+
+#if defined(__cpp_lib_is_constant_evaluated)
+#define WALNUT_IN_CONSTANT_EVALUATION() (::std::is_constant_evaluated())
+#elif defined(__GNUC__) || defined(__clang__) || (defined(_MSC_VER) && _MSC_VER >= 1925)
+#define WALNUT_IN_CONSTANT_EVALUATION() (__builtin_is_constant_evaluated())
+#else
+#define WALNUT_IN_CONSTANT_EVALUATION() (false)
+#endif
+
+#if defined(WALNUT_PROFILE)
+#include "walnut_profile.hpp"
+#else
+#define WALNUT_PROFILE_MARK() ((void)0)
+#define WALNUT_PROFILE_FUNCTION(name, line) ((void)0)
+#define WALNUT_PROFILE_FUNCTION_ARGS(...) ((void)0)
+#endif
+
+#if defined(WALNUT_SAFETY) && defined(WALNUT_PROFILE)
+#define WALNUT_HERE() do { ::walnut_rt::safety::here(__FILE__, __LINE__); WALNUT_PROFILE_MARK(); } while (0)
+#elif defined(WALNUT_SAFETY)
 #define WALNUT_HERE() ::walnut_rt::safety::here(__FILE__, __LINE__)
+#elif defined(WALNUT_PROFILE)
+#define WALNUT_HERE() WALNUT_PROFILE_MARK()
 #else
 #define WALNUT_HERE() ((void)0)
 #endif
@@ -136,7 +164,7 @@ public:
         a.made = made;
         a.array = array;
         m_live[a.base] = a;
-        m_freed.erase(a.base);
+        forget_freed_overlap(a.base, std::max<std::size_t>(a.bytes, 1));
         ++m_allocations;
         m_bytes += a.bytes;
         m_peak = std::max(m_peak, m_bytes);
@@ -181,6 +209,22 @@ public:
         return false;
     }
 
+    void quarantine(void* raw, std::size_t bytes) {
+        std::lock_guard<std::mutex> lk(m_mutex);
+        m_held.push_back(held_block{ raw, bytes });
+        m_held_bytes += bytes;
+        while (m_held.size() - m_held_head > 16384 || m_held_bytes > (std::size_t(64) << 20)) {
+            const held_block b = m_held[m_held_head++];
+            m_held_bytes -= b.bytes;
+            m_freed.erase(reinterpret_cast<std::uintptr_t>(b.raw));
+            ::operator delete(b.raw);
+        }
+        if (m_held_head > 4096 && m_held_head * 2 > m_held.size()) {
+            m_held.erase(m_held.begin(), m_held.begin() + static_cast<std::ptrdiff_t>(m_held_head));
+            m_held_head = 0;
+        }
+    }
+
     bool find_freed(const void* p, freed_range& out) {
         std::lock_guard<std::mutex> lk(m_mutex);
         if (const freed_range* f = freed_containing(reinterpret_cast<std::uintptr_t>(p))) {
@@ -217,6 +261,15 @@ private:
         return nullptr;
     }
 
+    void forget_freed_overlap(std::uintptr_t base, std::size_t bytes) {
+        auto it = m_freed.upper_bound(base);
+        if (it != m_freed.begin()) {
+            auto before = std::prev(it);
+            if (before->second.base + std::max<std::size_t>(before->second.bytes, 1) > base) it = before;
+        }
+        while (it != m_freed.end() && it->second.base < base + bytes) it = m_freed.erase(it);
+    }
+
     const freed_range* freed_containing(std::uintptr_t at) const {
         auto it = m_freed.upper_bound(at);
         if (it == m_freed.begin()) return nullptr;
@@ -248,6 +301,13 @@ private:
     raw_map<std::uintptr_t, allocation>                          m_live;
     raw_map<std::uintptr_t, freed_range>                         m_freed;
     std::vector<std::uintptr_t, raw_allocator<std::uintptr_t>>   m_freed_order;
+    struct held_block {
+        void*       raw;
+        std::size_t bytes;
+    };
+    std::vector<held_block, raw_allocator<held_block>>           m_held;
+    std::size_t                                m_held_head = 0;
+    std::size_t                                m_held_bytes = 0;
     std::size_t                                m_allocations = 0;
     std::size_t                                m_bytes = 0;
     std::size_t                                m_peak = 0;
@@ -801,9 +861,29 @@ inline T* new_array(long long count, const char* type, const char* file, int lin
     return track_new_array(p, count, type, file, line);
 }
 
+template <typename T, typename = void>
+struct has_own_delete : std::false_type {};
+
+template <typename T>
+struct has_own_delete<T, std::void_t<decltype(T::operator delete(static_cast<void*>(nullptr)))>> : std::true_type {};
+
 template <typename T>
 inline void delete_one(T* p, const char* file, int line) {
     before_delete(p, false, file, line);
+#if defined(WALNUT_TRACK_ALLOCATIONS) && defined(WALNUT_CHECK_NULL)
+    using bare = std::remove_cv_t<T>;
+    constexpr bool own_delete = has_own_delete<bare>::value;
+    if constexpr (!own_delete && alignof(bare) <= __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
+        if (p) {
+            void* raw = nullptr;
+            if constexpr (std::is_polymorphic_v<bare>) raw = dynamic_cast<void*>(const_cast<bare*>(p));
+            else raw = static_cast<void*>(const_cast<bare*>(p));
+            p->~T();
+            registry::get().quarantine(raw, sizeof(bare));
+        }
+        return;
+    }
+#endif
     delete p;
 }
 
@@ -913,7 +993,76 @@ inline void start(void* stack_bottom) {
 #endif
 }
 
+#if defined(WALNUT_GUARDS)
+inline std::uint64_t limit_from(const char* env_name, std::uint64_t fallback) noexcept {
+    const char* v = std::getenv(env_name);
+    if (!v || !*v) return fallback;
+    char* end = nullptr;
+    const unsigned long long n = std::strtoull(v, &end, 10);
+    if (end == v || n == 0) return fallback;
+    return static_cast<std::uint64_t>(n);
+}
+
+inline std::string short_file(const char* file) {
+    std::string f = file ? file : "";
+    const std::size_t slash = f.find_last_of("/\\");
+    if (slash != std::string::npos) f = f.substr(slash + 1);
+    return f;
+}
+#endif
+
+#if defined(WALNUT_CHECK_LOOPS)
+inline std::uint64_t loop_limit() noexcept {
+    static const std::uint64_t limit = limit_from("WALNUT_LOOP_LIMIT", static_cast<std::uint64_t>(WALNUT_CHECK_LOOPS));
+    return limit;
+}
+
+[[noreturn]] inline void loop_overrun(const char* file, int line, std::uint64_t count) {
+    throw ::walnut_rt::runtime_error(short_file(file) + ":" + std::to_string(line) + ": this loop ran " + std::to_string(count - 1) + " times without ending, so it was stopped because it looks stuck; if it really needs more, raise the limit with --check-loops=<count> or the WALNUT_LOOP_LIMIT environment variable");
+}
+#endif
+
+#if defined(WALNUT_CHECK_RECURSION)
+inline std::uint64_t depth_limit() noexcept {
+    static const std::uint64_t limit = limit_from("WALNUT_DEPTH_LIMIT", static_cast<std::uint64_t>(WALNUT_CHECK_RECURSION));
+    return limit;
+}
+
+inline std::uint64_t& call_depth() noexcept {
+    thread_local std::uint64_t depth = 0;
+    return depth;
+}
+
+class depth_guard {
+public:
+    depth_guard(const char* name, const char* file, int line) {
+        std::uint64_t& d = call_depth();
+        if (d >= depth_limit()) {
+            throw ::walnut_rt::runtime_error(short_file(file) + ":" + std::to_string(line) + ": calls were nested " + std::to_string(d) + " deep when '" + name + "' was called, so it was stopped before the stack runs out; this is usually recursion that never reaches its base case. If it really needs to go deeper, raise the limit with --check-recursion=<depth> or the WALNUT_DEPTH_LIMIT environment variable");
+        }
+        ++d;
+    }
+    depth_guard(const depth_guard&) = delete;
+    depth_guard& operator=(const depth_guard&) = delete;
+    ~depth_guard() { --call_depth(); }
+};
+#endif
+
 } // namespace safety
 } // namespace walnut_rt
+
+#if defined(WALNUT_CHECK_LOOPS)
+#define WALNUT_LOOP_COUNTER(n) ::std::uint64_t n = 0
+#define WALNUT_LOOP_TICK(n, line) do { if (!WALNUT_IN_CONSTANT_EVALUATION() && ++n > ::walnut_rt::safety::loop_limit()) ::walnut_rt::safety::loop_overrun(__FILE__, line, n); } while (0)
+#else
+#define WALNUT_LOOP_COUNTER(n) ((void)0)
+#define WALNUT_LOOP_TICK(n, line) ((void)0)
+#endif
+
+#if defined(WALNUT_CHECK_RECURSION)
+#define WALNUT_DEPTH_GUARD(name) ::walnut_rt::safety::depth_guard walnut_depth_guard_(name, __FILE__, __LINE__)
+#else
+#define WALNUT_DEPTH_GUARD(name) ((void)0)
+#endif
 
 #endif // WALNUT_SAFETY_HPP

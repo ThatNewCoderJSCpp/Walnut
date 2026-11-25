@@ -20,15 +20,15 @@ safe(compile) {
                 class TcpStream as "walnut_rt::net::tcp_stream" {
                 public:
                     constructor();
-                    static function connect(const string&: host, long int: port, long int: timeout_ms = 10000) -> TcpStream as "walnut_rt::net::tcp_stream::connect";
+                    static function connect(const string&: host, unsigned long int: port, unsigned long int: timeout_ms = 10000) -> TcpStream as "walnut_rt::net::tcp_stream::connect";
                     function is_open(const self&) -> bool;
-                    function send(self&, const string&: data) -> long int;
+                    function send(self&, const string&: data) -> unsigned long int;
                     function send_all(self&, const string&: data) -> bool;
-                    function receive(self&, long int: max_bytes = 65536) -> string;
-                    function receive_exact(self&, long int: count) -> string;
+                    function receive(self&, unsigned long int: max_bytes = 65536) -> string;
+                    function receive_exact(self&, unsigned long int: count) -> string;
                     function read_line(self&) -> string;
                     function receive_all(self&) -> string;
-                    function set_timeout(self&, long int: milliseconds) -> void;
+                    function set_timeout(self&, unsigned long int: milliseconds) -> void;
                     function close(self&) -> void;
                     function local_address(const self&) -> string;
                     function remote_address(const self&) -> string;
@@ -42,9 +42,9 @@ safe(compile) {
                 class TcpListener as "walnut_rt::net::tcp_listener" {
                 public:
                     constructor();
-                    static function bind(const string&: host, long int: port, long int: backlog = 16) -> TcpListener as "walnut_rt::net::tcp_listener::bind";
+                    static function bind(const string&: host, unsigned long int: port, unsigned long int: backlog = 16) -> TcpListener as "walnut_rt::net::tcp_listener::bind";
                     function accept(self&) -> TcpStream;
-                    function port(const self&) -> long int;
+                    function port(const self&) -> unsigned long int;
                     function local_address(const self&) -> string;
                     function is_open(const self&) -> bool;
                     function close(self&) -> void;
@@ -55,19 +55,19 @@ safe(compile) {
                     constructor();
                     function data(const self&) -> string;
                     function host(const self&) -> string;
-                    function port(const self&) -> long int;
-                    function empty(const self&) -> bool;
+                    function port(const self&) noexcept -> unsigned long int;
+                    function empty(const self&) noexcept -> bool;
                 } end class Datagram
 
                 class UdpSocket as "walnut_rt::net::udp_socket" {
                 public:
                     constructor();
-                    static function bind(const string&: host, long int: port) -> UdpSocket as "walnut_rt::net::udp_socket::bind";
-                    function send_to(self&, const string&: host, long int: port, const string&: data) -> long int;
-                    function receive_from(self&, long int: max_bytes = 65507) -> Datagram;
-                    function broadcast(self&, long int: port, const string&: data) -> long int;
-                    function set_timeout(self&, long int: milliseconds) -> void;
-                    function port(const self&) -> long int;
+                    static function bind(const string&: host, unsigned long int: port) -> UdpSocket as "walnut_rt::net::udp_socket::bind";
+                    function send_to(self&, const string&: host, unsigned long int: port, const string&: data) -> unsigned long int;
+                    function receive_from(self&, unsigned long int: max_bytes = 65507) -> Datagram;
+                    function broadcast(self&, unsigned long int: port, const string&: data) -> unsigned long int;
+                    function set_timeout(self&, unsigned long int: milliseconds) -> void;
+                    function port(const self&) -> unsigned long int;
                     function local_address(const self&) -> string;
                     function close(self&) -> void;
                 } end class UdpSocket
@@ -75,10 +75,10 @@ safe(compile) {
                 class TlsStream as "walnut_rt::net::tls_stream" {
                 public:
                     constructor();
-                    static function connect(const string&: host, long int: port, bool: verify = true, long int: timeout_ms = 10000) -> TlsStream as "walnut_rt::net::tls_stream::connect";
+                    static function connect(const string&: host, unsigned long int: port, bool: verify = true, unsigned long int: timeout_ms = 10000) -> TlsStream as "walnut_rt::net::tls_stream::connect";
                     function is_open(const self&) -> bool;
                     function send_all(self&, const string&: data) -> bool;
-                    function receive(self&, long int: max_bytes = 16384) -> string;
+                    function receive(self&, unsigned long int: max_bytes = 16384) -> string;
                     function receive_all(self&) -> string;
                     function close(self&) -> void;
                 } end class TlsStream
@@ -89,7 +89,7 @@ safe(compile) {
                     static function parse(const string&: input) -> Url as "walnut_rt::net::url::parse";
                     static function parse_relative(const string&: input, const string&: base) -> Url as "walnut_rt::net::url::parse_relative";
                     static function can_parse(const string&: input) -> bool as "walnut_rt::net::url::can_parse";
-                    static function default_port(const string&: scheme) -> long int as "walnut_rt::net::url::default_port";
+                    static function default_port(const string&: scheme) -> unsigned long int as "walnut_rt::net::url::default_port";
                     function href(const self&) -> string;
                     function origin(const self&) -> string;
                     function scheme(const self&) -> string;
@@ -97,7 +97,7 @@ safe(compile) {
                     function password(const self&) -> string;
                     function host(const self&) -> string;
                     function hostname(const self&) -> string;
-                    function port(const self&) -> long int;
+                    function port(const self&) -> unsigned long int;
                     function path(const self&) -> string;
                     function query(const self&) -> string;
                     function fragment(const self&) -> string;
@@ -109,7 +109,7 @@ safe(compile) {
                     function param_names(const self&) -> std::collections::Vector<string>;
                     function with_scheme(const self&, const string&: value) -> Url;
                     function with_host(const self&, const string&: value) -> Url;
-                    function with_port(const self&, long int: value) -> Url;
+                    function with_port(const self&, unsigned long int: value) -> Url;
                     function with_path(const self&, const string&: value) -> Url;
                     function with_query(const self&, const string&: value) -> Url;
                     function with_fragment(const self&, const string&: value) -> Url;
@@ -129,7 +129,7 @@ safe(compile) {
                     function get(const self&, const string&: name) -> string;
                     function has(const self&, const string&: name) -> bool;
                     function remove(self&, const string&: name) -> bool;
-                    function size(const self&) -> long int;
+                    function size(const self&) -> unsigned long int;
                     function names(const self&) -> std::collections::Vector<string>;
                 } end class Headers
 
@@ -150,7 +150,7 @@ safe(compile) {
                     function client_ip(const self&) -> string;
                     function tls_fingerprint(const self&) -> string;
                     function risk(const self&) -> string;
-                    function risk_score(const self&) -> long int;
+                    function risk_score(const self&) -> unsigned long int;
                     function encrypted(const self&) -> bool;
                     function user(const self&) -> string;
                     function guarded(const self&) -> bool;
@@ -159,8 +159,8 @@ safe(compile) {
                 class Response as "walnut_rt::net::response" {
                 public:
                     constructor();
-                    static function make(long int: status, const string&: body, const string&: content_type = "text/plain; charset=utf-8") -> Response as "walnut_rt::net::response::make";
-                    function status(const self&) -> long int;
+                    static function make(unsigned long int: status, const string&: body, const string&: content_type = "text/plain; charset=utf-8") -> Response as "walnut_rt::net::response::make";
+                    function status(const self&) noexcept -> unsigned long int;
                     function status_text(const self&) -> string;
                     function body(const self&) -> string;
                     function url(const self&) -> string;
@@ -170,20 +170,20 @@ safe(compile) {
                     function header_names(const self&) -> std::collections::Vector<string>;
                     function error(const self&) -> string;
                     function failed(const self&) -> bool;
-                    function set_status(self&, long int: code) -> void;
+                    function set_status(self&, unsigned long int: code) -> void;
                     function set_body(self&, const string&: input) -> void;
                     function set_header(self&, const string&: name, const string&: value) -> void;
                     function add_header(self&, const string&: name, const string&: value) -> void;
 
-                    static function plain(const string&: body, long int: status = 200) -> Response {
+                    static function plain(const string&: body, unsigned long int: status = 200) -> Response {
                         return Response::make(status, body, "text/plain; charset=utf-8");
                     } end function plain
 
-                    static function html(const string&: body, long int: status = 200) -> Response {
+                    static function html(const string&: body, unsigned long int: status = 200) -> Response {
                         return Response::make(status, body, "text/html; charset=utf-8");
                     } end function html
 
-                    static function json(const string&: body, long int: status = 200) -> Response {
+                    static function json(const string&: body, unsigned long int: status = 200) -> Response {
                         return Response::make(status, body, "application/json");
                     } end function json
 
@@ -191,7 +191,7 @@ safe(compile) {
                         return Response::make(404, "not found");
                     } end function not_found
 
-                    static function redirect(const string&: location, long int: status = 302) -> Response {
+                    static function redirect(const string&: location, unsigned long int: status = 302) -> Response {
                         Response: r = Response::make(status, "");
                         r.set_header("Location", location);
                         return r;
@@ -202,22 +202,22 @@ safe(compile) {
                 public:
                     constructor();
                     function data(const self&) -> string;
-                    function is_binary(const self&) -> bool;
+                    function is_binary(const self&) noexcept -> bool;
                     function is_text(const self&) -> bool;
-                    function ok(const self&) -> bool;
+                    function ok(const self&) noexcept -> bool;
                 } end class Message
 
                 class WebSocket as "walnut_rt::net::websocket" {
                 public:
                     constructor();
-                    static function connect(const string&: url, long int: timeout_ms = 30000) -> WebSocket as "walnut_rt::net::websocket::connect";
+                    static function connect(const string&: url, unsigned long int: timeout_ms = 30000) -> WebSocket as "walnut_rt::net::websocket::connect";
                     function send_text(self&, const string&: input) -> bool;
                     function send_binary(self&, const string&: data) -> bool;
-                    function receive(self&, long int: timeout_ms = -1) -> Message;
+                    function receive(self&, unsigned long int: timeout_ms = std::npos) -> Message;
                     function on_message(self&, function(Message) -> void: callback) -> void;
-                    function close(self&, long int: code = 1000, const string&: reason = "") -> void;
+                    function close(self&, unsigned long int: code = 1000, const string&: reason = "") -> void;
                     function is_open(const self&) -> bool;
-                    function close_code(const self&) -> long int;
+                    function close_code(const self&) noexcept -> unsigned long int;
                     function close_reason(const self&) -> string;
                     function error(const self&) -> string;
                     function remote_address(const self&) -> string;
@@ -227,12 +227,12 @@ safe(compile) {
                 public:
                     constructor();
                     function handle(self&, function(WebSocket) -> void: on_connect) -> void;
-                    function listen(self&, const string&: host, long int: port) -> void;
-                    function broadcast(self&, const string&: input) -> long int;
-                    function client_count(const self&) -> long int;
-                    function port(const self&) -> long int;
+                    function listen(self&, const string&: host, unsigned long int: port) -> void;
+                    function broadcast(self&, const string&: input) -> unsigned long int;
+                    function client_count(const self&) -> unsigned long int;
+                    function port(const self&) -> unsigned long int;
                     function serve(self&) -> void;
-                    function serve_for(self&, long int: milliseconds) -> void;
+                    function serve_for(self&, unsigned long int: milliseconds) -> void;
                     function close(self&) -> void;
                 } end class WebSocketServer
 
@@ -251,17 +251,17 @@ safe(compile) {
                     static function reverse_lookup(const string&: ip) -> std::collections::Vector<string> as "walnut_rt::net::reverse_lookup";
                     static function is_ipv4(const string&: input) -> bool as "walnut_rt::net::is_ipv4";
                     static function is_ipv6(const string&: input) -> bool as "walnut_rt::net::is_ipv6";
-                    static function fetch(const string&: method, const string&: url, const string&: body, const Headers&: headers, long int: timeout_ms, bool: follow, bool: verify) -> Response as "walnut_rt::net::fetch";
-                    static function fetch_async(const string&: method, const string&: url, const string&: body, const Headers&: headers, long int: timeout_ms, bool: follow, bool: verify, function(Response) -> void: callback) -> void as "walnut_rt::net::fetch_async";
-                    static function set_timeout(long int: ms, function() -> void: callback) -> Timer as "walnut_rt::net::set_timeout";
-                    static function set_interval(long int: ms, function() -> void: callback) -> Timer as "walnut_rt::net::set_interval";
+                    static function fetch(const string&: method, const string&: url, const string&: body, const Headers&: headers, unsigned long int: timeout_ms, bool: follow, bool: verify) -> Response as "walnut_rt::net::fetch";
+                    static function fetch_async(const string&: method, const string&: url, const string&: body, const Headers&: headers, unsigned long int: timeout_ms, bool: follow, bool: verify, function(Response) -> void: callback) -> void as "walnut_rt::net::fetch_async";
+                    static function set_timeout(unsigned long int: ms, function() -> void: callback) -> Timer as "walnut_rt::net::set_timeout";
+                    static function set_interval(unsigned long int: ms, function() -> void: callback) -> Timer as "walnut_rt::net::set_interval";
                     static function next_tick(function() -> void: callback) -> void as "walnut_rt::net::next_tick";
-                    static function run() -> long int as "walnut_rt::net::run";
-                    static function run_once() -> long int as "walnut_rt::net::run_once";
-                    static function poll() -> long int as "walnut_rt::net::poll";
-                    static function run_for(long int: ms) -> long int as "walnut_rt::net::run_for";
+                    static function run() -> unsigned long int as "walnut_rt::net::run";
+                    static function run_once() -> unsigned long int as "walnut_rt::net::run_once";
+                    static function poll() -> unsigned long int as "walnut_rt::net::poll";
+                    static function run_for(unsigned long int: ms) -> unsigned long int as "walnut_rt::net::run_for";
                     static function stop() -> void as "walnut_rt::net::stop";
-                    static function status_text(long int: code) -> string as "walnut_rt::net::status_text";
+                    static function status_text(unsigned long int: code) -> string as "walnut_rt::net::status_text";
                     static function url_encode(const string&: input) -> string as "walnut_rt::net::url_encode";
                     static function url_decode(const string&: input) -> string as "walnut_rt::net::url_decode";
                 } end class Native
@@ -272,10 +272,10 @@ safe(compile) {
                     class LoginCheck as "walnut_rt::net::login_check" {
                     public:
                         constructor();
-                        function allowed(const self&) -> bool;
-                        function status(const self&) -> long int;
-                        function retry_after_ms(const self&) -> long int;
-                        function delay_ms(const self&) -> long int;
+                        function allowed(const self&) noexcept -> bool;
+                        function status(const self&) noexcept -> unsigned long int;
+                        function retry_after_ms(const self&) -> unsigned long int;
+                        function delay_ms(const self&) -> unsigned long int;
                         function reason(const self&) -> string;
                     } end class LoginCheck
 
@@ -283,10 +283,10 @@ safe(compile) {
                     public:
                         constructor();
                         function add(self&, const string&: key, const string&: value) -> LogFields&;
-                        function add_int(self&, const string&: key, long int: value) -> LogFields&;
+                        function add_int(self&, const string&: key, unsigned long int: value) -> LogFields&;
                         function add_float(self&, const string&: key, short float: value) -> LogFields&;
                         function add_bool(self&, const string&: key, bool: value) -> LogFields&;
-                        function size(const self&) -> long int;
+                        function size(const self&) -> unsigned long int;
                     } end class LogFields
 
                     class Logger as "walnut_rt::guard::logger" {
@@ -295,7 +295,7 @@ safe(compile) {
                         constructor(const string&: level);
                         function to_stderr(self&) -> void;
                         function to_stdout(self&) -> void;
-                        function to_file(self&, const string&: path, long int: max_bytes = 10485760, long int: files = 5) -> void;
+                        function to_file(self&, const string&: path, unsigned long int: max_bytes = 10485760, unsigned long int: files = 5) -> void;
                         function as_text(self&, bool: enabled = true) -> void;
                         function set_level(self&, const string&: level) -> void;
                         function redact(self&, const string&: key) -> void;
@@ -328,8 +328,8 @@ safe(compile) {
                         function hsts(self&, const string&: value) -> void;
                         function no_store(self&, bool: on) -> void;
                         function allowed_origin(self&, const string&: origin) -> void;
-                        function max_body(self&, long int: bytes) -> void;
-                        function session_timeouts(self&, long int: idle_minutes, long int: absolute_hours) -> void;
+                        function max_body(self&, unsigned long int: bytes) -> void;
+                        function session_timeouts(self&, unsigned long int: idle_minutes, unsigned long int: absolute_hours) -> void;
                         function cookie_same_site(self&, const string&: mode) -> void;
                         function secure_cookies(self&, bool: on) -> void;
                         function use_logger(self&, const Logger&: log) -> void;
@@ -350,17 +350,17 @@ safe(compile) {
                         function new_device(const self&, const Request&: req) -> bool;
                         function trust_device(const self&, const Request&: req, const string&: label = "") -> bool;
                         function logout(const self&, const Request&: req, bool: everywhere = false, bool: keep_device = false) -> void;
-                        function revoke_sessions(const self&, const string&: user_id) -> long int;
-                        function session_count(const self&, const string&: user_id) -> long int;
+                        function revoke_sessions(const self&, const string&: user_id) -> unsigned long int;
+                        function session_count(const self&, const string&: user_id) -> unsigned long int;
                         function register_owner(self&, const string&: type, function(string) -> string: lookup) -> void;
                         function admin_role(self&, const string&: role) -> void;
                         function can(const self&, const Request&: req, const string&: type, const string&: id, const string&: action = "read") -> bool;
                         function idempotent(const self&, const Request&: req, function() -> Response: body) -> Response;
-                        function set_budget(self&, const string&: metric, short float: limit, long int: period_seconds = 86400, short float: warn_ratio = 0.8, bool: hard_stop = false) -> void;
+                        function set_budget(self&, const string&: metric, short float: limit, unsigned long int: period_seconds = 86400, short float: warn_ratio = 0.8, bool: hard_stop = false) -> void;
                         function budget_level(const self&, const string&: metric) -> string;
                         function on_budget_alert(self&, function(string, string, short float, short float) -> void: callback) -> void;
-                        function on_new_error(self&, function(string, string, string, long int) -> void: callback) -> void;
-                        function error_groups(const self&) -> long int;
+                        function on_new_error(self&, function(string, string, string, unsigned long int) -> void: callback) -> void;
+                        function error_groups(const self&) -> unsigned long int;
                         function errors_json(const self&) -> string;
                         function start_maintenance(self&) -> void;
                         function stop_maintenance(self&) -> void;
@@ -370,11 +370,11 @@ safe(compile) {
                     class RateDecision as "walnut_rt::guard::rate_decision" {
                     public:
                         constructor();
-                        function allowed(const self&) -> bool;
-                        function remaining(const self&) -> short float;
-                        function limit(const self&) -> short float;
-                        function retry_after_ms(const self&) -> long int;
-                        function reset_after_ms(const self&) -> long int;
+                        function allowed(const self&) noexcept -> bool;
+                        function remaining(const self&) noexcept -> short float;
+                        function limit(const self&) noexcept -> short float;
+                        function retry_after_ms(const self&) -> unsigned long int;
+                        function reset_after_ms(const self&) -> unsigned long int;
                     } end class RateDecision
 
                     class RateLimiter as "walnut_rt::guard::rate_limiter" {
@@ -390,36 +390,36 @@ safe(compile) {
                         function allow(self&, const string&: key) -> bool;
                         function refund(self&, const string&: key, short float: amount = 1.0) -> void;
                         function reset(self&, const string&: key) -> void;
-                        function size(const self&) -> long int;
-                        function sweep(self&) -> long int;
+                        function size(const self&) -> unsigned long int;
+                        function sweep(self&) -> unsigned long int;
                     } end class RateLimiter
 
                     class WindowLimiter as "walnut_rt::guard::window_limiter" {
                     public:
                         constructor();
-                        constructor(long int: limit, long int: window_seconds);
+                        constructor(unsigned long int: limit, unsigned long int: window_seconds);
                         function hit(self&, const string&: key) -> RateDecision;
                         function peek(const self&, const string&: key) -> RateDecision;
-                        function count(const self&, const string&: key) -> long int;
+                        function count(const self&, const string&: key) -> unsigned long int;
                         function reset(self&, const string&: key) -> void;
                     } end class WindowLimiter
 
                     class FailureStatus as "walnut_rt::guard::failure_status" {
                     public:
                         constructor();
-                        function failures(const self&) -> long int;
-                        function successes(const self&) -> long int;
-                        function failure_ratio(const self&) -> short float;
-                        function locked(const self&) -> bool;
-                        function strikes(const self&) -> long int;
-                        function lock_remaining_ms(const self&) -> long int;
-                        function delay_ms(const self&) -> long int;
+                        function failures(const self&) noexcept -> unsigned long int;
+                        function successes(const self&) noexcept -> unsigned long int;
+                        function failure_ratio(const self&) noexcept -> short float;
+                        function locked(const self&) noexcept -> bool;
+                        function strikes(const self&) noexcept -> unsigned long int;
+                        function lock_remaining_ms(const self&) -> unsigned long int;
+                        function delay_ms(const self&) -> unsigned long int;
                     } end class FailureStatus
 
                     class FailureTracker as "walnut_rt::guard::failure_tracker" {
                     public:
                         constructor();
-                        constructor(long int: max_failures, long int: window_seconds, long int: lockout_seconds);
+                        constructor(unsigned long int: max_failures, unsigned long int: window_seconds, unsigned long int: lockout_seconds);
                         function record_failure(self&, const string&: key) -> FailureStatus;
                         function record_success(self&, const string&: key, bool: forgive = false) -> FailureStatus;
                         function status(const self&, const string&: key) -> FailureStatus;
@@ -434,8 +434,8 @@ safe(compile) {
                         function id(const self&) -> string;
                         function name(const self&) -> string;
                         function payload(const self&) -> string;
-                        function attempt(const self&) -> long int;
-                        function max_attempts(const self&) -> long int;
+                        function attempt(const self&) noexcept -> unsigned long int;
+                        function max_attempts(const self&) noexcept -> unsigned long int;
                         function last_attempt(const self&) -> bool;
                         function last_error(const self&) -> string;
                         function should_stop(const self&) -> bool;
@@ -457,12 +457,12 @@ safe(compile) {
                         function max(self&, short float: value) -> FieldRule&;
                         function between(self&, short float: low, short float: high) -> FieldRule&;
                         function positive(self&) -> FieldRule&;
-                        function min_length(self&, long int: n) -> FieldRule&;
-                        function max_length(self&, long int: n) -> FieldRule&;
-                        function length(self&, long int: low, long int: high) -> FieldRule&;
+                        function min_length(self&, unsigned long int: n) -> FieldRule&;
+                        function max_length(self&, unsigned long int: n) -> FieldRule&;
+                        function length(self&, unsigned long int: low, unsigned long int: high) -> FieldRule&;
                         function non_empty(self&) -> FieldRule&;
-                        function min_items(self&, long int: n) -> FieldRule&;
-                        function max_items(self&, long int: n) -> FieldRule&;
+                        function min_items(self&, unsigned long int: n) -> FieldRule&;
+                        function max_items(self&, unsigned long int: n) -> FieldRule&;
                         function unique_items(self&) -> FieldRule&;
                         function allow_control_chars(self&) -> FieldRule&;
                         function format(self&, const string&: name) -> FieldRule&;
@@ -472,14 +472,14 @@ safe(compile) {
                     class JobSchema as "walnut_rt::guard::job_schema" {
                     public:
                         constructor();
-                        static function text_payload(long int: max_bytes = 65536) -> JobSchema as "walnut_rt::guard::job_schema::text_payload";
+                        static function text_payload(unsigned long int: max_bytes = 65536) -> JobSchema as "walnut_rt::guard::job_schema::text_payload";
                         static function no_payload() -> JobSchema as "walnut_rt::guard::job_schema::no_payload";
                         function add(self&, const string&: name, const FieldRule&: rule) -> JobSchema&;
                         function allow_extra_fields(self&) -> JobSchema&;
-                        function max_bytes(self&, long int: n) -> JobSchema&;
-                        function max_depth(self&, long int: n) -> JobSchema&;
-                        function max_string_length(self&, long int: n) -> JobSchema&;
-                        function max_array_items(self&, long int: n) -> JobSchema&;
+                        function max_bytes(self&, unsigned long int: n) -> JobSchema&;
+                        function max_depth(self&, unsigned long int: n) -> JobSchema&;
+                        function max_string_length(self&, unsigned long int: n) -> JobSchema&;
+                        function max_array_items(self&, unsigned long int: n) -> JobSchema&;
                         function at_least_one_of(self&, const std::collections::Vector<string>&: names) -> JobSchema&;
                         function only_one_of(self&, const std::collections::Vector<string>&: names) -> JobSchema&;
                         function all_or_none_of(self&, const std::collections::Vector<string>&: names) -> JobSchema&;
@@ -491,8 +491,8 @@ safe(compile) {
                     class EnqueueResult as "walnut_rt::guard::enqueue_result" {
                     public:
                         constructor();
-                        function ok(const self&) -> bool;
-                        function duplicate(const self&) -> bool;
+                        function ok(const self&) noexcept -> bool;
+                        function duplicate(const self&) noexcept -> bool;
                         function id(const self&) -> string;
                         function problems(const self&) -> std::collections::Vector<string>;
                         function message(const self&) -> string;
@@ -501,40 +501,40 @@ safe(compile) {
                     class JobQueue as "walnut_rt::guard::job_queue" {
                     public:
                         constructor();
-                        constructor(long int: workers);
+                        constructor(unsigned long int: workers);
                         function on(self&, const string&: name, function(Job) -> bool: handler) -> void;
                         function on_checked(self&, const string&: name, const JobSchema&: schema, function(Job) -> bool: handler) -> void;
-                        function enqueue(self&, const string&: name, const string&: payload = "", long int: max_attempts = 5, long int: delay_ms = 0, const string&: unique_key = "") -> string;
-                        function try_enqueue(self&, const string&: name, const string&: payload = "", long int: max_attempts = 5, long int: delay_ms = 0, const string&: unique_key = "") -> EnqueueResult;
-                        function check(const self&, const string&: name, const string&: payload = "", long int: max_attempts = 5, long int: delay_ms = 0, const string&: unique_key = "") -> std::collections::Vector<string>;
+                        function enqueue(self&, const string&: name, const string&: payload = "", unsigned long int: max_attempts = 5, unsigned long int: delay_ms = 0, const string&: unique_key = "") -> string;
+                        function try_enqueue(self&, const string&: name, const string&: payload = "", unsigned long int: max_attempts = 5, unsigned long int: delay_ms = 0, const string&: unique_key = "") -> EnqueueResult;
+                        function check(const self&, const string&: name, const string&: payload = "", unsigned long int: max_attempts = 5, unsigned long int: delay_ms = 0, const string&: unique_key = "") -> std::collections::Vector<string>;
                         function set_schema(self&, const string&: name, const JobSchema&: schema) -> void;
                         function remove_schema(self&, const string&: name) -> bool;
                         function has_schema(const self&, const string&: name) -> bool;
-                        function limit_attempts(self&, long int: n) -> void;
-                        function limit_queue(self&, long int: n) -> void;
-                        function limit_dead_letters(self&, long int: n) -> void;
-                        function limit_payload(self&, long int: bytes) -> void;
-                        function limit_delay(self&, long int: ms) -> void;
+                        function limit_attempts(self&, unsigned long int: n) -> void;
+                        function limit_queue(self&, unsigned long int: n) -> void;
+                        function limit_dead_letters(self&, unsigned long int: n) -> void;
+                        function limit_payload(self&, unsigned long int: bytes) -> void;
+                        function limit_delay(self&, unsigned long int: ms) -> void;
                         function require_handlers(self&, bool: on) -> void;
                         function require_schemas(self&, bool: on) -> void;
-                        function attempt_limit(const self&) -> long int;
-                        function set_retry_delay(self&, long int: initial_ms, long int: max_ms) -> void;
+                        function attempt_limit(const self&) -> unsigned long int;
+                        function set_retry_delay(self&, unsigned long int: initial_ms, unsigned long int: max_ms) -> void;
                         function start(self&) -> void;
                         function stop(self&, bool: drain = false) -> void;
                         function running(const self&) -> bool;
-                        function wait_idle(self&, long int: timeout_ms) -> bool;
+                        function wait_idle(self&, unsigned long int: timeout_ms) -> bool;
                         function cancel(self&, const string&: id) -> bool;
                         function retry_dead(self&, const string&: id) -> bool;
-                        function retry_all_dead(self&) -> long int;
+                        function retry_all_dead(self&) -> unsigned long int;
                         function discard_dead(self&, const string&: id) -> bool;
-                        function clear_dead(self&) -> long int;
-                        function queued(const self&) -> long int;
-                        function dead(const self&) -> long int;
-                        function succeeded(const self&) -> long int;
-                        function rejected(const self&) -> long int;
-                        function dead_dropped(const self&) -> long int;
+                        function clear_dead(self&) -> unsigned long int;
+                        function queued(const self&) -> unsigned long int;
+                        function dead(const self&) -> unsigned long int;
+                        function succeeded(const self&) -> unsigned long int;
+                        function rejected(const self&) -> unsigned long int;
+                        function dead_dropped(const self&) -> unsigned long int;
                         function errors_of(const self&, const string&: id) -> std::collections::Vector<string>;
-                        function attempts_of(const self&, const string&: id) -> long int;
+                        function attempts_of(const self&, const string&: id) -> unsigned long int;
                         function dead_ids(const self&) -> std::collections::Vector<string>;
                         function state_of(const self&, const string&: id) -> string;
                     } end class JobQueue
@@ -542,7 +542,7 @@ safe(compile) {
                     class BudgetMonitor as "walnut_rt::guard::budget_monitor" {
                     public:
                         constructor();
-                        function set_budget(self&, const string&: metric, short float: limit, long int: period_seconds = 86400, short float: warn_ratio = 0.8, bool: hard_stop = false, const string&: unit = "") -> void;
+                        function set_budget(self&, const string&: metric, short float: limit, unsigned long int: period_seconds = 86400, short float: warn_ratio = 0.8, bool: hard_stop = false, const string&: unit = "") -> void;
                         function add(self&, const string&: metric, short float: amount = 1.0) -> string;
                         function allows(const self&, const string&: metric, short float: amount = 1.0) -> bool;
                         function consume(self&, const string&: metric, short float: amount = 1.0) -> bool;
@@ -557,7 +557,7 @@ safe(compile) {
                     class Debouncer as "walnut_rt::guard::debouncer" {
                     public:
                         constructor();
-                        constructor(function() -> void: callback, long int: wait_ms, bool: leading = false, bool: trailing = true, long int: max_wait_ms = 0);
+                        constructor(function() -> void: callback, unsigned long int: wait_ms, bool: leading = false, bool: trailing = true, unsigned long int: max_wait_ms = 0);
                         function call(self&) -> void;
                         function cancel(self&) -> void;
                         function flush(self&) -> void;
@@ -567,7 +567,7 @@ safe(compile) {
                     class Throttler as "walnut_rt::guard::throttler" {
                     public:
                         constructor();
-                        constructor(function() -> void: callback, long int: interval_ms, bool: trailing = true);
+                        constructor(function() -> void: callback, unsigned long int: interval_ms, bool: trailing = true);
                         function call(self&) -> void;
                         function cancel(self&) -> void;
                         function pending(const self&) -> bool;
@@ -584,20 +584,20 @@ safe(compile) {
                     public:
                         constructor();
                         constructor(const string&: sql);
-                        function bind_int(self&, long int: value) -> SqlStatement&;
+                        function bind_int(self&, unsigned long int: value) -> SqlStatement&;
                         function bind_float(self&, short float: value) -> SqlStatement&;
                         function bind_text(self&, const string&: value) -> SqlStatement&;
                         function bind_bool(self&, bool: value) -> SqlStatement&;
                         function bind_null(self&) -> SqlStatement&;
                         function append(self&, const string&: fragment) -> SqlStatement&;
                         function sql(const self&) -> string;
-                        function placeholders(const self&) -> long int;
-                        function bound(const self&) -> long int;
+                        function placeholders(const self&) -> unsigned long int;
+                        function bound(const self&) -> unsigned long int;
                         function complete(const self&) -> bool;
                         function shape(const self&) -> string;
                         function debug_string(const self&) -> string;
                         static function identifier(const string&: name) -> string as "walnut_rt::guard::sql_statement::identifier";
-                        static function placeholders_for(long int: count) -> string as "walnut_rt::guard::sql_statement::placeholders_for";
+                        static function placeholders_for(unsigned long int: count) -> string as "walnut_rt::guard::sql_statement::placeholders_for";
                     } end class SqlStatement
 
                     hidden class Native as "walnut_rt::guard::api" {
@@ -620,11 +620,11 @@ safe(compile) {
                 public:
                     constructor();
                     function handle(self&, function(Request) -> Response: handler) -> void;
-                    function listen(self&, const string&: host, long int: port) -> void;
+                    function listen(self&, const string&: host, unsigned long int: port) -> void;
                     function serve(self&) -> void;
-                    function serve_for(self&, long int: milliseconds) -> void;
+                    function serve_for(self&, unsigned long int: milliseconds) -> void;
                     function close(self&) -> void;
-                    function is_listening(const self&) -> bool;
+                    function is_listening(const self&) noexcept -> bool;
                     function use_guard(self&, const guard::Guard&: shield) -> void;
                 } end class HttpServer
             } end extern
@@ -661,7 +661,7 @@ safe(compile) {
                 return Native::url_decode(input);
             } end function url_decode
 
-            function status_text(long int: code) -> string {
+            function status_text(unsigned long int: code) -> string {
                 return Native::status_text(code);
             } end function status_text
 
@@ -669,7 +669,7 @@ safe(compile) {
                 string: method = "GET";
                 string: body;
                 Headers: headers;
-                long int: timeout_ms = 30000;
+                unsigned long int: timeout_ms = 30000;
                 bool: follow_redirects = true;
                 bool: verify_certificates = true;
 
@@ -683,7 +683,7 @@ safe(compile) {
                 return Native::fetch(options.method, url, options.body, options.headers, options.timeout_ms, options.follow_redirects, options.verify_certificates);
             } end function request
 
-            function request(const string&: method, const string&: url, const string&: body = "", long int: timeout_ms = 30000) -> Response {
+            function request(const string&: method, const string&: url, const string&: body = "", unsigned long int: timeout_ms = 30000) -> Response {
                 RequestOptions: o;
                 o.method = method;
                 o.body = body;
@@ -691,15 +691,15 @@ safe(compile) {
                 return request(url, o);
             } end function request
 
-            function get(const string&: url, long int: timeout_ms = 30000) -> Response {
+            function get(const string&: url, unsigned long int: timeout_ms = 30000) -> Response {
                 return request("GET", url, "", timeout_ms);
             } end function get
 
-            function head(const string&: url, long int: timeout_ms = 30000) -> Response {
+            function head(const string&: url, unsigned long int: timeout_ms = 30000) -> Response {
                 return request("HEAD", url, "", timeout_ms);
             } end function head
 
-            function post(const string&: url, const string&: body, const string&: content_type = "application/x-www-form-urlencoded", long int: timeout_ms = 30000) -> Response {
+            function post(const string&: url, const string&: body, const string&: content_type = "application/x-www-form-urlencoded", unsigned long int: timeout_ms = 30000) -> Response {
                 RequestOptions: o;
                 o.method = "POST";
                 o.body = body;
@@ -708,11 +708,11 @@ safe(compile) {
                 return request(url, o);
             } end function post
 
-            function post_json(const string&: url, const string&: json, long int: timeout_ms = 30000) -> Response {
+            function post_json(const string&: url, const string&: json, unsigned long int: timeout_ms = 30000) -> Response {
                 return post(url, json, "application/json", timeout_ms);
             } end function post_json
 
-            function put(const string&: url, const string&: body, const string&: content_type = "application/octet-stream", long int: timeout_ms = 30000) -> Response {
+            function put(const string&: url, const string&: body, const string&: content_type = "application/octet-stream", unsigned long int: timeout_ms = 30000) -> Response {
                 RequestOptions: o;
                 o.method = "PUT";
                 o.body = body;
@@ -721,7 +721,7 @@ safe(compile) {
                 return request(url, o);
             } end function put
 
-            function patch(const string&: url, const string&: body, const string&: content_type = "application/json", long int: timeout_ms = 30000) -> Response {
+            function patch(const string&: url, const string&: body, const string&: content_type = "application/json", unsigned long int: timeout_ms = 30000) -> Response {
                 RequestOptions: o;
                 o.method = "PATCH";
                 o.body = body;
@@ -730,7 +730,7 @@ safe(compile) {
                 return request(url, o);
             } end function patch
 
-            function remove(const string&: url, long int: timeout_ms = 30000) -> Response {
+            function remove(const string&: url, unsigned long int: timeout_ms = 30000) -> Response {
                 return request("DELETE", url, "", timeout_ms);
             } end function remove
 
@@ -762,18 +762,18 @@ safe(compile) {
                 request_async(url, o, callback);
             } end function post_async
 
-            function serve(const string&: host, long int: port, function(Request) -> Response: handler) -> void {
+            function serve(const string&: host, unsigned long int: port, function(Request) -> Response: handler) -> void {
                 HttpServer: server;
                 server.handle(handler);
                 server.listen(host, port);
                 server.serve();
             } end function serve
 
-            function set_timeout(long int: milliseconds, function() -> void: callback) -> Timer {
+            function set_timeout(unsigned long int: milliseconds, function() -> void: callback) -> Timer {
                 return Native::set_timeout(milliseconds, callback);
             } end function set_timeout
 
-            function set_interval(long int: milliseconds, function() -> void: callback) -> Timer {
+            function set_interval(unsigned long int: milliseconds, function() -> void: callback) -> Timer {
                 return Native::set_interval(milliseconds, callback);
             } end function set_interval
 
@@ -781,19 +781,19 @@ safe(compile) {
                 Native::next_tick(callback);
             } end function next_tick
 
-            function run() -> long int {
+            function run() -> unsigned long int {
                 return Native::run();
             } end function run
 
-            function run_once() -> long int {
+            function run_once() -> unsigned long int {
                 return Native::run_once();
             } end function run_once
 
-            function poll() -> long int {
+            function poll() -> unsigned long int {
                 return Native::poll();
             } end function poll
 
-            function run_for(long int: milliseconds) -> long int {
+            function run_for(unsigned long int: milliseconds) -> unsigned long int {
                 return Native::run_for(milliseconds);
             } end function run_for
 

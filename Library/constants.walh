@@ -221,67 +221,67 @@ safe(compile) {
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function stieltjes(long int: n) -> T {
+            function stieltjes(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::stieltjes(n);
             } end function stieltjes
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function bernoulli(long int: n) -> T {
+            function bernoulli(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::bernoulli(n);
             } end function bernoulli
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function metallic_ratio(long int: n) -> T {
+            function metallic_ratio(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::metallic_ratio(n);
             } end function metallic_ratio
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function inv_metallic_ratio(long int: n) -> T {
+            function inv_metallic_ratio(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::inv_metallic_ratio(n);
             } end function inv_metallic_ratio
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function metallic_mean(long int: n) -> T {
+            function metallic_mean(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::metallic_mean(n);
             } end function metallic_mean
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function inv_metallic_mean(long int: n) -> T {
+            function inv_metallic_mean(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::inv_metallic_mean(n);
             } end function inv_metallic_mean
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function beraha(long int: n) -> T {
+            function beraha(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::beraha(n);
             } end function beraha
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function tangent_number(long int: n) -> T {
+            function tangent_number(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::tangent_number(n);
             } end function tangent_number
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function secant_number(long int: n) -> T {
+            function secant_number(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::secant_number(n);
             } end function secant_number
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function euler_number(long int: n) -> T {
+            function euler_number(unsigned long int: n) -> T {
                 return std::math::detail::Fn<T>::euler_number(n);
             } end function euler_number
 
             template <typename T = float>
             requires std::math::detail::RealValue<T>
-            function eulerian_number(long int: n, long int: k) -> T {
+            function eulerian_number(unsigned long int: n, unsigned long int: k) -> T {
                 return std::math::detail::Fn<T>::eulerian_number(n, k);
             } end function eulerian_number
 

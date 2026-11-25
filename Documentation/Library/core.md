@@ -290,7 +290,13 @@ Every `bool` trait comes in two parts: the value `std::traits::is_integer<T>` th
 | `is_iterable<T>` | Has `begin()` and `end()` |
 | `is_iterator<T>`, `is_random_access_iterator<T>` | Is an iterator, or one that can jump (see [std::concepts](#stdconcepts)) |
 | `has_to_string<T>` | Has a `to_string()` method |
+| `is_stringifiable<T>` | Can be turned into a string with [`std::core::to_string`](#stdcoreto_string): a number, `bool`, `char`, `string`, `text`, enum or `var`, or a class with `to_string()` |
 | `is_hashable<T>` | Has a `hash()` method |
+| `can_for_each<T>` | Works in a for-each loop, checked the same way the compiler checks the loop itself (see below) |
+| `is_container<T>` | A fixed-size array, or a class that works in a for-each loop and has `size()`, like `Vector`, `Map` or `Set`. `string` and `text` aren't counted, so code that treats containers and text differently can tell them apart |
+| `is_callable<F, Args...>` | A value of type `F` can be called with values of the types `Args`, as in `f(args...)` (see below) |
+| `is_function_like<F>` | A function, a pointer to one, a lambda, or a class with an `operator(())`, whatever its parameters |
+| `has_operator<Op, A, B>`, `overloads_operator<Op, A, B>` | The operator `Op` works on those types, or works through an operator function someone wrote (see below) |
 
 **Comparing types**
 
@@ -313,6 +319,46 @@ Every `bool` trait comes in two parts: the value `std::traits::is_integer<T>` th
 | `enum_bits<E>` | Each enumerator's value used as a bit position and put together, so `enum P { A, B, D = 3 }` gives `0b1011`, which is `11`. It's an `unsigned long long integer` (2048 bits), so every enumerator has to be below 2048 |
 
 See [Traits](../../documentation.md#traits) for details, and [Trait overloads](../../documentation.md#trait-overloads) for another way a class of your own can change the answers.
+
+### Checking what a type can do
+
+These traits ask the compiler to try a piece of code quietly and report whether it would compile, so they answer exactly what using the type would do, including overloads, templates, conversions and `const`.
+
+**Calling.** `is_callable<F, Args...>` is `true` when `f(args...)` would work for an `F` called `f` and arguments of the types `Args`; with no `Args` it asks about `f()`. `F` has to be something that can be called in the first place (`is_function_like<F>`), so an `int` is never callable, even though `x(5)` can mean something else for one. Use it to make sure a `typename Fn` really is a function that takes what you'll pass it:
+
+```walnut
+template <typename Fn>
+requires std::traits::is_callable<Fn, int>
+function apply(Fn: f, int: x) -> int {
+    return f(x);
+} end function apply
+```
+
+`apply([](int: x) -> int { return x + 1; }, 4)` and `apply(twice, 4)` work; `apply(3, 4)` is an error naming the requirement. `is_function` is narrower: it's only `true` for a function *type*, not for lambdas, pointers to functions or classes with `operator(())`.
+
+**For-each loops.** `can_for_each<T>` runs the same check as `for (x : items)`: arrays, `string`, `text`, `string_view`, generators and `var` always work; a class needs `begin()` and `end()`, the value `begin()` gives has to work with `!=` against what `end()` gives, with `++` and with `*`. `is_iterable<T>` only checks that `begin()` and `end()` exist, so a class whose `begin()` returns an `int` is iterable but can't be looped over.
+
+**Operators.** `has_operator<Op, A, B>` is `true` when the operator works with an `A` on the left and a `B` on the right, whether it's built in or an operator function; `B` can be left out to mean `A` again, and the unary ones take just `A`. `overloads_operator<Op, A, B>` is only `true` when the operator works and the operator used is a function someone wrote, in a class or outside one. `Op` is one of the tag types in `std::traits::op`:
+
+| Group | Tags |
+|---|---|
+| Arithmetic | `add`, `subtract`, `multiply`, `divide`, `modulo`, `power` |
+| Comparison | `equal`, `not_equal`, `less`, `greater`, `less_equal`, `greater_equal` |
+| Logic and bits | `logical_and`, `logical_or`, `bit_and`, `bit_or`, `bit_xor`, `shift_left`, `shift_right` |
+| Assignment | `assign`, `add_assign`, `subtract_assign`, `multiply_assign`, `divide_assign`, `modulo_assign`, `power_assign`, `bit_and_assign`, `bit_or_assign`, `bit_xor_assign`, `shift_left_assign`, `shift_right_assign` |
+| One operand | `negate` (`-x`), `positive` (`+x`), `logical_not` (`!x`), `bit_not` (`~x`), `increment` (`++x`), `decrement` (`--x`), `dereference` (`*x`) |
+| Others | `subscript` (`a[b]`), `call` (`f(args...)`, taking any number of argument types) |
+
+```walnut
+using namespace std::traits;
+static_assert(has_operator<op::add, int, float>, "int + float");
+static_assert(has_operator<op::add, Money> && overloads_operator<op::add, Money>, "Money has its own +");
+static_assert(!has_operator<op::less, Point>, "Points can't be ordered");
+static_assert(has_operator<op::subscript, std::collections::Vector<int>, long int>, "v[i]");
+static_assert(has_operator<op::dereference, int*> && !has_operator<op::dereference, int>, "*p");
+```
+
+A type written as a reference stands for a variable (`int&`), and one without for a value. Any type converts to `var`, so the operators of `var` would make every operator look available; an operator that only works by turning a non-`var` operand into a `var` doesn't count. The [io](io.md#your-own-types) module adds `has_ostream_operator`, `has_istream_operator` and `is_printable` on top of these.
 
 ### Extending a trait
 
@@ -396,7 +442,7 @@ Here `biggest` is `4294967295`, `smallest` is `-18446744073709551615`, `bits` is
 | `is_integer`, `is_exact` | `false` |
 | `is_bounded` | `true` |
 | `epsilon()` | The gap between `1` and the next value up |
-| `min()`, `max()`, `lowest()` | The smallest positive normal value, the largest value, and the most negative value |
+| `min()`, `max()`, `lowest()` | The smallest positive normal value, the largest value, and the most negative value (`0` for an unsigned float) |
 | `subnormal_min()` | The smallest positive value |
 | `infinity()`, `nan()` | Infinity and NaN |
 | `round_error()` | `0.5` |
@@ -491,6 +537,8 @@ Here `h` is `4` and `s` is `"apple"`. `half(2.5)` would be an error saying `inte
 | Concept | Satisfied when |
 |---|---|
 | `same_as<T, U>` | `T` and `U` are the same type |
+| `same_as_ignoring_cv<T, U>` | `T` and `U` are the same once `const` and `volatile` are removed (`is_same_ignoring_cv`) |
+| `same_as_decayed<T, U>` | `T` and `U` are the same once both are [decayed](#type-operations): references and `const` removed, arrays turned into pointers (`is_same_decayed`) |
 | `convertible_to<From, To>` | a `From` converts to a `To` |
 | `derived_from<Derived, Base>` | `Derived` is `Base` or inherits from it |
 | `integer_type<T>`, `signed_integer<T>`, `unsigned_integer<T>` | `T` is an integer type (never `bool` or `char`), a signed one, an unsigned one |
@@ -504,6 +552,12 @@ Here `h` is `4` and `s` is `"apple"`. `half(2.5)` would be an error saying `inte
 | `equality_comparable<T>` | `T` has `==` and `!=` |
 | `totally_ordered<T>` | `T` has `==`, `!=`, `<`, `>`, `<=` and `>=` |
 | `has_to_string<T>` | `T` has a `to_string()` method, which is what [`std::core::to_string`](#stdcoreto_string) and printing in `io` look for |
+| `stringifiable<T>` | `std::core::to_string` works on a `T` (`is_stringifiable`) |
+| `sized<T>` | `T` has a `size()` method |
+| `container<T>` | `T` is a container (`is_container`) |
+| `for_each_able<T>` | A `T` can be looped over with a for-each loop (`can_for_each`) |
+| `callable<F, Args...>` | An `F` can be called with arguments of the types `Args` (`is_callable`) |
+| `function_like<F>` | `F` is a function, a pointer to one, a lambda or a class with `operator(())` (`is_function_like`) |
 | `iterable<C>` | `C` has `begin()` and `end()` methods, so `for ... in` and the container forms of the [algorithms](algorithms.md) work on it |
 | `iterator<I>` | `I` can be read with `*it`, moved on with `++it` and compared with `!=` |
 | `random_access_iterator<I>` | `I` is an `iterator` that can also jump (`it + n`, `it - n`), be subtracted from another one (`last - first`) and be indexed (`it[k]`), as pointers can |

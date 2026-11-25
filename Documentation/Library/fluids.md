@@ -6,7 +6,7 @@
 import module.fluids
 ```
 
-Everything is in the namespace `std::fluids`. Like [physics](physics.md), numbers cross as `std::hardware_float` and counts and cell numbers as `long int`. Lengths are in metres and times in seconds, with y going up. For 3D fluids, use `add_fluid` on a [physics](physics.md#fluids) `World`.
+Everything is in the namespace `std::fluids`. Like [physics](physics.md), numbers cross as `std::hardware_float` and counts and cell coordinates as `unsigned long int`. Lengths are in metres and times in seconds, with y going up. For 3D fluids, use `add_fluid` on a [physics](physics.md#fluids) `World`.
 
 ## Contents
 

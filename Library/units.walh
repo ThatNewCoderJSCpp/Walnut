@@ -155,15 +155,15 @@ safe(compile) {
                 float: scale = 1.0;
                 float: offset = 0.0;
 
-                function to_base(const self&, float: x) -> float {
+                function to_base(const self&, float: x) noexcept -> float {
                     return x * self.scale + self.offset;
                 } end function to_base
 
-                function from_base(const self&, float: b) -> float {
+                function from_base(const self&, float: b) noexcept -> float {
                     return (b - self.offset) / self.scale;
                 } end function from_base
 
-                function has_offset(const self&) -> bool {
+                function has_offset(const self&) noexcept -> bool {
                     return self.offset != 0.0;
                 } end function has_offset
 
@@ -180,7 +180,7 @@ safe(compile) {
                             s = s * self.scale;
                         }
                     } else then {
-                        for (int: i = 0; i < -P; i++) {
+                        for (unsigned int: i = 0; i < -P; i++) {
                             s = s / self.scale;
                         }
                     }
@@ -206,15 +206,15 @@ safe(compile) {
                 using dims = Dims<L, M, T, I, K, N, J, A>;
                 float: scale = 1.0;
 
-                function to_base(const self&, float: x) -> float {
+                function to_base(const self&, float: x) noexcept -> float {
                     return 1.0 / (x * self.scale);
                 } end function to_base
 
-                function from_base(const self&, float: b) -> float {
+                function from_base(const self&, float: b) noexcept -> float {
                     return 1.0 / (b * self.scale);
                 } end function from_base
 
-                function has_offset(const self&) -> bool {
+                function has_offset(const self&) noexcept -> bool {
                     return false;
                 } end function has_offset
 
@@ -281,17 +281,26 @@ safe(compile) {
                 return ReciprocalUnit<L, M, T, I, K, N, J, A, Q2>{u.scale};
             } end function kind_cast
 
+            template <typename U>
+            concept Dimensioned = requires { typename U::dims; typename U::kind_type; }
+
+            template <typename U>
+            concept UnitLike = Dimensioned<U> && requires (const U&: u, float: v) { u.to_base(v); u.from_base(v); u.scale; }
+
             template <typename A, typename B>
+            requires Dimensioned<A> && Dimensioned<B>
             function same_dimension(const A&: a, const B&: b) -> bool {
                 return std::traits::is_same<A::dims, B::dims>;
             } end function same_dimension
 
             template <typename A, typename B>
+            requires Dimensioned<A> && Dimensioned<B>
             function same_kind(const A&: a, const B&: b) -> bool {
                 return same_dimension(a, b) && detail::kinds_compatible<A::kind_type, B::kind_type>;
             } end function same_kind
 
             template <typename A, typename B>
+            requires UnitLike<A> && UnitLike<B>
             function convert(float: value, const A&: source, const B&: target) -> float {
                 static_assert(std::traits::is_same<A::dims, B::dims>, "std::units::convert: the units have different dimensions");
                 static_assert(detail::kinds_compatible<A::kind_type, B::kind_type>, "std::units::convert: the units are different kinds of quantity (energy and torque, say); use kind_cast if this is intended");
@@ -299,16 +308,19 @@ safe(compile) {
             } end function convert
 
             template <typename U>
+            requires UnitLike<U>
             function to_base(float: value, const U&: source) -> float {
                 return source.to_base(value);
             } end function to_base
 
             template <typename U>
+            requires UnitLike<U>
             function from_base(float: base, const U&: target) -> float {
                 return target.from_base(base);
             } end function from_base
 
             template <typename A, typename B>
+            requires UnitLike<A> && UnitLike<B>
             function scale_ratio(const A&: source, const B&: target) -> float {
                 static_assert(std::traits::is_same<A::dims, B::dims>, "std::units::scale_ratio: the units have different dimensions");
                 static_assert(detail::kinds_compatible<A::kind_type, B::kind_type>, "std::units::scale_ratio: the units are different kinds of quantity (energy and torque, say); use kind_cast if this is intended");

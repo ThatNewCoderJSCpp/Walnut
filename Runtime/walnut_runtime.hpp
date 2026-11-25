@@ -10,6 +10,7 @@
 #include "fizmo/../../Source/Multiprecision/Fixed Width Float/Math/log_pow_roots.hpp"
 
 #include <array>
+#include <chrono>
 #include <atomic>
 #include <cstdint>
 #include <exception>
@@ -28,6 +29,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -88,6 +90,29 @@ inline T& volatile_access(T& object) noexcept {
 
 struct runtime_error : std::runtime_error {
     using std::runtime_error::runtime_error;
+};
+
+template <class F>
+class finally_guard {
+public:
+    explicit finally_guard(F body) : m_body(std::move(body)), m_unwinding(std::uncaught_exceptions()) {}
+    finally_guard(const finally_guard&) = delete;
+    finally_guard& operator=(const finally_guard&) = delete;
+
+    ~finally_guard() noexcept(false) {
+        if (std::uncaught_exceptions() > m_unwinding) {
+            try {
+                m_body();
+            } catch (...) {
+            }
+            return;
+        }
+        m_body();
+    }
+
+private:
+    F m_body;
+    int m_unwinding;
 };
 
 } // namespace walnut_rt
@@ -936,9 +961,19 @@ inline W from_native(const Native& n) {
         return W(n ? n : "");
     } else if constexpr (std::is_same_v<Native, W>) {
         return n;
+    } else if constexpr (is_int_v<Native> && is_int_v<W>) {
+        if constexpr (!int_info<W>::is_signed && int_info<Native>::is_signed) {
+            if (!n.is_special() && n.is_negative()) return W(static_cast<unsigned long long>(saturated_ll(n)));
+        }
+        return int_to_int<W>(n);
     } else if constexpr (std::is_floating_point_v<Native>) {
         return W(static_cast<double>(n));
     } else if constexpr (std::is_signed_v<Native>) {
+        if constexpr (is_int_v<W>) {
+            if constexpr (!int_info<W>::is_signed) {
+                if (n < 0) return W(static_cast<unsigned long long>(static_cast<long long>(n)));
+            }
+        }
         return W(static_cast<long long>(n));
     } else {
         return W(static_cast<unsigned long long>(n));
@@ -1577,7 +1612,7 @@ public:
     array_ref(std::vector<T>& v) : m_data(v.data()), m_size(v.size()) {}
     array_ref(const std::vector<T>& v) : m_data(const_cast<T*>(v.data())), m_size(v.size()) {}
 
-    std::size_t size() const { return m_size; }
+    std::size_t size() const noexcept { return m_size; }
     T& operator[](std::size_t i) const { return m_data[i]; }
     T* begin() const { return m_data; }
     T* end() const { return m_data + m_size; }
@@ -2558,12 +2593,12 @@ inline void check_binding_count(const C& c, std::size_t n) {
     if (c.size() != n) fail("structured binding expects " + std::to_string(n) + " elements but the array has " + std::to_string(c.size()));
 }
 
-inline i32 count_of(const std::string& s) { return i32(static_cast<long long>(utf8_count(s))); }
+inline u64 count_of(const std::string& s) { return u64(static_cast<unsigned long long>(utf8_count(s))); }
 
-inline i32 count_of(std::string_view s) { return i32(static_cast<long long>(utf8_count(s))); }
+inline u64 count_of(std::string_view s) { return u64(static_cast<unsigned long long>(utf8_count(s))); }
 
 template <typename C>
-inline i32 count_of(const C& c) { return i32(static_cast<long long>(c.size())); }
+inline u64 count_of(const C& c) { return u64(static_cast<unsigned long long>(c.size())); }
 
 template <typename I>
 inline char32_t char_at(std::string_view s, const I& i) {
@@ -2620,20 +2655,20 @@ inline std::size_t cp_offset(std::string_view s, long long n) {
     return i;
 }
 
-inline i32 length(const std::string& s) { return count_of(s); }
-inline i32 length(std::string_view s) { return count_of(s); }
-inline i32 size(std::string_view s) { return i32(static_cast<long long>(s.size())); }
-inline i32 countof(std::string_view s) { return count_of(s); }
-inline i32 byte_size(std::string_view s) { return i32(static_cast<long long>(s.size())); }
-template <typename C> inline i32 length(const C& c) { return count_of(c); }
-inline i32 size(const std::string& s) { return i32(static_cast<long long>(s.size())); }
-template <typename C> inline i32 size(const C& c) { return count_of(c); }
-inline i32 countof(const std::string& s) { return count_of(s); }
-template <typename C> inline i32 countof(const C& c) { return count_of(c); }
+inline u64 length(const std::string& s) { return count_of(s); }
+inline u64 length(std::string_view s) { return count_of(s); }
+inline u64 size(std::string_view s) { return u64(static_cast<unsigned long long>(s.size())); }
+inline u64 countof(std::string_view s) { return count_of(s); }
+inline u64 byte_size(std::string_view s) { return u64(static_cast<unsigned long long>(s.size())); }
+template <typename C> inline u64 length(const C& c) { return count_of(c); }
+inline u64 size(const std::string& s) { return u64(static_cast<unsigned long long>(s.size())); }
+template <typename C> inline u64 size(const C& c) { return count_of(c); }
+inline u64 countof(const std::string& s) { return count_of(s); }
+template <typename C> inline u64 countof(const C& c) { return count_of(c); }
 template <typename C> inline bool empty(const C& c) { return c.empty(); }
 
-inline i32 byte_size(const std::string& s) { return i32(static_cast<long long>(s.size())); }
-template <typename C> inline i32 byte_size(const C& c, long long element) { return i32(static_cast<long long>(c.size()) * element); }
+inline u64 byte_size(const std::string& s) { return u64(static_cast<unsigned long long>(s.size())); }
+template <typename C> inline u64 byte_size(const C& c, long long element) { return u64(static_cast<unsigned long long>(c.size()) * static_cast<unsigned long long>(element)); }
 
 template <typename I>
 inline std::string substr(std::string_view s, const I& start) {
@@ -2836,10 +2871,68 @@ inline void run_registered_inits() {
     for (std::size_t i = 0; i < registry.size(); ++i) registry[i]();
 }
 
+namespace bench {
+
+struct api {};
+
+inline long long steady_nanos() {
+    return static_cast<long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+inline std::string duration_text(long long ns) {
+    char buf[64];
+    const double v = static_cast<double>(ns);
+    if (ns >= 1000000000LL) std::snprintf(buf, sizeof buf, "%.3f s", v / 1e9);
+    else if (ns >= 1000000LL) std::snprintf(buf, sizeof buf, "%.3f ms", v / 1e6);
+    else if (ns >= 1000LL) std::snprintf(buf, sizeof buf, "%.3f us", v / 1e3);
+    else std::snprintf(buf, sizeof buf, "%lld ns", ns);
+    return buf;
+}
+
+inline void report(const std::string& line) {
+    std::fprintf(stderr, "benchmark %s\n", line.c_str());
+    std::fflush(stderr);
+}
+
+} // namespace bench
+
+inline std::thread::id& main_thread_id() noexcept {
+    static std::thread::id id;
+    return id;
+}
+
+[[noreturn]] inline void stop_from_terminate() noexcept {
+    int code = 71;
+    std::string text = "walnut: uncaught exception";
+    const bool on_main = std::this_thread::get_id() == main_thread_id();
+    if (std::exception_ptr current = std::current_exception()) {
+        try {
+            std::rethrow_exception(current);
+        } catch (const runtime_error& e) {
+            code = 70;
+            text = std::string("walnut runtime error: ") + e.what();
+        } catch (const std::exception& e) {
+            text = on_main ? std::string("walnut: uncaught exception: ") + e.what() : std::string("walnut: an exception escaped a thread: ") + e.what();
+        } catch (...) {
+            if (!on_main) text = "walnut: an exception escaped a thread";
+        }
+    } else {
+        std::fflush(nullptr);
+        std::abort();
+    }
+    try { std::cout.flush(); } catch (...) {}
+    std::fprintf(stderr, "%s\n", text.c_str());
+    std::fflush(nullptr);
+    if (on_main) std::exit(code);
+    std::abort();
+}
+
 template <typename F>
 inline int run_program(F&& body) {
     volatile char stack_anchor = 0;
     safety::start(const_cast<char*>(&stack_anchor));
+    main_thread_id() = std::this_thread::get_id();
+    std::set_terminate(&stop_from_terminate);
     try {
         return safety::finish(body());
     } catch (const runtime_error& e) {

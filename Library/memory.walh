@@ -34,20 +34,20 @@ namespace std {
                     class ArenaHandle as "walnut_rt::mem::arena" {
                     public:
                         constructor();
-                        constructor(long int: block_size) explicit;
-                        constructor(long int: block_size, long int: max_block_size, bool: thread_safe);
+                        constructor(unsigned long int: block_size) explicit;
+                        constructor(unsigned long int: block_size, unsigned long int: max_block_size, bool: thread_safe);
 
                         function reset(self&) -> void;
                         function shrink_to_fit(self&) -> void;
-                        function reserve(self&, long int: bytes) -> void;
-                        function bytes_used(const self&) -> long int;
-                        function bytes_reserved(const self&) -> long int;
-                        function object_count(const self&) -> long int;
-                        function handle_count(const self&) -> long int;
-                        function block_count(const self&) -> long int;
-                        function generation(const self&) -> long int;
-                        function block_size(const self&) -> long int;
-                        function max_block_size(const self&) -> long int;
+                        function reserve(self&, unsigned long int: bytes) -> void;
+                        function bytes_used(const self&) -> unsigned long int;
+                        function bytes_reserved(const self&) -> unsigned long int;
+                        function object_count(const self&) -> unsigned long int;
+                        function handle_count(const self&) -> unsigned long int;
+                        function block_count(const self&) -> unsigned long int;
+                        function generation(const self&) -> unsigned long int;
+                        function block_size(const self&) -> unsigned long int;
+                        function max_block_size(const self&) -> unsigned long int;
                         function thread_safe(const self&) -> bool;
                         function same(const self&, const ArenaHandle&: other) -> bool;
                     } end class ArenaHandle
@@ -79,8 +79,8 @@ namespace std {
                     function expired() const -> bool;
                     function reset() -> void;
                     function get() const -> T* as "walnut_rt::mem::ptr_get";
-                    function generation() const -> long int as "walnut_rt::mem::ptr_generation";
-                    function use_count() const -> long int as "walnut_rt::mem::ptr_use_count";
+                    function generation() const -> unsigned long int as "walnut_rt::mem::ptr_generation";
+                    function use_count() const -> unsigned long int as "walnut_rt::mem::ptr_use_count";
                     function same_arena(const ArenaPtr<T>&: other) const -> bool as "walnut_rt::mem::ptr_same_arena";
                     function same(const ArenaPtr<T>&: other) const -> bool as "walnut_rt::mem::ptr_same";
 
@@ -110,8 +110,8 @@ namespace std {
 
                 template <typename T>
                 class ArenaArray as "walnut_rt::mem::array" {
-                    function unchecked(long int: index) const -> T& as "walnut_rt::mem::array_ref";
-                    function element_unchecked(long int: index) const -> ArenaPtr<T> as "walnut_rt::mem::array_element";
+                    function unchecked(unsigned long int: index) const -> T& as "walnut_rt::mem::array_ref";
+                    function element_unchecked(unsigned long int: index) const -> ArenaPtr<T> as "walnut_rt::mem::array_element";
                     function first() const -> T* as "walnut_rt::mem::array_data";
                     function past_last() const -> T* as "walnut_rt::mem::array_end";
 
@@ -124,9 +124,9 @@ namespace std {
                         }
                     } end function check_live
 
-                    function check(long int: index) const -> void {
+                    function check(unsigned long int: index) const -> void {
                         check_live();
-                        if (index < 0 || index >= size()) then {
+                        if (index >= size()) then {
                             throw std::errors::arena_error(static_cast<string>(`ArenaArray index ${index} is out of range for size ${size()}`));
                         }
                     } end function check
@@ -134,20 +134,20 @@ namespace std {
                 public:
                     constructor();
 
-                    static function create(detail::ArenaHandle&: arena, long int: count) -> ArenaArray<T> as "walnut_rt::mem::make_array<T>";
-                    static function create(detail::ArenaHandle&: arena, long int: count, const T&: fill) -> ArenaArray<T> as "walnut_rt::mem::make_filled<T>";
+                    static function create(detail::ArenaHandle&: arena, unsigned long int: count) -> ArenaArray<T> as "walnut_rt::mem::make_array<T>";
+                    static function create(detail::ArenaHandle&: arena, unsigned long int: count, const T&: fill) -> ArenaArray<T> as "walnut_rt::mem::make_filled<T>";
                     static function create(detail::ArenaHandle&: arena, const std::collections::Vector<T>&: values) -> ArenaArray<T> as "walnut_rt::mem::make_from<T>";
 
                     function valid() const -> bool as "walnut_rt::mem::array_valid";
                     function expired() const -> bool;
                     function reset() -> void;
-                    function size() const -> long int as "walnut_rt::mem::array_size";
+                    function size() const -> unsigned long int as "walnut_rt::mem::array_size";
                     function empty() const -> bool;
 
                     function to_vector() const -> std::collections::Vector<T> {
                         check_live();
                         std::collections::Vector<T>: out;
-                        for (long int: i = 0; i < size(); i++) {
+                        for (unsigned long int: i = 0; i < size(); i++) {
                             out.push_back(unchecked(i));
                         }
                         return out;
@@ -157,12 +157,12 @@ namespace std {
                         return valid();
                     }
 
-                    operator([]) function(long int: index) const -> T& {
+                    operator([]) function(unsigned long int: index) const -> T& {
                         check(index);
                         return unchecked(index);
                     }
 
-                    function at(long int: index) const -> T& {
+                    function at(unsigned long int: index) const -> T& {
                         check(index);
                         return unchecked(index);
                     } end function at
@@ -177,7 +177,7 @@ namespace std {
                         return unchecked(size() - 1);
                     } end function back
 
-                    function element(long int: index) const -> ArenaPtr<T> {
+                    function element(unsigned long int: index) const -> ArenaPtr<T> {
                         check(index);
                         return element_unchecked(index);
                     } end function element
@@ -202,13 +202,10 @@ namespace std {
             class Arena {
                 detail::ArenaHandle: handle;
 
-                static function check_count(long int: count) -> void {
-                    if (count < 0) then {
-                        throw std::errors::arena_error(static_cast<string>(`Arena: an array can't have ${count} elements`));
-                    }
+                static function check_count(unsigned long int: count) -> void {
                 } end function check_count
 
-                static function check_size(long int: bytes, const string&: what) -> long int {
+                static function check_size(unsigned long int: bytes, const string&: what) -> unsigned long int {
                     if (bytes < 64) then {
                         throw std::errors::arena_error(static_cast<string>(`Arena: ${what} must be at least 64 bytes, not ${bytes}`));
                     }
@@ -216,11 +213,11 @@ namespace std {
                 } end function check_size
 
             public:
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(long int: block_size) explicit : handle(check_size(block_size, "the block size")) { }
+                constructor(unsigned long int: block_size) explicit : handle(check_size(block_size, "the block size")) { }
 
-                constructor(long int: block_size, long int: max_block_size, bool: thread_safe) : handle(check_size(block_size, "the block size"), check_size(max_block_size, "the largest block size"), thread_safe) { }
+                constructor(unsigned long int: block_size, unsigned long int: max_block_size, bool: thread_safe) : handle(check_size(block_size, "the block size"), check_size(max_block_size, "the largest block size"), thread_safe) { }
 
                 template <typename T>
                 function make(self&) -> ArenaPtr<T> {
@@ -233,13 +230,13 @@ namespace std {
                 } end function make
 
                 template <typename T>
-                function make_array(self&, long int: count) -> ArenaArray<T> {
+                function make_array(self&, unsigned long int: count) -> ArenaArray<T> {
                     check_count(count);
                     return ArenaArray<T>::create(self.handle, count);
                 } end function make_array
 
                 template <typename T>
-                function make_array(self&, long int: count, const T&: fill) -> ArenaArray<T> {
+                function make_array(self&, unsigned long int: count, const T&: fill) -> ArenaArray<T> {
                     check_count(count);
                     return ArenaArray<T>::create(self.handle, count, fill);
                 } end function make_array
@@ -266,42 +263,39 @@ namespace std {
                     self.handle.shrink_to_fit();
                 } end function shrink_to_fit
 
-                function reserve(self&, long int: bytes) -> void {
-                    if (bytes < 0) then {
-                        throw std::errors::arena_error(static_cast<string>(`Arena: can't reserve ${bytes} bytes`));
-                    }
+                function reserve(self&, unsigned long int: bytes) -> void {
                     self.handle.reserve(bytes);
                 } end function reserve
 
-                function bytes_used(const self&) -> long int {
+                function bytes_used(const self&) -> unsigned long int {
                     return self.handle.bytes_used();
                 } end function bytes_used
 
-                function bytes_reserved(const self&) -> long int {
+                function bytes_reserved(const self&) -> unsigned long int {
                     return self.handle.bytes_reserved();
                 } end function bytes_reserved
 
-                function object_count(const self&) -> long int {
+                function object_count(const self&) -> unsigned long int {
                     return self.handle.object_count();
                 } end function object_count
 
-                function handle_count(const self&) -> long int {
+                function handle_count(const self&) -> unsigned long int {
                     return self.handle.handle_count();
                 } end function handle_count
 
-                function block_count(const self&) -> long int {
+                function block_count(const self&) -> unsigned long int {
                     return self.handle.block_count();
                 } end function block_count
 
-                function generation(const self&) -> long int {
+                function generation(const self&) -> unsigned long int {
                     return self.handle.generation();
                 } end function generation
 
-                function block_size(const self&) -> long int {
+                function block_size(const self&) -> unsigned long int {
                     return self.handle.block_size();
                 } end function block_size
 
-                function max_block_size(const self&) -> long int {
+                function max_block_size(const self&) -> unsigned long int {
                     return self.handle.max_block_size();
                 } end function max_block_size
 
@@ -327,8 +321,8 @@ namespace std {
                         function add_weak(self&) noexcept -> void;
                         function release_weak(self&) noexcept -> bool;
                         function try_add_strong(self&) noexcept -> bool;
-                        function strong_count(const self&) noexcept -> long int;
-                        function weak_count(const self&) noexcept -> long int;
+                        function strong_count(const self&) noexcept -> unsigned long int;
+                        function weak_count(const self&) noexcept -> unsigned long int;
                     } end class Counts
                 } end extern
 
@@ -376,15 +370,15 @@ namespace std {
             public:
                 Block*: hook_block = nullptr;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(const SharedHook&: other) { }
+                constructor(const SharedHook&: other) noexcept { }
 
-                operator(=) function(self&, const SharedHook&: other) -> SharedHook& {
+                operator(=) function(self&, const SharedHook&: other) noexcept -> SharedHook& {
                     return self;
                 }
 
-                destructor() {
+                destructor() noexcept {
                     release_weak(hook_block);
                 }
 
@@ -418,11 +412,11 @@ namespace std {
 
             constructor(const UniquePtr&: other) = delete;
 
-            constructor(UniquePtr&&: other) : ptr = other.ptr {
+            constructor(UniquePtr&&: other) noexcept : ptr = other.ptr {
                 other.ptr = nullptr;
             }
 
-            destructor() {
+            destructor() noexcept {
                 delete ptr;
             }
 
@@ -559,7 +553,7 @@ namespace std {
                 }
             }
 
-            constructor(SharedPtr&&: other) : ptr = other.ptr, block = other.block {
+            constructor(SharedPtr&&: other) noexcept : ptr = other.ptr, block = other.block {
                 other.ptr = nullptr;
                 other.block = nullptr;
             }
@@ -571,7 +565,7 @@ namespace std {
                 }
             }
 
-            destructor() {
+            destructor() noexcept {
                 detail::release_strong(block);
             }
 
@@ -625,7 +619,7 @@ namespace std {
                 other.block = b;
             } end function swap
 
-            function use_count(const self&) noexcept -> long int {
+            function use_count(const self&) noexcept -> unsigned long int {
                 if (self.block == nullptr) then {
                     return 0;
                 }
@@ -646,7 +640,7 @@ namespace std {
 
             template <typename U>
             function owner_before(const self&, const SharedPtr<U>&: other) noexcept -> bool {
-                return reinterpret_cast<long int>(self.block) < reinterpret_cast<long int>(other.block);
+                return reinterpret_cast<unsigned long int>(self.block) < reinterpret_cast<unsigned long int>(other.block);
             } end function owner_before
 
             template <typename U>
@@ -704,12 +698,12 @@ namespace std {
                 }
             }
 
-            constructor(WeakPtr&&: other) : ptr = other.ptr, block = other.block {
+            constructor(WeakPtr&&: other) noexcept : ptr = other.ptr, block = other.block {
                 other.ptr = nullptr;
                 other.block = nullptr;
             }
 
-            destructor() {
+            destructor() noexcept {
                 detail::release_weak(block);
             }
 
@@ -753,7 +747,7 @@ namespace std {
                 return self.block == nullptr || self.block->counts.strong_count() == 0;
             } end function expired
 
-            function use_count(const self&) noexcept -> long int {
+            function use_count(const self&) noexcept -> unsigned long int {
                 if (self.block == nullptr) then {
                     return 0;
                 }
@@ -825,11 +819,11 @@ namespace std {
                     public:
                         static function gc_running() -> bool as "walnut_rt::mem::gc_running";
                         static function tracking_allocations() -> bool as "walnut_rt::mem::tracking_allocations";
-                        static function collect_garbage() -> long int as "walnut_rt::mem::collect_garbage";
-                        static function live_objects() -> long int as "walnut_rt::mem::live_objects";
-                        static function live_bytes() -> long int as "walnut_rt::mem::live_bytes";
-                        static function peak_bytes() -> long int as "walnut_rt::mem::peak_bytes";
-                        static function allocations_made() -> long int as "walnut_rt::mem::allocations_made";
+                        static function collect_garbage() -> unsigned long int as "walnut_rt::mem::collect_garbage";
+                        static function live_objects() -> unsigned long int as "walnut_rt::mem::live_objects";
+                        static function live_bytes() -> unsigned long int as "walnut_rt::mem::live_bytes";
+                        static function peak_bytes() -> unsigned long int as "walnut_rt::mem::peak_bytes";
+                        static function allocations_made() -> unsigned long int as "walnut_rt::mem::allocations_made";
                         static function allocation_report() -> string as "walnut_rt::mem::allocation_report";
                     } end class Tracker
                 } end extern
@@ -843,23 +837,23 @@ namespace std {
                 return detail::Tracker::tracking_allocations();
             } end function tracking_allocations
 
-            function collect_garbage() -> long int {
+            function collect_garbage() -> unsigned long int {
                 return detail::Tracker::collect_garbage();
             } end function collect_garbage
 
-            function live_objects() -> long int {
+            function live_objects() -> unsigned long int {
                 return detail::Tracker::live_objects();
             } end function live_objects
 
-            function live_bytes() -> long int {
+            function live_bytes() -> unsigned long int {
                 return detail::Tracker::live_bytes();
             } end function live_bytes
 
-            function peak_bytes() -> long int {
+            function peak_bytes() -> unsigned long int {
                 return detail::Tracker::peak_bytes();
             } end function peak_bytes
 
-            function allocations_made() -> long int {
+            function allocations_made() -> unsigned long int {
                 return detail::Tracker::allocations_made();
             } end function allocations_made
 
@@ -867,5 +861,52 @@ namespace std {
                 return detail::Tracker::allocation_report();
             } end function allocation_report
         } end safe
+
+        hidden namespace detail {
+            extern "C++" from "<walnut_memory.hpp>" {
+                template <typename T>
+                class Bytes as "walnut_rt::mem::bytes" {
+                public:
+                    static function move_items(T*: to, const T*: source, unsigned long int: count) -> T* as "walnut_rt::mem::move_items";
+                    static function copy_items(T*: to, const T*: source, unsigned long int: count) -> T* as "walnut_rt::mem::copy_items";
+                } end class Bytes
+            } end extern
+
+            template <typename T>
+            function check_span(const std::collections::Vector<T>&: items, unsigned long int: start, unsigned long int: count, const string&: name, const string&: which) -> void {
+                if (start > items.size() || count > items.size() - start) then {
+                    throw std::errors::pointer_error("std::memory::" + name + ": " + which + " items " + std::core::to_string(start) + " to " + std::core::to_string(start + count) + " don't fit in a list of " + std::core::to_string(items.size()));
+                }
+            } end function check_span
+        } end namespace detail
+
+        template <typename T>
+        function memmove(T*: to, const T*: source, unsigned long int: count) -> T* {
+            return detail::Bytes<T>::move_items(to, source, count);
+        } end function memmove
+
+        template <typename T>
+        function memcopy(T*: to, const T*: source, unsigned long int: count) -> T* {
+            return detail::Bytes<T>::copy_items(to, source, count);
+        } end function memcopy
+
+        template <typename T>
+        function memcpy(T*: to, const T*: source, unsigned long int: count) -> T* {
+            return detail::Bytes<T>::copy_items(to, source, count);
+        } end function memcpy
+
+        template <typename T>
+        function memmove(std::collections::Vector<T>&: to, unsigned long int: to_start, const std::collections::Vector<T>&: source, unsigned long int: source_start, unsigned long int: count) -> void {
+            detail::check_span(to, to_start, count, "memmove", "the destination");
+            detail::check_span(source, source_start, count, "memmove", "the source");
+            if (count > 0) then { detail::Bytes<T>::move_items(to.data() + to_start, source.data() + source_start, count); }
+        } end function memmove
+
+        template <typename T>
+        function memcopy(std::collections::Vector<T>&: to, unsigned long int: to_start, const std::collections::Vector<T>&: source, unsigned long int: source_start, unsigned long int: count) -> void {
+            detail::check_span(to, to_start, count, "memcopy", "the destination");
+            detail::check_span(source, source_start, count, "memcopy", "the source");
+            if (count > 0) then { detail::Bytes<T>::copy_items(to.data() + to_start, source.data() + source_start, count); }
+        } end function memcopy
     } end namespace memory
 } end namespace std

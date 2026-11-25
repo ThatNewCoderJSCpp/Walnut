@@ -6,7 +6,7 @@
 import module.physics
 ```
 
-Everything is in the namespace `std::physics`. Numbers cross as `std::hardware_float` (C++ `float`, the same as the physics engine uses) and counts and body numbers as `long int`. Literals and integers pass straight in, and every reading comes back as a `std::hardware_float` that turns into a `short float` or wider without a cast. A `short float` variable needs `static_cast<std::hardware_float>(...)` to go in, or can be declared as a `std::hardware_float` to begin with. Lengths are in metres, times in seconds and angles in radians.
+Everything is in the namespace `std::physics`. Numbers cross as `std::hardware_float` (C++ `float`, the same as the physics engine uses) and counts as `unsigned long int` and body numbers as `long int`. Literals and integers pass straight in, and every reading comes back as a `std::hardware_float` that turns into a `short float` or wider without a cast. A `short float` variable needs `static_cast<std::hardware_float>(...)` to go in, or can be declared as a `std::hardware_float` to begin with. Lengths are in metres, times in seconds and angles in radians.
 
 ## Contents
 

@@ -11,6 +11,8 @@ namespace semantics {
 enum class ConversionRank : std::uint8_t {
     Exact = 0,    // identical canonical type
     Promotion,    // same-family same-sign widening
+    ConstantFit,
+    ConstantFitConstRef,
     Conversion,   // int->float widening, pointer->bool, table Implicit
     UserDefined,  // operator T()  
     None          // not implicitly convertible 

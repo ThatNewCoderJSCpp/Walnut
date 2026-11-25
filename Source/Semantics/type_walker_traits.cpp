@@ -1,5 +1,8 @@
 #include "Semantics/type_walker.hpp"
 #include "Semantics/type_ops.hpp"
+#include "Semantics/substitution.hpp"
+#include "Common/arena_allocator.hpp"
+#include "Common/error_reporter.hpp"
 
 namespace walnut {
 namespace semantics {
@@ -43,8 +46,173 @@ std::optional<std::int64_t> TypeWalker::lifecycle_trait(parser_types::TypeTrait 
         case T::IsConstexprAssignable:    return args.size() == 2 && can_assign(args[0], args[1], Want::Constexpr, 0) ? 1 : 0;
         case T::IsDestructible:
         case T::IsNothrowDestructible:    return can_destroy(args[0], 0) ? 1 : 0;
+        case T::IsCallable:
+            if (!probe_function_like(args[0]) && !dynamic_builtin(without_ref(args[0]))) return 0;
+            return probe_compiles(args, [this](const std::vector<nodes::ASTNode*>& ids) -> nodes::ASTNode* {
+                auto* call = make_in<nodes::CallExpression>(m_inst->arena(), ids[0], 0);
+                for (std::size_t i = 1; i < ids.size(); ++i) call->m_arguments.push_back(ids[i]);
+                return call;
+            }, false) ? 1 : 0;
+        case T::IsFunctionLike:           return probe_function_like(args[0]) ? 1 : 0;
+        case T::CanForEach:               return probe_for_each(args[0]) ? 1 : 0;
+        case T::HasOperator:              return probe_operator(args, false) ? 1 : 0;
+        case T::OverloadsOperator:        return probe_operator(args, true) ? 1 : 0;
         default:                          return std::nullopt;
     }
+}
+
+bool TypeWalker::probe_compiles(const std::vector<Type*>& types, const std::function<nodes::ASTNode*(const std::vector<nodes::ASTNode*>&)>& build, bool want_overload) {
+    if (!m_inst || types.empty()) return false;
+    ArenaScope arena(m_inst->arena());
+    DiagnosticTrap trap(m_reporter);
+    std::vector<nodes::ASTNode*> ids;
+    for (std::size_t i = 0; i < types.size(); ++i) {
+        if (void_builtin(without_ref(types[i]))) {
+            trap.discard();
+            return false;
+        }
+        Symbol* sym = synthetic_symbol("walnut_probe_" + std::to_string(i), types[i], nullptr);
+        ids.push_back(ident_for(sym, 0));
+    }
+    nodes::ASTNode* e = build(ids);
+    bool ok = false;
+    if (e) {
+        walk_expr(e);
+        Type* t = type_of(e);
+        ok = t && !t->is_error() && !contains_error(t);
+    }
+    const bool errors = trap.discard();
+    if (!ok || errors) return false;
+    Symbol* chosen = nullptr;
+    switch (e->kind) {
+        case K::BinaryExpression:      chosen = static_cast<nodes::BinaryExpression*>(e)->resolved; break;
+        case K::UnaryExpression:       chosen = static_cast<nodes::UnaryExpression*>(e)->resolved; break;
+        case K::DereferenceExpression: chosen = static_cast<nodes::DereferenceExpression*>(e)->resolved; break;
+        case K::SubscriptExpression:   chosen = static_cast<nodes::SubscriptExpression*>(e)->resolved; break;
+        case K::CallExpression:        chosen = static_cast<nodes::CallExpression*>(e)->resolved; break;
+        default: break;
+    }
+    const bool written = chosen && chosen->decl && chosen->decl->kind == K::OperatorFunctionDeclaration;
+    if (written) {
+        bool any_dynamic = false;
+        for (Type* t : types) if (dynamic_builtin(m_types.strip_cv(without_ref(t)))) any_dynamic = true;
+        if (!any_dynamic) {
+            for (const ParamShape& p : shapes_of(chosen)) {
+                if (p.element && dynamic_builtin(m_types.strip_cv(without_ref(p.element)))) return false;
+            }
+        }
+    }
+    if (!want_overload) return true;
+    return written;
+}
+
+bool TypeWalker::probe_function_like(Type* t) {
+    Type* c = without_ref(t);
+    if (!c || c->is_error()) return false;
+    c = m_types.strip_cv(c);
+    if (c->is_function() || c->kind() == TypeKind::Closure) return true;
+    if (c->is_pointer()) {
+        Type* p = static_cast<PointerType*>(c)->pointee();
+        return p && m_types.strip_cv(p)->is_function();
+    }
+    if (!record_symbol_of(c)) return false;
+    Scope* ms = member_scope_of(c);
+    if (!ms) return false;
+    for (Symbol* o = ms->find_member("operator"); o; o = o->next_overload) {
+        if (o->decl && o->decl->kind == K::OperatorFunctionDeclaration && static_cast<nodes::OperatorFunctionDeclaration*>(o->decl)->get_overload() == nodes::OverloadableOperator::Call) return true;
+    }
+    return ms->find_member("operator(())") != nullptr;
+}
+
+bool TypeWalker::probe_for_each(Type* t) {
+    Type* c = without_ref(t);
+    if (!c || c->is_error()) return false;
+    if (iterated_element(c)) return true;
+    if (!m_inst || !record_symbol_of(m_types.strip_cv(c))) return false;
+    Scope* ms = member_scope_of(c);
+    if (!ms || !ms->find_member("begin") || !ms->find_member("end")) return false;
+    ArenaScope arena(m_inst->arena());
+    DiagnosticTrap trap(m_reporter);
+    Symbol* range = synthetic_symbol("walnut_probe_range", m_types.reference(c, RefQual::LValue), nullptr);
+    auto member_call = [&](std::string_view name) -> nodes::ASTNode* {
+        auto* m = make_in<nodes::MemberAccessExpression>(m_inst->arena(), ident_for(range, 0), name, nodes::MemberAccessExpression::Op::Dot, 0);
+        auto* call = make_in<nodes::CallExpression>(m_inst->arena(), m, 0);
+        walk_expr(call);
+        return call;
+    };
+    auto usable = [](Type* x) { return x && !x->is_error() && !contains_error(x); };
+    Type* it = without_ref(type_of(member_call("begin")));
+    Type* et = without_ref(type_of(member_call("end")));
+    bool ok = usable(it) && usable(et);
+    if (ok) {
+        Symbol* it_sym = synthetic_symbol("walnut_probe_it", m_types.strip_cv(it), nullptr);
+        Symbol* end_sym = synthetic_symbol("walnut_probe_end", m_types.strip_cv(et), nullptr);
+        nodes::ASTNode* cond = binary_node(ident_for(it_sym, 0), tokenizing::Token::Kind::NotEqual, ident_for(end_sym, 0), 0);
+        auto* next = make_in<nodes::UnaryExpression>(m_inst->arena(), ident_for(it_sym, 0), tokenizing::Token::Kind::DoublePlus, true, 0);
+        auto* get = make_in<nodes::DereferenceExpression>(m_inst->arena(), ident_for(it_sym, 0), 0);
+        walk_expr(cond);
+        walk_expr(next);
+        walk_expr(get);
+        ok = usable(type_of(cond)) && usable(type_of(next)) && usable(type_of(get));
+    }
+    const bool errors = trap.discard();
+    return ok && !errors;
+}
+
+bool TypeWalker::probe_operator(const std::vector<Type*>& args, bool want_overload) {
+    using TK = tokenizing::Token::Kind;
+    if (args.size() < 2) return false;
+    Symbol* tag = record_symbol_of(m_types.strip_cv(without_ref(args[0])));
+    if (!tag) return false;
+    enum class Shape { Binary, Prefix, Deref, Subscript, Call };
+    struct OpInfo { std::string_view name; Shape shape; TK token; };
+    static const OpInfo ops[] = {
+        { "add", Shape::Binary, TK::Plus }, { "subtract", Shape::Binary, TK::Minus }, { "multiply", Shape::Binary, TK::Asterisk },
+        { "divide", Shape::Binary, TK::Slash }, { "modulo", Shape::Binary, TK::Percent }, { "power", Shape::Binary, TK::DoubleAsterisk },
+        { "equal", Shape::Binary, TK::LogicEqual }, { "not_equal", Shape::Binary, TK::NotEqual }, { "less", Shape::Binary, TK::LessThan },
+        { "greater", Shape::Binary, TK::GreaterThan }, { "less_equal", Shape::Binary, TK::LessEqual }, { "greater_equal", Shape::Binary, TK::GreaterEqual },
+        { "logical_and", Shape::Binary, TK::LogicAnd }, { "logical_or", Shape::Binary, TK::LogicOr },
+        { "bit_and", Shape::Binary, TK::Ampersand }, { "bit_or", Shape::Binary, TK::Pipe }, { "bit_xor", Shape::Binary, TK::Caret },
+        { "shift_left", Shape::Binary, TK::DoubleLessThan }, { "shift_right", Shape::Binary, TK::DoubleGreaterThan },
+        { "assign", Shape::Binary, TK::Equal }, { "add_assign", Shape::Binary, TK::PlusEqual }, { "subtract_assign", Shape::Binary, TK::MinusEqual },
+        { "multiply_assign", Shape::Binary, TK::AsteriskEqual }, { "divide_assign", Shape::Binary, TK::SlashEqual }, { "modulo_assign", Shape::Binary, TK::PercentEqual },
+        { "power_assign", Shape::Binary, TK::DoubleAsteriskEqual }, { "bit_and_assign", Shape::Binary, TK::AmpersandEqual }, { "bit_or_assign", Shape::Binary, TK::PipeEqual },
+        { "bit_xor_assign", Shape::Binary, TK::CaretEqual }, { "shift_left_assign", Shape::Binary, TK::ShiftLeftEqual }, { "shift_right_assign", Shape::Binary, TK::ShiftRightEqual },
+        { "negate", Shape::Prefix, TK::Minus }, { "positive", Shape::Prefix, TK::Plus }, { "logical_not", Shape::Prefix, TK::ExclamationMark },
+        { "bit_not", Shape::Prefix, TK::Tilde }, { "increment", Shape::Prefix, TK::DoublePlus }, { "decrement", Shape::Prefix, TK::DoubleMinus },
+        { "dereference", Shape::Deref, TK::Asterisk }, { "subscript", Shape::Subscript, TK::LeftSquare }, { "call", Shape::Call, TK::LeftParen },
+    };
+    const OpInfo* op = nullptr;
+    for (const OpInfo& o : ops) if (o.name == tag->name) op = &o;
+    if (!op) return false;
+    std::vector<Type*> operands(args.begin() + 1, args.end());
+    switch (op->shape) {
+        case Shape::Binary:
+        case Shape::Subscript:
+            if (operands.size() == 1) operands.push_back(operands[0]);
+            if (operands.size() != 2) return false;
+            break;
+        case Shape::Prefix:
+        case Shape::Deref:
+            if (operands.size() != 1) return false;
+            break;
+        case Shape::Call:
+            break;
+    }
+    return probe_compiles(operands, [this, op](const std::vector<nodes::ASTNode*>& ids) -> nodes::ASTNode* {
+        switch (op->shape) {
+            case Shape::Binary:    return binary_node(ids[0], op->token, ids[1], 0);
+            case Shape::Prefix:    return make_in<nodes::UnaryExpression>(m_inst->arena(), ids[0], op->token, true, 0);
+            case Shape::Deref:     return make_in<nodes::DereferenceExpression>(m_inst->arena(), ids[0], 0);
+            case Shape::Subscript: return make_in<nodes::SubscriptExpression>(m_inst->arena(), ids[0], ids[1], 0);
+            case Shape::Call: {
+                auto* call = make_in<nodes::CallExpression>(m_inst->arena(), ids[0], 0);
+                for (std::size_t i = 1; i < ids.size(); ++i) call->m_arguments.push_back(ids[i]);
+                return call;
+            }
+        }
+        return nullptr;
+    }, want_overload);
 }
 
 bool TypeWalker::symbol_nothrow(Symbol* s) {

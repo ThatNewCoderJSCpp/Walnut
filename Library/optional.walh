@@ -187,6 +187,7 @@ namespace std {
 
                     function swap(self&, Optional&: other) -> void;
 
+                    requires std::traits::is_stringifiable<T>
                     function to_string(const self&) -> string {
                         if (!self.has_value()) then {
                             return "none";
@@ -221,7 +222,7 @@ namespace std {
                     return Optional<T>();
                 }
 
-                operator(==) function(const self&, const None&: other) -> bool {
+                operator(==) function(const self&, const None&: other) noexcept -> bool {
                     return true;
                 }
             } end struct None
@@ -320,6 +321,7 @@ namespace std {
                     return Result<T, F>::err(func(self.m_error.value()));
                 } end function map_error
 
+                requires std::traits::is_stringifiable<T> && std::traits::is_stringifiable<E>
                 function to_string(const self&) -> string {
                     if (self.m_value.has_value()) then {
                         return "ok(" + std::core::to_string(self.m_value.value()) + ")";
@@ -371,7 +373,7 @@ namespace std {
             safe(compile) {
                 class Propagated {
                 public:
-                    constructor() { }
+                    constructor() noexcept { }
 
                     function what(const self&) virtual -> string {
                         return "a '?' found nothing to unwrap";

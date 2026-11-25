@@ -39,7 +39,7 @@ This prints `0 -> 2 -> 1 -> 3 costs 8`, then `2 hops at least`, then `loops? 1` 
 
 ## Graphs, nodes and edges
 
-`Graph<T, W>` holds a value of type `T` at each node, and each edge has a weight of type `W` (`float` if left out). A node is named by its id, a `long int` handed out by `add_node` in order from 0.
+`Graph<T, W>` holds a value of type `T` at each node, and each edge has a weight of type `W` (`float` if left out). A node is named by its id, an `unsigned long int` handed out by `add_node` in order from 0.
 
 A `Graph` is undirected unless it is made directed: `Graph<T>(Direction::directed)`, `Graph<T>::directed()` or `std::graphs::directed_graph<T>()`. In an undirected graph `add_edge(a, b)` connects both ways.
 
@@ -54,7 +54,7 @@ A `Graph` is undirected unless it is made directed: `Graph<T>(Direction::directe
 | `node_count()`, `size()`, `edge_count()`, `empty()`, `is_directed()` | Sizes |
 | `value(node)`, `g[node]` | The node's value, which can be changed |
 | `values()`, `nodes()` | Every value, and every id |
-| `find(value)`, `find_first(value)` | The ids holding a value (`find_first` gives -1 when there is none) |
+| `find(value)`, `find_first(value)` | The ids holding a value (`find_first` gives `std::npos` when there is none) |
 | `edges()`, `edges_from(node)`, `edges_to(node)` | Edges as `Edge<W>` values |
 | `neighbors(node)`, `predecessors(node)` | The nodes an edge leads to, and the nodes with an edge leading here |
 | `out_degree(node)`, `in_degree(node)`, `degree(node)` | Edge counts |
@@ -89,7 +89,7 @@ A `Path<W>` is a list of node ids and the total cost of the edges between them. 
 | Field or method | Holds |
 |---|---|
 | `order` | The nodes in the order they were reached |
-| `depth`, `depth_of(node)` | How many edges from the start each node is in the search tree (-1 when not reached) |
+| `depth`, `depth_of(node)` | How many edges from the start each node is in the search tree (`std::npos` when not reached) |
 | `parent`, `parent_of(node)` | Each node's parent in the search tree (-1 for the start and unreached nodes) |
 | `reached(node)`, `count()` | Whether a node was reached, and how many were |
 | `path_to(node)` | The search tree's path from the start, as a list of ids |
@@ -120,7 +120,7 @@ function main() -> int {
 
 This prints `0`, then `1 4 1 -> 2 -> 3 -> 1`. With one more edge, `g.add_edge(2, 0)`, the search would also report the loop `0 -> 1 -> 2 -> 0`, and `t.loop_count()` would be `2`.
 
-Both searches also take a function, `(long int: node, long int: depth) -> bool`, called for each node as it is reached. Returning `false` stops the search:
+Both searches also take a function, `(unsigned long int: node, unsigned long int: depth) -> bool`, called for each node as it is reached. Returning `false` stops the search:
 
 ```walnut
 import module.io
@@ -131,10 +131,10 @@ function main() -> int {
     for (int: i = 0; i < 6; i++) {
         g.add_node(i);
     }
-    for (int: i = 1; i < 6; i++) {
+    for (unsigned long int: i = 1; i < 6; i++) {
         g.add_edge(i - 1, i);
     }
-    auto: near = g.breadth_first_search(0, [](long int: node, long int: depth) -> bool { return depth < 2; });
+    auto: near = g.breadth_first_search(0, [](unsigned long int: node, unsigned long int: depth) -> bool { return depth < 2; });
     std::io::println(near.count());
     return 0;
 } end function main
@@ -148,7 +148,7 @@ This prints `3`: the search stops at the first node two edges away.
 | `breadth_first_path(start, goal)` | A path with the fewest edges |
 | `depth_first_path(start, goal)` | The first path depth-first search finds |
 | `reachable(source, target)` | Whether there is any path |
-| `hop_distances(start)` | The fewest edges to each node (-1 when unreachable) |
+| `hop_distances(start)` | The fewest edges to each node (`std::npos` when unreachable) |
 
 ### Parallel breadth-first search
 
@@ -163,7 +163,7 @@ function main() -> int {
     for (int: i = 0; i < 1000; i++) {
         g.add_node(i);
     }
-    for (int: i = 0; i < 999; i++) {
+    for (unsigned long int: i = 0; i < 999; i++) {
         g.add_edge(i, i + 1);
         g.add_edge(i, (i * 7 + 3) % 1000);
     }
@@ -188,7 +188,7 @@ This prints `1000 1000 1`.
 | `shortest_path(start, goal)` | The path of least total weight. It uses Dijkstra's algorithm, or Bellman–Ford when some weight is negative, and throws if there is a negative loop |
 | `shortest_distances(start)` | A `Distances<W>` with `distance`, `reached` and `parent` for every node, `has_negative_cycle`, and the methods `reachable(node)`, `distance_to(node)` and `path_to(node)` |
 | `bellman_ford(start)` | The same, always by Bellman–Ford |
-| `a_star(start, goal, heuristic)` | The least-weight path, guided by `heuristic`, a function `(long int: node) -> W` that estimates the remaining cost without overestimating it |
+| `a_star(start, goal, heuristic)` | The least-weight path, guided by `heuristic`, a function `(unsigned long int: node) -> W` that estimates the remaining cost without overestimating it |
 | `all_simple_paths(start, goal, max_edges = -1)` | Every path that doesn't repeat a node, optionally limited to `max_edges` edges |
 
 ## Structure

@@ -5,6 +5,9 @@
 #include "fizmo/../../Source/Memory/arena.hpp"
 
 #include <algorithm>
+#include <cstring>
+#include <functional>
+#include <type_traits>
 #include <atomic>
 #include <memory>
 #include <string>
@@ -239,6 +242,41 @@ inline std::string allocation_report() {
 #else
     return std::string();
 #endif
+}
+
+template <typename T>
+struct bytes {};
+
+template <typename T>
+inline void check_item_range(const T* to, const T* from, long long count, const char* name) {
+    if (count < 0) fail(std::string("std::memory::") + name + ": the count is " + std::to_string(count) + ", and it can't be negative");
+    if (count > 0 && (!to || !from)) fail(std::string("std::memory::") + name + ": one of the pointers is null");
+}
+
+template <typename T>
+inline T* move_items(T* to, const T* from, long long count) {
+    check_item_range(to, from, count, "memmove");
+    if (count == 0 || to == from) return to;
+    if constexpr (std::is_trivially_copyable_v<T>) {
+        std::memmove(static_cast<void*>(to), static_cast<const void*>(from), static_cast<std::size_t>(count) * sizeof(T));
+    } else if (std::less<const T*>()(to, from) || !std::less<const T*>()(to, from + count)) {
+        std::copy(from, from + count, to);
+    } else {
+        std::copy_backward(from, from + count, to + count);
+    }
+    return to;
+}
+
+template <typename T>
+inline T* copy_items(T* to, const T* from, long long count) {
+    check_item_range(to, from, count, "memcopy");
+    if (count == 0) return to;
+    const std::less<const T*> before;
+    if (before(to, from + count) && before(from, to + count))
+        fail("std::memory::memcopy: the two ranges overlap, and copying them front to back would overwrite items before they're copied; use std::memory::memmove, which handles overlapping ranges");
+    if constexpr (std::is_trivially_copyable_v<T>) std::memcpy(static_cast<void*>(to), static_cast<const void*>(from), static_cast<std::size_t>(count) * sizeof(T));
+    else std::copy(from, from + count, to);
+    return to;
 }
 
 } // namespace mem

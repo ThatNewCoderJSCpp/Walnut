@@ -253,6 +253,11 @@ private:
 
 private:
     nodes::ASTNode* parse_expression();
+    static std::string_view source_between(const char* start, const char* end) {
+        if (!start || !end || end <= start) return {};
+        while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n')) --end;
+        return std::string_view(start, static_cast<std::size_t>(end - start));
+    }
     nodes::ASTNode* parse_text_template(const tokenizing::Token& tok);
     static bool has_interpolation(std::string_view raw);
     nodes::ASTNode* parse_primary_base();

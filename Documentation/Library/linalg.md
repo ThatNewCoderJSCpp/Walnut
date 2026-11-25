@@ -199,7 +199,7 @@ import module.linalg
 function main() -> int {
     std::linalg::Matrix3<float>: rotation(0, -1, 0, 1, 0, 0, 0, 0, 1);
     auto: values = rotation.eigenvalues();
-    for (long int: i = 0; i < values.size(); i++) {
+    for (unsigned long int: i = 0; i < values.size(); i++) {
         std::io::println(values[i].real(), " ", values[i].imaginary());
     }
     return 0;

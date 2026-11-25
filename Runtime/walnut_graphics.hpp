@@ -224,8 +224,8 @@ public:
     long long type() const { return static_cast<long long>(e.type); }
     long long x() const { return static_cast<long long>(e.x); }
     long long y() const { return static_cast<long long>(e.y); }
-    long long dx() const { return e.dx; }
-    long long dy() const { return e.dy; }
+    long long dx() const noexcept { return e.dx; }
+    long long dy() const noexcept { return e.dy; }
     long long button() const { return static_cast<long long>(e.button); }
     long long key() const { return static_cast<long long>(e.physical_key); }
     long long logical_key() const { return static_cast<long long>(e.logical_key); }
@@ -233,7 +233,7 @@ public:
     long long scancode() const { return static_cast<long long>(e.scancode); }
     std::string key_name() const { return e.key_name; }
     long long modifiers() const { return static_cast<long long>(e.mods); }
-    bool repeat() const { return e.repeat; }
+    bool repeat() const noexcept { return e.repeat; }
     std::string text() const { return e.text; }
     F scroll_x() const { return w(e.scroll_x); }
     F scroll_y() const { return w(e.scroll_y); }
@@ -242,10 +242,10 @@ public:
     F pressure() const { return w(e.pressure); }
     long long pointer() const { return static_cast<long long>(e.pointer); }
     long long pointer_id() const { return static_cast<long long>(e.pointer_id); }
-    long long window_x() const { return e.window_x; }
-    long long window_y() const { return e.window_y; }
+    long long window_x() const noexcept { return e.window_x; }
+    long long window_y() const noexcept { return e.window_y; }
     F dpi_scale() const { return w(e.dpi_scale); }
-    long long gamepad() const { return e.gamepad; }
+    long long gamepad() const noexcept { return e.gamepad; }
     long long gamepad_button() const { return static_cast<long long>(e.gamepad_button); }
     long long gamepad_axis() const { return static_cast<long long>(e.gamepad_axis); }
     F axis_value() const { return w(e.axis_value); }
@@ -400,18 +400,18 @@ public:
     monitor() = default;
     explicit monitor(fw::MonitorInfo info) : m(std::move(info)) {}
     std::string name() const { return m.name; }
-    long long x() const { return m.bounds.x; }
-    long long y() const { return m.bounds.y; }
-    long long width() const { return m.bounds.width; }
-    long long height() const { return m.bounds.height; }
-    long long work_x() const { return m.work_area.x; }
-    long long work_y() const { return m.work_area.y; }
-    long long work_width() const { return m.work_area.width; }
-    long long work_height() const { return m.work_area.height; }
+    long long x() const noexcept { return m.bounds.x; }
+    long long y() const noexcept { return m.bounds.y; }
+    long long width() const noexcept { return m.bounds.width; }
+    long long height() const noexcept { return m.bounds.height; }
+    long long work_x() const noexcept { return m.work_area.x; }
+    long long work_y() const noexcept { return m.work_area.y; }
+    long long work_width() const noexcept { return m.work_area.width; }
+    long long work_height() const noexcept { return m.work_area.height; }
     F refresh_rate() const { return w(m.current.refresh_rate); }
     F scale() const { return w(m.scale); }
     F dpi() const { return w(m.dpi); }
-    bool primary() const { return m.primary; }
+    bool primary() const noexcept { return m.primary; }
 };
 
 inline long long monitor_count() { return static_cast<long long>(fw::monitors().size()); }
@@ -616,7 +616,7 @@ public:
     void arc_to(const F& cx, const F& cy, const F& rx, const F& ry, const F& start, const F& sweep) { pth.arc_to(d(cx), d(cy), d(rx), d(ry), d(start), d(sweep)); }
     void close() { pth.close(); }
     void clear() { pth.clear(); }
-    bool empty() const { return pth.empty(); }
+    bool empty() const noexcept { return pth.empty(); }
     static path circle(const F& cx, const F& cy, const F& r) { path out; out.pth = fg::Path2D::circle(d(cx), d(cy), d(r)); return out; }
     static path ellipse(const F& cx, const F& cy, const F& rx, const F& ry) { path out; out.pth = fg::Path2D::ellipse(d(cx), d(cy), d(rx), d(ry)); return out; }
     static path rounded_rect(const F& x, const F& y, const F& wd, const F& ht, const F& r) { path out; out.pth = fg::Path2D::rounded_rect(d(x), d(y), d(wd), d(ht), d(r)); return out; }
@@ -852,7 +852,7 @@ public:
         return s->pads->get(static_cast<int>(index));
     }
 
-    long long slot() const { return index; }
+    long long slot() const noexcept { return index; }
     bool connected() const { auto* p = g(); return p && p->connected(); }
     bool mapped() const { auto* p = g(); return p && p->mapped(); }
     std::string name() const { auto* p = g(); return p ? p->name() : std::string(); }
@@ -960,7 +960,7 @@ public:
     void clear() { m.clear(); }
     long long vertex_count() const { return static_cast<long long>(m.vertices().size()); }
     long long triangle_count() const { return static_cast<long long>(m.triangle_count()); }
-    bool empty() const { return m.empty(); }
+    bool empty() const noexcept { return m.empty(); }
 
     void quad(const linalg::vector3d& a, const linalg::vector3d& b, const linalg::vector3d& c, const linalg::vector3d& e, const linalg::vector3d& n, const fc::Color& col) {
         const std::uint32_t base = static_cast<std::uint32_t>(m.vertices().size());
@@ -1109,7 +1109,7 @@ public:
         m.layer_count = 0;
         bind();
     }
-    long long layer_count() const { return m.layer_count; }
+    long long layer_count() const noexcept { return m.layer_count; }
     void set_soft(bool on, const F& distance, const F& near_fade) { m.soft = on; m.soft_distance = static_cast<float>(std::max(0.0, d(distance))); m.soft_near_fade = static_cast<float>(std::max(0.0, d(near_fade))); }
 
     static material of(const fg::Material3D& mm) {
@@ -1151,7 +1151,7 @@ public:
     void set_pbr(const F& metallic, const F& roughness) { m.with_pbr(static_cast<float>(d(metallic)), static_cast<float>(d(roughness))); }
     void set_emissive(long long col, const F& strength) { m.with_emissive(color(col), static_cast<float>(d(strength))); }
     void set_occlusion(const F& ao) { m.with_occlusion(static_cast<float>(d(ao))); }
-    bool lit() const { return m.lit; }
+    bool lit() const noexcept { return m.lit; }
     F metallic() const { return w(m.metallic); }
     F roughness() const { return w(m.roughness); }
 
@@ -1325,7 +1325,7 @@ public:
     }
     void clear_capsule_shadows() { l.capsule_shadows.capsules.clear(); }
     void set_enabled(bool on) { l.enabled = on; }
-    bool enabled() const { return l.enabled; }
+    bool enabled() const noexcept { return l.enabled; }
     void set_sun(const F& dx, const F& dy, const F& dz, long long col, const F& intensity) { l.enabled = true; l.sun_direction = v3(dx, dy, dz); l.sun_color = color(col); l.sun_intensity = static_cast<float>(d(intensity)); }
     void set_sky(long long col, const F& intensity) { l.sky_color = color(col); l.sky_intensity = static_cast<float>(d(intensity)); }
     void set_ambient(const F& a) { l.ambient = static_cast<float>(d(a)); }
@@ -1572,7 +1572,7 @@ public:
     void set_layer_parallax(long long i, const F& x, const F& y) { if (auto* l = L(i)) l->set_parallax(d(x), d(y)); }
     void set_solid(long long gid, bool v) { t.set_solid(static_cast<std::uint32_t>(gid), v); }
     bool solid(long long gid) const { return t.solid(static_cast<std::uint32_t>(gid)); }
-    void set_animation(long long gid, const walnut_rt::coll::vector<walnut_rt::i64>& frames, const walnut_rt::coll::vector<F>& seconds) {
+    void set_animation(long long gid, const walnut_rt::coll::vector<walnut_rt::u64>& frames, const walnut_rt::coll::vector<F>& seconds) {
         fg::TileSet* set = nullptr;
         for (auto& s : t.tilesets()) if (s.contains(static_cast<std::uint32_t>(gid))) set = &s;
         if (!set) return;
@@ -1603,9 +1603,9 @@ public:
         return (last_move.hit_x ? 1 : 0) | (last_move.hit_y ? 2 : 0) | (last_move.on_ground ? 4 : 0) | (last_move.on_ceiling ? 8 : 0) | (last_move.on_left ? 16 : 0) | (last_move.on_right ? 32 : 0);
     }
     void raycast(const F& ox, const F& oy, const F& dx, const F& dy, const F& max_distance) { last_hit = t.raycast(d(ox), d(oy), d(dx), d(dy), d(max_distance)); }
-    bool hit() const { return last_hit.hit; }
-    long long hit_tile_x() const { return last_hit.tile_x; }
-    long long hit_tile_y() const { return last_hit.tile_y; }
+    bool hit() const noexcept { return last_hit.hit; }
+    long long hit_tile_x() const noexcept { return last_hit.tile_x; }
+    long long hit_tile_y() const noexcept { return last_hit.tile_y; }
     long long hit_gid() const { return static_cast<long long>(last_hit.gid); }
     F hit_value(long long which) const {
         switch (which) {

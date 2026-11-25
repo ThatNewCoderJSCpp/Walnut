@@ -72,8 +72,27 @@ int finish_program(const Options& o, const fs::path& exe, const LibraryLink& lib
 #endif
     std::string cmd = quote(exe.string());
     for (const std::string& a : o.program_args) cmd += " " + quote(a);
+    return run_program(o, cmd);
+}
+
+int run_program(const Options& o, const std::string& cmd) {
+    if (!o.profile) {
+        std::cout.flush();
+        return exit_status_of(run_command(cmd));
+    }
+    const fs::path dir = make_temp_dir();
+    const fs::path data = dir / "profile.tsv";
+#if defined(_WIN32)
+    _putenv_s("WALNUT_PROFILE_OUT", data.string().c_str());
+#else
+    setenv("WALNUT_PROFILE_OUT", data.string().c_str(), 1);
+#endif
     std::cout.flush();
-    return exit_status_of(run_command(cmd));
+    const int status = exit_status_of(run_command(cmd));
+    const int result = profile_report(o, status, data);
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    return result;
 }
 
 int run(const Options& in) {
@@ -215,8 +234,7 @@ int run(const Options& in) {
 #endif
     std::string cmd = quote(exe.string());
     for (const std::string& a : o.program_args) cmd += " " + quote(a);
-    std::cout.flush();
-    const int status = exit_status_of(run_command(cmd));
+    const int status = run_program(o, cmd);
     std::error_code ec;
     if (!o.keep_cpp) fs::remove_all(tmp, ec);
     else std::cerr << "walnut: generated C++ kept at " << cpp_path.string() << "\n";

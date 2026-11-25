@@ -75,7 +75,7 @@ H.264 streams that use slice groups (FMO), data partitioning or SP/SI slices (th
 | `container()` | `"mp4"`, `"mov"`, `"m4a"`, `"3gp"`, `"matroska"`, `"webm"` or `"ogg"`; for a plain audio file, `"wav"`, `"flac"`, `"mp3"` or `"aac"` |
 | `duration()` | The length in seconds |
 | `tracks()`, `track(index)`, `track_count()` | The tracks, as [`Track`](#track)s; `track` throws a `video_error` for a track that doesn't exist |
-| `video_track()`, `audio_track()` | The index of the track a `Player` would use, or -1 when there is none |
+| `video_track()`, `audio_track()` | The index of the track a `Player` would use, or `std::npos` when there is none |
 | `has_video()`, `has_audio()` | Whether there is such a track |
 | `video_supported()`, `audio_supported()` | Whether it can be decoded |
 | `video_codec()`, `audio_codec()` | Their codecs' short names |
@@ -210,7 +210,7 @@ This plays a file to the end. Showing its pictures as well is in [frame loops](#
 | `state()`, `state_name()` | A [`PlayerState`](#enums): `closed`, `paused`, `playing`, `ended` or `error` |
 | `playing()`, `paused()`, `ended()`, `seeking()`, `buffering()` | The same as yes-or-no questions; `buffering()` is `true` while it's playing but waiting for the decoder |
 | `error()` | What went wrong when the state is `error` |
-| `wait(timeout_ms = -1)` | Waits until the end; `false` if it gave up first, or straight away when the player is paused, closed or has failed. A looping player never ends |
+| `wait(timeout_ms = std::npos)` | Waits until the end (`std::npos` waits as long as it takes); `false` if it gave up first, or straight away when the player is paused, closed or has failed. A looping player never ends |
 | `set_loop(on)`, `loop()` | Starts again at the end |
 | `set_rate(rate)`, `rate()` | Speed: 2.0 plays twice as fast. Rates are kept between 0.25 and 4; a rate of 0 or less throws a `video_error` |
 | `set_preserve_pitch(on)`, `preserve_pitch()` | Keeps voices sounding normal when the rate isn't 1 (on by default) |
@@ -251,7 +251,7 @@ A player doesn't draw anything itself. Your program asks it for the current fram
 | `frame_rgba()` | The same as a `Picture`, already in RGBA; it keeps its own count, so it can be used beside `frame()` |
 | `current_frame()` | The frame showing now, even if it hasn't changed (to redraw a window) |
 | `frame_serial()` | The number of the frame showing now. It goes up by one for each new frame, so a program can tell a new frame by comparing it with `VideoFrame::serial()` |
-| `frame_time()` | The time of the frame showing now, or -1 when there is none |
+| `frame_time()` | The time of the frame showing now, or `std::npos` when there is none |
 | `next_frame_delay()` | Seconds until the next frame is due, 0 when one is already due, or -1 when the player doesn't know (paused, ended, no video or still decoding) |
 | `next_frame_delay_ms(fallback_ms = 10)` | The same in whole milliseconds, ready for `sleep_for`, with `fallback_ms` in place of -1 |
 
@@ -432,7 +432,7 @@ function main() -> int {
 | `Demuxer::open(path)`, `Demuxer::open(bytes)` | Opens a file; throws a `video_error` when it can't |
 | `tracks()`, `track(index)`, `track_count()` | The tracks, as for `MediaInfo` |
 | `duration()`, `format_name()`, `tag(key)`, `tag_keys()` | About the file |
-| `best_track(kind)` | The index of the main track of a [`MediaType`](#enums), or -1 |
+| `best_track(kind)` | The index of the main track of a [`MediaType`](#enums), or `std::npos` |
 | `select(index, on = true)`, `select_only(index)`, `selected(index)` | Which tracks' packets `read` gives (all of them at first) |
 | `read()` | The next packet in file order, as an `Optional<Packet>`; empty at the end |
 | `seek(seconds, keyframe_before = true)` | Moves so the next packets start at that time; with `keyframe_before`, at the keyframe at or before it, where a decoder can start |

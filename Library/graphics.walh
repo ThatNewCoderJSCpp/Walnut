@@ -49,9 +49,9 @@ safe(compile) {
                 float: x = 0.0;
                 float: y = 0.0;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(float: px, float: py) : x = px, y = py { }
+                constructor(float: px, float: py) noexcept : x = px, y = py { }
 
                 operator(+) function(const self&, const Point&: o) -> Point {
                     return Point(self.x + o.x, self.y + o.y);
@@ -65,7 +65,7 @@ safe(compile) {
                     return Point(self.x * k, self.y * k);
                 }
 
-                operator(==) function(const self&, const Point&: o) -> bool {
+                operator(==) function(const self&, const Point&: o) noexcept -> bool {
                     return self.x == o.x && self.y == o.y;
                 }
 
@@ -80,18 +80,18 @@ safe(compile) {
                 float: zoom = 1.0;
                 float: rotation = 0.0;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(float: cx, float: cy, float: z = 1.0) : x = cx, y = cy, zoom = z { }
+                constructor(float: cx, float: cy, float: z = 1.0) noexcept : x = cx, y = cy, zoom = z { }
 
-                constructor(float: cx, float: cy, float: z, float: r) : x = cx, y = cy, zoom = z, rotation = r { }
+                constructor(float: cx, float: cy, float: z, float: r) noexcept : x = cx, y = cy, zoom = z, rotation = r { }
 
-                function move(self&, float: dx, float: dy) -> void {
+                function move(self&, float: dx, float: dy) noexcept -> void {
                     self.x = self.x + dx;
                     self.y = self.y + dy;
                 } end function move
 
-                function zoom_by(self&, float: factor) -> void {
+                function zoom_by(self&, float: factor) noexcept -> void {
                     self.zoom = self.zoom * factor;
                 } end function zoom_by
             } end struct Camera
@@ -111,9 +111,9 @@ safe(compile) {
                 float: y = 0.0;
                 float: z = 0.0;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(float: vx, float: vy, float: vz) : x = vx, y = vy, z = vz { }
+                constructor(float: vx, float: vy, float: vz) noexcept : x = vx, y = vy, z = vz { }
 
                 operator(+) function(const self&, const Vec3&: o) -> Vec3 {
                     return Vec3(self.x + o.x, self.y + o.y, self.z + o.z);
@@ -131,11 +131,11 @@ safe(compile) {
                     return Vec3(self.x * k, self.y * k, self.z * k);
                 }
 
-                operator(==) function(const self&, const Vec3&: o) -> bool {
+                operator(==) function(const self&, const Vec3&: o) noexcept -> bool {
                     return self.x == o.x && self.y == o.y && self.z == o.z;
                 }
 
-                function dot(const self&, const Vec3&: o) -> float {
+                function dot(const self&, const Vec3&: o) noexcept -> float {
                     return self.x * o.x + self.y * o.y + self.z * o.z;
                 } end function dot
 
@@ -165,7 +165,7 @@ safe(compile) {
                 Vec3: rotation;
                 Vec3: scale = Vec3(1.0, 1.0, 1.0);
 
-                constructor() { }
+                constructor() noexcept { }
 
                 constructor(const Vec3&: p) : position = p { }
 
@@ -193,7 +193,7 @@ safe(compile) {
                 bool: in_front = false;
                 bool: on_screen = false;
 
-                constructor() { }
+                constructor() noexcept { }
             } end struct ScreenPoint
 
             struct TileMove {
@@ -206,21 +206,21 @@ safe(compile) {
                 bool: on_left = false;
                 bool: on_right = false;
 
-                constructor() { }
+                constructor() noexcept { }
             } end struct TileMove
 
             struct TileHit {
                 bool: hit = false;
                 long int: tile_x = 0;
                 long int: tile_y = 0;
-                long int: gid = 0;
+                unsigned long int: gid = 0;
                 float: distance = 0.0;
                 float: x = 0.0;
                 float: y = 0.0;
                 float: normal_x = 0.0;
                 float: normal_y = 0.0;
 
-                constructor() { }
+                constructor() noexcept { }
             } end struct TileHit
 
             hidden namespace detail {
@@ -245,9 +245,9 @@ safe(compile) {
                 class Gradient as "walnut_rt::gfx::gradient" {
                     static function native_linear(float: x0, float: y0, float: x1, float: y1) -> Gradient as "walnut_rt::gfx::gradient::linear";
                     static function native_radial(float: cx, float: cy, float: r) -> Gradient as "walnut_rt::gfx::gradient::radial";
-                    function native_add_stop(self&, float: position, long int: rgba) -> void as "add_stop";
-                    function native_set_spread(self&, long int: s) -> void as "set_spread";
-                    function native_color_at(const self&, float: t) -> long int as "color_at";
+                    function native_add_stop(self&, float: position, unsigned long int: rgba) -> void as "add_stop";
+                    function native_set_spread(self&, unsigned long int: s) -> void as "set_spread";
+                    function native_color_at(const self&, float: t) -> unsigned long int as "color_at";
 
                 public:
                     constructor();
@@ -279,11 +279,11 @@ safe(compile) {
                     } end function add_stop
 
                     function set_spread(self&, Spread: s) -> void {
-                        self.native_set_spread(static_cast<long int>(s));
+                        self.native_set_spread(static_cast<unsigned long int>(s));
                     } end function set_spread
 
                     function set_focal(self&, float: fx, float: fy) -> void;
-                    function stop_count(const self&) -> long int;
+                    function stop_count(const self&) -> unsigned long int;
 
                     function color_at(const self&, float: t) -> Color {
                         return Color::from_packed(self.native_color_at(t));
@@ -291,19 +291,19 @@ safe(compile) {
                 } end class Gradient
 
                 class Paint as "walnut_rt::gfx::paint" {
-                    static function native_fill(long int: rgba) -> Paint as "walnut_rt::gfx::paint::fill";
-                    static function native_stroke(long int: rgba, float: width) -> Paint as "walnut_rt::gfx::paint::stroke";
-                    static function native_fill_and_stroke(long int: f, long int: s, float: width) -> Paint as "walnut_rt::gfx::paint::fill_and_stroke";
+                    static function native_fill(unsigned long int: rgba) -> Paint as "walnut_rt::gfx::paint::fill";
+                    static function native_stroke(unsigned long int: rgba, float: width) -> Paint as "walnut_rt::gfx::paint::stroke";
+                    static function native_fill_and_stroke(unsigned long int: f, unsigned long int: s, float: width) -> Paint as "walnut_rt::gfx::paint::fill_and_stroke";
                     static function native_gradient(const Gradient&: g) -> Paint as "walnut_rt::gfx::paint::gradient_fill";
-                    function native_set_fill_color(self&, long int: rgba) -> void as "set_fill_color";
-                    function native_set_stroke(self&, long int: rgba, float: width) -> void as "set_stroke";
-                    function native_set_style(self&, long int: s) -> void as "set_style";
-                    function native_set_line_cap(self&, long int: c) -> void as "set_line_cap";
-                    function native_set_line_join(self&, long int: j) -> void as "set_line_join";
-                    function native_set_origin(self&, long int: o) -> void as "set_origin";
-                    function native_fill_color(const self&) -> long int as "fill_color";
-                    function native_stroke_color(const self&) -> long int as "stroke_color";
-                    function native_style(const self&) -> long int as "style";
+                    function native_set_fill_color(self&, unsigned long int: rgba) -> void as "set_fill_color";
+                    function native_set_stroke(self&, unsigned long int: rgba, float: width) -> void as "set_stroke";
+                    function native_set_style(self&, unsigned long int: s) -> void as "set_style";
+                    function native_set_line_cap(self&, unsigned long int: c) -> void as "set_line_cap";
+                    function native_set_line_join(self&, unsigned long int: j) -> void as "set_line_join";
+                    function native_set_origin(self&, unsigned long int: o) -> void as "set_origin";
+                    function native_fill_color(const self&) -> unsigned long int as "fill_color";
+                    function native_stroke_color(const self&) -> unsigned long int as "stroke_color";
+                    function native_style(const self&) -> unsigned long int as "style";
 
                 public:
                     constructor();
@@ -333,19 +333,19 @@ safe(compile) {
                     } end function set_stroke
 
                     function set_style(self&, PaintStyle: s) -> void {
-                        self.native_set_style(static_cast<long int>(s));
+                        self.native_set_style(static_cast<unsigned long int>(s));
                     } end function set_style
 
                     function set_line_cap(self&, LineCap: c) -> void {
-                        self.native_set_line_cap(static_cast<long int>(c));
+                        self.native_set_line_cap(static_cast<unsigned long int>(c));
                     } end function set_line_cap
 
                     function set_line_join(self&, LineJoin: j) -> void {
-                        self.native_set_line_join(static_cast<long int>(j));
+                        self.native_set_line_join(static_cast<unsigned long int>(j));
                     } end function set_line_join
 
                     function set_origin(self&, Origin: o) -> void {
-                        self.native_set_origin(static_cast<long int>(o));
+                        self.native_set_origin(static_cast<unsigned long int>(o));
                     } end function set_origin
 
                     function set_opacity(self&, float: opacity) -> void;
@@ -393,36 +393,36 @@ safe(compile) {
                     function arc_to(self&, float: cx, float: cy, float: rx, float: ry, float: start_degrees, float: sweep_degrees) -> void;
                     function close(self&) -> void;
                     function clear(self&) -> void;
-                    function empty(const self&) -> bool;
+                    function empty(const self&) noexcept -> bool;
                 } end class Path
 
                 class Texture as "walnut_rt::gfx::texture" {
-                    function native_set_filter(self&, long int: f) -> void as "set_filter";
-                    function native_set_wrap(self&, long int: m) -> void as "set_wrap";
-                    function native_filter(const self&) -> long int as "filter";
+                    function native_set_filter(self&, unsigned long int: f) -> void as "set_filter";
+                    function native_set_wrap(self&, unsigned long int: m) -> void as "set_wrap";
+                    function native_filter(const self&) -> unsigned long int as "filter";
 
                 public:
                     constructor();
-                    constructor(const Image&: img, long int: filter, long int: wrap);
+                    constructor(const Image&: img, unsigned long int: filter, unsigned long int: wrap);
 
                     static function from_image(const Image&: img, Filter: filter = Filter::nearest, Wrap: wrap = Wrap::clamp) -> Texture {
                         if (img.is_empty()) then {
                             throw std::errors::graphics_error("a texture needs an image that isn't empty");
                         }
-                        return Texture(img, static_cast<long int>(filter), static_cast<long int>(wrap));
+                        return Texture(img, static_cast<unsigned long int>(filter), static_cast<unsigned long int>(wrap));
                     } end function from_image
 
                     static function load(const string&: path, Filter: filter = Filter::nearest, Wrap: wrap = Wrap::clamp) -> Texture {
-                        return Texture(Image::load(path), static_cast<long int>(filter), static_cast<long int>(wrap));
+                        return Texture(Image::load(path), static_cast<unsigned long int>(filter), static_cast<unsigned long int>(wrap));
                     } end function load
 
                     function valid(const self&) -> bool;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
                     function to_image(const self&) -> Image;
 
                     function set_filter(self&, Filter: f) -> void {
-                        self.native_set_filter(static_cast<long int>(f));
+                        self.native_set_filter(static_cast<unsigned long int>(f));
                     } end function set_filter
 
                     function filter(const self&) -> Filter {
@@ -430,7 +430,7 @@ safe(compile) {
                     } end function filter
 
                     function set_wrap(self&, Wrap: m) -> void {
-                        self.native_set_wrap(static_cast<long int>(m));
+                        self.native_set_wrap(static_cast<unsigned long int>(m));
                     } end function set_wrap
 
                     function set_role(self&, const string&: role) -> void;
@@ -440,7 +440,7 @@ safe(compile) {
                     function mipmaps(const self&) -> bool;
 
                     static function load_as(const string&: path, const string&: role, Filter: filter = Filter::bilinear, Wrap: wrap = Wrap::tile) -> Texture {
-                        Texture: t = Texture(Image::load(path), static_cast<long int>(filter), static_cast<long int>(wrap));
+                        Texture: t = Texture(Image::load(path), static_cast<unsigned long int>(filter), static_cast<unsigned long int>(wrap));
                         t.set_role(role);
                         t.set_mipmaps(true);
                         return t;
@@ -450,7 +450,7 @@ safe(compile) {
                         if (img.is_empty()) then {
                             throw std::errors::graphics_error("a texture needs an image that isn't empty");
                         }
-                        Texture: t = Texture(img, static_cast<long int>(filter), static_cast<long int>(wrap));
+                        Texture: t = Texture(img, static_cast<unsigned long int>(filter), static_cast<unsigned long int>(wrap));
                         t.set_role(role);
                         t.set_mipmaps(true);
                         return t;
@@ -458,10 +458,10 @@ safe(compile) {
                 } end class Texture
 
                 class Sprite as "walnut_rt::gfx::sprite" {
-                    function native_set_origin(self&, long int: o) -> void as "set_origin";
-                    function native_set_tint(self&, long int: rgba) -> void as "set_tint";
-                    function native_tint(const self&) -> long int as "tint";
-                    function native_set_blend_mode(self&, long int: m) -> void as "set_blend_mode";
+                    function native_set_origin(self&, unsigned long int: o) -> void as "set_origin";
+                    function native_set_tint(self&, unsigned long int: rgba) -> void as "set_tint";
+                    function native_tint(const self&) -> unsigned long int as "tint";
+                    function native_set_blend_mode(self&, unsigned long int: m) -> void as "set_blend_mode";
 
                 public:
                     constructor();
@@ -501,9 +501,9 @@ safe(compile) {
                     function z_order(const self&) -> long int;
                     function clear_tint(self&) -> void;
                     function set_texture(self&, const Texture&: texture) -> void;
-                    function set_source_rect(self&, long int: x, long int: y, long int: w, long int: h) -> void;
+                    function set_source_rect(self&, long int: x, long int: y, unsigned long int: w, unsigned long int: h) -> void;
                     function reset_source_rect(self&) -> void;
-                    function set_frame(self&, long int: index, long int: frame_width, long int: frame_height, long int: columns = 0) -> bool;
+                    function set_frame(self&, unsigned long int: index, unsigned long int: frame_width, unsigned long int: frame_height, unsigned long int: columns = 0) -> bool;
                     function contains(const self&, float: x, float: y) -> bool;
                     function overlaps(const self&, const Sprite&: other) -> bool;
                     function bounds_x(const self&) -> float;
@@ -516,7 +516,7 @@ safe(compile) {
                     } end function set_scale
 
                     function set_origin(self&, Origin: o) -> void {
-                        self.native_set_origin(static_cast<long int>(o));
+                        self.native_set_origin(static_cast<unsigned long int>(o));
                     } end function set_origin
 
                     function set_tint(self&, const Color&: c) -> void {
@@ -528,31 +528,31 @@ safe(compile) {
                     } end function tint
 
                     function set_blend_mode(self&, BlendMode: m) -> void {
-                        self.native_set_blend_mode(static_cast<long int>(m));
+                        self.native_set_blend_mode(static_cast<unsigned long int>(m));
                     } end function set_blend_mode
                 } end class Sprite
 
                 class RenderTarget as "walnut_rt::gfx::render_target" {
                 public:
                     constructor();
-                    constructor(long int: width, long int: height, long int: filter);
+                    constructor(unsigned long int: width, unsigned long int: height, unsigned long int: filter);
 
-                    static function make(long int: width, long int: height, Filter: filter = Filter::bilinear) -> RenderTarget {
+                    static function make(unsigned long int: width, unsigned long int: height, Filter: filter = Filter::bilinear) -> RenderTarget {
                         if (width <= 0 || height <= 0) then {
                             throw std::errors::graphics_error(static_cast<string>(`a render target needs a width and height above 0, not ${width} by ${height}`));
                         }
-                        return RenderTarget(width, height, static_cast<long int>(filter));
+                        return RenderTarget(width, height, static_cast<unsigned long int>(filter));
                     } end function make
 
                     function valid(const self&) -> bool;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
-                    function resize(self&, long int: width, long int: height) -> void;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
+                    function resize(self&, unsigned long int: width, unsigned long int: height) -> void;
                 } end class RenderTarget
 
                 class Camera3D as "walnut_rt::gfx::camera3d" {
-                    function native_axis(const self&, long int: which, long int: comp) -> float as "axis";
-                    function native_project(const self&, float: x, float: y, float: z, long int: which) -> float as "project";
+                    function native_axis(const self&, unsigned long int: which, unsigned long int: comp) -> float as "axis";
+                    function native_project(const self&, float: x, float: y, float: z, unsigned long int: which) -> float as "project";
 
                 public:
                     constructor();
@@ -562,7 +562,7 @@ safe(compile) {
                         return Camera3D(x, y, z, fov_degrees);
                     } end function at
 
-                    function set_viewport(self&, long int: width, long int: height) -> void;
+                    function set_viewport(self&, unsigned long int: width, unsigned long int: height) -> void;
                     function set_position(self&, float: x, float: y, float: z) -> void;
                     function x(const self&) -> float;
                     function y(const self&) -> float;
@@ -622,12 +622,12 @@ safe(compile) {
                 } end class Camera3D
 
                 class Mesh as "walnut_rt::gfx::mesh" {
-                    function native_add_vertex(self&, float: x, float: y, float: z, float: nx, float: ny, float: nz, long int: rgba, float: u, float: v) -> long int as "add_vertex";
-                    function native_add_triangle(self&, long int: a, long int: b, long int: c) -> bool as "add_triangle";
-                    static function native_box(float: w, float: h, float: d, long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::box";
-                    static function native_plane(float: w, float: d, long int: divisions, long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::plane";
-                    static function native_sphere(float: r, long int: segments, long int: rings, long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::sphere";
-                    static function native_cylinder(float: r, float: h, long int: segments, long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::cylinder";
+                    function native_add_vertex(self&, float: x, float: y, float: z, float: nx, float: ny, float: nz, unsigned long int: rgba, float: u, float: v) -> unsigned long int as "add_vertex";
+                    function native_add_triangle(self&, unsigned long int: a, unsigned long int: b, unsigned long int: c) -> bool as "add_triangle";
+                    static function native_box(float: w, float: h, float: d, unsigned long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::box";
+                    static function native_plane(float: w, float: d, unsigned long int: divisions, unsigned long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::plane";
+                    static function native_sphere(float: r, unsigned long int: segments, unsigned long int: rings, unsigned long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::sphere";
+                    static function native_cylinder(float: r, float: h, unsigned long int: segments, unsigned long int: rgba) -> Mesh as "walnut_rt::gfx::mesh::cylinder";
 
                 public:
                     constructor();
@@ -640,7 +640,7 @@ safe(compile) {
                         return native_box(size, size, size, c.packed());
                     } end function cube
 
-                    static function plane(float: width, float: depth, const Color&: c = Color(255, 255, 255), long int: divisions = 1) -> Mesh {
+                    static function plane(float: width, float: depth, const Color&: c = Color(255, 255, 255), unsigned long int: divisions = 1) -> Mesh {
                         return native_plane(width, depth, divisions, c.packed());
                     } end function plane
 
@@ -648,53 +648,53 @@ safe(compile) {
                         return native_sphere(radius, 32, 16, c.packed());
                     } end function sphere
 
-                    static function sphere(float: radius, const Color&: c, long int: segments, long int: rings) -> Mesh {
+                    static function sphere(float: radius, const Color&: c, unsigned long int: segments, unsigned long int: rings) -> Mesh {
                         return native_sphere(radius, segments, rings, c.packed());
                     } end function sphere
 
-                    static function cylinder(float: radius, float: height, const Color&: c = Color(255, 255, 255), long int: segments = 32) -> Mesh {
+                    static function cylinder(float: radius, float: height, const Color&: c = Color(255, 255, 255), unsigned long int: segments = 32) -> Mesh {
                         return native_cylinder(radius, height, segments, c.packed());
                     } end function cylinder
 
-                    function add_vertex(self&, const Vec3&: position, const Vec3&: normal, const Color&: c) -> long int {
+                    function add_vertex(self&, const Vec3&: position, const Vec3&: normal, const Color&: c) -> unsigned long int {
                         return self.native_add_vertex(position.x, position.y, position.z, normal.x, normal.y, normal.z, c.packed(), 0.0, 0.0);
                     } end function add_vertex
 
-                    function add_vertex(self&, const Vec3&: position, const Vec3&: normal, const Color&: c, float: u, float: v) -> long int {
+                    function add_vertex(self&, const Vec3&: position, const Vec3&: normal, const Color&: c, float: u, float: v) -> unsigned long int {
                         return self.native_add_vertex(position.x, position.y, position.z, normal.x, normal.y, normal.z, c.packed(), u, v);
                     } end function add_vertex
 
-                    function add_triangle(self&, long int: a, long int: b, long int: c) -> void {
+                    function add_triangle(self&, unsigned long int: a, unsigned long int: b, unsigned long int: c) -> void {
                         if (!self.native_add_triangle(a, b, c)) then {
                             throw std::errors::graphics_error(static_cast<string>(`add_triangle(${a}, ${b}, ${c}) needs vertex numbers below ${self.vertex_count()}`));
                         }
                     } end function add_triangle
 
-                    function add_quad(self&, long int: a, long int: b, long int: c, long int: d) -> void {
+                    function add_quad(self&, unsigned long int: a, unsigned long int: b, unsigned long int: c, unsigned long int: d) -> void {
                         self.add_triangle(a, b, c);
                         self.add_triangle(a, c, d);
                     } end function add_quad
 
                     function clear(self&) -> void;
-                    function vertex_count(const self&) -> long int;
-                    function triangle_count(const self&) -> long int;
-                    function empty(const self&) -> bool;
+                    function vertex_count(const self&) -> unsigned long int;
+                    function triangle_count(const self&) -> unsigned long int;
+                    function empty(const self&) noexcept -> bool;
                 } end class Mesh
 
                 class Material as "walnut_rt::gfx::material" {
-                    static function native_preset(long int: which) -> Material as "walnut_rt::gfx::material::preset";
-                    static function native_glowing(long int: rgba, float: strength) -> Material as "walnut_rt::gfx::material::glowing";
+                    static function native_preset(unsigned long int: which) -> Material as "walnut_rt::gfx::material::preset";
+                    static function native_glowing(unsigned long int: rgba, float: strength) -> Material as "walnut_rt::gfx::material::glowing";
                     static function native_physical(float: metallic, float: roughness) -> Material as "walnut_rt::gfx::material::physical";
-                    function native_set_cull(self&, long int: c) -> void as "set_cull";
-                    function native_set_blend(self&, long int: b) -> void as "set_blend";
-                    function native_set_shadow(self&, long int: s) -> void as "set_shadow";
-                    function native_set_emissive(self&, long int: rgba, float: strength) -> void as "set_emissive";
+                    function native_set_cull(self&, unsigned long int: c) -> void as "set_cull";
+                    function native_set_blend(self&, unsigned long int: b) -> void as "set_blend";
+                    function native_set_shadow(self&, unsigned long int: s) -> void as "set_shadow";
+                    function native_set_emissive(self&, unsigned long int: rgba, float: strength) -> void as "set_emissive";
 
                 public:
                     constructor();
 
                     static function make(MaterialPreset: preset = MaterialPreset::plain) -> Material {
-                        return native_preset(static_cast<long int>(preset));
+                        return native_preset(static_cast<unsigned long int>(preset));
                     } end function make
 
                     static function glowing(const Color&: c, float: strength = 1.0) -> Material {
@@ -715,37 +715,37 @@ safe(compile) {
                     function clear_texture(self&) -> void;
                     function has_texture(const self&) -> bool;
                     function set_lit(self&, bool: on) -> void;
-                    function lit(const self&) -> bool;
+                    function lit(const self&) noexcept -> bool;
                     function set_depth(self&, bool: test, bool: write) -> void;
                     function set_fog(self&, bool: on) -> void;
                     function set_pbr(self&, float: metallic, float: roughness) -> void;
                     function set_occlusion(self&, float: amount) -> void;
-                    function native_set_layer(self&, long int: index, const Texture&: t, float: tiling, long int: rgba) -> void as "set_layer";
-                    function set_layer_normal_map(self&, long int: index, const Texture&: normal) -> void;
+                    function native_set_layer(self&, unsigned long int: index, const Texture&: t, float: tiling, unsigned long int: rgba) -> void as "set_layer";
+                    function set_layer_normal_map(self&, unsigned long int: index, const Texture&: normal) -> void;
                     function set_splat_map(self&, const Texture&: weights) -> void;
                     function set_second_splat_map(self&, const Texture&: weights) -> void;
                     function set_height_blend(self&, float: depth) -> void;
                     function set_splat_triplanar(self&, bool: on) -> void;
                     function clear_layers(self&) -> void;
-                    function layer_count(const self&) -> long int;
+                    function layer_count(const self&) noexcept -> unsigned long int;
                     function set_soft(self&, bool: on, float: distance = 0.5, float: near_fade = 0.0) -> void;
 
-                    function set_layer(self&, long int: index, const Texture&: t, float: tiling = 1.0, const Color&: tint = Color(255, 255, 255)) -> void {
+                    function set_layer(self&, unsigned long int: index, const Texture&: t, float: tiling = 1.0, const Color&: tint = Color(255, 255, 255)) -> void {
                         self.native_set_layer(index, t, tiling, tint.packed());
                     } end function set_layer
                     function metallic(const self&) -> float;
                     function roughness(const self&) -> float;
 
                     function set_cull(self&, Cull: c) -> void {
-                        self.native_set_cull(static_cast<long int>(c));
+                        self.native_set_cull(static_cast<unsigned long int>(c));
                     } end function set_cull
 
                     function set_blend(self&, Blend: b) -> void {
-                        self.native_set_blend(static_cast<long int>(b));
+                        self.native_set_blend(static_cast<unsigned long int>(b));
                     } end function set_blend
 
                     function set_shadow(self&, Shadow: mode) -> void {
-                        self.native_set_shadow(static_cast<long int>(mode));
+                        self.native_set_shadow(static_cast<unsigned long int>(mode));
                     } end function set_shadow
 
                     function set_emissive(self&, const Color&: c, float: strength = 1.0) -> void {
@@ -784,17 +784,17 @@ safe(compile) {
                 } end class Material
 
                 class Lighting as "walnut_rt::gfx::lighting" {
-                    static function native_preset(long int: which) -> Lighting as "walnut_rt::gfx::lighting::preset";
-                    function native_set_sun(self&, float: dx, float: dy, float: dz, long int: rgba, float: intensity) -> void as "set_sun";
-                    function native_set_sky(self&, long int: rgba, float: intensity) -> void as "set_sky";
-                    function native_add_point(self&, float: x, float: y, float: z, long int: rgba, float: intensity, float: radius) -> long int as "add_point_light";
-                    function native_move_point(self&, long int: index, float: x, float: y, float: z) -> void as "move_point_light";
+                    static function native_preset(unsigned long int: which) -> Lighting as "walnut_rt::gfx::lighting::preset";
+                    function native_set_sun(self&, float: dx, float: dy, float: dz, unsigned long int: rgba, float: intensity) -> void as "set_sun";
+                    function native_set_sky(self&, unsigned long int: rgba, float: intensity) -> void as "set_sky";
+                    function native_add_point(self&, float: x, float: y, float: z, unsigned long int: rgba, float: intensity, float: radius) -> unsigned long int as "add_point_light";
+                    function native_move_point(self&, unsigned long int: index, float: x, float: y, float: z) -> void as "move_point_light";
 
                 public:
                     constructor();
 
                     static function make(LightingPreset: preset = LightingPreset::off) -> Lighting {
-                        return native_preset(static_cast<long int>(preset));
+                        return native_preset(static_cast<unsigned long int>(preset));
                     } end function make
 
                     static function quality(const string&: level) -> Lighting;
@@ -807,29 +807,29 @@ safe(compile) {
                     function set_saturation(self&, float: saturation) -> void;
                     function set_max_light(self&, float: brightest) -> void;
                     function clear_capsule_shadows(self&) -> void;
-                    function native_add_capsule(self&, float: ax, float: ay, float: az, float: bx, float: by, float: bz, float: radius) -> long int as "add_capsule_shadow";
-                    function native_move_capsule(self&, long int: index, float: ax, float: ay, float: az, float: bx, float: by, float: bz) -> void as "move_capsule_shadow";
+                    function native_add_capsule(self&, float: ax, float: ay, float: az, float: bx, float: by, float: bz, float: radius) -> unsigned long int as "add_capsule_shadow";
+                    function native_move_capsule(self&, unsigned long int: index, float: ax, float: ay, float: az, float: bx, float: by, float: bz) -> void as "move_capsule_shadow";
 
-                    function add_capsule_shadow(self&, const Vec3&: start, const Vec3&: finish, float: radius) -> long int {
+                    function add_capsule_shadow(self&, const Vec3&: start, const Vec3&: finish, float: radius) -> unsigned long int {
                         return self.native_add_capsule(start.x, start.y, start.z, finish.x, finish.y, finish.z, radius);
                     } end function add_capsule_shadow
 
-                    function move_capsule_shadow(self&, long int: index, const Vec3&: start, const Vec3&: finish) -> void {
+                    function move_capsule_shadow(self&, unsigned long int: index, const Vec3&: start, const Vec3&: finish) -> void {
                         self.native_move_capsule(index, start.x, start.y, start.z, finish.x, finish.y, finish.z);
                     } end function move_capsule_shadow
 
                     function set_enabled(self&, bool: on) -> void;
-                    function enabled(const self&) -> bool;
+                    function enabled(const self&) noexcept -> bool;
                     function set_ambient(self&, float: amount) -> void;
                     function set_shadows(self&, bool: on) -> void;
                     function set_shadow_distance(self&, float: meters) -> void;
-                    function set_shadow_resolution(self&, long int: pixels) -> void;
+                    function set_shadow_resolution(self&, unsigned long int: pixels) -> void;
                     function set_layered_shadows(self&, bool: on) -> void;
                     function set_soft_shadows(self&, bool: on) -> void;
                     function set_atmosphere(self&, bool: on) -> void;
                     function set_exposure(self&, float: exposure) -> void;
                     function clear_point_lights(self&) -> void;
-                    function point_light_count(const self&) -> long int;
+                    function point_light_count(const self&) -> unsigned long int;
 
                     function set_sun(self&, const Vec3&: direction, const Color&: c = Color(255, 244, 222), float: intensity = 1.0) -> void {
                         self.native_set_sun(direction.x, direction.y, direction.z, c.packed(), intensity);
@@ -839,32 +839,29 @@ safe(compile) {
                         self.native_set_sky(c.packed(), intensity);
                     } end function set_sky
 
-                    function add_point_light(self&, const Vec3&: position, const Color&: c) -> long int {
+                    function add_point_light(self&, const Vec3&: position, const Color&: c) -> unsigned long int {
                         return self.add_point_light(position, c, 1.0, 8.0);
                     } end function add_point_light
 
-                    function add_point_light(self&, const Vec3&: position, const Color&: c, float: intensity, float: radius) -> long int {
-                        const long int: index = self.native_add_point(position.x, position.y, position.z, c.packed(), intensity, radius);
-                        if (index < 0) then {
-                            throw std::errors::graphics_error("a Lighting can hold at most 64 point lights");
-                        }
+                    function add_point_light(self&, const Vec3&: position, const Color&: c, float: intensity, float: radius) -> unsigned long int {
+                        const unsigned long int: index = self.native_add_point(position.x, position.y, position.z, c.packed(), intensity, radius);
                         return index;
                     } end function add_point_light
 
-                    function move_point_light(self&, long int: index, const Vec3&: position) -> void {
+                    function move_point_light(self&, unsigned long int: index, const Vec3&: position) -> void {
                         self.native_move_point(index, position.x, position.y, position.z);
                     } end function move_point_light
 
-                    function set_point_light_falloff(self&, long int: index, const string&: spread, float: spill, float: reference_distance) -> void;
-                    function point_light_falloff(self&, long int: index) -> string;
-                    function point_light_spill(self&, long int: index) -> float;
-                    function point_light_reference(self&, long int: index) -> float;
+                    function set_point_light_falloff(self&, unsigned long int: index, const string&: spread, float: spill, float: reference_distance) -> void;
+                    function point_light_falloff(self&, unsigned long int: index) -> string;
+                    function point_light_spill(self&, unsigned long int: index) -> float;
+                    function point_light_reference(self&, unsigned long int: index) -> float;
 
-                    function set_point_light_falloff(self&, long int: index, const string&: spread) -> void {
+                    function set_point_light_falloff(self&, unsigned long int: index, const string&: spread) -> void {
                         self.set_point_light_falloff(index, spread, 0.35, 0.0);
                     } end function set_point_light_falloff
 
-                    function set_point_light_falloff(self&, long int: index, const string&: spread, float: spill) -> void {
+                    function set_point_light_falloff(self&, unsigned long int: index, const string&: spread, float: spill) -> void {
                         self.set_point_light_falloff(index, spread, spill, 0.0);
                     } end function set_point_light_falloff
                 } end class Lighting
@@ -872,32 +869,32 @@ safe(compile) {
                 class Visibility as "walnut_rt::gfx::visibility" {
                 public:
                     constructor();
-                    function add(self&, float: x0, float: y0, float: z0, float: x1, float: y1, float: z1, bool: occluder, bool: caster) -> long int;
-                    function update(self&, long int: object, float: x0, float: y0, float: z0, float: x1, float: y1, float: z1) -> void;
-                    function remove(self&, long int: object) -> void;
-                    function set_lods(self&, long int: object, float: first, float: second, float: third) -> void;
-                    function set_always(self&, long int: object, bool: on) -> void;
+                    function add(self&, float: x0, float: y0, float: z0, float: x1, float: y1, float: z1, bool: occluder, bool: caster) -> unsigned long int;
+                    function update(self&, unsigned long int: object, float: x0, float: y0, float: z0, float: x1, float: y1, float: z1) -> void;
+                    function remove(self&, unsigned long int: object) -> void;
+                    function set_lods(self&, unsigned long int: object, float: first, float: second, float: third) -> void;
+                    function set_always(self&, unsigned long int: object, bool: on) -> void;
                     function set_occlusion(self&, bool: on) -> void;
                     function set_max_distance(self&, float: meters) -> void;
                     function set_min_pixels(self&, float: pixels) -> void;
                     function set_shadow_distances(self&, float: real, float: blob) -> void;
-                    function set_up_axis(self&, long int: axis) -> void;
+                    function set_up_axis(self&, unsigned long int: axis) -> void;
                     function cull(self&, const Camera3D&: camera) -> void;
-                    function visible(const self&, long int: object) -> bool;
-                    function occluded(const self&, long int: object) -> bool;
-                    function lod(const self&, long int: object) -> long int;
-                    function shadow(const self&, long int: object) -> long int;
-                    function visible_count(const self&) -> long int;
-                    function occluded_count(const self&) -> long int;
-                    function culled_count(const self&) -> long int;
-                    function blob_count(const self&) -> long int;
-                    function blob_x(const self&, long int: index) -> float;
-                    function blob_y(const self&, long int: index) -> float;
-                    function blob_z(const self&, long int: index) -> float;
-                    function blob_radius(const self&, long int: index) -> float;
-                    function blob_opacity(const self&, long int: index) -> float;
+                    function visible(const self&, unsigned long int: object) -> bool;
+                    function occluded(const self&, unsigned long int: object) -> bool;
+                    function lod(const self&, unsigned long int: object) -> unsigned long int;
+                    function shadow(const self&, unsigned long int: object) -> unsigned long int;
+                    function visible_count(const self&) -> unsigned long int;
+                    function occluded_count(const self&) -> unsigned long int;
+                    function culled_count(const self&) -> unsigned long int;
+                    function blob_count(const self&) -> unsigned long int;
+                    function blob_x(const self&, unsigned long int: index) -> float;
+                    function blob_y(const self&, unsigned long int: index) -> float;
+                    function blob_z(const self&, unsigned long int: index) -> float;
+                    function blob_radius(const self&, unsigned long int: index) -> float;
+                    function blob_opacity(const self&, unsigned long int: index) -> float;
 
-                    function add(self&, float: x0, float: y0, float: z0, float: x1, float: y1, float: z1) -> long int {
+                    function add(self&, float: x0, float: y0, float: z0, float: x1, float: y1, float: z1) -> unsigned long int {
                         return self.add(x0, y0, z0, x1, y1, z1, false, true);
                     } end function add
                 } end class Visibility
@@ -905,27 +902,27 @@ safe(compile) {
                 class LodGrid as "walnut_rt::gfx::lod_grid" {
                 public:
                     constructor();
-                    function setup(self&, float: world_size, float: base_distance, long int: levels, long int: up_axis) -> void;
+                    function setup(self&, float: world_size, float: base_distance, unsigned long int: levels, unsigned long int: up_axis) -> void;
                     function set_origin(self&, float: x, float: y, float: z) -> void;
                     function update(self&, float: x, float: y, float: z) -> bool;
-                    function tile_count(const self&) -> long int;
-                    function tile_x(const self&, long int: index) -> float;
-                    function tile_y(const self&, long int: index) -> float;
-                    function tile_z(const self&, long int: index) -> float;
-                    function tile_size(const self&, long int: index) -> float;
-                    function tile_level(const self&, long int: index) -> long int;
-                    function tile_key(const self&, long int: index) -> long int;
-                    function added_count(const self&) -> long int;
-                    function added_key(const self&, long int: index) -> long int;
-                    function removed_count(const self&) -> long int;
-                    function removed_key(const self&, long int: index) -> long int;
-                    function level_at(const self&, float: x, float: y, float: z) -> long int;
+                    function tile_count(const self&) -> unsigned long int;
+                    function tile_x(const self&, unsigned long int: index) -> float;
+                    function tile_y(const self&, unsigned long int: index) -> float;
+                    function tile_z(const self&, unsigned long int: index) -> float;
+                    function tile_size(const self&, unsigned long int: index) -> float;
+                    function tile_level(const self&, unsigned long int: index) -> unsigned long int;
+                    function tile_key(const self&, unsigned long int: index) -> unsigned long int;
+                    function added_count(const self&) -> unsigned long int;
+                    function added_key(const self&, unsigned long int: index) -> unsigned long int;
+                    function removed_count(const self&) -> unsigned long int;
+                    function removed_key(const self&, unsigned long int: index) -> unsigned long int;
+                    function level_at(const self&, float: x, float: y, float: z) -> unsigned long int;
                 } end class LodGrid
 
                 class Model as "walnut_rt::gfx::model" {
                     static function native_load(const string&: path, float: scale, bool: z_up) -> Model as "walnut_rt::gfx::model::load";
                     static function native_load_error() -> string as "walnut_rt::gfx::model::load_error";
-                    function native_bound(const self&, long int: which) -> float as "bound";
+                    function native_bound(const self&, unsigned long int: which) -> float as "bound";
 
                 public:
                     constructor();
@@ -939,8 +936,8 @@ safe(compile) {
                     } end function load
 
                     function valid(const self&) -> bool;
-                    function vertex_count(const self&) -> long int;
-                    function find_animation(const self&, const string&: name) -> long int;
+                    function vertex_count(const self&) -> unsigned long int;
+                    function find_animation(const self&, const string&: name) -> unsigned long int;
 
                     function bounds_min(const self&) -> Vec3 {
                         return Vec3(self.native_bound(0), self.native_bound(1), self.native_bound(2));
@@ -953,7 +950,7 @@ safe(compile) {
 
                 class Animator as "walnut_rt::gfx::animator" {
                     function native_play(self&, const string&: name, bool: loop, float: fade, float: speed) -> bool as "play";
-                    function native_play_index(self&, long int: index, bool: loop, float: fade, float: speed) -> bool as "play_index";
+                    function native_play_index(self&, unsigned long int: index, bool: loop, float: fade, float: speed) -> bool as "play_index";
 
                 public:
                     constructor();
@@ -967,11 +964,11 @@ safe(compile) {
                         return self.native_play(name, loop, fade_seconds, speed);
                     } end function play
 
-                    function play(self&, long int: index, bool: loop = true, float: fade_seconds = 0.0) -> bool {
+                    function play(self&, unsigned long int: index, bool: loop = true, float: fade_seconds = 0.0) -> bool {
                         return self.native_play_index(index, loop, fade_seconds, 1.0);
                     } end function play
 
-                    function play(self&, long int: index, bool: loop, float: fade_seconds, float: speed) -> bool {
+                    function play(self&, unsigned long int: index, bool: loop, float: fade_seconds, float: speed) -> bool {
                         return self.native_play_index(index, loop, fade_seconds, speed);
                     } end function play
 
@@ -982,37 +979,37 @@ safe(compile) {
                     function time(const self&) -> float;
                     function duration(const self&) -> float;
                     function finished(const self&) -> bool;
-                    function current(const self&) -> long int;
+                    function current(const self&) -> unsigned long int;
                     function update(self&, float: dt) -> void;
                 } end class Animator
 
                 class TileMap as "walnut_rt::gfx::tilemap" {
                     static function native_load(const string&: path) -> TileMap as "walnut_rt::gfx::tilemap::load_tiled";
                     static function native_load_error() -> string as "walnut_rt::gfx::tilemap::load_error";
-                    function native_add_tileset(self&, const Texture&: t, long int: tw, long int: th, long int: margin, long int: spacing, long int: columns) -> long int as "add_tileset";
-                    function native_add_layer_csv(self&, const string&: name, const string&: csv, long int: offset) -> long int as "add_layer_csv";
-                    function native_set_layer_tint(self&, long int: layer, long int: rgba) -> void as "set_layer_tint";
+                    function native_add_tileset(self&, const Texture&: t, unsigned long int: tw, unsigned long int: th, unsigned long int: margin, unsigned long int: spacing, unsigned long int: columns) -> unsigned long int as "add_tileset";
+                    function native_add_layer_csv(self&, const string&: name, const string&: csv, unsigned long int: id_offset) -> unsigned long int as "add_layer_csv";
+                    function native_set_layer_tint(self&, unsigned long int: layer, unsigned long int: rgba) -> void as "set_layer_tint";
                     function native_move(self&, float: x, float: y, float: w, float: h, float: dx, float: dy) -> void as "move";
                     function native_move_x(const self&) -> float as "move_x";
                     function native_move_y(const self&) -> float as "move_y";
-                    function native_move_flags(const self&) -> long int as "move_flags";
+                    function native_move_flags(const self&) -> unsigned long int as "move_flags";
                     function native_raycast(self&, float: ox, float: oy, float: dx, float: dy, float: max_distance) -> void as "raycast";
                     function native_hit(const self&) -> bool as "hit";
                     function native_hit_tile_x(const self&) -> long int as "hit_tile_x";
                     function native_hit_tile_y(const self&) -> long int as "hit_tile_y";
-                    function native_hit_gid(const self&) -> long int as "hit_gid";
-                    function native_hit_value(const self&, long int: which) -> float as "hit_value";
-                    function native_set_animation(self&, long int: gid, const std::collections::Vector<long int>&: frames, const std::collections::Vector<float>&: seconds) -> void as "set_animation";
+                    function native_hit_gid(const self&) -> unsigned long int as "hit_gid";
+                    function native_hit_value(const self&, unsigned long int: which) -> float as "hit_value";
+                    function native_set_animation(self&, unsigned long int: gid, const std::collections::Vector<unsigned long int>&: frames, const std::collections::Vector<float>&: seconds) -> void as "set_animation";
 
-                    function check_layer(const self&, long int: layer, const string&: what) -> void {
-                        if (layer < 0 || layer >= self.layer_count()) then {
+                    function check_layer(const self&, unsigned long int: layer, const string&: what) -> void {
+                        if (layer >= self.layer_count()) then {
                             throw std::errors::graphics_error(static_cast<string>(`${what}: there is no layer ${layer} (the map has ${self.layer_count()})`));
                         }
                     } end function check_layer
 
                 public:
                     constructor();
-                    constructor(long int: tile_width, long int: tile_height);
+                    constructor(unsigned long int: tile_width, unsigned long int: tile_height);
 
                     static function load_tiled(const string&: path) -> TileMap {
                         TileMap: m = native_load(path);
@@ -1023,22 +1020,22 @@ safe(compile) {
                         return m;
                     } end function load_tiled
 
-                    function tile_width(const self&) -> long int;
-                    function tile_height(const self&) -> long int;
-                    function tileset_count(const self&) -> long int;
-                    function layer_count(const self&) -> long int;
-                    function layer_index(const self&, const string&: name) -> long int;
-                    function layer_name(const self&, long int: layer) -> string;
-                    function layer_width(const self&, long int: layer) -> long int;
-                    function layer_height(const self&, long int: layer) -> long int;
-                    function add_layer(self&, const string&: name, long int: width, long int: height) -> long int;
-                    function set_layer_visible(self&, long int: layer, bool: visible) -> void;
-                    function set_layer_collides(self&, long int: layer, bool: collides) -> void;
-                    function set_layer_opacity(self&, long int: layer, float: opacity) -> void;
-                    function set_layer_offset(self&, long int: layer, float: x, float: y) -> void;
-                    function set_layer_parallax(self&, long int: layer, float: x, float: y) -> void;
-                    function set_solid(self&, long int: gid, bool: solid) -> void;
-                    function solid(const self&, long int: gid) -> bool;
+                    function tile_width(const self&) -> unsigned long int;
+                    function tile_height(const self&) -> unsigned long int;
+                    function tileset_count(const self&) -> unsigned long int;
+                    function layer_count(const self&) -> unsigned long int;
+                    function layer_index(const self&, const string&: name) -> unsigned long int;
+                    function layer_name(const self&, unsigned long int: layer) -> string;
+                    function layer_width(const self&, unsigned long int: layer) -> unsigned long int;
+                    function layer_height(const self&, unsigned long int: layer) -> unsigned long int;
+                    function add_layer(self&, const string&: name, unsigned long int: width, unsigned long int: height) -> unsigned long int;
+                    function set_layer_visible(self&, unsigned long int: layer, bool: visible) -> void;
+                    function set_layer_collides(self&, unsigned long int: layer, bool: collides) -> void;
+                    function set_layer_opacity(self&, unsigned long int: layer, float: opacity) -> void;
+                    function set_layer_offset(self&, unsigned long int: layer, float: x, float: y) -> void;
+                    function set_layer_parallax(self&, unsigned long int: layer, float: x, float: y) -> void;
+                    function set_solid(self&, unsigned long int: gid, bool: solid) -> void;
+                    function solid(const self&, unsigned long int: gid) -> bool;
                     function update(self&, float: dt) -> void;
                     function world_to_tile_x(const self&, float: x) -> long int;
                     function world_to_tile_y(const self&, float: y) -> long int;
@@ -1049,47 +1046,44 @@ safe(compile) {
                     function overlaps_solid(const self&, float: x, float: y, float: w, float: h) -> bool;
                     function pixel_width(const self&) -> float;
                     function pixel_height(const self&) -> float;
-                    function get(const self&, long int: layer, long int: x, long int: y) -> long int;
-                    function set(self&, long int: layer, long int: x, long int: y, long int: gid) -> void;
-                    function fill(self&, long int: layer, long int: gid) -> void;
-                    function fill_rect(self&, long int: layer, long int: x, long int: y, long int: w, long int: h, long int: gid) -> void;
+                    function get(const self&, unsigned long int: layer, long int: x, long int: y) -> unsigned long int;
+                    function set(self&, unsigned long int: layer, long int: x, long int: y, unsigned long int: gid) -> void;
+                    function fill(self&, unsigned long int: layer, unsigned long int: gid) -> void;
+                    function fill_rect(self&, unsigned long int: layer, long int: x, long int: y, unsigned long int: w, unsigned long int: h, unsigned long int: gid) -> void;
 
-                    function add_tileset(self&, const Texture&: texture, long int: tile_width, long int: tile_height) -> long int {
+                    function add_tileset(self&, const Texture&: texture, unsigned long int: tile_width, unsigned long int: tile_height) -> unsigned long int {
                         return self.native_add_tileset(texture, tile_width, tile_height, 0, 0, 0);
                     } end function add_tileset
 
-                    function add_tileset(self&, const Texture&: texture, long int: tile_width, long int: tile_height, long int: margin, long int: spacing) -> long int {
+                    function add_tileset(self&, const Texture&: texture, unsigned long int: tile_width, unsigned long int: tile_height, unsigned long int: margin, unsigned long int: spacing) -> unsigned long int {
                         return self.native_add_tileset(texture, tile_width, tile_height, margin, spacing, 0);
                     } end function add_tileset
 
-                    function add_layer_csv(self&, const string&: name, const string&: csv, long int: id_offset = 0) -> long int {
-                        const long int: index = self.native_add_layer_csv(name, csv, id_offset);
-                        if (index < 0) then {
-                            throw std::errors::graphics_error(static_cast<string>(`add_layer_csv: the CSV for '${name}' isn't a grid of tile numbers`));
-                        }
+                    function add_layer_csv(self&, const string&: name, const string&: csv, unsigned long int: id_offset = 0) -> unsigned long int {
+                        const unsigned long int: index = self.native_add_layer_csv(name, csv, id_offset);
                         return index;
                     } end function add_layer_csv
 
-                    function tile(const self&, long int: layer, long int: x, long int: y) -> long int {
+                    function tile(const self&, unsigned long int: layer, long int: x, long int: y) -> unsigned long int {
                         self.check_layer(layer, "tile()");
                         return self.get(layer, x, y);
                     } end function tile
 
-                    function set_tile(self&, long int: layer, long int: x, long int: y, long int: gid) -> void {
+                    function set_tile(self&, unsigned long int: layer, long int: x, long int: y, unsigned long int: gid) -> void {
                         self.check_layer(layer, "set_tile()");
                         self.set(layer, x, y, gid);
                     } end function set_tile
 
-                    function fill_layer(self&, long int: layer, long int: gid) -> void {
+                    function fill_layer(self&, unsigned long int: layer, unsigned long int: gid) -> void {
                         self.check_layer(layer, "fill_layer()");
                         self.fill(layer, gid);
                     } end function fill_layer
 
-                    function set_layer_tint(self&, long int: layer, const Color&: c) -> void {
+                    function set_layer_tint(self&, unsigned long int: layer, const Color&: c) -> void {
                         self.native_set_layer_tint(layer, c.packed());
                     } end function set_layer_tint
 
-                    function set_animation(self&, long int: gid, const std::collections::Vector<long int>&: frames, const std::collections::Vector<float>&: seconds) -> void {
+                    function set_animation(self&, unsigned long int: gid, const std::collections::Vector<unsigned long int>&: frames, const std::collections::Vector<float>&: seconds) -> void {
                         self.native_set_animation(gid, frames, seconds);
                     } end function set_animation
 
@@ -1098,7 +1092,7 @@ safe(compile) {
                         TileMove: out;
                         out.x = self.native_move_x();
                         out.y = self.native_move_y();
-                        const long int: f = self.native_move_flags();
+                        const unsigned long int: f = self.native_move_flags();
                         out.hit_x = f % 2 == 1;
                         out.hit_y = (f / 2) % 2 == 1;
                         out.on_ground = (f / 4) % 2 == 1;
@@ -1125,10 +1119,10 @@ safe(compile) {
                 } end class TileMap
 
                 class Renderer as "walnut_rt::gfx::renderer" {
-                    function native_clear(self&, long int: rgba) -> void as "clear";
-                    function native_set_blend_mode(self&, long int: m) -> void as "set_blend_mode";
-                    function native_blend_mode(const self&) -> long int as "blend_mode";
-                    function native_pixel(self&, float: x, float: y, long int: rgba) -> void as "pixel";
+                    function native_clear(self&, unsigned long int: rgba) -> void as "clear";
+                    function native_set_blend_mode(self&, unsigned long int: m) -> void as "set_blend_mode";
+                    function native_blend_mode(const self&) -> unsigned long int as "blend_mode";
+                    function native_pixel(self&, float: x, float: y, unsigned long int: rgba) -> void as "pixel";
                     function native_line(self&, float: x1, float: y1, float: x2, float: y2, const Paint&: p) -> void as "line";
                     function native_rect(self&, float: x, float: y, float: w, float: h, const Paint&: p) -> void as "rect";
                     function native_rounded_rect(self&, float: x, float: y, float: w, float: h, float: r, const Paint&: p) -> void as "rounded_rect";
@@ -1143,23 +1137,23 @@ safe(compile) {
                     function native_image_sized(self&, const Image&: img, float: x, float: y, float: w, float: h) -> void as "draw_image_sized";
                     function native_texture(self&, const Texture&: t, float: x, float: y, float: opacity) -> void as "draw_texture";
                     function native_texture_sized(self&, const Texture&: t, float: x, float: y, float: w, float: h, float: opacity) -> void as "draw_texture_sized";
-                    function native_texture_part(self&, const Texture&: t, float: x, float: y, float: w, float: h, long int: sx, long int: sy, long int: sw, long int: sh, long int: tint, float: opacity) -> void as "draw_texture_part";
+                    function native_texture_part(self&, const Texture&: t, float: x, float: y, float: w, float: h, unsigned long int: sx, unsigned long int: sy, unsigned long int: sw, unsigned long int: sh, unsigned long int: tint, float: opacity) -> void as "draw_texture_part";
                     function native_sprite(self&, const Sprite&: s) -> void as "draw_sprite";
                     function native_text(self&, float: x, float: y, const string&: s, const TextStyle&: style) -> void as "text";
                     function native_text_box(self&, float: x, float: y, float: w, float: h, const string&: s, const TextStyle&: style) -> void as "text_box";
-                    function native_measure(self&, const string&: s, const TextStyle&: style, long int: max_width, long int: which) -> long int as "measure";
+                    function native_measure(self&, const string&: s, const TextStyle&: style, unsigned long int: max_width, unsigned long int: which) -> long int as "measure";
                     function native_begin_camera(self&, float: x, float: y, float: zoom, float: rotation) -> void as "begin_camera";
-                    function native_begin_target(self&, const RenderTarget&: t, long int: rgba, bool: clear) -> bool as "begin_target";
+                    function native_begin_target(self&, const RenderTarget&: t, unsigned long int: rgba, bool: clear) -> bool as "begin_target";
                     function native_draw_target(self&, const RenderTarget&: t, float: x, float: y, float: w, float: h, float: opacity) -> void as "draw_target";
                     function native_load_font(self&, const string&: file) -> bool as "load_font_file";
                     function valid(const self&) -> bool;
 
                 public:
                     constructor();
-                    constructor(const Window&: window, long int: backend, bool: vsync);
+                    constructor(const Window&: window, unsigned long int: backend, bool: vsync);
 
                     static function make(const Window&: window, Backend: backend = Backend::best, bool: vsync = false) -> Renderer {
-                        Renderer: r = Renderer(window, static_cast<long int>(backend), vsync);
+                        Renderer: r = Renderer(window, static_cast<unsigned long int>(backend), vsync);
                         if (!r.valid()) then {
                             throw std::errors::graphics_error("can't start a renderer for this window; is it open?");
                         }
@@ -1174,8 +1168,8 @@ safe(compile) {
                     function is_gpu(const self&) -> bool;
                     function set_vsync(self&, bool: on) -> void;
                     function vsync(const self&) -> bool;
-                    function width(const self&) -> long int;
-                    function height(const self&) -> long int;
+                    function width(const self&) -> unsigned long int;
+                    function height(const self&) -> unsigned long int;
                     function frame_ms(const self&) -> float;
                     function begin_frame(self&) -> void;
                     function present(self&) -> void;
@@ -1201,7 +1195,7 @@ safe(compile) {
                     } end function clear
 
                     function set_blend_mode(self&, BlendMode: m) -> void {
-                        self.native_set_blend_mode(static_cast<long int>(m));
+                        self.native_set_blend_mode(static_cast<unsigned long int>(m));
                     } end function set_blend_mode
 
                     function blend_mode(const self&) -> BlendMode {
@@ -1292,7 +1286,7 @@ safe(compile) {
                         self.native_texture_sized(t, x, y, w, h, opacity);
                     } end function draw_texture
 
-                    function draw_texture_part(self&, const Texture&: t, float: x, float: y, float: w, float: h, long int: sx, long int: sy, long int: sw, long int: sh, const Color&: tint = Color(255, 255, 255), float: opacity = 1.0) -> void {
+                    function draw_texture_part(self&, const Texture&: t, float: x, float: y, float: w, float: h, unsigned long int: sx, unsigned long int: sy, unsigned long int: sw, unsigned long int: sh, const Color&: tint = Color(255, 255, 255), float: opacity = 1.0) -> void {
                         self.native_texture_part(t, x, y, w, h, sx, sy, sw, sh, tint.packed(), opacity);
                     } end function draw_texture_part
 
@@ -1308,8 +1302,8 @@ safe(compile) {
                         self.native_text_box(x, y, w, h, s, style);
                     } end function draw_text
 
-                    function measure_text(self&, const string&: s, const TextStyle&: style, long int: max_width = 0) -> TextMetrics {
-                        return TextMetrics(self.native_measure(s, style, max_width, 0), self.native_measure(s, style, max_width, 1), self.native_measure(s, style, max_width, 2), self.native_measure(s, style, max_width, 3));
+                    function measure_text(self&, const string&: s, const TextStyle&: style, unsigned long int: max_width = 0) -> TextMetrics {
+                        return TextMetrics(static_cast<unsigned long int>(self.native_measure(s, style, max_width, 0)), static_cast<unsigned long int>(self.native_measure(s, style, max_width, 1)), static_cast<unsigned long int>(self.native_measure(s, style, max_width, 2)), self.native_measure(s, style, max_width, 3));
                     } end function measure_text
 
                     function load_font(self&, const string&: file) -> void {
@@ -1347,9 +1341,9 @@ safe(compile) {
                     function native_draw_mesh_at(self&, const Mesh&: m, float: px, float: py, float: pz, float: rx, float: ry, float: rz, float: sx, float: sy, float: sz, const Material&: mat) -> void as "walnut_rt::gfx::draw_mesh_at";
                     function native_draw_model(self&, const Model&: m, float: px, float: py, float: pz, float: rx, float: ry, float: rz, float: sx, float: sy, float: sz) -> void as "walnut_rt::gfx::draw_model";
                     function native_draw_animated(self&, const Animator&: a, float: px, float: py, float: pz, float: rx, float: ry, float: rz, float: sx, float: sy, float: sz) -> void as "walnut_rt::gfx::draw_animated";
-                    function native_line_3d(self&, float: ax, float: ay, float: az, float: bx, float: by, float: bz, long int: rgba, float: width, bool: depth_test) -> void as "walnut_rt::gfx::draw_line_3d";
-                    function native_box_3d(self&, float: ax, float: ay, float: az, float: bx, float: by, float: bz, long int: rgba, float: width, bool: depth_test) -> void as "walnut_rt::gfx::draw_box_3d";
-                    function native_draw_tilemap(self&, const TileMap&: map, float: x, float: y) -> long int as "walnut_rt::gfx::draw_tilemap";
+                    function native_line_3d(self&, float: ax, float: ay, float: az, float: bx, float: by, float: bz, unsigned long int: rgba, float: width, bool: depth_test) -> void as "walnut_rt::gfx::draw_line_3d";
+                    function native_box_3d(self&, float: ax, float: ay, float: az, float: bx, float: by, float: bz, unsigned long int: rgba, float: width, bool: depth_test) -> void as "walnut_rt::gfx::draw_box_3d";
+                    function native_draw_tilemap(self&, const TileMap&: map, float: x, float: y) -> unsigned long int as "walnut_rt::gfx::draw_tilemap";
 
                 public:
                     function begin_3d(self&, Camera3D&: camera) -> void {
@@ -1402,108 +1396,108 @@ safe(compile) {
                         self.native_box_3d(low.x, low.y, low.z, high.x, high.y, high.z, c.packed(), width, depth_test);
                     } end function draw_box_3d
 
-                    function draw_tilemap(self&, const TileMap&: map) -> long int {
+                    function draw_tilemap(self&, const TileMap&: map) -> unsigned long int {
                         return self.native_draw_tilemap(map, 0.0, 0.0);
                     } end function draw_tilemap
 
-                    function draw_tilemap(self&, const TileMap&: map, float: x, float: y) -> long int {
+                    function draw_tilemap(self&, const TileMap&: map, float: x, float: y) -> unsigned long int {
                         return self.native_draw_tilemap(map, x, y);
                     } end function draw_tilemap
                 } end class Renderer
 
                 class Particles as "walnut_rt::gfx::particles" {
-                    function native_add_emitter(self&, const string&: preset, const string&: dimension, float: pixels_per_unit) -> long int as "add_emitter";
-                    function native_add_effect(self&, const string&: preset, const string&: dimension, float: pixels_per_unit) -> long int as "add_effect";
+                    function native_add_emitter(self&, const string&: preset, const string&: dimension, float: pixels_per_unit) -> unsigned long int as "add_emitter";
+                    function native_add_effect(self&, const string&: preset, const string&: dimension, float: pixels_per_unit) -> unsigned long int as "add_effect";
                     function native_step_camera(self&, float: seconds, const Camera3D&: camera) -> void as "step_camera";
-                    function native_draw_camera(self&, Renderer&: renderer, const Camera3D&: camera) -> long int as "draw_camera";
-                    function native_count_of(const self&, long int: emitter) -> long int as "count_of";
-                    function native_clear_emitter(self&, long int: emitter) -> void as "clear_emitter";
+                    function native_draw_camera(self&, Renderer&: renderer, const Camera3D&: camera) -> unsigned long int as "draw_camera";
+                    function native_count_of(const self&, unsigned long int: emitter) -> unsigned long int as "count_of";
+                    function native_clear_emitter(self&, unsigned long int: emitter) -> void as "clear_emitter";
 
                 public:
                     constructor();
-                    constructor(long int: budget);
+                    constructor(unsigned long int: budget);
 
-                    function add_emitter(self&, const string&: preset) -> long int {
+                    function add_emitter(self&, const string&: preset) -> unsigned long int {
                         return self.native_add_emitter(preset, "3d", 50.0);
                     } end function add_emitter
 
-                    function add_emitter(self&, const string&: preset, const string&: dimension) -> long int {
+                    function add_emitter(self&, const string&: preset, const string&: dimension) -> unsigned long int {
                         return self.native_add_emitter(preset, dimension, 50.0);
                     } end function add_emitter
 
-                    function add_emitter(self&, const string&: preset, const string&: dimension, float: pixels_per_unit) -> long int {
+                    function add_emitter(self&, const string&: preset, const string&: dimension, float: pixels_per_unit) -> unsigned long int {
                         return self.native_add_emitter(preset, dimension, pixels_per_unit);
                     } end function add_emitter
 
-                    function add_emitter_text(self&, const string&: settings) -> long int;
-                    function settings_text(const self&, long int: emitter) -> string;
-                    function set_setting(self&, long int: emitter, const string&: key, const string&: value) -> void;
-                    function setting(const self&, long int: emitter, const string&: key) -> string;
+                    function add_emitter_text(self&, const string&: settings) -> unsigned long int;
+                    function settings_text(const self&, unsigned long int: emitter) -> string;
+                    function set_setting(self&, unsigned long int: emitter, const string&: key, const string&: value) -> void;
+                    function setting(const self&, unsigned long int: emitter, const string&: key) -> string;
 
-                    function set_position(self&, long int: emitter, float: x, float: y, float: z) -> void;
-                    function teleport(self&, long int: emitter, float: x, float: y, float: z) -> void;
-                    function set_direction(self&, long int: emitter, float: x, float: y, float: z) -> void;
-                    function set_orientation(self&, long int: emitter, float: fx, float: fy, float: fz, float: ux, float: uy, float: uz) -> void;
-                    function set_angle(self&, long int: emitter, float: degrees) -> void;
-                    function set_velocity(self&, long int: emitter, float: x, float: y, float: z) -> void;
-                    function clear_velocity(self&, long int: emitter) -> void;
-                    function set_texture(self&, long int: emitter, const Texture&: t) -> void;
+                    function set_position(self&, unsigned long int: emitter, float: x, float: y, float: z) -> void;
+                    function teleport(self&, unsigned long int: emitter, float: x, float: y, float: z) -> void;
+                    function set_direction(self&, unsigned long int: emitter, float: x, float: y, float: z) -> void;
+                    function set_orientation(self&, unsigned long int: emitter, float: fx, float: fy, float: fz, float: ux, float: uy, float: uz) -> void;
+                    function set_angle(self&, unsigned long int: emitter, float: degrees) -> void;
+                    function set_velocity(self&, unsigned long int: emitter, float: x, float: y, float: z) -> void;
+                    function clear_velocity(self&, unsigned long int: emitter) -> void;
+                    function set_texture(self&, unsigned long int: emitter, const Texture&: t) -> void;
 
-                    function set_position(self&, long int: emitter, float: x, float: y) -> void {
+                    function set_position(self&, unsigned long int: emitter, float: x, float: y) -> void {
                         self.set_position(emitter, x, y, 0.0);
                     } end function set_position
 
-                    function set_position(self&, long int: emitter, const Vec3&: p) -> void {
+                    function set_position(self&, unsigned long int: emitter, const Vec3&: p) -> void {
                         self.set_position(emitter, p.x, p.y, p.z);
                     } end function set_position
 
-                    function set_direction(self&, long int: emitter, const Vec3&: d) -> void {
+                    function set_direction(self&, unsigned long int: emitter, const Vec3&: d) -> void {
                         self.set_direction(emitter, d.x, d.y, d.z);
                     } end function set_direction
 
-                    function play(self&, long int: emitter) -> void;
-                    function stop(self&, long int: emitter) -> void;
-                    function pause(self&, long int: emitter, bool: paused) -> void;
-                    function restart(self&, long int: emitter) -> void;
-                    function burst(self&, long int: emitter, long int: count) -> long int;
-                    function remove(self&, long int: emitter) -> void;
-                    function exists(const self&, long int: emitter) -> bool;
-                    function playing(const self&, long int: emitter) -> bool;
-                    function finished(const self&, long int: emitter) -> bool;
-                    function count(const self&) -> long int;
-                    function emitter_count(const self&) -> long int;
+                    function play(self&, unsigned long int: emitter) -> void;
+                    function stop(self&, unsigned long int: emitter) -> void;
+                    function pause(self&, unsigned long int: emitter, bool: paused) -> void;
+                    function restart(self&, unsigned long int: emitter) -> void;
+                    function burst(self&, unsigned long int: emitter, unsigned long int: count) -> unsigned long int;
+                    function remove(self&, unsigned long int: emitter) -> void;
+                    function exists(const self&, unsigned long int: emitter) -> bool;
+                    function playing(const self&, unsigned long int: emitter) -> bool;
+                    function finished(const self&, unsigned long int: emitter) -> bool;
+                    function count(const self&) -> unsigned long int;
+                    function emitter_count(const self&) -> unsigned long int;
                     function clear(self&) -> void;
 
-                    function count(const self&, long int: emitter) -> long int {
+                    function count(const self&, unsigned long int: emitter) -> unsigned long int {
                         return self.native_count_of(emitter);
                     } end function count
 
-                    function clear(self&, long int: emitter) -> void {
+                    function clear(self&, unsigned long int: emitter) -> void {
                         self.native_clear_emitter(emitter);
                     } end function clear
 
-                    function add_effect(self&, const string&: preset) -> long int {
+                    function add_effect(self&, const string&: preset) -> unsigned long int {
                         return self.native_add_effect(preset, "3d", 50.0);
                     } end function add_effect
 
-                    function add_effect(self&, const string&: preset, const string&: dimension) -> long int {
+                    function add_effect(self&, const string&: preset, const string&: dimension) -> unsigned long int {
                         return self.native_add_effect(preset, dimension, 50.0);
                     } end function add_effect
 
-                    function add_effect(self&, const string&: preset, const string&: dimension, float: pixels_per_unit) -> long int {
+                    function add_effect(self&, const string&: preset, const string&: dimension, float: pixels_per_unit) -> unsigned long int {
                         return self.native_add_effect(preset, dimension, pixels_per_unit);
                     } end function add_effect
 
-                    function add_effect_text(self&, const string&: settings) -> long int;
-                    function spawn(self&, long int: effect, float: x, float: y, float: z) -> bool;
-                    function spawn_2d(self&, long int: effect, float: x, float: y, float: angle) -> bool;
+                    function add_effect_text(self&, const string&: settings) -> unsigned long int;
+                    function spawn(self&, unsigned long int: effect, float: x, float: y, float: z) -> bool;
+                    function spawn_2d(self&, unsigned long int: effect, float: x, float: y, float: angle) -> bool;
 
-                    function spawn_2d(self&, long int: effect, float: x, float: y) -> bool {
+                    function spawn_2d(self&, unsigned long int: effect, float: x, float: y) -> bool {
                         return self.spawn_2d(effect, x, y, 0.0);
                     } end function spawn_2d
 
-                    function set_budget(self&, long int: budget) -> void;
-                    function set_threads(self&, long int: count) -> void;
+                    function set_budget(self&, unsigned long int: budget) -> void;
+                    function set_threads(self&, unsigned long int: count) -> void;
                     function set_origin(self&, float: x, float: y, float: z) -> void;
                     function add_ground(self&, float: height) -> void;
                     function add_plane(self&, float: nx, float: ny, float: nz, float: px, float: py, float: pz) -> void;
@@ -1513,19 +1507,19 @@ safe(compile) {
 
                     function step(self&, float: seconds) -> void;
                     function step_2d(self&, float: seconds, float: x0, float: y0, float: x1, float: y1) -> void;
-                    function draw(self&, Renderer&: renderer) -> long int;
-                    function draw_2d(self&, Renderer&: renderer) -> long int;
+                    function draw(self&, Renderer&: renderer) -> unsigned long int;
+                    function draw_2d(self&, Renderer&: renderer) -> unsigned long int;
 
                     function step(self&, float: seconds, const Camera3D&: camera) -> void {
                         self.native_step_camera(seconds, camera);
                     } end function step
 
-                    function draw(self&, Renderer&: renderer, const Camera3D&: camera) -> long int {
+                    function draw(self&, Renderer&: renderer, const Camera3D&: camera) -> unsigned long int {
                         return self.native_draw_camera(renderer, camera);
                     } end function draw
 
-                    function spawned(const self&) -> long int;
-                    function limited(const self&) -> long int;
+                    function spawned(const self&) -> unsigned long int;
+                    function limited(const self&) -> unsigned long int;
                     function step_ms(const self&) -> float;
                 } end class Particles
             } end extern

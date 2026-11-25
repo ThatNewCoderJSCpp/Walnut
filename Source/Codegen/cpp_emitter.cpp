@@ -5,6 +5,7 @@
 #include "Common/file_kind.hpp"
 #include "Common/source_manager.hpp"
 
+#include <cctype>
 #include <cstring>
 #include <cmath>
 #include <cstdlib>
@@ -177,6 +178,7 @@ void CppEmitter::emit_walnut_externs(CodeBuffer& os) {
 std::string CppEmitter::main_function_code() {
     CodeBuffer out;
     out << "#if defined(WALNUT_GC)\n#include \"walnut_gc_main.hpp\"\n#endif\n\n";
+    out << "#if defined(WALNUT_PROFILE)\n#include \"walnut_profile_main.hpp\"\n#endif\n\n";
     out << "int main(int argc, char** argv) {\n";
     out << "    return walnut_rt::run_program([&]() -> int {\n";
     if (unbuffered) out << "        walnut_rt::io_native::unbuffered_request() = true;\n";
@@ -2459,7 +2461,7 @@ std::string CppEmitter::builtin_method_call(nodes::CallExpression* c) {
         && (name == "to_string" || name == "to_text")) obj = "std::string(" + obj + ")";
 
     if (name == "sizeof[]") return "walnut_rt::bm::byte_size(" + obj + ", " + std::to_string(c->builtin_size) + "LL)";
-    if (c->builtin_size >= 0) return "walnut_rt::i32(" + std::to_string(c->builtin_size) + "LL)";
+    if (c->builtin_size >= 0) return "walnut_rt::u64(" + std::to_string(c->builtin_size) + "ULL)";
     if (name == "sizeof") return "walnut_rt::bm::byte_size(" + obj + ")";
     if (name == "to_string" || name == "to_text") return "walnut_rt::to_display(" + obj + ")";
     if (name == "name") return "walnut_enum_name_of(" + obj + ")";
@@ -2665,6 +2667,8 @@ std::string CppEmitter::lambda(nodes::LambdaExpression* l) {
 }
 
 void CppEmitter::loop_body(CodeBuffer& os, nodes::ASTNode* body) {
+    const std::string tick = m_loop_tick;
+    m_loop_tick.clear();
     LoopLabel entry;
     entry.name = "walnut_redo_" + std::to_string(m_temp++);
     LoopLabel* origin = m_next_loop;
@@ -2682,10 +2686,40 @@ void CppEmitter::loop_body(CodeBuffer& os, nodes::ASTNode* body) {
     LoopLabel done = m_loops.back();
     m_loops.pop_back();
     std::string text = tmp.str();
+    if (!tick.empty() && text.size() >= 2) text.insert(2, pad() + "    " + tick + "\n");
     if (done.used) text.insert(2, pad() + "    " + done.name + ":;\n");
     if (done.cont_used) text = "{ " + text + " " + done.cont + ":; }";
     if (origin) origin->brk_used = done.brk_used;
     os << text;
+}
+
+std::string CppEmitter::profile_name(const FuncInfo& f) {
+    std::string name(f.sym->name);
+    if (f.sym->owner && f.sym->owner->owner_symbol && f.sym->owner->owner_symbol->kind == semantics::SymbolKind::Type) name = std::string(f.sym->owner->owner_symbol->name) + "::" + name;
+    std::string out;
+    for (char c : name) {
+        if (c == '"' || c == '\\') out += '\\';
+        out += c;
+    }
+    return out;
+}
+
+std::string CppEmitter::open_loop_guard(CodeBuffer& os, const nodes::ASTNode* s) {
+    const std::string counter = "walnut_loop_" + std::to_string(m_temp++);
+    const nodes::ASTNode* at = located(s, 0);
+    const std::uint32_t line = at && at->line ? at->line : s->line;
+    os << pad() << "{\n";
+    ++m_indent;
+    os << pad() << "WALNUT_LOOP_COUNTER(" << counter << ");\n";
+    m_loop_tick = "WALNUT_LOOP_TICK(" + counter + ", " + std::to_string(line) + ");";
+    return counter;
+}
+
+void CppEmitter::close_loop_guard(CodeBuffer& os, const std::string& counter) {
+    (void)counter;
+    m_loop_tick.clear();
+    --m_indent;
+    os << pad() << "}\n";
 }
 
 std::string_view CppEmitter::loop_label_of(const nodes::ASTNode* s) {
@@ -3144,22 +3178,27 @@ void CppEmitter::statement_body(CodeBuffer& os, nodes::ASTNode* s) {
 
         case K::WhileStatement: {
             auto* w = static_cast<nodes::WhileStatement*>(s);
+            const std::string counter = open_loop_guard(os, s);
             os << pad() << "while (" << truthy(w->condition) << ") ";
             loop_body(os, w->body);
             os << "\n";
+            close_loop_guard(os, counter);
             break;
         }
 
         case K::DoWhileStatement: {
             auto* w = static_cast<nodes::DoWhileStatement*>(s);
+            const std::string counter = open_loop_guard(os, s);
             os << pad() << "do ";
             loop_body(os, w->body);
             os << " while (" << truthy(w->condition) << ");\n";
+            close_loop_guard(os, counter);
             break;
         }
 
         case K::ForStatement: {
             auto* f = static_cast<nodes::ForStatement*>(s);
+            const std::string counter = open_loop_guard(os, s);
             os << pad() << "for (";
             if (f->has_var_init && f->var_init && f->var_init->kind == K::VariableDeclaration) os << local_decl(static_cast<nodes::VariableDeclaration*>(f->var_init), false);
             else if (f->initializer) os << expr(f->initializer);
@@ -3170,6 +3209,7 @@ void CppEmitter::statement_body(CodeBuffer& os, nodes::ASTNode* s) {
             os << ") ";
             loop_body(os, f->body);
             os << "\n";
+            close_loop_guard(os, counter);
             break;
         }
 
@@ -3282,10 +3322,26 @@ void CppEmitter::statement_body(CodeBuffer& os, nodes::ASTNode* s) {
 
         case K::TryCatchStatement: {
             auto* t = static_cast<nodes::TryCatchStatement*>(s);
+            if (t->finally_body) {
+                os << pad() << "{\n";
+                ++m_indent;
+                os << pad() << "::walnut_rt::finally_guard walnut_finally_" << std::to_string(m_temp++) << "([&]() ";
+                block(os, t->finally_body);
+                os << ");\n";
+                if (!t->is_handler()) {
+                    os << pad();
+                    block(os, t->try_body);
+                    os << "\n";
+                    --m_indent;
+                    os << pad() << "}\n";
+                    break;
+                }
+            }
             os << pad() << "try ";
             block(os, t->try_body);
 
             for (nodes::TryCatchStatement* h = t; h; h = h->next_handler) {
+                if (!h->is_handler()) continue;
                 if (h->has_typed_catch) {
                     Type* ct = m_types.canonicalize(h->catch_type);
                     os << " catch (" << cpp_type(ct, h) << " " << local_name(h->catch_name) << ") ";
@@ -3296,6 +3352,10 @@ void CppEmitter::statement_body(CodeBuffer& os, nodes::ASTNode* s) {
             }
 
             os << "\n";
+            if (t->finally_body) {
+                --m_indent;
+                os << pad() << "}\n";
+            }
             break;
         }
 
@@ -3524,6 +3584,10 @@ auto CppEmitter::param_slots(const Sym* fn, bool& has_group) -> std::vector<Para
     return out;
 }
 
+std::string CppEmitter::noexcept_text(const modifiers::FunctionQualifiers& q) {
+    return q.has(FQ::Noexcept) && !q.has_conditional_noexcept() ? " noexcept" : "";
+}
+
 std::string CppEmitter::function_header(const FuncInfo& f, bool qualified, bool in_class) {
     EnvScope outer(m_types, outer_env(f));
     EnvScope env(m_types, f.inst ? &f.inst->env : nullptr);
@@ -3567,6 +3631,7 @@ std::string CppEmitter::function_header(const FuncInfo& f, bool qualified, bool 
     m_templated_params = saved_templated;
 
     if (f.owner && q->has(FQ::Const) && !mods->has(RM::Static)) out += " const";
+    if (q->has(FQ::Noexcept) && !q->has_conditional_noexcept() && !q->has(FQ::Virtual) && !q->has(FQ::Override) && !decl_is_async(f.decl)) out += " noexcept";
     return out;
 }
 
@@ -3696,7 +3761,33 @@ void CppEmitter::emit_function_body(CodeBuffer& os, const FuncInfo& f) {
     }
 
     if (!async) collect_last_uses(params_of(f.decl), { body });
-    callable_body(os, body, m_current_return, async, caps, f.sym == m_main_fn);
+    if (!async && !generator_of(m_current_return) && body) {
+        CodeBuffer inner;
+        callable_body(inner, body, m_current_return, async, caps, f.sym == m_main_fn);
+        std::string text = inner.str();
+        const std::size_t open = text.find("{\n");
+        if (open != std::string::npos) {
+            std::string entry = "    WALNUT_DEPTH_GUARD(\"" + std::string(f.sym->name) + "\");\n";
+            const bool own = source_path && (tracks_lines ? tracks_lines(f.decl->file_id) : !source_path(f.decl->file_id).empty());
+            if (own) {
+                std::string names;
+                std::string sizes;
+                if (const nodes::FunctionParameters* ps = params_of(f.decl)) {
+                    for (const nodes::FunctionParameter* p : ps->m_params) {
+                        if (p->expanded_pack || p->is_variadic() || p->get_name().empty() || p->get_name() == "self") continue;
+                        names += (names.empty() ? "" : ",") + std::string(p->get_name());
+                        sizes += ", ::walnut_rt::profile::size_of(" + local_name(p->get_name()) + ")";
+                    }
+                }
+                if (sizes.empty()) entry += "    WALNUT_PROFILE_FUNCTION(\"" + profile_name(f) + "\", " + std::to_string(f.decl->line) + ");\n";
+                else entry += "    WALNUT_PROFILE_FUNCTION_ARGS(\"" + profile_name(f) + "\", " + std::to_string(f.decl->line) + ", \"" + names + "\"" + sizes + ");\n";
+            }
+            text.insert(open + 2, entry);
+        }
+        os << text;
+    } else {
+        callable_body(os, body, m_current_return, async, caps, f.sym == m_main_fn);
+    }
     os << "\n";
     line_reset(os);
     os << "\n";
@@ -3992,7 +4083,7 @@ void CppEmitter::emit_native_record(CodeBuffer& os, RecordInfo* r) {
             auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
             has_ctor = true;
             const bool forwarded = c->m_special != nodes::ConstructorDeclaration::Special::Delete && !c->m_body;
-            os << "    " << (forwarded ? "template <int W_ = 0> " : "") << (c->m_qualifiers.has(FQ::Explicit) ? "explicit " : "") << r->cname << "(" << param_list(c->get_parameters(), c, true) << ")";
+            os << "    " << (forwarded ? "template <int W_ = 0> " : "") << (c->m_qualifiers.has(FQ::Explicit) ? "explicit " : "") << r->cname << "(" << param_list(c->get_parameters(), c, true) << ")" << noexcept_text(c->m_qualifiers);
             if (c->m_special == nodes::ConstructorDeclaration::Special::Delete) os << " = delete;\n";
             else if (c->m_body) os << ";\n";
             else if (!c->native_name.empty()) os << " : native(" << native_template_name(c->native_name, r) << "(" << native_args(c->get_parameters()) << ")) {}\n";
@@ -4118,7 +4209,7 @@ void CppEmitter::emit_record(CodeBuffer& os, RecordInfo* r) {
                 auto* c = static_cast<nodes::ConstructorDeclaration*>(n);
                 using SP = nodes::ConstructorDeclaration::Special;
                 if (c->m_special == SP::Delete && self_ref_kind(r, c->get_parameters()) == 2) break;
-                os << pad() << (c->m_qualifiers.has(FQ::Explicit) ? "explicit " : "") << r->cname << "(" << param_list(c->get_parameters(), c, true) << ")";
+                os << pad() << (c->m_qualifiers.has(FQ::Explicit) ? "explicit " : "") << r->cname << "(" << param_list(c->get_parameters(), c, true) << ")" << noexcept_text(c->m_qualifiers);
                 if (c->m_special == SP::Default) { os << " = default;\n"; break; }
                 if (c->m_special == SP::Delete)  { os << " = delete;\n"; break; }
                 os << ";\n";
@@ -4130,9 +4221,9 @@ void CppEmitter::emit_record(CodeBuffer& os, RecordInfo* r) {
                 using SP = nodes::DestructorDeclaration::Special;
                 const bool virt = d->m_qualifiers.has(FQ::Virtual) || polymorphic;
                 os << pad() << (virt ? "virtual " : "") << "~" << r->cname << "()";
-                if (d->m_special == SP::Default) { os << " noexcept(false) {}\n"; break; }
+                if (d->m_special == SP::Default) { os << " noexcept {}\n"; break; }
                 if (d->m_special == SP::Delete)  { os << " = delete;\n"; break; }
-                os << " noexcept(false);\n";
+                os << " noexcept;\n";
                 break;
             }
 
@@ -4176,7 +4267,7 @@ void CppEmitter::emit_record(CodeBuffer& os, RecordInfo* r) {
         if (owner_record_of(I->sym) != r) continue;
         EnvScope inst_env(m_types, &I->env);
         auto* c = static_cast<nodes::ConstructorDeclaration*>(I->decl);
-        os << pad() << (ctor_instance_self_kind(I) == 2 ? "template <int W_ = 0> " : "") << (c->m_qualifiers.has(FQ::Explicit) ? "explicit " : "") << r->cname << "(" << param_list(c->get_parameters(), c, true) << ");\n";
+        os << pad() << (ctor_instance_self_kind(I) == 2 ? "template <int W_ = 0> " : "") << (c->m_qualifiers.has(FQ::Explicit) ? "explicit " : "") << r->cname << "(" << param_list(c->get_parameters(), c, true) << ")" << noexcept_text(c->m_qualifiers) << ";\n";
     }
 
     emit_lazy_fields(os, r);
@@ -4184,7 +4275,44 @@ void CppEmitter::emit_record(CodeBuffer& os, RecordInfo* r) {
 
     m_indent = 0;
     os << "};\n\n";
+    emit_layout_record(os, r);
     m_current_record = saved;
+}
+
+void CppEmitter::emit_layout_record(CodeBuffer& os, RecordInfo* r) {
+    if (!source_path || r->decl->is_union()) return;
+    const bool own = tracks_lines ? tracks_lines(r->decl->file_id) : !source_path(r->decl->file_id).empty();
+    if (!own) return;
+    std::vector<std::pair<std::string, std::string>> fields;
+    for (const auto& member : r->decl->get_members()) {
+        nodes::ASTNode* n = member.node;
+        if (!n) continue;
+        if (n->kind == K::VariableDeclaration) {
+            auto* v = static_cast<nodes::VariableDeclaration*>(n);
+            if (is_lazy_decl(v) || v->get_type_info().modifiers.has(RM::Static)) continue;
+            fields.emplace_back(std::string(v->get_name()), local_name(v->get_name()));
+        } else if (n->kind == K::ArrayDeclaration) {
+            auto* a = static_cast<nodes::ArrayDeclaration*>(n);
+            if (a->get_array_modifiers().has(RM::Static)) continue;
+            fields.emplace_back(std::string(a->m_name), local_name(a->m_name));
+        }
+    }
+    if (fields.size() < 2) return;
+    auto quoted = [](const std::string& text) {
+        std::string out = "\"";
+        for (char c : text) { if (c == '\\' || c == '"') out += '\\'; out += c; }
+        return out + "\"";
+    };
+    std::string name = r->sym ? std::string(r->sym->name) : r->cname;
+    if (r->env && name.find('<') == std::string::npos) name = r->cname;
+    std::string id;
+    for (char c : r->cname) id += std::isalnum(static_cast<unsigned char>(c)) ? c : '_';
+    os << "#if defined(WALNUT_PROFILE)\n";
+    os << "[[maybe_unused]] inline const bool walnut_profile_layout_" << id << " = ::walnut_rt::profile::layout<" << r->cname << ">(" << quoted(name) << ", " << quoted(source_path(r->decl->file_id)) << ", " << r->decl->line << ", {";
+    for (std::size_t i = 0; i < fields.size(); ++i) {
+        os << (i ? ", " : " ") << "{ " << quoted(fields[i].first) << ", ::walnut_rt::profile::field_size<decltype(" << r->cname << "::" << fields[i].second << ")>(), ::walnut_rt::profile::field_align<decltype(" << r->cname << "::" << fields[i].second << ")>() }";
+    }
+    os << " });\n#endif\n\n";
 }
 
 void CppEmitter::emit_native_constructors(CodeBuffer& os, RecordInfo* r) {
@@ -4193,7 +4321,7 @@ void CppEmitter::emit_native_constructors(CodeBuffer& os, RecordInfo* r) {
         auto* c = static_cast<nodes::ConstructorDeclaration*>(member.node);
         if (!c->m_body) continue;
         line_marker(os, c);
-        os << m_def_prefix << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ") : native() ";
+        os << m_def_prefix << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ")" << noexcept_text(c->m_qualifiers) << " : native() ";
         Type* saved_ret = m_current_return;
         m_current_return = m_types.void_();
         m_indent = 0;
@@ -4207,7 +4335,7 @@ void CppEmitter::emit_native_constructors(CodeBuffer& os, RecordInfo* r) {
 
 void CppEmitter::emit_destructor_definition(CodeBuffer& os, RecordInfo* r, nodes::DestructorDeclaration* d) {
     line_marker(os, d);
-    os << m_def_prefix << r->cname << "::~" << r->cname << "() noexcept(false) ";
+    os << m_def_prefix << r->cname << "::~" << r->cname << "() noexcept ";
     Type* saved_ret = m_current_return;
     m_current_return = m_types.void_();
     m_indent = 0;
@@ -4263,7 +4391,7 @@ void CppEmitter::emit_record_definitions(CodeBuffer& os, RecordInfo* r, CodeBuff
         if (ctor_instance_self_kind(I) == 2) {
             os << "template <int W_>\n";
             emit_constructor_definition(os, r, c);
-            os << "template " << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ");\n\n";
+            os << "template " << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ")" << noexcept_text(c->m_qualifiers) << ";\n\n";
         } else {
             emit_constructor_definition(instances, r, c);
         }
@@ -4292,7 +4420,7 @@ int CppEmitter::ctor_instance_self_kind(Inst* I) {
 
 void CppEmitter::emit_constructor_definition(CodeBuffer& os, RecordInfo* r, nodes::ConstructorDeclaration* c) {
     line_marker(os, c);
-    os << m_def_prefix << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ")";
+    os << m_def_prefix << r->cname << "::" << r->cname << "(" << param_list(c->get_parameters(), c) << ")" << noexcept_text(c->m_qualifiers);
     std::vector<std::string> inits;
     {
         std::vector<nodes::ASTNode*> roots(c->get_init_list().begin(), c->get_init_list().end());
@@ -4637,7 +4765,7 @@ void CppEmitter::emit_special_members(CodeBuffer& os, RecordInfo* r, bool polymo
     }
 
     const std::string& c = r->cname;
-    if (!has_dtor && polymorphic) os << pad() << "virtual ~" << c << "() noexcept(false) {}\n";
+    if (!has_dtor && polymorphic) os << pad() << "virtual ~" << c << "() noexcept {}\n";
     if (!has_dtor && !polymorphic && copy == 0 && move == 0) return;
     if (!has_ctor && !polymorphic) return;
 

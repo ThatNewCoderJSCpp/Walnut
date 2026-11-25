@@ -34,7 +34,7 @@ safe(compile) {
                     }
                 } end function finite
 
-                function check_steps(const string&: what, long int: steps) -> void {
+                function check_steps(const string&: what, unsigned long int: steps) -> void {
                     if (steps <= 0) then {
                         throw std::errors::integration_error(static_cast<string>(`${what}: the number of steps must be positive, not ${steps}`));
                     }
@@ -49,7 +49,7 @@ safe(compile) {
                 } end function check_tolerance
 
                 template <typename T, typename F>
-                function simpson_step(const F&: f, const T&: a, const T&: b, const T&: fa, const T&: fm, const T&: fb, const T&: whole, const T&: tolerance, long int: depth, bool&: converged) -> T {
+                function simpson_step(const F&: f, const T&: a, const T&: b, const T&: fa, const T&: fm, const T&: fb, const T&: whole, const T&: tolerance, unsigned long int: depth, bool&: converged) -> T {
                     const T: m = (a + b) / T(2);
                     const T: lm = (a + m) / T(2);
                     const T: rm = (m + b) / T(2);
@@ -70,7 +70,7 @@ safe(compile) {
                 } end function simpson_step
 
                 template <typename T, typename F>
-                function adaptive(const F&: f, const T&: a, const T&: b, const T&: tolerance, long int: max_depth) -> T {
+                function adaptive(const F&: f, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_depth) -> T {
                     if (a == b) then {
                         return T(0);
                     }
@@ -91,25 +91,25 @@ safe(compile) {
                 struct Rule {
                     array[64] T: nodes;
                     array[64] T: weights;
-                    long int: count;
+                    unsigned long int: count;
                 } end struct Rule
 
                 template <typename T>
                 requires std::symbolic::Real<T>
-                function legendre_rule(long int: points) -> Rule<T> {
+                function legendre_rule(unsigned long int: points) -> Rule<T> {
                     Rule<T>: rule;
                     rule.count = points;
                     const T: one = T(1);
                     const T: two = T(2);
                     const T: pi = std::constants::pi<T>();
-                    const long int: pairs = (points + 1) / 2;
-                    for (long int: i = 1; i <= pairs; i++) {
+                    const unsigned long int: pairs = (points + 1) / 2;
+                    for (unsigned long int: i = 1; i <= pairs; i++) {
                         T: x = std::math::cos(pi * T(4 * i - 1) / T(4 * points + 2));
                         T: slope = one;
-                        for (int: iteration = 0; iteration < 200; iteration++) {
+                        for (unsigned int: iteration = 0; iteration < 200; iteration++) {
                             T: p0 = one;
                             T: p1 = x;
-                            for (long int: k = 2; k <= points; k++) {
+                            for (unsigned long int: k = 2; k <= points; k++) {
                                 const T: p2 = ((two * T(k) - one) * x * p1 - (T(k) - one) * p0) / T(k);
                                 p0 = p1;
                                 p1 = p2;
@@ -139,8 +139,8 @@ safe(compile) {
                     const T: half = (b - a) / T(2);
                     const T: mid = (b + a) / T(2);
                     T: total = T(0);
-                    const long int: slots = 2 * ((rule.count + 1) / 2);
-                    for (long int: i = 0; i < slots; i++) {
+                    const unsigned long int: slots = 2 * ((rule.count + 1) / 2);
+                    for (unsigned long int: i = 0; i < slots; i++) {
                         if (rule.weights[i] != T(0)) then {
                             total += rule.weights[i] * f(mid + half * rule.nodes[i]);
                         }
@@ -149,7 +149,7 @@ safe(compile) {
                 } end function apply_rule
 
                 template <typename T, typename F>
-                function gauss_step(const F&: f, const Rule<T>&: fine, const T&: a, const T&: b, const T&: estimate, const T&: tolerance, long int: depth, bool&: converged) -> T {
+                function gauss_step(const F&: f, const Rule<T>&: fine, const T&: a, const T&: b, const T&: estimate, const T&: tolerance, unsigned long int: depth, bool&: converged) -> T {
                     const T: m = (a + b) / T(2);
                     const T: left = apply_rule(f, fine, a, m);
                     const T: right = apply_rule(f, fine, m, b);
@@ -167,7 +167,7 @@ safe(compile) {
                 } end function gauss_step
 
                 template <typename T, typename F>
-                function adaptive_gauss(const F&: f, const T&: a, const T&: b, const T&: tolerance, long int: max_depth) -> T {
+                function adaptive_gauss(const F&: f, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_depth) -> T {
                     if (a == b) then {
                         return T(0);
                     }
@@ -187,12 +187,12 @@ safe(compile) {
                 } end function magnitude
 
                 template <typename T, typename F>
-                function tanh_sinh_level(const F&: f, const T&: a, const T&: b, const T&: h, long int: start, long int: stride, const T&: cutoff) -> T {
+                function tanh_sinh_level(const F&: f, const T&: a, const T&: b, const T&: h, unsigned long int: start, unsigned long int: stride, const T&: cutoff) -> T {
                     const T: half = (b - a) / T(2);
                     const T: half_pi = std::constants::pi<T>() / T(2);
                     T: total = T(0);
-                    long int: quiet = 0;
-                    for (long int: j = start; j <= 100000; j += stride) {
+                    unsigned long int: quiet = 0;
+                    for (unsigned long int: j = start; j <= 100000; j += stride) {
                         const T: t = h * T(j);
                         const T: u = half_pi * std::math::sinh(t);
                         const T: e2u = std::math::exp(u * T(2));
@@ -241,7 +241,7 @@ safe(compile) {
                 } end function tanh_sinh_level
 
                 template <typename T, typename F>
-                function tanh_sinh(const F&: f, const T&: a, const T&: b, const T&: tolerance, long int: max_level, bool&: converged) -> T {
+                function tanh_sinh(const F&: f, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_level, bool&: converged) -> T {
                     converged = true;
                     if (a == b) then {
                         return T(0);
@@ -251,7 +251,7 @@ safe(compile) {
                     T: h = T(1);
                     T: sum = tanh_sinh_level(f, a, b, h, 0, 1, cutoff);
                     T: estimate = sum * h * half;
-                    for (long int: level = 1; level <= max_level; level++) {
+                    for (unsigned long int: level = 1; level <= max_level; level++) {
                         h = h / T(2);
                         sum += tanh_sinh_level(f, a, b, h, 1, 2, cutoff);
                         const T: next = sum * h * half;
@@ -299,7 +299,7 @@ safe(compile) {
 
             template <typename T>
             requires std::symbolic::Real<T>
-            function adaptive_simpson(const Expression&: f, const string&: name, const T&: a, const T&: b, const T&: tolerance, long int: max_depth = 50) -> T {
+            function adaptive_simpson(const Expression&: f, const string&: name, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_depth = 50) -> T {
                 detail::check_tolerance("adaptive_simpson", tolerance);
                 auto: g = [&f, &name](const T&: x) -> T { return f.evaluate<T>(name, x); };
                 return detail::adaptive(g, a, b, tolerance, max_depth);
@@ -307,7 +307,7 @@ safe(compile) {
 
             template <typename T>
             requires std::symbolic::Real<T>
-            function adaptive_gauss(const Expression&: f, const string&: name, const T&: a, const T&: b, const T&: tolerance, long int: max_depth = 60) -> T {
+            function adaptive_gauss(const Expression&: f, const string&: name, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_depth = 60) -> T {
                 detail::check_tolerance("adaptive_gauss", tolerance);
                 auto: g = [&f, &name](const T&: x) -> T { return f.evaluate<T>(name, x); };
                 return detail::adaptive_gauss(g, a, b, tolerance, max_depth);
@@ -315,7 +315,7 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function adaptive_gauss(function(T) -> T: f, const T&: a, const T&: b, const T&: tolerance, long int: max_depth = 60) -> T {
+            function adaptive_gauss(function(T) -> T: f, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_depth = 60) -> T {
                 detail::check_tolerance("adaptive_gauss", tolerance);
                 return detail::adaptive_gauss(f, a, b, tolerance, max_depth);
             } end function adaptive_gauss
@@ -342,7 +342,7 @@ safe(compile) {
 
             template <typename T>
             requires std::symbolic::Real<T>
-            function tanh_sinh(const Expression&: f, const string&: name, const T&: a, const T&: b, const T&: tolerance, long int: max_level = 14) -> T {
+            function tanh_sinh(const Expression&: f, const string&: name, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_level = 14) -> T {
                 detail::check_tolerance("tanh_sinh", tolerance);
                 auto: g = [&f, &name](const T&: x) -> T { return f.evaluate<T>(name, x); };
                 bool: converged = true;
@@ -355,7 +355,7 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function tanh_sinh(function(T) -> T: f, const T&: a, const T&: b, const T&: tolerance, long int: max_level = 14) -> T {
+            function tanh_sinh(function(T) -> T: f, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_level = 14) -> T {
                 detail::check_tolerance("tanh_sinh", tolerance);
                 bool: converged = true;
                 const T: result = detail::tanh_sinh(f, a, b, tolerance, max_level, converged);
@@ -367,11 +367,11 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function trapezoid(function(T) -> T: f, const T&: a, const T&: b, long int: steps = 1000) -> T {
+            function trapezoid(function(T) -> T: f, const T&: a, const T&: b, unsigned long int: steps = 1000) -> T {
                 detail::check_steps("trapezoid", steps);
                 const T: h = (b - a) / static_cast<T>(steps);
                 T: total = (f(a) + f(b)) / static_cast<T>(2);
-                for (long int: i = 1; i < steps; i++) {
+                for (unsigned long int: i = 1; i < steps; i++) {
                     total += f(a + h * static_cast<T>(i));
                 }
                 return total * h;
@@ -379,11 +379,11 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function midpoint(function(T) -> T: f, const T&: a, const T&: b, long int: steps = 1000) -> T {
+            function midpoint(function(T) -> T: f, const T&: a, const T&: b, unsigned long int: steps = 1000) -> T {
                 detail::check_steps("midpoint", steps);
                 const T: h = (b - a) / static_cast<T>(steps);
                 T: total = static_cast<T>(0);
-                for (long int: i = 0; i < steps; i++) {
+                for (unsigned long int: i = 0; i < steps; i++) {
                     total += f(a + h * (static_cast<T>(i) + static_cast<T>(0.5)));
                 }
                 return total * h;
@@ -391,12 +391,12 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function simpson(function(T) -> T: f, const T&: a, const T&: b, long int: steps = 1000) -> T {
+            function simpson(function(T) -> T: f, const T&: a, const T&: b, unsigned long int: steps = 1000) -> T {
                 detail::check_steps("simpson", steps);
-                const long int: n = steps % 2 == 0 ? steps : steps + 1;
+                const unsigned long int: n = steps % 2 == 0 ? steps : steps + 1;
                 const T: h = (b - a) / static_cast<T>(n);
                 T: total = f(a) + f(b);
-                for (long int: i = 1; i < n; i++) {
+                for (unsigned long int: i = 1; i < n; i++) {
                     const T: weight = i % 2 == 1 ? static_cast<T>(4) : static_cast<T>(2);
                     total += weight * f(a + h * static_cast<T>(i));
                 }
@@ -405,31 +405,31 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function adaptive_simpson(function(T) -> T: f, const T&: a, const T&: b, const T&: tolerance, long int: max_depth = 50) -> T {
+            function adaptive_simpson(function(T) -> T: f, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_depth = 50) -> T {
                 detail::check_tolerance("adaptive_simpson", tolerance);
                 return detail::adaptive(f, a, b, tolerance, max_depth);
             } end function adaptive_simpson
 
             template <typename T>
             requires Float<T>
-            function romberg(function(T) -> T: f, const T&: a, const T&: b, const T&: tolerance, long int: max_steps = 20) -> T {
+            function romberg(function(T) -> T: f, const T&: a, const T&: b, const T&: tolerance, unsigned long int: max_steps = 20) -> T {
                 detail::check_tolerance("romberg", tolerance);
                 detail::check_steps("romberg", max_steps);
                 array[32] T: previous;
                 array[32] T: current;
-                const long int: rows = max_steps < 32 ? max_steps : 32;
+                const unsigned long int: rows = max_steps < 32 ? max_steps : 32;
                 T: h = b - a;
                 previous[0] = h / static_cast<T>(2) * (f(a) + f(b));
-                for (long int: i = 1; i < rows; i++) {
+                for (unsigned long int: i = 1; i < rows; i++) {
                     h = h / static_cast<T>(2);
                     T: sum = static_cast<T>(0);
-                    const long int: count = static_cast<long int>(1) << (i - 1);
-                    for (long int: k = 1; k <= count; k++) {
+                    const unsigned long int: count = static_cast<unsigned long int>(1) << (i - 1);
+                    for (unsigned long int: k = 1; k <= count; k++) {
                         sum += f(a + static_cast<T>(2 * k - 1) * h);
                     }
                     current[0] = previous[0] / static_cast<T>(2) + h * sum;
                     T: factor = static_cast<T>(1);
-                    for (long int: j = 1; j <= i; j++) {
+                    for (unsigned long int: j = 1; j <= i; j++) {
                         factor = factor * static_cast<T>(4);
                         current[j] = current[j - 1] + (current[j - 1] - previous[j - 1]) / (factor - static_cast<T>(1));
                     }
@@ -438,7 +438,7 @@ safe(compile) {
                     if (size <= tolerance) then {
                         return current[i];
                     }
-                    for (long int: j = 0; j <= i; j++) {
+                    for (unsigned long int: j = 0; j <= i; j++) {
                         previous[j] = current[j];
                     }
                 }
@@ -447,7 +447,7 @@ safe(compile) {
 
             template <typename T>
             requires Float<T>
-            function gauss_legendre(function(T) -> T: f, const T&: a, const T&: b, long int: points = 16) -> T {
+            function gauss_legendre(function(T) -> T: f, const T&: a, const T&: b, unsigned long int: points = 16) -> T {
                 if (points <= 0 || points > 64) then {
                     throw std::errors::integration_error(static_cast<string>(`gauss_legendre: the number of points must be between 1 and 64, not ${points}`));
                 }

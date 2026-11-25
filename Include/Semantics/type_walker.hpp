@@ -97,6 +97,7 @@ private:
 
     struct ControlContextGuard {
         TypeWalker& w; unsigned long long int loops, switches;
+        bool in_finally = false;
         std::vector<std::string_view> labels;
         std::vector<std::pair<Span<nodes::ASTNode* const>, std::size_t>> path;
         std::vector<std::pair<nodes::SingleStatement*, std::vector<std::pair<Span<nodes::ASTNode* const>, std::size_t>>>> jump_labels, jumps;
@@ -144,6 +145,10 @@ private:
     };
 
     std::optional<std::int64_t> lifecycle_trait(parser_types::TypeTrait trait, const std::vector<Type*>& args);
+    bool probe_compiles(const std::vector<Type*>& types, const std::function<nodes::ASTNode*(const std::vector<nodes::ASTNode*>&)>& build, bool want_overload);
+    bool probe_for_each(Type* t);
+    bool probe_function_like(Type* t);
+    bool probe_operator(const std::vector<Type*>& args, bool want_overload);
     ConstructChoice quiet_constructor(Type* record, const std::vector<Type*>& args);
     bool can_construct(Type* t, const std::vector<Type*>& args, Want want, int depth);
     bool can_assign(Type* to, Type* from, Want want, int depth);
@@ -165,6 +170,7 @@ private:
     std::vector<nodes::ASTNode*> m_fn_bodies;
     std::size_t                  m_catch_depth  = 0; 
     unsigned long long int       m_loop_depth   = 0;
+    bool                         m_in_finally   = false;
     std::vector<std::string_view> m_loop_labels;
     using StmtPath = std::vector<std::pair<Span<nodes::ASTNode* const>, std::size_t>>;
     StmtPath m_stmt_path;
@@ -209,6 +215,12 @@ private:
     void check_cast(nodes::CastExpression* c, Type* src, Type* dst);
     void report_overflow(nodes::ASTNode* at, const std::string& detail);
     void check_clamped_cast(nodes::CastExpression* c, Type* dst);
+    void check_bad_constants(nodes::BinaryExpression* b);
+    int m_dead_constant = 0;
+    void check_bad_constants(nodes::UnaryExpression* u);
+    void check_unsigned_comparison(nodes::BinaryExpression* b);
+    void report_redundant_cast(nodes::CastExpression* c, Type* src, Type* dst);
+    void check_constant_index(nodes::SubscriptExpression* s, Type* arr);
 
     Scope* member_scope_of(Type* t);
     Type* record_iteration(nodes::ForEachStatement* s, Type* container);
@@ -442,6 +454,8 @@ private:
 
     int         m_constraint_depth = 0;
     std::string m_last_constraint_failure;
+    std::set<std::tuple<const void*, FileId, std::size_t>> m_reported_constraints;
+    bool member_constraint_holds(Symbol* fn, const SubstEnv* env, std::string& failed);
 
     bool concept_satisfied(Symbol* cept, const TemplateArgs& args);
 
@@ -616,6 +630,9 @@ private:
     static bool breaks_out(const nodes::ASTNode* s);
 
     bool constant_true(nodes::ASTNode* cond);
+    bool unsigned_never_negative(nodes::ASTNode* cond);
+    void check_loop(nodes::ASTNode* loop);
+    void check_self_recursion(const Symbol* fn, nodes::ASTNode* body, nodes::ASTNode* site);
 
     bool always_exits(nodes::ASTNode* s);
 

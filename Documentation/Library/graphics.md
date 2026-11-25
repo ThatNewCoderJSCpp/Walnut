@@ -313,8 +313,8 @@ function main() -> int {
     sheet.fill_rect(0, 0, 16, 16, std::colors::forest_green);
     sheet.fill_rect(16, 0, 16, 16, std::colors::saddle_brown);
     TileMap: map = TileMap(16, 16);
-    const long int: first = map.add_tileset(Texture::from_image(sheet), 16, 16);
-    const long int: ground = map.add_layer("ground", 20, 15);
+    const unsigned long int: first = map.add_tileset(Texture::from_image(sheet), 16, 16);
+    const unsigned long int: ground = map.add_layer("ground", 20, 15);
     map.fill_layer(ground, first);
     for (long int: x = 0; x < 20; x++) {
         map.set_tile(ground, x, 12, first + 1);

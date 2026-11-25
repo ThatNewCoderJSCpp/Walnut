@@ -11,6 +11,7 @@ std::vector<std::string> g_native_from;
 std::vector<walnut::codegen::NativeCode> g_native_code;
 
 LibraryState g_lib;
+walnut::driver::PerfInfo g_perf;
 
 void print_usage(std::ostream& os) {
     os << "usage: walnut <command> [options] <main.wal> [more.wal ...] [C/C++ files] [-- program arguments]\n"
@@ -21,6 +22,18 @@ void print_usage(std::ostream& os) {
           "  build   compile the program to an executable without running it (default: the input name without .wal);\n"
           "          with -c, --static or --shared it makes an object file or a library instead\n"
           "  run     build the program and run it\n"
+          "  profile build the program with timing added, run it, and report its slowest lines and functions, with suggestions:\n"
+          "          --top <n> rows in each table (default 10), --function <name> and --file <path> for a line-by-line breakdown\n"
+          "          (and to keep only their suggestions), --report <file> for the report, --json <file> for editors,\n"
+          "          --suggest-out <file> for the suggestions (a .diff or .patch file gets just the changes),\n"
+          "          --annotate <file> for a copy of the program with each line's time, --apply to make the suggested\n"
+          "          changes (each changed file is backed up as .bak), --no-suggest to leave suggestions out, --memory to also\n"
+          "          count allocations (which lines allocate the most and what's still held at the end; it slows every allocation\n"
+          "          down, so it's off unless asked), --complexity to also measure how each function grows with the size of its\n"
+          "          arguments (slows every call down)\n"
+          "  complexity  estimate how each function's time and memory grow with the size of its input (O(n), O(n^2), ...):\n"
+          "          --run to also build and run the program and measure it, --function <name> and --file <path> to pick which,\n"
+          "          --json <file> for editors\n"
           "  clean   delete walnut's build cache\n"
           "  highlight  print what each name and operator in the file is, as JSON, for editors (with --stdin, the file's text is read from standard input)\n"
           "  complete   print the names that fit at --at LINE:COLUMN (from 1, in bytes), as JSON, for editors' autocomplete; also takes --stdin\n"
@@ -98,6 +111,10 @@ void print_usage(std::ostream& os) {
           "                     constants that overflow or clamp become compile errors instead of warnings\n"
           "  --check-dangling   stop with the .wal line when a pointer to a local variable is used after its function returned\n"
           "  --checks           all four checks above\n"
+          "  --check-loops[=n]  stop with the .wal line when one run of a loop goes round more than n times\n"
+          "                     (100000000 if n is left out; WALNUT_LOOP_LIMIT overrides it when the program runs)\n"
+          "  --check-recursion[=n]  stop with the .wal line when calls are nested more than n deep, before the stack\n"
+          "                     runs out (10000 if n is left out; WALNUT_DEPTH_LIMIT overrides it when the program runs)\n"
           "  --leak-check[=warn|error]  list memory from new that was never deleted when the program ends;\n"
           "                     with =error the program also exits with code 3 (WALNUT_LEAKS=off|warn|error overrides it)\n"
           "  --gc               a garbage collector frees objects made with new once nothing points to them;\n"
@@ -302,6 +319,8 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     else if (cmd == "emit")  o.command = Command::Emit;
     else if (cmd == "build") o.command = Command::Build;
     else if (cmd == "run")   o.command = Command::Run;
+    else if (cmd == "profile") { o.command = Command::Run; o.profile = true; }
+    else if (cmd == "complexity") { o.command = Command::Check; o.complexity = true; }
     else if (cmd == "clean") { o.command = Command::Clean; return true; }
     else if (cmd == "highlight") o.command = Command::Highlight;
     else if (cmd == "complete") o.command = Command::Complete;
@@ -370,6 +389,17 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
         else if (a == "--check-null")     o.safety.push_back("-DWALNUT_CHECK_NULL");
         else if (a == "--check-overflow") { o.safety.push_back("-DWALNUT_CHECK_OVERFLOW"); o.overflow_errors = true; }
         else if (a == "--check-dangling") o.safety.push_back("-DWALNUT_CHECK_DANGLING");
+        else if (a == "--check-loops" || a.rfind("--check-loops=", 0) == 0 || a == "--check-recursion" || a.rfind("--check-recursion=", 0) == 0) {
+            const bool loops = a.rfind("--check-loops", 0) == 0;
+            const std::size_t eq = a.find('=');
+            std::string n = loops ? "100000000" : "10000";
+            if (eq != std::string::npos) {
+                n = a.substr(eq + 1);
+                const bool digits = !n.empty() && n.size() <= 18 && n.find_first_not_of("0123456789") == std::string::npos && n.find_first_not_of('0') != std::string::npos;
+                if (!digits) { std::cerr << "walnut: " << a.substr(0, eq) << " takes a whole number above 0, not '" << n << "'\n"; exit_code = 2; return false; }
+            }
+            o.safety.push_back(std::string(loops ? "-DWALNUT_CHECK_LOOPS=" : "-DWALNUT_CHECK_RECURSION=") + n + "ULL");
+        }
         else if (a == "--checks")      { for (const char* d : { "-DWALNUT_CHECK_BOUNDS", "-DWALNUT_CHECK_NULL", "-DWALNUT_CHECK_OVERFLOW", "-DWALNUT_CHECK_DANGLING" }) o.safety.push_back(d); o.overflow_errors = true; }
         else if (a == "--leak-check" || a == "--leak-check=warn") o.safety.push_back("-DWALNUT_LEAK_CHECK");
         else if (a == "--leak-check=error") { o.safety.push_back("-DWALNUT_LEAK_CHECK"); o.safety.push_back("-DWALNUT_LEAK_ERROR"); }
@@ -393,6 +423,26 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
             if (o.android_api < 21) { std::cerr << "walnut: --android-api takes an Android API level, 21 or newer, such as 26\n"; exit_code = 2; return false; }
         }
         else if (a == "--no-prebuilt-std") o.prebuilt_std = false;
+        else if (o.profile && (a == "--top" || a.rfind("--top=", 0) == 0)) {
+            std::string v;
+            if (a == "--top") { const char* n = need(i, a); if (!n) return false; v = n; }
+            else v = a.substr(6);
+            const int n = std::atoi(v.c_str());
+            if (n <= 0 || v.find_first_not_of("0123456789") != std::string::npos) { std::cerr << "walnut: --top takes a whole number above 0, not '" << v << "'\n"; exit_code = 2; return false; }
+            o.profile_top = n;
+        }
+        else if ((o.profile || o.complexity) && a == "--function") { const char* v = need(i, a); if (!v) return false; o.profile_functions.push_back(v); }
+        else if ((o.profile || o.complexity) && a == "--file")     { const char* v = need(i, a); if (!v) return false; o.profile_files.push_back(v); }
+        else if ((o.profile || o.complexity) && a == "--json")     { const char* v = need(i, a); if (!v) return false; o.profile_json = v; }
+        else if (o.profile && a == "--report")   { const char* v = need(i, a); if (!v) return false; o.profile_report = v; }
+        else if (o.profile && a == "--suggest-out") { const char* v = need(i, a); if (!v) return false; o.profile_suggest_out = v; }
+        else if (o.profile && a == "--annotate") { const char* v = need(i, a); if (!v) return false; o.profile_annotate = v; }
+        else if (o.profile && a == "--no-suggest") o.profile_suggest = false;
+        else if (o.profile && a == "--apply")    o.profile_apply = true;
+        else if (o.profile && a == "--no-memory") o.profile_memory = false;
+        else if (o.profile && a == "--memory") o.profile_memory = true;
+        else if (o.profile && a == "--complexity") o.profile_complexity = true;
+        else if (o.complexity && (a == "--run" || a == "--measure")) o.complexity_run = true;
         else if (a == "-S" || a == "--asm" || a == "-E" || a == "--preprocessed" || a == "--preprocessed-cpp" || a == "--llvm-ir") {
             Dump d = Dump::Preprocessed;
             if (a == "-S" || a == "--asm") d = Dump::Assembly;
@@ -509,6 +559,15 @@ bool parse_args(int argc, char** argv, Options& o, int& exit_code) {
     std::sort(o.safety.begin(), o.safety.end());
     o.safety.erase(std::unique(o.safety.begin(), o.safety.end()), o.safety.end());
     for (const std::string& d : o.safety) o.cxx_flags.push_back(d);
+    if (o.complexity && o.complexity_run) {
+        o.command = Command::Run;
+        o.profile = true;
+        o.profile_complexity = true;
+        o.profile_suggest = false;
+    }
+    if (o.profile) o.cxx_flags.push_back("-DWALNUT_PROFILE");
+    if (o.profile && o.profile_memory) o.cxx_flags.push_back("-DWALNUT_PROFILE_MEMORY");
+    if (o.profile && o.profile_complexity) o.cxx_flags.push_back("-DWALNUT_PROFILE_COMPLEXITY");
 
     for (const auto& [flag, path] : { std::pair<const char*, const std::string*>{ "--tokens", &o.tokens_path }, { "--ast", &o.ast_path } }) {
         if (path->empty()) continue;
@@ -691,8 +750,18 @@ bool generate(const Options& o, std::string& cpp, walnut::codegen::SplitProgram*
         return false;
     }
 
+    if (o.profile || o.complexity) {
+        const walnut::SourceManager& srcs = compiler.get_sources();
+        g_perf = walnut::driver::performance_hints(compiler, [&srcs, &index](walnut::FileId f) {
+            if (f >= srcs.file_count()) return false;
+            const std::string& path = srcs.absolute_path(f);
+            return walnut::is_walnut_file(walnut::classify_file(path)) && !is_library_path(path) && index.owner_of(srcs, f) == nullptr;
+        });
+    }
+
     if (o.command == Command::Check) {
         if (!o.no_warnings) for (const std::string& w : index.warnings()) std::cerr << "walnut: warning: " << w << "\n";
+        if (o.complexity) return complexity_report(o) == 0;
         return true;
     }
 

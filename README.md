@@ -11,7 +11,7 @@ function main() -> int {
 } end function main
 ```
 
-Programs reach the screen, files and the rest of the system through Walnut's library or by calling C or C++ directly, as `puts` does above. The full language is described in [documentation.md](documentation.md). Walnut's library has its own documentation, one page per module, in [Documentation/Library](Documentation/Library/README.md). `core` comes with every program; the other modules, such as `io`, `collections`, `linalg`, `statistics`, `combinatorics`, `units`, `memory`, `graphs`, `windows`, `graphics`, `images`, `audio`, `video`, `ui`, `game`, `time`, `networking` and `crypto`, are imported by name.
+Programs reach the screen, files and the rest of the system through Walnut's library or by calling C or C++ directly, as `puts` does above. The full language is described in [documentation.md](documentation.md). Walnut's library has its own documentation, one page per module, in [Documentation/Library](Documentation/Library/README.md). `core` comes with every program; the other modules, such as `io`, `collections`, `linalg`, `statistics`, `combinatorics`, `units`, `memory`, `graphs`, `windows`, `graphics`, `images`, `audio`, `video`, `ui`, `game`, `time`, `networking`, `crypto` and `cache`, are imported by name.
 
 ## Requirements
 
@@ -179,6 +179,8 @@ walnut <command> [options] <main.wal> [more.wal ...] [C/C++ files] [-- program a
 |---|---|
 | `walnut check main.wal` | Report errors and warnings without building anything |
 | `walnut run main.wal` | Build and run the program |
+| `walnut profile main.wal` | Build and run the program with timing added, then list its slowest lines and functions and which classes could be smaller, with suggestions (`--memory` adds what allocates the most, `--complexity` measures how each function grows) ([details](documentation.md#profiling)) |
+| `walnut complexity main.wal` | Estimate how each function grows with the size of its input, like O(n) or O(n^2); `--run` also measures it ([details](documentation.md#complexity-estimates)) |
 | `walnut build main.wal` | Build an executable (named after the input, or `-o <path>`); with `-c`, `--static` or `--shared`, an object file or a library instead ([details](#libraries)) |
 | `walnut emit main.wal` | Print the generated C++ (or write it with `-o file.cpp`) |
 | `walnut clean` | Delete the build cache |
@@ -218,6 +220,7 @@ Common options:
 | `--line-map[=file]` | Write which `.wal` line each line of generated C++ came from (to the terminal when no file is given) |
 | `-v`, `--verbose` | Print the C++ compiler command |
 | `--checks` | Stop with the `.wal` line on an index outside memory from `new[]`, a null or deleted pointer, a pointer to a local of a function that already returned, or integer overflow (or pick one: `--check-bounds`, `--check-null`, `--check-dangling`, `--check-overflow`) |
+| `--check-loops[=n]`, `--check-recursion[=n]` | Stop with the `.wal` line when one run of a loop goes round more than `n` times, or calls are nested more than `n` deep (for loops and recursion that look stuck) |
 | `--leak-check[=warn\|error]` | List memory from `new` that was never deleted when the program ends |
 | `--gc` | Free objects made with `new` automatically once nothing points to them |
 | `--ownership` | Report use after move or delete, double deletes, leaks and dangling pointers or references while compiling |

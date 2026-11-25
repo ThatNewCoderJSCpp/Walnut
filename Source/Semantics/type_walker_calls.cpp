@@ -1,4 +1,5 @@
 #include "Semantics/type_walker.hpp"
+#include "Semantics/substitution.hpp"
 #include "Semantics/type_ops.hpp"
 #include "Parser/Nodes/node_children.hpp"
 #include <unordered_set>
@@ -8,6 +9,16 @@
 
 namespace walnut {
 namespace semantics {
+
+namespace {
+
+bool is_unsigned_int(Type* t) {
+    if (t && t->is_reference()) t = static_cast<ReferenceType*>(t)->referent();
+    return t && t->is_builtin() && static_cast<BuiltinType*>(t)->base() == parser_types::PrimitiveType::BaseKind::Int && static_cast<BuiltinType*>(t)->is_unsigned();
+}
+
+} // namespace
+
 
 bool TypeWalker::is_generic_lambda(const nodes::LambdaExpression* l) {
     if (l->generic_origin || !l->get_parameters()) return false;
@@ -786,6 +797,15 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
                 cand_shapes.push_back(shapes_of(o));
             }
 
+            if (matches.back().viable) {
+                std::string failed;
+                if (!member_constraint_holds(o, owner ? &owner->env : nullptr, failed)) {
+                    matches.back().viable = false;
+                    if (m_inst) ++m_inst->constraint_failures;
+                    m_last_constraint_failure = failed;
+                }
+            }
+
             cand_origins.push_back(o);
             cand_syms.push_back(o);
             cand_inst.push_back(owner);
@@ -907,6 +927,19 @@ Type* TypeWalker::type_call(nodes::CallExpression* c, const std::vector<Type*>& 
             if (args[i] && !args[i]->is_error() && !args[i]->is_dependent() && rank_conversion(args[i], m_types.dynamic_(), m_types) == ConversionRank::None) report_not_dynamic(args[i], c->m_arguments[i]);
         }
         return m_types.dynamic_();
+    }
+
+    if (Type* bare = m_types.strip_cv(callee_type && callee_type->is_reference() ? static_cast<ReferenceType*>(callee_type)->referent() : callee_type);
+        bare && !bare->is_error() && !bare->is_dependent() && !contains_error(bare)) {
+        bool callable = false;
+        if (bare->is_pointer()) {
+            Type* pointee = static_cast<PointerType*>(bare)->pointee();
+            callable = pointee && (pointee->is_dependent() || m_types.strip_cv(pointee)->is_function());
+        }
+        if (!callable && (bare->is_builtin() || bare->is_pointer() || bare->is_array() || bare->kind() == TypeKind::Enum)) {
+            SemanticError::emit(m_reporter, file_of(c), c->line, "Type", "'" + std::string(callee_name(c->m_callee)) + "' is a value of type '" + type_str(bare) + "', so it can't be called like a function");
+            return m_types.error_();
+        }
     }
 
     return callee_type;
@@ -1064,6 +1097,10 @@ std::string TypeWalker::candidate_notes(Symbol* head, const std::vector<Type*>& 
                 if (is_dynamic_t(want) || want->is_dependent()) continue;
                 if (rank_conversion(args[j], want, m_types) == ConversionRank::None) {
                     why = "argument " + std::to_string(j + 1) + " is '" + type_str(args[j]) + "', which can't be converted to '" + type_str(want) + "'";
+                    if (arg_nodes && j < arg_nodes->size()) {
+                        const ConstValue cv = m_eval.eval((*arg_nodes)[j]);
+                        if (cv.ok() && cv.is_int()) why += cv.i->is_negative() && is_unsigned_int(want) ? " (" + cv.i->to_string() + " is negative)" : " (" + cv.i->to_string() + " doesn't fit)";
+                    }
                     continue;
                 }
                 if (want->is_reference() && arg_nodes && j < arg_nodes->size()) {
@@ -1160,6 +1197,7 @@ Type* TypeWalker::type_builtin_method(nodes::CallExpression* c, const std::vecto
     const std::uint32_t file = file_of(c);
     const std::string where = "'" + type_str(plain) + "." + std::string(name) + "()'";
     Type* int_t  = m_types.builtin(BMK::Int);
+    Type* size_t_ = m_types.builtin(BMK::Int, parser_types::LengthModifier::Long, true);
     Type* bool_t = m_types.builtin(BMK::Bool);
 
     auto arity = [&](std::size_t lo, std::size_t hi) {
@@ -1192,31 +1230,31 @@ Type* TypeWalker::type_builtin_method(nodes::CallExpression* c, const std::vecto
     if (name == "sizeof" || name == "alignof") {
         arity(0, 0);
         long long size = 0, alignment = 0;
-        if (plain->is_dependent()) return int_t;
+        if (plain->is_dependent()) return size_t_;
         if (m_eval.layout_of(plain, size, alignment)) {
             c->builtin_size = name == "sizeof" ? size : alignment;
-            return int_t;
+            return size_t_;
         }
-        if (name == "sizeof" && is_text_like(plain)) return int_t;
+        if (name == "sizeof" && is_text_like(plain)) return size_t_;
         if (name == "sizeof" && plain->is_array()) {
             Type* el = m_types.strip_cv(static_cast<ArrayType*>(plain)->element());
-            if (m_eval.layout_of(el, size, alignment)) { c->builtin_size = size; c->builtin_method = "sizeof[]"; return int_t; }
+            if (m_eval.layout_of(el, size, alignment)) { c->builtin_size = size; c->builtin_method = "sizeof[]"; return size_t_; }
         }
         SemanticError::emit(m_reporter, file, c->line, "Type", where + " is not defined because '" + type_str(plain) + "' has no fixed size");
-        return int_t;
+        return size_t_;
     }
 
     if (name == "countof" && !is_text_like(plain) && !plain->is_array()) {
         arity(0, 0);
         if (plain->is_enum()) {
             if (std::optional<std::size_t> n = enumerator_count(plain)) c->builtin_size = static_cast<long long>(*n);
-            return int_t;
+            return size_t_;
         }
         SemanticError::emit(m_reporter, file, c->line, "Type", "countof requires an array, a string or an enum, not '" + type_str(plain) + "'");
-        return int_t;
+        return size_t_;
     }
 
-    if (name == "length" || name == "size" || name == "countof") { arity(0, 0); return int_t; }
+    if (name == "length" || name == "size" || name == "countof") { arity(0, 0); return size_t_; }
     if (name == "empty") { arity(0, 0); return bool_t; }
 
     if (is_text_like(plain)) {
@@ -2355,6 +2393,12 @@ void TypeWalker::check_convertible(Type* from, Type* to, nodes::ASTNode* site) {
     }
 
     if (numeric(f) && numeric(t) && !static_cast<BuiltinType*>(f)->is_unsigned() && static_cast<BuiltinType*>(t)->is_unsigned()) {
+        nodes::ASTNode* value = site && site->kind == K::VariableDeclaration ? static_cast<nodes::VariableDeclaration*>(site)->m_initializer : site;
+        const ConstValue cv = value ? m_eval.eval(value) : ConstValue();
+        if (cv.ok() && cv.is_int() && cv.i->is_negative()) {
+            SemanticError::emit(m_reporter, file_of(site), site->line, "Type", cv.i->to_string() + " is negative, so it can't be a '" + type_str(t) + "'");
+            return;
+        }
         SemanticError::emit(m_reporter, file_of(site), site->line, "Type",
             "no implicit conversion from '" + type_str(from) + "' to '" + type_str(to) + "': a negative value would be lost, so convert it explicitly with static_cast<" + type_str(t) + ">(...)");
         return;

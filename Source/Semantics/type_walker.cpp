@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include "Semantics/type_walker.hpp"
 #include "Semantics/type_ops.hpp"
 #include "Parser/Nodes/node_children.hpp"
@@ -77,7 +78,15 @@ TypeWalker::TypeWalker(
             std::string failed;
             if (constraints_satisfied(tmpl, env, failed)) return true;
             m_last_constraint_failure = failed;
-            if (!quiet) SemanticError::constraints_not_satisfied(m_reporter, file_of(site), site ? site->line : 0, template_name_of(tmpl), failed);
+            if (!quiet) {
+                const FileId file = file_of(site);
+                const std::size_t line = site ? site->line : 0;
+                const bool seen_template = m_reported_constraints.count({ tmpl, FileId(), 0 }) > 0;
+                if (!(line == 0 && seen_template) && m_reported_constraints.insert({ tmpl, file, line }).second) {
+                    m_reported_constraints.insert({ tmpl, FileId(), 0 });
+                    SemanticError::constraints_not_satisfied(m_reporter, file, line, template_name_of(tmpl), failed);
+                }
+            }
             return false;
         };
     }
@@ -104,6 +113,7 @@ TypeWalker::ControlContextGuard::~ControlContextGuard() {
     w.resolve_gotos();
     w.m_loop_depth = loops;
     w.m_switch_depth = switches;
+    w.m_in_finally = in_finally;
     w.m_loop_labels.swap(labels);
     w.m_stmt_path.swap(path);
     w.m_jump_labels.swap(jump_labels);
@@ -158,8 +168,9 @@ void TypeWalker::resolve_gotos() {
     m_jump_labels.clear();
 }
 
-TypeWalker::ControlContextGuard::ControlContextGuard(TypeWalker& tw) : w(tw), loops(tw.m_loop_depth), switches(tw.m_switch_depth) {
+TypeWalker::ControlContextGuard::ControlContextGuard(TypeWalker& tw) : w(tw), loops(tw.m_loop_depth), switches(tw.m_switch_depth), in_finally(tw.m_in_finally) {
     w.m_loop_depth = w.m_switch_depth = 0;
+    w.m_in_finally = false;
     labels.swap(w.m_loop_labels);
     path.swap(w.m_stmt_path);
     jump_labels.swap(w.m_jump_labels);
@@ -366,6 +377,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
             walk_param_defaults(fn->get_parameters());
             push_return(fn->get_return_type(), fn);
             if (fn->has_body()) build(mn(fn->get_body()));
+            if (fn->has_body()) check_self_recursion(fn->symbol, mn(fn->get_body()), fn);
             check_falls_off(pop_return(fn->get_return_type()), fn->has_body() ? mn(fn->get_body()) : nullptr, fn->get_name(), fn);
             restore_self_rules(saved_self);
             m_in_const_method = saved_const;
@@ -588,6 +600,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
         case K::ReturnStatement: {
             auto* rs = static_cast<nodes::ReturnStatement*>(node);
             walk_expr(rs->get_value());
+            if (m_in_finally) SemanticError::emit(m_reporter, file_of(rs), rs->line, "Jump", "'return' can't be used inside 'finally'; it would hide the value or exception the try block is already leaving with. Return after the try statement instead");
             if (rs->has_value() && !type_of(rs->get_value())) reject_type_as_value(rs->get_value());
             if (m_returns.empty()) break;
             ReturnFrame& f = m_returns.back();
@@ -720,6 +733,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
             build(mn(s->get_body()));
             m_loop_labels.pop_back();
             --m_loop_depth;
+            check_loop(s);
             break;
         }
 
@@ -732,6 +746,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
             --m_loop_depth;
             walk_expr(mn(s->get_condition()));
             check_condition(mn(s->get_condition()));
+            check_loop(s);
             break;
         }
 
@@ -748,6 +763,7 @@ void TypeWalker::build(nodes::ASTNode* node) {
             build(s->body);
             m_loop_labels.pop_back();
             --m_loop_depth;
+            check_loop(s);
             m_current = saved;
             break;
         }
@@ -848,8 +864,13 @@ void TypeWalker::build(nodes::ASTNode* node) {
             auto* s = static_cast<nodes::TryCatchStatement*>(node);
             build(s->get_try_body());
             ++m_catch_depth;
-            for (nodes::TryCatchStatement* h = s; h; h = h->next_handler) build(h->get_catch_body());
+            for (nodes::TryCatchStatement* h = s; h; h = h->next_handler) if (h->is_handler()) build(h->get_catch_body());
             --m_catch_depth;
+            if (s->finally_body) {
+                ControlContextGuard ctx(*this);
+                m_in_finally = true;
+                build(s->finally_body);
+            }
             break;
         }
 
@@ -882,10 +903,20 @@ void TypeWalker::build(nodes::ASTNode* node) {
             if (!ss->label.empty()) {
                 bool known = false;
                 for (std::string_view l : m_loop_labels) known = known || l == ss->label;
+                if (!known && m_in_finally) {
+                    SemanticError::emit(m_reporter, file_of(ss), ss->line, "Jump", "'" + std::string(ss->variant == V::Continue ? "continue" : ss->variant == V::Repeat ? "repeat" : "break") + " " + std::string(ss->label) + ";' can't jump out of 'finally'; only loops inside the finally block can be left this way");
+                    break;
+                }
                 if (!known) {
                     SemanticError::emit(m_reporter, file_of(ss), ss->line, "Name", "there is no loop labelled '" + std::string(ss->label) + "' around this statement; label a loop as '" + std::string(ss->label) + ": while (...)' or '" + std::string(ss->label) + ": for (...)'");
                     break;
                 }
+            }
+
+            if (m_in_finally && m_loop_depth == 0 && (ss->variant == V::Continue || ss->variant == V::Repeat || (ss->variant == V::Break && m_switch_depth == 0))) {
+                const char* kw = ss->variant == V::Break ? "break" : ss->variant == V::Continue ? "continue" : "repeat";
+                SemanticError::emit(m_reporter, file_of(ss), ss->line, "Jump", std::string("'") + kw + "' can't jump out of 'finally'; it would cancel the return, break or exception the try block is leaving with");
+                break;
             }
 
             switch (ss->variant) {
@@ -1056,6 +1087,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             keep_overloads(b, op);
             ensure_member_body(op);
             assign_typed(e, t, vc);
+            if (!op) check_bad_constants(b);
             break;
         }
 
@@ -1071,6 +1103,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
             keep_overloads(u, op);
             ensure_member_body(op);
             assign_typed(e, t, vc);
+            if (!op) check_bad_constants(u);
             break;
         }
 
@@ -1116,7 +1149,15 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
         case K::TernaryExpression: {
             auto* t = static_cast<nodes::TernaryExpression*>(e);
-            walk_expr(t->condition); walk_expr(t->true_branch); walk_expr(t->false_branch);
+            walk_expr(t->condition);
+            const ConstValue known = m_eval.eval(t->condition);
+            const bool fixed = known.ok() && known.is_bool();
+            if (fixed && !known.b) ++m_dead_constant;
+            walk_expr(t->true_branch);
+            if (fixed && !known.b) --m_dead_constant;
+            if (fixed && known.b) ++m_dead_constant;
+            walk_expr(t->false_branch);
+            if (fixed && known.b) --m_dead_constant;
             check_condition(t->condition);
             Type* ct = common_type(type_of(t->true_branch), type_of(t->false_branch), t);
             VC vc = (is_lvalue(t->true_branch) && is_lvalue(t->false_branch) && type_of(t->true_branch) == type_of(t->false_branch)) ? VC::LValue : VC::RValue;
@@ -1238,7 +1279,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                 if (res.status == SelectStatus::Ok)             { s->resolved = res.chosen; keep_overloads(s, res.chosen); el = decay_ref(res.type, vc); ensure_member_body(res.chosen); }
                 else if (res.status == SelectStatus::Ambiguous) SemanticError::ambiguous_call(m_reporter, file_of(s), s->line, "[]");
                 else                                            SemanticError::no_matching_overload(m_reporter, file_of(s), s->line, "[]");
-            } else if (arr && arr->is_array()) { el = static_cast<ArrayType*>(arr)->element();  vc = VC::LValue; }
+            } else if (arr && arr->is_array()) { el = static_cast<ArrayType*>(arr)->element();  vc = VC::LValue; check_constant_index(s, arr); }
             else if (arr && arr->is_pointer()) { el = static_cast<PointerType*>(arr)->pointee(); vc = VC::LValue; }
             else if (Type* sv = m_types.strip_cv(arr && arr->is_reference() ? static_cast<ReferenceType*>(arr)->referent() : arr); sv && sv->is_builtin()) {
                 using BK = parser_types::PrimitiveType::BaseKind;
@@ -1279,6 +1320,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
 
             Type* dst = m_types.canonicalize(c->get_target());
             check_cast(c, src, dst);
+            report_redundant_cast(c, src, dst);
             const bool lref = dst && dst->is_reference() && static_cast<ReferenceType*>(dst)->ref_qual() == RefQual::LValue;
             const bool rref = dst && dst->is_reference() && static_cast<ReferenceType*>(dst)->ref_qual() == RefQual::RValue;
             assign_typed(c, (lref || rref) ? static_cast<ReferenceType*>(dst)->referent() : dst, lref ? VC::LValue : VC::RValue);
@@ -1578,7 +1620,7 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
                 if (q->op != QOp::Countof && qv && !qv->is_error() && !qv->is_dependent() && !m_eval.layout_of(qv, size, alignment) && !m_eval.layout_hit_native) {
                     SemanticError::emit(m_reporter, file_of(q), q->line, "Type", std::string(q->op_name()) + " is not defined for '" + type_str(qv) + "' because it has no fixed size");
                 }
-                assign_typed(e, m_types.builtin(parser_types::PrimitiveType::BaseKind::Int), VC::RValue);
+                assign_typed(e, m_types.builtin(parser_types::PrimitiveType::BaseKind::Int, parser_types::LengthModifier::Long, true), VC::RValue);
                 break;
             }
 
@@ -1709,6 +1751,38 @@ void TypeWalker::walk_expr(nodes::ASTNode* e) {
         default: break;
     }
     check_safe_expression(e);
+}
+
+void TypeWalker::report_redundant_cast(nodes::CastExpression* c, Type* src, Type* dst) {
+    static const bool enabled = std::getenv("WALNUT_CAST_REPORT") != nullptr;
+    if (!enabled || !c || !src || !dst || c->get_cast_kind() != nodes::CastExpression::CastKind::Static) return;
+    if (dst->is_reference() || !c->target.type || !c->target.type->is_primitive() || !c->target.indirection.empty()) return;
+    Type* s = m_types.strip_cv(src->is_reference() ? static_cast<ReferenceType*>(src)->referent() : src);
+    if (s != m_types.strip_cv(dst)) return;
+    nodes::ASTNode* op = c->operand;
+    const parser_types::TypeInfo* declared = nullptr;
+    std::string name;
+    if (op && op->kind == K::Identifier) {
+        auto* id = static_cast<nodes::Identifier*>(op);
+        name = std::string(id->name);
+        if (id->resolved && id->resolved->decl && id->resolved->decl->kind == K::VariableDeclaration) declared = &static_cast<nodes::VariableDeclaration*>(id->resolved->decl)->m_type_info;
+        else if (id->resolved && id->resolved->decl && id->resolved->decl->kind == K::FunctionParameter) declared = &static_cast<nodes::FunctionParameter*>(id->resolved->decl)->get_type();
+    } else if (op && op->kind == K::MemberAccessExpression) {
+        auto* m = static_cast<nodes::MemberAccessExpression*>(op);
+        name = std::string(m->m_member);
+        if (m->resolved && m->resolved->decl && m->resolved->decl->kind == K::VariableDeclaration) declared = &static_cast<nodes::VariableDeclaration*>(m->resolved->decl)->m_type_info;
+    } else if (op && op->kind == K::CallExpression) {
+        auto* call = static_cast<nodes::CallExpression*>(op);
+        Symbol* f = call->resolved;
+        if (!f || !f->decl) return;
+        if (f->decl->kind == K::FunctionDeclaration) declared = &static_cast<nodes::FunctionDeclaration*>(f->decl)->get_return_type();
+        name = std::string(f->name) + "()";
+    }
+    if (!declared || !declared->type || !declared->type->is_primitive() || !declared->indirection.empty()) return;
+    const auto* want = static_cast<const parser_types::PrimitiveType*>(c->target.type);
+    const auto* have = static_cast<const parser_types::PrimitiveType*>(declared->type);
+    if (want->base_kind() != have->base_kind() || want->is_unsigned() != have->is_unsigned()) return;
+    SemanticError::emit(m_reporter, file_of(c), c->line, "RedundantCast", "redundant cast of " + name + " to " + type_str(dst));
 }
 
 void TypeWalker::check_cast(nodes::CastExpression* c, Type* src, Type* dst) {
@@ -1955,6 +2029,7 @@ Type* TypeWalker::pop_return(const parser_types::TypeInfo& rt) {
 }
 
 void TypeWalker::note_coroutine(nodes::ASTNode* site, std::string_view kw) {
+    if (m_in_finally) SemanticError::emit(m_reporter, file_of(site), site->line, "Coroutine", "'" + std::string(kw) + "' can't be used inside 'finally'");
     if (m_returns.empty()) {
         SemanticError::coroutine_outside_function(m_reporter, file_of(site), site->line, kw);
         return;

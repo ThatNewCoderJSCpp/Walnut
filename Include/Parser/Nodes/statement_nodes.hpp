@@ -383,6 +383,9 @@ struct TryCatchStatement : ASTNode {
     bool has_typed_catch;                
     BlockStatement* catch_body;
     TryCatchStatement* next_handler = nullptr;
+    BlockStatement* finally_body = nullptr;
+
+    bool is_handler() const { return catch_body != nullptr; }
 
     TryCatchStatement(
         BlockStatement* tb,
@@ -538,6 +541,7 @@ struct TemplateDeclaration : ASTNode {
     ASTNode* m_declaration = nullptr;   
     bool m_is_empty_template = false;
     ASTNode* m_requires_clause = nullptr;
+    std::string_view m_requires_text;
     semantics::Scope* scope = nullptr;
     RecordDeclaration* friend_of = nullptr;
     parser_types::TypeInfo friend_type;

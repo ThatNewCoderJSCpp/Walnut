@@ -28,16 +28,16 @@ safe(compile) {
             enum TextTransform { none, uppercase, lowercase, capitalize }
 
             struct TextMetrics {
-                long int: width = 0;
-                long int: height = 0;
-                long int: ascent = 0;
+                unsigned long int: width = 0;
+                unsigned long int: height = 0;
+                unsigned long int: ascent = 0;
                 long int: descent = 0;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(long int: w, long int: h, long int: a, long int: d) : width = w, height = h, ascent = a, descent = d { }
+                constructor(unsigned long int: w, unsigned long int: h, unsigned long int: a, long int: d) noexcept : width = w, height = h, ascent = a, descent = d { }
 
-                function is_empty(const self&) -> bool {
+                function is_empty(const self&) noexcept -> bool {
                     return self.width == 0 && self.height == 0;
                 } end function is_empty
 
@@ -62,21 +62,21 @@ safe(compile) {
             extern "C++" from "<walnut_graphics.hpp>" {
                 class TextStyle as "walnut_rt::gfx::text_style" {
                     function native_set_font(self&, const string&: name) -> bool as "set_font";
-                    function native_set_color(self&, long int: rgba) -> void as "set_color";
-                    function native_color(const self&) -> long int as "color_value";
-                    function native_set_background(self&, long int: rgba) -> void as "set_background";
-                    function native_set_weight(self&, long int: weight) -> void as "set_weight";
-                    function native_weight(const self&) -> long int as "weight";
-                    function native_set_align(self&, long int: a) -> void as "set_align";
-                    function native_align(const self&) -> long int as "align";
-                    function native_set_overflow(self&, long int: o) -> void as "set_overflow";
-                    function native_set_transform(self&, long int: t) -> void as "set_transform";
-                    function native_set_outline(self&, long int: rgba, float: width) -> void as "set_outline";
-                    function native_set_shadow(self&, float: dx, float: dy, float: blur, long int: rgba) -> void as "set_shadow";
+                    function native_set_color(self&, unsigned long int: rgba) -> void as "set_color";
+                    function native_color(const self&) -> unsigned long int as "color_value";
+                    function native_set_background(self&, unsigned long int: rgba) -> void as "set_background";
+                    function native_set_weight(self&, unsigned long int: font_weight) -> void as "set_weight";
+                    function native_weight(const self&) -> unsigned long int as "weight";
+                    function native_set_align(self&, unsigned long int: a) -> void as "set_align";
+                    function native_align(const self&) -> unsigned long int as "align";
+                    function native_set_overflow(self&, unsigned long int: o) -> void as "set_overflow";
+                    function native_set_transform(self&, unsigned long int: t) -> void as "set_transform";
+                    function native_set_outline(self&, unsigned long int: rgba, float: width) -> void as "set_outline";
+                    function native_set_shadow(self&, float: dx, float: dy, float: blur, unsigned long int: rgba) -> void as "set_shadow";
 
                 public:
                     constructor();
-                    constructor(float: size, long int: rgba);
+                    constructor(float: size, unsigned long int: rgba);
 
                     static function make(float: size, const Color&: color = Color(0, 0, 0)) -> TextStyle {
                         return TextStyle(size, color.packed());
@@ -116,7 +116,7 @@ safe(compile) {
                     function clear_background(self&) -> void;
                     function clear_outline(self&) -> void;
                     function clear_shadow(self&) -> void;
-                    function set_max_lines(self&, long int: count) -> void;
+                    function set_max_lines(self&, unsigned long int: count) -> void;
                     function set_indent(self&, float: px) -> void;
 
                     function set_color(self&, const Color&: c) -> void {
@@ -132,14 +132,11 @@ safe(compile) {
                     } end function set_background
 
                     function set_weight(self&, FontWeight: weight) -> void {
-                        self.native_set_weight((static_cast<long int>(weight) + 1) * 100);
+                        self.native_set_weight((static_cast<unsigned long int>(weight) + 1) * 100);
                     } end function set_weight
 
                     function weight(const self&) -> FontWeight {
-                        long int: index = self.native_weight() / 100 - 1;
-                        if (index < 0) then {
-                            index = 0;
-                        }
+                        unsigned long int: index = self.native_weight() / 100 - 1;
                         if (index > 8) then {
                             index = 8;
                         }
@@ -147,7 +144,7 @@ safe(compile) {
                     } end function weight
 
                     function set_align(self&, TextAlign: a) -> void {
-                        self.native_set_align(static_cast<long int>(a));
+                        self.native_set_align(static_cast<unsigned long int>(a));
                     } end function set_align
 
                     function align(const self&) -> TextAlign {
@@ -155,11 +152,11 @@ safe(compile) {
                     } end function align
 
                     function set_overflow(self&, TextOverflow: o) -> void {
-                        self.native_set_overflow(static_cast<long int>(o));
+                        self.native_set_overflow(static_cast<unsigned long int>(o));
                     } end function set_overflow
 
                     function set_transform(self&, TextTransform: t) -> void {
-                        self.native_set_transform(static_cast<long int>(t));
+                        self.native_set_transform(static_cast<unsigned long int>(t));
                     } end function set_transform
 
                     function set_outline(self&, const Color&: c, float: width = 1.0) -> void {

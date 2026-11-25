@@ -7,15 +7,15 @@ safe(compile) {
                 class Value as "walnut_rt::db::value" {
                 public:
                     constructor();
-                    constructor(int: v) as "walnut_rt::db::value::from_int";
-                    constructor(long int: v);
+                    constructor(unsigned int: v) as "walnut_rt::db::value::from_int";
+                    constructor(unsigned long int: v);
                     constructor(short float: v);
                     constructor(float: v) as "walnut_rt::db::value::from_wide";
                     constructor(const string&: v);
                     constructor(bool: v);
 
                     static function null() -> Value as "walnut_rt::db::value::null";
-                    static function from_int(long int: v) -> Value as "walnut_rt::db::value::from_int";
+                    static function from_int(unsigned long int: v) -> Value as "walnut_rt::db::value::from_int";
                     static function from_float(short float: v) -> Value as "walnut_rt::db::value::from_float";
                     static function from_text(const string&: v) -> Value as "walnut_rt::db::value::from_text";
                     static function from_bool(bool: v) -> Value as "walnut_rt::db::value::from_bool";
@@ -50,7 +50,7 @@ safe(compile) {
                     constructor();
                     static function column(const string&: name) -> Expr as "walnut_rt::db::expr::column";
                     static function literal(const Value&: v) -> Expr as "walnut_rt::db::expr::literal";
-                    static function param(long int: index) -> Expr as "walnut_rt::db::expr::param";
+                    static function param(unsigned long int: index) -> Expr as "walnut_rt::db::expr::param";
 
                     function eq(const self&, const Value&: v) -> Expr;
                     function ne(const self&, const Value&: v) -> Expr;
@@ -96,7 +96,7 @@ safe(compile) {
                     function set_null(self&, const string&: column) -> Record&;
                     function has(const self&, const string&: column) -> bool;
                     function get(const self&, const string&: column) -> Value;
-                    function size(const self&) -> long int;
+                    function size(const self&) -> unsigned long int;
                     function columns(const self&) -> std::collections::Vector<string>;
                     function clear(self&) -> void;
                 } end class Record
@@ -115,7 +115,7 @@ safe(compile) {
                     function unique(self&) -> Schema&;
                     function nullable(self&) -> Schema&;
                     function default_value(self&, const Value&: v) -> Schema&;
-                    function size(const self&) -> long int;
+                    function size(const self&) -> unsigned long int;
                     function column_names(const self&) -> std::collections::Vector<string>;
                 } end class Schema
 
@@ -142,35 +142,35 @@ safe(compile) {
                     function having(self&, const Expr&: condition) -> Query&;
                     function order_by(self&, const string&: column, bool: descending = false) -> Query&;
                     function order_by_expr(self&, const Expr&: expression, bool: descending = false) -> Query&;
-                    function limit(self&, long int: count) -> Query&;
-                    function offset(self&, long int: count) -> Query&;
+                    function limit(self&, unsigned long int: count) -> Query&;
+                    function offset(self&, unsigned long int: count) -> Query&;
                     function distinct(self&) -> Query&;
                     function no_cache(self&) -> Query&;
                     function table(const self&) -> string;
                 } end class Query
 
                 class Result as "walnut_rt::db::result" {
-                    function row_into(const self&, long int: index, std::collections::Vector<Value>&: out) -> void;
+                    function row_into(const self&, unsigned long int: index, std::collections::Vector<Value>&: out) -> void;
                     function column_into(const self&, const string&: name, std::collections::Vector<Value>&: out) -> void;
 
                 public:
                     constructor();
-                    function size(const self&) -> long int;
+                    function size(const self&) -> unsigned long int;
                     function empty(const self&) -> bool;
-                    function column_count(const self&) -> long int;
+                    function column_count(const self&) -> unsigned long int;
                     function columns(const self&) -> std::collections::Vector<string>;
-                    function get(const self&, long int: row, const string&: column) -> Value;
-                    function at(const self&, long int: row, long int: column) -> Value;
+                    function get(const self&, unsigned long int: row, const string&: column) -> Value;
+                    function at(const self&, unsigned long int: row, unsigned long int: column) -> Value;
                     function scalar(const self&) -> Value;
                     function to_json(const self&) -> string;
                     function to_text(const self&) -> string;
                     function plan(const self&) -> string;
                     function used_index(const self&) -> bool;
                     function cache_hit(const self&) -> bool;
-                    function rows_examined(const self&) -> long int;
-                    function elapsed_us(const self&) -> long int;
+                    function rows_examined(const self&) -> unsigned long int;
+                    function elapsed_us(const self&) -> unsigned long int;
 
-                    function row(const self&, long int: index) -> std::collections::Vector<Value> {
+                    function row(const self&, unsigned long int: index) -> std::collections::Vector<Value> {
                         std::collections::Vector<Value>: out;
                         self.row_into(index, out);
                         return out;
@@ -186,21 +186,21 @@ safe(compile) {
                 class Graph as "walnut_rt::db::graph" {
                     function neighbors_into(const self&, const Value&: node, std::collections::Vector<Value>&: out) -> void;
                     function incoming_into(const self&, const Value&: node, std::collections::Vector<Value>&: out) -> void;
-                    function bfs_into(const self&, const Value&: start, long int: max_depth, std::collections::Vector<Value>&: out) -> void;
-                    function dfs_into(const self&, const Value&: start, long int: max_depth, std::collections::Vector<Value>&: out) -> void;
-                    function bfs_depths_into(const self&, const Value&: start, long int: max_depth, std::collections::Vector<long int>&: out) -> void;
+                    function bfs_into(const self&, const Value&: start, unsigned long int: max_depth, std::collections::Vector<Value>&: out) -> void;
+                    function dfs_into(const self&, const Value&: start, unsigned long int: max_depth, std::collections::Vector<Value>&: out) -> void;
+                    function bfs_depths_into(const self&, const Value&: start, unsigned long int: max_depth, std::collections::Vector<unsigned long int>&: out) -> void;
                     function shortest_path_into(const self&, const Value&: source, const Value&: target, std::collections::Vector<Value>&: out) -> void;
-                    function component_into(const self&, long int: index, std::collections::Vector<Value>&: out) -> void;
+                    function component_into(const self&, unsigned long int: index, std::collections::Vector<Value>&: out) -> void;
                     function topological_into(const self&, std::collections::Vector<Value>&: out) -> void;
 
                 public:
                     constructor();
-                    function node_count(const self&) -> long int;
-                    function edge_count(const self&) -> long int;
+                    function node_count(const self&) -> unsigned long int;
+                    function edge_count(const self&) -> unsigned long int;
                     function contains(const self&, const Value&: node) -> bool;
                     function path_cost(const self&, const Value&: source, const Value&: target) -> short float;
                     function reachable(const self&, const Value&: source, const Value&: target) -> bool;
-                    function component_count(const self&) -> long int;
+                    function component_count(const self&) -> unsigned long int;
                     function has_cycle(const self&) -> bool;
 
                     function neighbors(const self&, const Value&: node) -> std::collections::Vector<Value> {
@@ -215,20 +215,20 @@ safe(compile) {
                         return out;
                     } end function incoming
 
-                    function bfs(const self&, const Value&: start, long int: max_depth = -1) -> std::collections::Vector<Value> {
+                    function bfs(const self&, const Value&: start, unsigned long int: max_depth = 9223372036854775807) -> std::collections::Vector<Value> {
                         std::collections::Vector<Value>: out;
                         self.bfs_into(start, max_depth, out);
                         return out;
                     } end function bfs
 
-                    function dfs(const self&, const Value&: start, long int: max_depth = -1) -> std::collections::Vector<Value> {
+                    function dfs(const self&, const Value&: start, unsigned long int: max_depth = 9223372036854775807) -> std::collections::Vector<Value> {
                         std::collections::Vector<Value>: out;
                         self.dfs_into(start, max_depth, out);
                         return out;
                     } end function dfs
 
-                    function bfs_depths(const self&, const Value&: start, long int: max_depth = -1) -> std::collections::Vector<long int> {
-                        std::collections::Vector<long int>: out;
+                    function bfs_depths(const self&, const Value&: start, unsigned long int: max_depth = 9223372036854775807) -> std::collections::Vector<unsigned long int> {
+                        std::collections::Vector<unsigned long int>: out;
                         self.bfs_depths_into(start, max_depth, out);
                         return out;
                     } end function bfs_depths
@@ -239,7 +239,7 @@ safe(compile) {
                         return out;
                     } end function shortest_path
 
-                    function component(const self&, long int: index) -> std::collections::Vector<Value> {
+                    function component(const self&, unsigned long int: index) -> std::collections::Vector<Value> {
                         std::collections::Vector<Value>: out;
                         self.component_into(index, out);
                         return out;
@@ -258,10 +258,10 @@ safe(compile) {
                     function create_table(self&, const string&: name, const Schema&: schema) -> void;
                     function drop_table(self&, const string&: name) -> bool;
                     function create_index(self&, const string&: table, const std::collections::Vector<string>&: columns, const string&: kind = "ordered", bool: unique = false) -> void;
-                    function insert(self&, const string&: table, const Record&: row) -> long int;
-                    function update(self&, const string&: table, const Expr&: where, const Record&: changes) -> long int;
-                    function remove(self&, const string&: table, const Expr&: where) -> long int;
-                    function clear(self&, const string&: table) -> long int;
+                    function insert(self&, const string&: table, const Record&: row) -> unsigned long int;
+                    function update(self&, const string&: table, const Expr&: where, const Record&: changes) -> unsigned long int;
+                    function remove(self&, const string&: table, const Expr&: where) -> unsigned long int;
+                    function clear(self&, const string&: table) -> unsigned long int;
                     function run(const self&, const Query&: q) -> Result;
                     function run_with(const self&, const Query&: q, const std::collections::Vector<Value>&: params) -> Result;
                     function commit(self&) -> void;
@@ -288,17 +288,17 @@ safe(compile) {
                     function create_index(self&, const string&: table, const std::collections::Vector<string>&: columns, const string&: kind = "ordered", bool: unique = false) -> void;
                     function drop_index(self&, const string&: table, const string&: name) -> bool;
 
-                    function insert(self&, const string&: table, const Record&: row) -> long int;
-                    function insert_many(self&, const string&: table, const std::collections::Vector<Record>&: rows) -> long int;
-                    function update(self&, const string&: table, const Expr&: where, const Record&: changes) -> long int;
-                    function remove(self&, const string&: table, const Expr&: where) -> long int;
+                    function insert(self&, const string&: table, const Record&: row) -> unsigned long int;
+                    function insert_many(self&, const string&: table, const std::collections::Vector<Record>&: rows) -> unsigned long int;
+                    function update(self&, const string&: table, const Expr&: where, const Record&: changes) -> unsigned long int;
+                    function remove(self&, const string&: table, const Expr&: where) -> unsigned long int;
 
                     function run(const self&, const Query&: q) -> Result;
                     function run_with(const self&, const Query&: q, const std::collections::Vector<Value>&: params) -> Result;
                     function find(const self&, const string&: table, const Expr&: where) -> Result;
                     function all(const self&, const string&: table) -> Result;
-                    function count(const self&, const string&: table) -> long int;
-                    function count_where(const self&, const string&: table, const Expr&: where) -> long int;
+                    function count(const self&, const string&: table) -> unsigned long int;
+                    function count_where(const self&, const string&: table, const Expr&: where) -> unsigned long int;
                     function get(const self&, const string&: table, const Value&: key) -> Result;
                     function explain(const self&, const Query&: q) -> string;
                     function prepare(self&, const Query&: q) -> Statement;
@@ -308,11 +308,11 @@ safe(compile) {
 
                     function checkpoint(self&) -> void;
                     function maintain(self&) -> void;
-                    function set_cache(self&, long int: entries, long int: rows) -> void;
+                    function set_cache(self&, unsigned long int: entries, unsigned long int: rows) -> void;
                     function clear_cache(self&) -> void;
-                    function row_count(const self&) -> long int;
-                    function cache_hits(const self&) -> long int;
-                    function cache_misses(const self&) -> long int;
+                    function row_count(const self&) -> unsigned long int;
+                    function cache_hits(const self&) -> unsigned long int;
+                    function cache_misses(const self&) -> unsigned long int;
                     function stats_json(const self&) -> string;
                 } end class Database
 
@@ -326,7 +326,7 @@ safe(compile) {
                 return Expr::column(name);
             } end function column
 
-            function param(long int: index) -> Expr {
+            function param(unsigned long int: index) -> Expr {
                 return Expr::param(index);
             } end function param
 

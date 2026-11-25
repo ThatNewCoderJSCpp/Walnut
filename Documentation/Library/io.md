@@ -289,7 +289,7 @@ Other `ostream` methods:
 | `write(s)` | Writes the string `s` exactly, ignoring width and fill |
 | `put(c)` | Writes one character |
 | `flush()` | Sends buffered output to its destination |
-| `tellp()` | The current write position, or `-1` |
+| `tellp()` | The current write position, or `std::npos` |
 | `seekp(pos)`, `seekp(offset, dir)` | Moves the write position. `dir` is `ios_base::seek_beg`, `seek_cur` or `seek_end` |
 
 ## Reading with >>
@@ -501,7 +501,7 @@ function main() -> int {
     char*: memory = new char[16];
     std::io::ospanstream: out = std::io::ospanstream(memory, 16);
     out << "id " << 77;
-    std::io::ispanstream: input = std::io::ispanstream(memory, out.tellp());
+    std::io::ispanstream: input = std::io::ispanstream(memory, static_cast<unsigned long int>(out.tellp()));
     string: word = "";
     int: id = 0;
     input >> word >> id;
@@ -553,8 +553,8 @@ import module.io
 
 class counter inherits std::io::streambuf {
 public:
-    long int: written = 0;
-    function sputn(const string&: s) override -> long int {
+    unsigned long int: written = 0;
+    function sputn(const string&: s) override -> unsigned long int {
         written += s.size();
         return s.size();
     } end function sputn
@@ -600,6 +600,16 @@ function main() -> int {
 ```
 
 This prints `p = (3, 0)`. `to_string()` can return a `string` or a `text`, and [`std::core::to_string(p)`](core.md#stdcoreto_string) gives the same string. `BigFloat`, `BigComplex` and `Complex<T>` from [math](math.md) print this way.
+
+Importing io adds three [traits](core.md#checking-what-a-type-can-do) for checking a type in a template:
+
+| Trait | `true` when |
+|---|---|
+| `std::traits::has_ostream_operator<T>` | `out << value` works with an `std::io::ostream&`, built in or with your own `operator(<<)` |
+| `std::traits::has_istream_operator<T>` | `in >> value` works with an `std::io::istream&` and a `T` variable |
+| `std::traits::is_printable<T>` | Either of the ways above to print a `T` works: `<<`, or a `to_string()` (`is_stringifiable`) |
+
+`std::concepts::printable<T>` and `std::concepts::readable<T>` are the matching concepts. A class with neither `<<` nor `to_string()` isn't printable, even though it would convert to `var`.
 
 ## Differences from C++
 

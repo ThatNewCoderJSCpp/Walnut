@@ -179,6 +179,7 @@ void ImportResolver::forbid_nested(const ASTNode* node) {
             auto* s = static_cast<const nodes::TryCatchStatement*>(node);
             forbid_nested(s->get_try_body());
             for (const nodes::TryCatchStatement* h = s; h; h = h->next_handler) if (h->get_catch_body()) forbid_nested(h->get_catch_body());
+            if (s->finally_body) forbid_nested(s->finally_body);
             return;
         }
         default:

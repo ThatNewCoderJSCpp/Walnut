@@ -43,7 +43,7 @@ import module.io
 function main() -> int {
     string: line = "  apples, pears ,figs  ";
     auto: parts = line.split(",");
-    for (long int: i = 0; i < parts.size(); i++) {
+    for (unsigned long int: i = 0; i < parts.size(); i++) {
         parts[i] = parts[i].trim().capitalize();
     }
     string: joined = std::strings::join(parts, " | ");
@@ -57,7 +57,7 @@ This prints `Apples | Pears | Figs` and `000042 snakeCaseName 3`.
 
 ## Searching
 
-`needle` can be a `string`, a `text` or a `char`. A position of `-1` means "not found".
+`needle` can be a `string`, a `text` or a `char`. A position of `std::npos` means "not found".
 
 | Function | Gives |
 |---|---|
@@ -71,7 +71,7 @@ This prints `Apples | Pears | Figs` and `000042 snakeCaseName 3`.
 | `find_first_not_of(s, chars)`, `find_last_not_of(s, chars)` | The first or last position of a character not in `chars` |
 | `contains_any(s, chars)` | Whether any character of `chars` is in `s` |
 
-As methods, `find` is the built-in one, which gives `undefined` instead of `-1` when there's no match; `find_from` and the others come from `strings`.
+As methods, `find` is the built-in one, which gives `undefined` instead of `std::npos` when there's no match; `find_from` and the others come from `strings`.
 
 ## Splitting and joining
 
@@ -169,9 +169,9 @@ import module.strings
 
 function main() -> int {
     string: code = "A1-B22-C3";
-    long int: digits = code.count_if([](char: c) -> bool { return c.is_digit(); });
+    unsigned long int: digits = code.count_if([](char: c) -> bool { return c.is_digit(); });
     string: letters = code.filter([](char: c) -> bool { return c.is_alpha(); });
-    long int: dash = code.find_if([](char: c) -> bool { return c == '-'; });
+    unsigned long int: dash = code.find_if([](char: c) -> bool { return c == '-'; });
     return 0;
 } end function main
 ```
@@ -188,7 +188,7 @@ import module.strings
 function main() -> int {
     string: word = "banana";
     word.where('a').replace('o');
-    long int: ns = word.where('n').count();
+    unsigned long int: ns = word.where('n').count();
     word.where([](char: c) -> bool { return c == 'b'; }).remove();
     return 0;
 } end function main

@@ -4,6 +4,8 @@ namespace walnut {
 namespace parsing {
 
 nodes::ASTNode* Parser::parse_for_loop() {
+    const std::uint32_t at = static_cast<std::uint32_t>(current_token().line());
+    const auto stamped = [at](nodes::ASTNode* n) { n->line = at; return n; };
     expect(tokenizing::Token::Kind::ForKeyword);
     expect(tokenizing::Token::Kind::LeftParen);
     nodes::ASTNode* initializer_expr = nullptr;
@@ -17,7 +19,7 @@ nodes::ASTNode* Parser::parse_for_loop() {
         if (current_token().kind() != tokenizing::Token::Kind::RightParen) { increment = parse_expression(); }
         expect(tokenizing::Token::Kind::RightParen);
         nodes::ASTNode* body = parse_statement();
-        return make<nodes::ForStatement>(static_cast<nodes::ASTNode*>(nullptr), nullptr, increment, body);
+        return stamped(make<nodes::ForStatement>(static_cast<nodes::ASTNode*>(nullptr), nullptr, increment, body));
     }
     
     if (current_token().kind() == tokenizing::Token::Kind::Semicolon || current_token().kind() == tokenizing::Token::Kind::Comma) {
@@ -38,9 +40,9 @@ nodes::ASTNode* Parser::parse_for_loop() {
             nodes::ASTNode* body = parse_statement();
 
             if (has_var_init) {
-                return make<nodes::ForStatement>(initializer_stmt, nullptr, static_cast<nodes::ASTNode*>(nullptr), increment, body);
+                return stamped(make<nodes::ForStatement>(initializer_stmt, nullptr, static_cast<nodes::ASTNode*>(nullptr), increment, body));
             } else {
-                return make<nodes::ForStatement>(initializer_expr, nullptr, increment, body);
+                return stamped(make<nodes::ForStatement>(initializer_expr, nullptr, increment, body));
             }
         }
         
@@ -74,13 +76,14 @@ nodes::ASTNode* Parser::parse_for_loop() {
     nodes::ASTNode* body = parse_statement();
 
     if (has_var_init) {
-        return make<nodes::ForStatement>(initializer_stmt, nullptr, condition, increment, body);
+        return stamped(make<nodes::ForStatement>(initializer_stmt, nullptr, condition, increment, body));
     } else {
-        return make<nodes::ForStatement>(initializer_expr, condition, increment, body);
+        return stamped(make<nodes::ForStatement>(initializer_expr, condition, increment, body));
     }
 }
 
 nodes::ASTNode* Parser::parse_while_loop() {
+    const std::uint32_t at = static_cast<std::uint32_t>(current_token().line());
     expect(tokenizing::Token::Kind::WhileKeyword);
     expect(tokenizing::Token::Kind::LeftParen, "Expected '(<condition>)' for while loop");
 
@@ -91,7 +94,9 @@ nodes::ASTNode* Parser::parse_while_loop() {
     nodes::ASTNode* condition = parse_expression();
     expect(tokenizing::Token::Kind::RightParen, "Expected ')' to finish condition of while loop");
     nodes::ASTNode* body = parse_statement();
-    return make<nodes::WhileStatement>(body, condition);
+    nodes::ASTNode* loop = make<nodes::WhileStatement>(body, condition);
+    loop->line = at;
+    return loop;
 }
 
 nodes::ASTNode* Parser::parse_for_each_loop() {

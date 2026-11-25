@@ -229,7 +229,7 @@ public:
     long long channels() const { return static_cast<long long>(m_channels); }
     long long sample_rate() const { return static_cast<long long>(m_rate); }
     long long sample_count() const { return static_cast<long long>(m_frames * m_channels); }
-    bool writable() const { return m_writable; }
+    bool writable() const noexcept { return m_writable; }
 
     float get(long long frame, long long channel) const {
         check(frame, channel, "get()");
@@ -398,7 +398,7 @@ public:
     long long frames() const { return static_cast<long long>(b.frames()); }
     long long sample_count() const { return static_cast<long long>(b.sample_count()); }
     F duration() const { return w(b.duration()); }
-    bool empty() const { return b.empty(); }
+    bool empty() const noexcept { return b.empty(); }
 
     float get(long long frame, long long channel) const { return b.at(static_cast<std::size_t>(frame), static_cast<std::size_t>(channel)); }
     void set(long long frame, long long channel, float value) { b.at(static_cast<std::size_t>(frame), static_cast<std::size_t>(channel)) = value; }
@@ -561,7 +561,7 @@ public:
         return out;
     }
 
-    bool ok() const { return m_ok; }
+    bool ok() const noexcept { return m_ok; }
     long long type() const { return file_type_number(m.type); }
     std::string type_name() const { return fa::audio_type_name(m.type); }
     long long sample_rate() const { return static_cast<long long>(m.sample_rate); }
@@ -594,7 +594,7 @@ public:
     std::string id() const { return m.id; }
     std::string name() const { return m.name; }
     long long kind() const { return kind_number(m.kind); }
-    bool is_default() const { return m.is_default; }
+    bool is_default() const noexcept { return m.is_default; }
     long long sample_rate() const { return static_cast<long long>(m.sample_rate); }
     long long channels() const { return static_cast<long long>(m.channels); }
     std::string backend() const { return m.backend; }

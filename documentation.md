@@ -724,7 +724,7 @@ function main() -> int {
     string: joined = s + "def" + c;
     s += "!";
     text: t = `back\`tick`;
-    int: letters = countof("héllo");
+    unsigned long int: letters = countof("héllo");
     string: seen = "";
     for (char: ch in "hé!") {
         seen = seen + ch + "|";
@@ -836,8 +836,8 @@ function main() -> int {
     text: padded = `  Héllo  `;
     array[4] int: nums = {3, 1, 4, 1};
     int: n = 42;
-    int: chars = x.length();
-    int: bytes = padded.sizeof();
+    unsigned long int: chars = x.length();
+    unsigned long int: bytes = padded.sizeof();
     string: middle = x.substr(1, 3);
     int: at = x.find("bk");
     bool: has = x.contains('h');
@@ -845,7 +845,7 @@ function main() -> int {
     bool: found = nums.contains(4);
     int: where = nums.find(1);
     string: shown = n.to_string() + "!";
-    int: width = n.sizeof();
+    unsigned long int: width = n.sizeof();
     return 0;
 } end function main
 ```
@@ -858,7 +858,7 @@ Strings and characters get many more methods from the [strings library](Document
 
 | Method | Result |
 |---|---|
-| `sizeof()` | The size in bytes, as an `int`. For a `string` or `text` it is the number of bytes the characters take, and for an array whose size is only known at run time it is the element size times the count |
+| `sizeof()` | The size in bytes, as an `unsigned long int`. For a `string` or `text` it is the number of bytes the characters take, and for an array whose size is only known at run time it is the element size times the count |
 | `alignof()` | The alignment in bytes |
 | `to_string()`, `to_text()` | The value as a `string` or `text`, written the same way as [text interpolation](#text-interpolation) writes it. Not available on classes and structs |
 | `countof()` | The same as `countof(x)`: elements of an array, characters of a string, or enumerators of an enum |
@@ -897,6 +897,7 @@ A needle can be a `string`, a `text` or a `char`.
 - `sizeof`, `alignof` and `countof` are keywords, but they are allowed as method names after `.` and `->`.
 - A class or struct can use `.sizeof()` and `.alignof()` too. Its other methods are its own.
 - A method that doesn't exist for a type is an error, such as `n.length()` on an `int`.
+- `sizeof()`, `alignof()`, `countof()`, `length()` and `size()` give an `unsigned long int`, since none of them can be negative. `find()` gives a `long int` because it can be `undefined`.
 
 ## Enums, aliases, variants and unions
 
@@ -1053,6 +1054,15 @@ Here `quotient` is `3`, `remainder` is `2`, `power` is `289`, `mixed` is `50`, `
 
 Integer division or `%` by zero doesn't stop the program: it gives `undefined` (or `indeterminate` for `0 / 0`). See [Special values](#special-values).
 
+**Mistakes the compiler can see.** When the numbers involved are known while compiling, these are compile errors, so the editor marks them before the program is built:
+- a negative constant going into an unsigned type: `unsigned int: u = -1;` or passing `-1` to an `unsigned long int` parameter
+- a constant that doesn't fit its type: `int: big = 4294967295 + 1;`, `short int: s = 60000s + 60000s;`
+- an unsigned constant going below zero: `unsigned int: d = 3u - 5u;`
+- a shift by a negative count, or by at least the number of bits in the left side's type, even when the left side isn't a constant: `x << 40` for an `int` `x` (cast `x` to a wider type first)
+- integer division or `%` by a constant 0, even when the left side isn't a constant
+- an index into a fixed-size array that is known to be out of range: `nums[5]` for an `array[4] int`
+- a comparison of an unsigned variable that never changes its answer: `i >= 0` (always true, so a loop counting down with it never ends), `i < 0`, or `i == -1` (use `std::npos`)
+
 **Runtime errors.** These stop the program with a `walnut runtime error` message:
 - a shift by a negative amount, or by at least the type's width
 - an integer other than 0, 1 and -1 raised to a negative power
@@ -1152,9 +1162,9 @@ function find_name(int: id) -> Optional<string> {
     return std::optional::none;
 } end function find_name
 
-function name_length(int: id) -> Optional<int> {
+function name_length(int: id) -> Optional<unsigned long int> {
     string: name = find_name(id)?;
-    return Optional<int>(countof(name));
+    return Optional<unsigned long int>(countof(name));
 } end function name_length
 
 function parse_digit(char: c) -> Result<int, string> {
@@ -1172,12 +1182,12 @@ function two_digits(char: a, char: b) -> Result<int, string> {
 
 function main() -> int {
     string: shown = find_name(2) ?? "anonymous";
-    Optional<int>: size = find_name(1)?.length();
+    Optional<unsigned long int>: size = find_name(1)?.length();
     auto: head = std::memory::make_shared<Node>();
     head->value = 1;
     int: second = head?.next?.value ?? -1;
-    Optional<int>: a = name_length(1);
-    Optional<int>: b = name_length(5);
+    Optional<unsigned long int>: a = name_length(1);
+    Optional<unsigned long int>: b = name_length(5);
     Result<int, string>: good = two_digits('4', '2');
     Result<int, string>: bad = two_digits('4', 'x');
     return 0;
@@ -1211,7 +1221,7 @@ Walnut converts implicitly only when nothing can be lost:
 - a narrower integer to a wider one, or a narrower float to a wider one
 - an integer to a float that can hold all of its values
 - an unsigned float to a signed float
-- a constant that fits, such as `short int: s = 3;`. This also goes for arguments to functions, constructors and variadic parameters, so `Vector<short short float>: v = {1.5, 2.5};` and `Box(1.5)` for a `Box(short short float)` constructor work without casts
+- a constant that fits, such as `short int: s = 3;` or `unsigned long int: n = 0;`. This also goes for arguments to functions, constructors and variadic parameters, so `Vector<short short float>: v = {1.5, 2.5};` and `Box(1.5)` for a `Box(short short float)` constructor work without casts
 - a value into a `variant` that has a matching alternative
 - a value into a `var`
 
@@ -1221,7 +1231,19 @@ Everything else needs a cast. That includes:
 - signed to unsigned, for integers or floats: a negative value would be lost
 - `char` ↔ `int`, `bool` ↔ `int`, `string` ↔ `text`
 
-The error message names the cast to use, for example `static_cast<unsigned int>(...)`.
+The error message names the cast to use, for example `static_cast<unsigned int>(...)`. A negative constant can't be made unsigned at all: `unsigned int: u = -1;` is an error that says `-1` is negative.
+
+The standard library requires unsigned types. Every integer in it that can't be negative is unsigned: sizes, lengths, counts, capacities, indexes, ids, byte and bit counts, timeouts in milliseconds, colors, flags, months, days and hours, and the loop counters and other variables inside the library too. So `v.size()` is an `unsigned long int` and `v[i]` takes one. To pass a signed value, cast it yourself: `v[static_cast<unsigned long int>(i)]`. That cast is the point: a negative number can't reach a collection by accident.
+
+**"Not found" is `std::npos`.** Functions that find a position, such as `find`, `find_last`, `binary_find`, `index_of`, `min_index` and `first_index`, return an `unsigned long int`, and `std::npos` (the largest `unsigned long int`, 18446744073709551615) when there is nothing to find. The same value means "none" or "no limit" elsewhere: a `timeout_ms` of `std::npos` waits forever, and a graph search gives `std::npos` as the parent of a node it never reached. Compare with it directly: `if (v.find(x) != std::npos)`. Comparing an unsigned value with `-1`, or testing `i >= 0` or `i < 0` on one, is a compile-time error, because the answer never changes.
+
+**What stays signed, and why.** An integer is signed only when negative values are part of what it means:
+- coordinates and offsets that can go past an edge: `x`, `y`, `dx`, `dy`, mouse positions and movement, window and monitor positions, where an image is drawn, tile coordinates, relative seek offsets
+- the values in a calculation: `pow(x, n)` and a matrix `power(n)` (a negative power inverts), the Lambert W branch, unit dimension exponents (`m/s` is `s^-1`), `BigFloat` and symbolic numbers, numerators, an `IntField`'s value and range, radio button values, database integers
+- charges and oxidation states in chemistry, and the magnetic quantum number `m`
+- dates and times: years (there are years before 1), days since 1970, Unix times, durations, time offsets and `add_days(count)` and similar, which go back with a negative count; months, days, hours, minutes, seconds and other calendar fields are unsigned
+- `range(start, stop, step)` and slices (`v[-2:]`), which count with any numbers and step backwards
+- comparison results (`-1`, `0`, `1`), `min_exponent` and `min_exponent10` in `float_traits`, a font's descent, `z_order`, stream `sync()` results
 
 A class converts to another type only through a [conversion operator](#conversion-operators). Its constructors are never used as implicit conversions.
 
@@ -1447,6 +1469,30 @@ Here `found` is `32`: the search stops at `r` = 3, `c` = 2, and `continue rows` 
 - Any `for`, `for ... in`, `while` or `do ... while` loop can have a label.
 - The label must belong to a loop around the jump; anything else is an error. A label is only visible inside its own loop, so two separate loops can use the same label.
 - Labelled jumps work in `constexpr` functions too.
+
+### Loops that never end
+
+The compiler looks for loops and recursion that can't stop. When it's certain, that's an error; when the loop could still stop through something it calls, it's a warning.
+
+| Code | Result |
+|---|---|
+| A condition that's always true (`while (true)`, `for (;;)`, an unsigned value `>= 0`) and nothing in the loop that leaves it: no `break`, `return`, `throw` or `goto`, and no calls | Error: the loop never ends |
+| The same, but the loop calls something | Warning: it can only stop if something it calls throws or ends the program |
+| A condition that only reads local variables, none of which the loop changes, and nothing that leaves the loop | Error once the loop starts, or a warning when the loop calls something |
+| A `for` loop whose step moves its variable away from the bound, such as `for (int: i = 0; i < n; i--)` | Error, or a warning when the loop calls something |
+| A function whose every call reaches a call to itself before it can return, such as one with no base case | Error |
+
+```walnut
+function wait(int: ready) -> void {
+    while (ready == 0) {
+        ready = 0;
+    }
+} end function wait
+```
+
+Here assigning `ready` counts as changing it, so this loop isn't reported, even though it still never ends. The checks only report what they can be sure of from the loop itself: a variable that is passed to a function, used with `&`, or captured by a lambda by reference is treated as changed, and a loop that might leave through `break`, `return`, `throw` or `goto` anywhere inside it isn't reported. A `while (true)` loop with a `break` inside is fine.
+
+A loop that only gets stuck at run time, such as one waiting for a value a function never returns, can be stopped with [`--check-loops`](#safety-checks), and runaway recursion with `--check-recursion`.
 
 ### Comprehensions
 
@@ -1870,7 +1916,7 @@ function three(int...[3]: xs = 1) -> int {
 } end function three
 
 function pair(int...<2>: xs = 7, string: s) -> int {
-    return xs[0] + xs[1] + countof(s);
+    return xs[0] + xs[1] + static_cast<int>(countof(s));
 } end function pair
 
 function main() -> int {
@@ -1888,11 +1934,11 @@ Here `a` is `6`, `b` is `7` (`5 + 1 + 1`), `c` is `10` (`1 + 7 + 2`) and `d` is 
 
 ```walnut
 function a(int...: xs, double: y) -> int {
-    return countof(xs) * 10 + static_cast<int>(y);
+    return static_cast<int>(countof(xs)) * 10 + static_cast<int>(y);
 } end function a
 
 function b(int...[3]: xs, double...: ys) -> int {
-    return countof(xs) * 10 + countof(ys);
+    return static_cast<int>(countof(xs) * 10 + countof(ys));
 } end function b
 
 function main() -> int {
@@ -2127,7 +2173,7 @@ function main() -> int {
         } catch (int: e) {
             total += e;
         } catch (string: s) {
-            total += countof(s);
+            total += static_cast<int>(countof(s));
         } catch (const Problem&: p) {
             total += p.code;
         } catch (...) {
@@ -2149,7 +2195,49 @@ function main() -> int {
 
 Here `total` ends as `58`: 42, plus 4 for `"boom"`, plus 7, plus the rethrown 5.
 
-A `throw` written directly inside a `noexcept` function is a compile-time error. Destructors are `noexcept`, so the same applies to them.
+### finally
+
+A `finally` block goes after the last handler, or straight after the `try` block when there are no handlers. It always runs when the try statement is left, however that happens: the try block finishing, a handler finishing, `return`, `break`, `continue`, or an exception that no handler caught (which carries on outward once `finally` is done). That makes it the place for cleanup that has to happen either way, such as closing a file or releasing a lock.
+
+```walnut
+import module.io
+
+function load(int: id) -> int {
+    std::io::println("opening");
+    try {
+        if (id < 0) then {
+            throw "bad id";
+        }
+        return id * 2;
+    } catch (string: problem) {
+        std::io::println(problem);
+        return 0;
+    } finally {
+        std::io::println("closing");
+    }
+} end function load
+
+function main() -> int {
+    int: total = load(5) + load(-1);
+    try {
+        total += 1;
+    } finally {
+        std::io::println("done");
+    }
+    return 0;
+} end function main
+```
+
+Each call to `load` prints `opening` and then `closing`, after `return id * 2;` has worked out its value and after the handler has run, and `total` ends as `11`.
+
+- `return` can't be used inside `finally`, since it would replace the value or exception the try statement is already leaving with. Return after the try statement instead.
+- `break`, `continue` and `repeat` can't leave a `finally` block either; they can only be used for loops inside it.
+- `await`, `co_yield` and `co_return` can't be used inside `finally`.
+- If `finally` throws while an exception is already on its way out, the new exception is dropped and the original one carries on. If it throws after a normal exit, that exception is thrown from the try statement.
+
+A `noexcept` function can't let an exception out, and the compiler checks the whole body: a `throw`, a call to a function that may throw, or an overloaded operator or `[]` that may throw is a compile-time error unless a `try` around it catches it. A call to a native function that isn't declared `noexcept` counts as one that may throw. Destructors are `noexcept`, so the same applies to them.
+
+`noexcept` also reaches the generated C++, so the library's containers can move a type's values instead of copying them when its move constructor and move assignment are `noexcept`. Mark them `noexcept` whenever they only take over the other object's contents, as the library's own types do. A runtime error inside a `noexcept` function still stops the program with the usual message.
 
 ## Templates and concepts
 
@@ -2492,9 +2580,36 @@ function main() -> int {
 Here `a` is `42`, `b` is `"abab"` and `c` is `4`.
 
 - A requirement can also check the result type: `{ x.size() } -> int;`.
+- `typename T::name;` checks that a type has a member type, as in `template <typename U> concept HasDims = requires { typename U::dims; }`. The parameter list can be left out when nothing needs a value.
+- A concept can take a parameter pack, and so can the parameters of a `requires` block: `template <typename F, typename... Args> concept CallableWith = requires (F&: f, Args&&...: args) { f(args...); }`. `CallableWith<F, int, string>` checks `f(an_int, a_string)`.
+- Template parameters can have defaults: `template <typename A, typename B = A> concept AddableTo = requires (A: a, B: b) { a + b; }` makes `AddableTo<int>` mean `AddableTo<int, int>`.
 - A concept definition has no `;` after it.
 - Calling a constrained template with a type that doesn't qualify names what failed, such as `Addable<P> is not satisfied` or `std::traits::is_integer<float> is not satisfied`.
 - Ready-made concepts are in `std::concepts`, which every program has: `integer_type`, `floating_point`, `same_as`, `totally_ordered` and [others](Documentation/Library/core.md#stdconcepts). `template <std::concepts::integer_type T>` and `requires std::concepts::integer_type<T>` both work.
+
+#### Constrained methods
+
+A method or operator inside a class template can have its own `requires` line. The class can still be used with any type, but that one method only exists when the condition holds:
+
+```walnut
+template <typename T>
+class Bag {
+    std::collections::Vector<T>: items;
+public:
+    function add(self&, const T&: value) -> void {
+        self.items.push_back(value);
+    } end function add
+
+    requires std::traits::has_operator<std::traits::op::less, T>
+    function smallest(const self&) -> T {
+        return std::algorithms::min_element(self.items);
+    } end function smallest
+} end class Bag
+```
+
+`Bag<Point>` works even when `Point` has no `<`, as long as `smallest` is never called. Calling it gives an error at your call, such as `constraints not satisfied for 'smallest': std::traits::has_operator<less, Point> is not satisfied`, instead of an error inside the class.
+
+The `requires` line goes right before the method or operator it constrains, and can use the class's template parameters and anything a `requires` clause can. The standard library uses this throughout, so a missing operator or a wrong type is reported where you used it.
 
 ## Lambdas
 
@@ -3662,6 +3777,7 @@ Traits are [variable templates](#variable-templates) in the namespace `std::trai
 | `is_const<T>`, `is_volatile<T>`, `is_ref<T>`, `is_lvalue_ref<T>`, `is_rvalue_ref<T>`, `is_pointer<T>`, `is_array<T>`, `is_function<T>`, `is_void<T>` | `bool` |
 | `is_integer<T>`, `is_float<T>`, `is_number<T>`, `is_signed<T>`, `is_unsigned<T>`, `is_bool<T>`, `is_char<T>`, `is_string<T>`, `is_enum<T>`, `is_class<T>`, `is_dynamic<T>` and [about 60 more](Documentation/Library/core.md#stdtraits) | `bool` |
 | `is_constructible<T, Args...>`, `is_nothrow_constructible<T, Args...>`, `is_constexpr_constructible<T, Args...>`, `is_assignable<T, U>`, `is_nothrow_assignable<T, U>`, `is_constexpr_assignable<T, U>`, `is_destructible<T>`, `is_nothrow_destructible<T>`, and `nothrow`/`constexpr` versions of the default, copy and move ones | `bool`: whether `T(args...)` or `t = u` works, can't throw, or can run while compiling; see [What a type can do](Documentation/Library/core.md#stdtraits) |
+| `is_callable<F, Args...>`, `is_function_like<F>`, `can_for_each<T>`, `is_container<T>`, `is_stringifiable<T>`, `has_operator<Op, A, B>`, `overloads_operator<Op, A, B>` | `bool`: whether an `F` can be called with those arguments, whether `T` works in a for-each loop, and whether an operator works on those types; the compiler tries the code quietly to answer. See [Checking what a type can do](Documentation/Library/core.md#checking-what-a-type-can-do) |
 | `integer_rank<T>` | An `int`: the width step of an integer type. `int` is 0, `long int` 1, `short int` -1, and so on up to 6 for `long long integer` |
 | `float_rank<T>` | The same for floats: `float` is 0, `short float` -1, `double` 2 |
 | `integer_bits<T>`, `float_bits<T>`, `float_mantissa_bits<T>`, `float_exponent_bits<T>`, `array_extent<T>` | `int` sizes |
@@ -4428,6 +4544,8 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `emit` | Prints the generated C++ (or writes it with `-o`); with `-E`, `-S`, `--llvm-ir` or `--preprocessed-cpp`, the preprocessed Walnut source, the assembly, the LLVM IR or the preprocessed C++ instead (see [Looking at the generated code](#looking-at-the-generated-code)) |
 | `build` | Builds an executable without running it; with `-c`, `--static` or `--shared`, an object file or a library (see [Libraries and object files](#libraries-and-object-files)) |
 | `run` | Builds the program and runs it |
+| `profile` | Builds the program with timing added, runs it, and reports its slowest lines, functions and files and which classes could be smaller, with suggestions for speeding them up; `--memory` adds what allocates the most and `--complexity` measures how each function grows (see [Profiling](#profiling)) |
+| `complexity` | Estimates how each function's time and memory grow with the size of its input, like `O(n)` or `O(n^2)`; with `--run` it also runs the program and measures them (see [Complexity estimates](#complexity-estimates)) |
 | `clean` | Deletes the build cache |
 | `highlight` | Prints what each name and operator in the file is, and its errors and warnings, as JSON for editors. With `--stdin`, the file's text comes from standard input. It also takes a `.walh` file. The format is in [the VS Code extension's README](Tools/vscode-walnut/README.md#the-highlight-command) |
 | `complete` | With `--at LINE:COL` (from 1, the column in bytes), prints what can be typed at that spot as JSON, for editors' autocomplete. After `.` or `->` it lists the members of the value's type, after `::` what's inside the namespace, class or enum, and otherwise every name in scope there (locals declared further down are left out). It works on unfinished code, so the line being typed doesn't have to compile. The answer is `{"start": column, "mode": "member" \| "scope" \| "name" \| "none", "items": [{"label", "kind", "detail"}]}`, where `start` is the byte column (from 0) where the word being completed starts and `detail` is a type or signature. Also takes `--stdin` and `.walh` files |
@@ -4473,6 +4591,7 @@ The files can be `.wal` files, C and C++ source files (`.c`, `.cpp`, `.cc`, `.cx
 | `--time` | Shows how long each stage takes |
 | `-v`, `--verbose` | Prints the C++ compiler command |
 | `--check-bounds`, `--check-null`, `--check-overflow`, `--check-dangling`, `--checks` | Runtime safety checks; see [Safety checks](#safety-checks) |
+| `--check-loops[=n]`, `--check-recursion[=n]` | Stop a loop that goes round more than `n` times, or calls nested more than `n` deep; see [Safety checks](#safety-checks) |
 | `--leak-check[=warn\|error]` | Lists memory from `new` that was never deleted when the program ends |
 | `--gc` | Turns on the garbage collector |
 | `--ownership` | Compile-time checks for moved, deleted and dangling values |
@@ -4508,10 +4627,14 @@ Walnut programs are as fast as C++ by default, which also means a wrong index, a
 | `--check-overflow` | Stops the program when `+`, `-`, `*` or negation of fixed-width integers doesn't fit, or a cast clamps; constants that overflow or clamp become compile errors instead of warnings | A check after each of those operations and casts |
 | `--check-dangling` | Stops the program when `*p`, `p->` or `p[i]` uses a pointer to a local variable of a function that has already returned | Each dereference compares the pointer with the stack |
 | `--checks` | All four above | |
+| `--check-loops[=n]` | Stops the program when one run of a loop goes round more than `n` times (100000000 if `n` is left out), since that usually means it's stuck. Each time the loop starts again the count starts again, so nested loops are fine. Setting `WALNUT_LOOP_LIMIT` when the program runs overrides `n` | A counter in each loop |
+| `--check-recursion[=n]` | Stops the program when calls are nested more than `n` deep (10000 if `n` is left out), before the stack runs out; that's usually recursion that never reaches its base case. Setting `WALNUT_DEPTH_LIMIT` when the program runs overrides `n` | A counter in each function call |
 | `--leak-check` | When the program ends, lists the memory from `new` that was never deleted, grouped by the line that made it. `--leak-check=error` also makes the program exit with code 3. Setting `WALNUT_LEAKS` to `off`, `warn` or `error` when the program runs overrides it | Every `new` is recorded |
 | `--gc` | A garbage collector frees objects made with `new` once nothing points to them anymore. `delete` still works and frees them right away | Collection pauses, and every allocation is a little larger |
 | `--ownership` | Compile-time checks; see below | Only compile time |
 | `--safe` | `--checks`, `--leak-check` and `--ownership` | |
+
+`--check-loops` and `--check-recursion` aren't part of `--checks` or `--safe`, because a program that really does loop for a long time or recurse deeply would be stopped. Turn them on when something seems to hang.
 
 A runtime check stops the program with the `.wal` file and line, the way an uncaught exception does, and exit code 70. A crash such as a segmentation fault also prints the last `.wal` line that ran when any check is on:
 
@@ -4590,6 +4713,194 @@ A call that matches no overload lists the candidates and why each one doesn't fi
 - Nothing has to be set up: there are no build files, and headers never need compiling by hand.
 - The cache is in `~/.cache/walnut` (`%LOCALAPPDATA%\walnut\cache` on Windows), or in the folder named by `WALNUT_CACHE_DIR`. Entries that haven't been used for 30 days are deleted, and `walnut clean` deletes everything.
 - `--keep-cpp`, `--debug-cpp`, `--line-map` and `--no-cache` build the old way, as a single C++ file in a temporary folder.
+
+### Profiling
+
+`walnut profile main.wal` builds the program with timing added to your own code, runs it, and then reports where the time went: the slowest lines, the slowest functions and, for a program of several files, the time in each file. Arguments after `--` go to the program, as with `run`. The program's own output comes first, on standard output; the report follows on standard error.
+
+```
+walnut profile slow.wal
+
+walnut profile: slow.wal spent 14.7 ms in your code (the run took 151.8 ms; the time spent measuring is taken out)
+
+Slowest lines (the time each line takes itself; time in the standard library counts toward the line that called it)
+      time        %       runs    per run  line
+    4.2 ms    28.6%      28656     147 ns  slow.wal:8        return fib(n - 1) + fib(n - 2);
+    3.8 ms    25.5%    3000000       1 ns  slow.wal:14       if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') then {
+
+Slowest functions (total counts the functions it calls; own is just its lines)
+     total        %        own       calls   per call  function
+    8.0 ms    54.6%     8.0 ms         300    26.8 us  count_vowels  (slow.wal:11)
+
+Suggestions (the slowest parts first)
+
+  slow.wal:11 in 'count_vowels' (300 calls, 54.6% of the time)
+    'count_vowels' takes 'word' by value, which copies it on every call; it only reads it, so taking it as a const reference avoids the copy
+    - function count_vowels(string: word) -> int {
+    + function count_vowels(const string&: word) -> int {
+```
+
+A line's time is the time from when it starts to when the next line of your code starts, so it includes everything it calls in the standard library, but not the lines of your own functions it calls; those have their own rows. A function's total includes everything it calls, and its own time is just its lines. Timing every line makes the program slower while it's being profiled; walnut measures that cost when the program starts and takes it out of the numbers, so they're close to how long the program takes without profiling. They still vary a little from run to run, so compare runs rather than single numbers.
+
+| Option | Does |
+|---|---|
+| `--top <n>` | How many rows each table shows (10 if left out) |
+| `--function <name>` | Adds a line-by-line breakdown of that function (`Shape::area` or just `area`) and keeps only the suggestions for it. Can be given more than once |
+| `--file <path>` | Adds a line-by-line breakdown of that file and keeps only the suggestions for it. Can be given more than once |
+| `--report <file>` | Writes the report to a file instead of the terminal |
+| `--json <file>` | Writes every line, function and suggestion as JSON, for editors (Canopy uses this) |
+| `--suggest-out <file>` | Writes the suggestions to a file. A file ending in `.diff` or `.patch` gets just the changes, as a patch that `git apply` or `patch -p1` can use |
+| `--annotate <file>` | Writes a copy of the main file with each line's time, share and runs in front of it |
+| `--apply` | Makes the suggested changes that walnut can write out itself, saving each changed file as `<file>.bak` first |
+| `--no-suggest` | Leaves the suggestions out |
+| `--memory` | Also counts every allocation (see [Memory](#memory) below). Off unless asked, since it makes every allocation slower |
+| `--complexity` | Also times every call of your functions against the size of its arguments, and shows how each one really grows (see [Measuring growth](#measuring-growth)). Off unless asked, since it makes every call slower |
+| `--no-memory` | Turns `--memory` back off |
+
+Suggestions only appear for the parts of the program that took a real share of the time. Some come with the change written out (`-` is the line now, `+` is the suggested line); the others explain what to change:
+
+| Suggestion | When |
+|---|---|
+| Take a parameter as `const T&` | A string or class parameter is passed by value but only read |
+| Loop with `const T&` | A `for (T: x in items)` loop copies each string or class element |
+| `inline` | A small function that doesn't call itself is called very often |
+| Remember results | A function calls itself more than once per call, like `fib` |
+| `reserve` | A container from `std::collections` grows one item at a time in a loop, and the function never calls `reserve` |
+| Build strings in place | A string is added to in a loop, or rebuilt with `s = s + ...` |
+| Hardware ints | A busy loop does arithmetic on built-in ints, which never overflow because they're wider than the processor's own; `std::hardware_int32` and `std::hardware_int64` are faster when the values stay small |
+| Work it out once | A loop condition calls a function every time round |
+| A fixed type for `var` | A `var` always holds the same kind of value |
+| Avoid `new` in a loop | `new` runs every time round a busy loop |
+| Avoid throwing | A `throw` runs thousands of times |
+| Reorder fields | A class or struct would be smaller with its fields in another order (see below) |
+
+Only your own `.wal` files are timed; the standard library's time counts toward the line in your code that called it, and the precompiled standard library is used as it is.
+
+The table rows are already the top *n* of each kind, slowest first, with each one's share of the total in the `%` column, so `--top 3` gives the three slowest lines, the three slowest functions and so on.
+
+#### Memory
+
+With `--memory`, the profile also counts every allocation the program makes, and shows it in bytes, KB, MB or GB. It's off unless asked, because every `new` and every container that grows then goes through a counting allocator, which slows allocation-heavy programs down a little and moves their timings:
+
+```
+Memory: 5.5 MB allocated in 80335 blocks; at most 277.4 KB was in use at once; 1.5 KB was still held when the program ended
+
+Lines that allocate the most (memory the standard library asks for counts toward the line that called it)
+ allocated        %     blocks  per block  most held  held at end  line
+    5.1 MB    93.4%      80240       67 B   135.2 KB            -  m.wal:16          out.push_back("item " + std::core::to_string(i));
+  367.8 KB    6.52%         11    33.4 KB   276.0 KB            -  m.wal:29          ps.push_back(Particle());
+
+Functions that allocate the most (total counts the functions it calls; own is just its lines)
+     total        %        own     blocks  function
+    5.5 MB   100.0%   368.6 KB         23  main  (m.wal:21)
+    5.1 MB    93.4%     5.1 MB      80241  build  (m.wal:13)
+```
+
+*allocated* is everything the line asked for over the whole run, *blocks* how many times it asked, *most held* the most of its memory that was in use at one time, and *held at end* what it still had when the program finished. A line that makes many small blocks is a good place for `reserve`, or for reusing one container instead of making a new one each time; memory still held at the end is normal for globals, but if it grows the longer a program runs, something is being added to and never cleared. Many allocations also raise the score of the `reserve`, `new` and string suggestions. With `--gc` the collector handles memory itself, so the memory part is left out.
+
+#### Smaller classes
+
+The compiler places each field after the one before it, adding unused bytes so that every field starts where its type needs it to. Putting the big fields first keeps the small ones packed together at the end, so the same fields can take less room. The profile checks every class and struct of your own that has two or more fields, and lists the ones that would be smaller. This part is always on, since it costs nothing while the program runs (each class is measured once as the program starts):
+
+```
+Classes that could be smaller (each field is placed after the one before it, and the compiler adds unused bytes so every field starts where its type needs it to)
+
+  Particle (m.wal:4) takes 184 B per object, 18 B of it unused padding
+    fields now:    alive, x, tag, y, visible, id
+    better order:  x, y, id, tag, alive, visible  ->  168 B per object (16 B, 8.70% less; 15.3 MB less for a million of them)
+    (--suggest-out writes this change and --apply makes it)
+```
+
+When each field is on its own line, and they're all in the same `public` or `private` part, `--suggest-out` and `--apply` reorder them for you; otherwise move them by hand. The values a class gives its fields are set in the new order, so check that none of them uses a field declared after it.
+
+#### How the slowest functions grow
+
+The report ends with an estimate of how the slowest functions' time and memory grow with the size of their input, *n*, like `O(n)` or `O(n^2)`; `walnut complexity` (below) explains each one. With `--complexity` it shows the measured growth next to the estimate.
+
+### Complexity estimates
+
+`walnut complexity main.wal` reads the program, without running it, and estimates how each function's time and memory grow as its input gets bigger:
+
+```
+walnut complexity sorts.wal
+
+  function    time           memory         where
+  fib         O(2^n)         O(n)           sorts.wal:4
+                time: 'fib' calls itself 2 times with only slightly smaller values, so the calls multiply; remembering results it has already worked out brings this down to about O(n)
+                memory: each call of 'fib' waits on the stack for the one it makes, up to about n deep
+  search      O(log n)       O(1)           sorts.wal:9
+                time: the loop on line 12 halves (or doubles) a value each time round, so it runs about log n times
+  pairs       O(n^2)         O(1)           sorts.wal:20
+                time: the loop on line 22 runs about n times
+                time: the loop on line 23 runs about n times
+  merge_sort  O(n log n)     O(n)           sorts.wal:30
+                time: 'merge_sort' splits its input in half and calls itself on each part, doing O(n) work at each level (like merge sort)
+                memory: 'tmp' gets an item each time round the loop on line 36
+```
+
+The estimate follows a few rules: a loop over a whole list, or up to a size or a parameter, runs about *n* times; a loop that halves or doubles a value runs about *log n* times; a loop with fixed numbers runs a fixed number of times; loops inside loops multiply; a call costs whatever the called function costs (unless every argument is a fixed value), and sorting costs *n log n*. A function that calls itself once with a smaller value runs about *n* times, one that splits its input in half runs about *log n* deep, and one that calls itself twice with only slightly smaller values grows exponentially. Memory counts containers that get an item every time round a loop, `resize` and `reserve` with a size that isn't fixed, and how deep a function's calls to itself go. Everything is measured in one *n*, the size of the input, so a function over two lists of different sizes still shows as `O(n^2)`, and it's an estimate: a loop that stops early, or a value that only looks like it's halved, can make the real growth smaller.
+
+| Option | Does |
+|---|---|
+| `--function <name>` | Only that function (`Shape::area` or just `area`). Can be given more than once |
+| `--file <path>` | Only the functions in that file. Can be given more than once |
+| `--run` | Also builds and runs the program and measures each function (below). Takes the same build options as `walnut run` |
+| `--json <file>` | Writes the estimates and their reasons as JSON, for editors |
+
+#### Measuring growth
+
+Reading the code can only guess: a loop that usually stops early, or a call that's cheap for the values it really gets, looks the same as one that isn't. `walnut complexity main.wal --run` (or `walnut profile main.wal --complexity`) builds and runs the program, and every time one of your functions is called it records how big each argument was, how long the call took, the most memory it held at once and how deep it went on calling itself. The size of an argument is its value for a number and its size for a list, a string or anything else with `size()` or `length()`. Then for each argument it tries the curves 1, log n, n, n log n, n², n² log n, n³ and 2ⁿ, keeps the one that fits the timings best, and uses the argument that fits best:
+
+```
+walnut complexity sorts.wal --run
+
+            time                         memory
+  function  estimated      measured      estimated      measured      where
+  fib       O(2^n)         O(2^n)        O(n)           O(n)          sorts.wal:4
+              measured: grows with 'n', measured over 23 sizes from 0 to 22
+  search    O(log n)       O(log n)      O(1)           O(1)          sorts.wal:9
+              measured: grows with 'v', measured over 30 sizes from 100 to 3000
+  pairs     O(n^2)         O(n^2)        O(1)           O(1)          sorts.wal:20
+              measured: grows with 'v', measured over 30 sizes from 100 to 3000
+  main      O(2^n)         -             O(n)           -             sorts.wal:36
+              measured: it has no arguments with a size (numbers, lists or strings) to measure it against
+```
+
+When the two disagree, a line says which one grows faster; the measurement is the one to trust, but only for the sizes the run used. To get a measurement, the program has to call the function with a range of sizes: at least four different ones, with the biggest at least four times the smallest. A function called with only one or two sizes says so instead. Timings on a busy computer jump around, so a function whose time barely changes is reported as `O(1)`, and curves that are close together (`n` and `n log n`, say) can swap places between runs.
+
+### Benchmarks
+
+`std::benchmark` is part of the core library, so it works without an `import`. It runs a function many times and reports how long one run takes:
+
+```walnut
+function main() -> int {
+    long int: total = 0;
+    std::benchmark("sum to 1000", [&]() -> void {
+        for (long int: i = 0; i < 1000; i += 1) { total += i; }
+    });
+    return 0;
+} end function main
+```
+
+```
+benchmark sum to 1000: 11.069 us per run (best 9.590 us, worst 697.563 us, 19203 runs)
+```
+
+| Call | Does |
+|---|---|
+| `std::benchmark(name, work)` | Runs `work` once to warm up, then as many times as fit in about a fifth of a second (at least once, at most a million times), prints a line like the one above to standard error and returns the result |
+| `std::benchmark(name, work, runs)` | The same, with an exact number of runs |
+| `std::benchmark(work)`, `std::benchmark(work, runs)` | The same without printing anything |
+
+The result is a `std::BenchmarkResult` with `name`, `runs`, `total_ns`, `best_ns` and `worst_ns`, plus `average_ns()`, `runs_per_second()` and `to_string()`, so two versions can be compared in code:
+
+```walnut
+const std::BenchmarkResult: a = std::benchmark([&]() -> void { first_way(); });
+const std::BenchmarkResult: b = std::benchmark([&]() -> void { second_way(); });
+std::io::println(a.average_ns() < b.average_ns() ? "the first way is faster" : "the second way is faster");
+```
+
+The line goes to standard error so it doesn't mix with what the program prints. The best time is usually the most reliable number to compare, since the others include whatever else the computer was doing. For timing just one piece of a program, `std::time::measure` and `std::time::Stopwatch` in `module.time` are still there.
 
 ### Looking at the generated code
 

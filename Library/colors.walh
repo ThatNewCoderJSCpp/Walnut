@@ -18,17 +18,14 @@ safe(compile) {
 
         namespace colors {
             hidden namespace detail {
-                function clamp_channel(long int: v) -> int {
-                    if (v < 0) then {
-                        return 0;
-                    }
+                function clamp_channel(unsigned long int: v) noexcept -> unsigned int {
                     if (v > 255) then {
                         return 255;
                     }
-                    return static_cast<int>(v);
+                    return static_cast<unsigned int>(v);
                 } end function clamp_channel
 
-                function clamp_unit(float: v) -> float {
+                function clamp_unit(float: v) noexcept -> float {
                     if (v < 0.0) then {
                         return 0.0;
                     }
@@ -38,8 +35,8 @@ safe(compile) {
                     return v;
                 } end function clamp_unit
 
-                function channel_of(float: unit) -> int {
-                    return clamp_channel(static_cast<long int>(std::math::floor(clamp_unit(unit) * 255.0 + 0.5)));
+                function channel_of(float: unit) -> unsigned int {
+                    return clamp_channel(static_cast<unsigned long int>(std::math::floor(clamp_unit(unit) * 255.0 + 0.5)));
                 } end function channel_of
 
                 function wrap_hue(float: h) -> float {
@@ -50,20 +47,20 @@ safe(compile) {
                     return x;
                 } end function wrap_hue
 
-                function hex_digit(char: c) -> int {
+                function hex_digit(char: c) noexcept -> unsigned int {
                     if (c >= '0' && c <= '9') then {
-                        return static_cast<int>(c) - static_cast<int>('0');
+                        return static_cast<unsigned int>(c) - static_cast<unsigned int>('0');
                     }
                     if (c >= 'a' && c <= 'f') then {
-                        return static_cast<int>(c) - static_cast<int>('a') + 10;
+                        return static_cast<unsigned int>(c) - static_cast<unsigned int>('a') + 10;
                     }
                     if (c >= 'A' && c <= 'F') then {
-                        return static_cast<int>(c) - static_cast<int>('A') + 10;
+                        return static_cast<unsigned int>(c) - static_cast<unsigned int>('A') + 10;
                     }
-                    return -1;
+                    return 16;
                 } end function hex_digit
 
-                function hex_pair(long int: v) -> string {
+                function hex_pair(unsigned long int: v) -> string {
                     const string: digits = "0123456789abcdef";
                     return digits.substr(v / 16, 1) + digits.substr(v % 16, 1);
                 } end function hex_pair
@@ -90,7 +87,7 @@ safe(compile) {
                     return std::math::pow((c + 0.055) / 1.055, 2.4);
                 } end function to_linear
 
-                function hue_part(float: p, float: q, float: t) -> float {
+                function hue_part(float: p, float: q, float: t) noexcept -> float {
                     float: x = t;
                     if (x < 0.0) then {
                         x = x + 1.0;
@@ -110,7 +107,7 @@ safe(compile) {
                     return p;
                 } end function hue_part
 
-                function max3(float: a, float: b, float: c) -> float {
+                function max3(float: a, float: b, float: c) noexcept -> float {
                     float: m = a;
                     if (b > m) then {
                         m = b;
@@ -121,7 +118,7 @@ safe(compile) {
                     return m;
                 } end function max3
 
-                function min3(float: a, float: b, float: c) -> float {
+                function min3(float: a, float: b, float: c) noexcept -> float {
                     float: m = a;
                     if (b < m) then {
                         m = b;
@@ -139,9 +136,9 @@ safe(compile) {
                 float: lightness = 0.0;
                 float: alpha = 1.0;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(float: h, float: s, float: l, float: a = 1.0) : hue = h, saturation = s, lightness = l, alpha = a { }
+                constructor(float: h, float: s, float: l, float: a = 1.0) noexcept : hue = h, saturation = s, lightness = l, alpha = a { }
 
                 function to_string(const self&) -> string {
                     return static_cast<string>(`hsl(${self.hue}, ${self.saturation}, ${self.lightness}, ${self.alpha})`);
@@ -154,9 +151,9 @@ safe(compile) {
                 float: value = 0.0;
                 float: alpha = 1.0;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(float: h, float: s, float: v, float: a = 1.0) : hue = h, saturation = s, value = v, alpha = a { }
+                constructor(float: h, float: s, float: v, float: a = 1.0) noexcept : hue = h, saturation = s, value = v, alpha = a { }
 
                 function to_string(const self&) -> string {
                     return static_cast<string>(`hsv(${self.hue}, ${self.saturation}, ${self.value}, ${self.alpha})`);
@@ -164,20 +161,20 @@ safe(compile) {
             } end struct HSV
 
             struct Color {
-                int: r = 0;
-                int: g = 0;
-                int: b = 0;
-                int: a = 255;
+                unsigned int: r = 0;
+                unsigned int: g = 0;
+                unsigned int: b = 0;
+                unsigned int: a = 255;
 
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(long int: red, long int: green, long int: blue, long int: alpha = 255) : r = detail::clamp_channel(red), g = detail::clamp_channel(green), b = detail::clamp_channel(blue), a = detail::clamp_channel(alpha) { }
+                constructor(unsigned long int: red, unsigned long int: green, unsigned long int: blue, unsigned long int: alpha = 255) noexcept : r = detail::clamp_channel(red), g = detail::clamp_channel(green), b = detail::clamp_channel(blue), a = detail::clamp_channel(alpha) { }
 
-                static function rgb(long int: red, long int: green, long int: blue) -> Color {
+                static function rgb(unsigned long int: red, unsigned long int: green, unsigned long int: blue) -> Color {
                     return Color(red, green, blue, 255);
                 } end function rgb
 
-                static function rgba(long int: red, long int: green, long int: blue, long int: alpha) -> Color {
+                static function rgba(unsigned long int: red, unsigned long int: green, unsigned long int: blue, unsigned long int: alpha) -> Color {
                     return Color(red, green, blue, alpha);
                 } end function rgba
 
@@ -185,11 +182,11 @@ safe(compile) {
                     return Color(detail::channel_of(red), detail::channel_of(green), detail::channel_of(blue), detail::channel_of(alpha));
                 } end function from_unit
 
-                static function gray(long int: level, long int: alpha = 255) -> Color {
+                static function gray(unsigned long int: level, unsigned long int: alpha = 255) -> Color {
                     return Color(level, level, level, alpha);
                 } end function gray
 
-                static function from_packed(long int: rgba) -> Color {
+                static function from_packed(unsigned long int: rgba) -> Color {
                     return Color((rgba / 16777216) % 256, (rgba / 65536) % 256, (rgba / 256) % 256, rgba % 256);
                 } end function from_packed
 
@@ -198,25 +195,25 @@ safe(compile) {
                     if (s.starts_with("#")) then {
                         s = s.substr(1);
                     }
-                    const long int: n = s.length();
+                    const unsigned long int: n = s.length();
                     if (n != 3 && n != 4 && n != 6 && n != 8) then {
                         throw std::errors::color_error(static_cast<string>(`'${hex}' is not a hex color; use #rgb, #rgba, #rrggbb or #rrggbbaa`));
                     }
-                    array[8] int: d = {0, 0, 0, 0, 0, 0, 15, 15};
-                    long int: k = 0;
+                    array[8] unsigned int: d = {0, 0, 0, 0, 0, 0, 15, 15};
+                    unsigned long int: k = 0;
                     for (char: c in s) {
-                        const int: v = detail::hex_digit(c);
-                        if (v < 0) then {
+                        const unsigned int: v = detail::hex_digit(c);
+                        if (v > 15) then {
                             throw std::errors::color_error(static_cast<string>(`'${hex}' is not a hex color; '${c}' is not a hex digit`));
                         }
                         d[k] = v;
                         k++;
                     }
                     if (n == 3 || n == 4) then {
-                        const int: alpha = n == 4 ? d[3] * 17 : 255;
+                        const unsigned int: alpha = n == 4 ? d[3] * 17 : 255u;
                         return Color(d[0] * 17, d[1] * 17, d[2] * 17, alpha);
                     }
-                    const int: alpha = n == 8 ? d[6] * 16 + d[7] : 255;
+                    const unsigned int: alpha = n == 8 ? d[6] * 16 + d[7] : 255u;
                     return Color(d[0] * 16 + d[1], d[2] * 16 + d[3], d[4] * 16 + d[5], alpha);
                 } end function from_hex
 
@@ -273,44 +270,44 @@ safe(compile) {
                 } end function from_hsv
 
                 static function random(bool: random_alpha = false) -> Color {
-                    const long int: alpha = random_alpha ? std::random::random_int(0, 255) : 255;
-                    return Color(std::random::random_int(0, 255), std::random::random_int(0, 255), std::random::random_int(0, 255), alpha);
+                    const unsigned int: alpha = random_alpha ? std::random::random_int(0u, 255u) : 255u;
+                    return Color(std::random::random_int(0u, 255u), std::random::random_int(0u, 255u), std::random::random_int(0u, 255u), alpha);
                 } end function random
 
-                function red(const self&) -> int {
+                function red(const self&) noexcept -> unsigned int {
                     return self.r;
                 } end function red
 
-                function green(const self&) -> int {
+                function green(const self&) noexcept -> unsigned int {
                     return self.g;
                 } end function green
 
-                function blue(const self&) -> int {
+                function blue(const self&) noexcept -> unsigned int {
                     return self.b;
                 } end function blue
 
-                function alpha(const self&) -> int {
+                function alpha(const self&) noexcept -> unsigned int {
                     return self.a;
                 } end function alpha
 
-                function red_unit(const self&) -> float {
+                function red_unit(const self&) noexcept -> float {
                     return static_cast<float>(self.r) / 255.0;
                 } end function red_unit
 
-                function green_unit(const self&) -> float {
+                function green_unit(const self&) noexcept -> float {
                     return static_cast<float>(self.g) / 255.0;
                 } end function green_unit
 
-                function blue_unit(const self&) -> float {
+                function blue_unit(const self&) noexcept -> float {
                     return static_cast<float>(self.b) / 255.0;
                 } end function blue_unit
 
-                function alpha_unit(const self&) -> float {
+                function alpha_unit(const self&) noexcept -> float {
                     return static_cast<float>(self.a) / 255.0;
                 } end function alpha_unit
 
-                function packed(const self&) -> long int {
-                    return static_cast<long int>(self.r) * 16777216 + static_cast<long int>(self.g) * 65536 + static_cast<long int>(self.b) * 256 + static_cast<long int>(self.a);
+                function packed(const self&) noexcept -> unsigned long int {
+                    return static_cast<unsigned long int>(self.r) * 16777216 + static_cast<unsigned long int>(self.g) * 65536 + static_cast<unsigned long int>(self.b) * 256 + static_cast<unsigned long int>(self.a);
                 } end function packed
 
                 function to_hex(self&, bool: include_alpha = false) -> string {
@@ -407,27 +404,27 @@ safe(compile) {
                     return !self.is_dark();
                 } end function is_light
 
-                function is_opaque(const self&) -> bool {
+                function is_opaque(const self&) noexcept -> bool {
                     return self.a == 255;
                 } end function is_opaque
 
-                function is_transparent(const self&) -> bool {
+                function is_transparent(const self&) noexcept -> bool {
                     return self.a == 0;
                 } end function is_transparent
 
-                function with_red(const self&, long int: v) -> Color {
+                function with_red(const self&, unsigned long int: v) -> Color {
                     return Color(v, self.g, self.b, self.a);
                 } end function with_red
 
-                function with_green(const self&, long int: v) -> Color {
+                function with_green(const self&, unsigned long int: v) -> Color {
                     return Color(self.r, v, self.b, self.a);
                 } end function with_green
 
-                function with_blue(const self&, long int: v) -> Color {
+                function with_blue(const self&, unsigned long int: v) -> Color {
                     return Color(self.r, self.g, v, self.a);
                 } end function with_blue
 
-                function with_alpha(const self&, long int: v) -> Color {
+                function with_alpha(const self&, unsigned long int: v) -> Color {
                     return Color(self.r, self.g, self.b, v);
                 } end function with_alpha
 
@@ -437,10 +434,10 @@ safe(compile) {
 
                 function lerp(const self&, const Color&: other, float: t) -> Color {
                     const float: k = detail::clamp_unit(t);
-                    return Color(static_cast<long int>(std::math::floor(static_cast<float>(self.r) + (static_cast<float>(other.r) - static_cast<float>(self.r)) * k + 0.5)),
-                                 static_cast<long int>(std::math::floor(static_cast<float>(self.g) + (static_cast<float>(other.g) - static_cast<float>(self.g)) * k + 0.5)),
-                                 static_cast<long int>(std::math::floor(static_cast<float>(self.b) + (static_cast<float>(other.b) - static_cast<float>(self.b)) * k + 0.5)),
-                                 static_cast<long int>(std::math::floor(static_cast<float>(self.a) + (static_cast<float>(other.a) - static_cast<float>(self.a)) * k + 0.5)));
+                    return Color(static_cast<unsigned long int>(std::math::floor(static_cast<float>(self.r) + (static_cast<float>(other.r) - static_cast<float>(self.r)) * k + 0.5)),
+                                 static_cast<unsigned long int>(std::math::floor(static_cast<float>(self.g) + (static_cast<float>(other.g) - static_cast<float>(self.g)) * k + 0.5)),
+                                 static_cast<unsigned long int>(std::math::floor(static_cast<float>(self.b) + (static_cast<float>(other.b) - static_cast<float>(self.b)) * k + 0.5)),
+                                 static_cast<unsigned long int>(std::math::floor(static_cast<float>(self.a) + (static_cast<float>(other.a) - static_cast<float>(self.a)) * k + 0.5)));
                 } end function lerp
 
                 function mix(const self&, const Color&: other, float: t = 0.5) -> Color {
@@ -477,7 +474,7 @@ safe(compile) {
                 } end function complement
 
                 function grayscale(const self&) -> Color {
-                    const long int: v = static_cast<long int>(std::math::floor(0.299 * static_cast<float>(self.r) + 0.587 * static_cast<float>(self.g) + 0.114 * static_cast<float>(self.b) + 0.5));
+                    const unsigned long int: v = static_cast<unsigned long int>(std::math::floor(0.299 * static_cast<float>(self.r) + 0.587 * static_cast<float>(self.g) + 0.114 * static_cast<float>(self.b) + 0.5));
                     return Color(v, v, v, self.a);
                 } end function grayscale
 
@@ -499,7 +496,7 @@ safe(compile) {
                 } end function blend_over
 
                 function premultiplied(const self&) -> Color {
-                    return Color((static_cast<long int>(self.r) * self.a + 127) / 255, (static_cast<long int>(self.g) * self.a + 127) / 255, (static_cast<long int>(self.b) * self.a + 127) / 255, self.a);
+                    return Color((static_cast<unsigned long int>(self.r) * self.a + 127) / 255, (static_cast<unsigned long int>(self.g) * self.a + 127) / 255, (static_cast<unsigned long int>(self.b) * self.a + 127) / 255, self.a);
                 } end function premultiplied
 
                 function distance(const self&, const Color&: other) -> float {
@@ -509,11 +506,11 @@ safe(compile) {
                     return std::math::sqrt(dr * dr + dg * dg + db * db);
                 } end function distance
 
-                operator(==) function(const self&, const Color&: o) -> bool {
+                operator(==) function(const self&, const Color&: o) noexcept -> bool {
                     return self.r == o.r && self.g == o.g && self.b == o.b && self.a == o.a;
                 }
 
-                operator(!=) function(const self&, const Color&: o) -> bool {
+                operator(!=) function(const self&, const Color&: o) noexcept -> bool {
                     return !(self.r == o.r && self.g == o.g && self.b == o.b && self.a == o.a);
                 }
 

@@ -5,7 +5,7 @@ namespace std {
     namespace linalg {
         hidden namespace detail {
             template <typename T>
-            function past(T*: first, long int: count) -> T* {
+            function past(T*: first, unsigned long int: count) -> T* {
                 return first + count;
             } end function past
         } end namespace detail
@@ -79,19 +79,20 @@ safe(compile) {
             template <typename T>
             struct Vector4;
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             struct VectorN;
 
             template <typename T>
             class DynVector;
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
             struct Matrix;
 
             template <typename T>
             class DynMatrix;
 
             template <typename T>
+            requires std::traits::is_float<T>
             struct Vector2 {
                 static_assert(std::traits::is_float<T>, "linalg vectors need a real float type, such as float or double, not an integer or other type");
                 T: x = T(0);
@@ -121,11 +122,11 @@ safe(compile) {
                     return Vector2(T(0), T(1));
                 } end function unit_y
 
-                static function size() -> long int {
+                static function size() -> unsigned long int {
                     return 2;
                 } end function size
 
-                operator([]) function(self&, long int: index) -> T& {
+                operator([]) function(self&, unsigned long int: index) -> T& {
                     if (index == 0) then {
                         return self.x;
                     }
@@ -135,7 +136,7 @@ safe(compile) {
                     throw std::errors::linalg_error(static_cast<string>(`index ${index} is out of range for a Vector2`));
                 }
 
-                operator([]) function(const self&, long int: index) -> const T& {
+                operator([]) function(const self&, unsigned long int: index) -> const T& {
                     if (index == 0) then {
                         return self.x;
                     }
@@ -145,11 +146,11 @@ safe(compile) {
                     throw std::errors::linalg_error(static_cast<string>(`index ${index} is out of range for a Vector2`));
                 }
 
-                function at(self&, long int: index) -> T& {
+                function at(self&, unsigned long int: index) -> T& {
                     return (*this)[index];
                 } end function at
 
-                function at(const self&, long int: index) -> const T& {
+                function at(const self&, unsigned long int: index) -> const T& {
                     return (*this)[index];
                 } end function at
 
@@ -401,6 +402,7 @@ safe(compile) {
             }
 
             template <typename T>
+            requires std::traits::is_float<T>
             struct Vector3 {
                 static_assert(std::traits::is_float<T>, "linalg vectors need a real float type, such as float or double, not an integer or other type");
                 T: x = T(0);
@@ -435,11 +437,11 @@ safe(compile) {
                     return Vector3(T(0), T(0), T(1));
                 } end function unit_z
 
-                static function size() -> long int {
+                static function size() -> unsigned long int {
                     return 3;
                 } end function size
 
-                operator([]) function(self&, long int: index) -> T& {
+                operator([]) function(self&, unsigned long int: index) -> T& {
                     if (index == 0) then {
                         return self.x;
                     }
@@ -452,7 +454,7 @@ safe(compile) {
                     throw std::errors::linalg_error(static_cast<string>(`index ${index} is out of range for a Vector3`));
                 }
 
-                operator([]) function(const self&, long int: index) -> const T& {
+                operator([]) function(const self&, unsigned long int: index) -> const T& {
                     if (index == 0) then {
                         return self.x;
                     }
@@ -465,11 +467,11 @@ safe(compile) {
                     throw std::errors::linalg_error(static_cast<string>(`index ${index} is out of range for a Vector3`));
                 }
 
-                function at(self&, long int: index) -> T& {
+                function at(self&, unsigned long int: index) -> T& {
                     return (*this)[index];
                 } end function at
 
-                function at(const self&, long int: index) -> const T& {
+                function at(const self&, unsigned long int: index) -> const T& {
                     return (*this)[index];
                 } end function at
 
@@ -733,6 +735,7 @@ safe(compile) {
             }
 
             template <typename T>
+            requires std::traits::is_float<T>
             struct Vector4 {
                 static_assert(std::traits::is_float<T>, "linalg vectors need a real float type, such as float or double, not an integer or other type");
                 T: x = T(0);
@@ -772,11 +775,11 @@ safe(compile) {
                     return Vector4(T(0), T(0), T(0), T(1));
                 } end function unit_w
 
-                static function size() -> long int {
+                static function size() -> unsigned long int {
                     return 4;
                 } end function size
 
-                operator([]) function(self&, long int: index) -> T& {
+                operator([]) function(self&, unsigned long int: index) -> T& {
                     if (index == 0) then {
                         return self.x;
                     }
@@ -792,7 +795,7 @@ safe(compile) {
                     throw std::errors::linalg_error(static_cast<string>(`index ${index} is out of range for a Vector4`));
                 }
 
-                operator([]) function(const self&, long int: index) -> const T& {
+                operator([]) function(const self&, unsigned long int: index) -> const T& {
                     if (index == 0) then {
                         return self.x;
                     }
@@ -808,11 +811,11 @@ safe(compile) {
                     throw std::errors::linalg_error(static_cast<string>(`index ${index} is out of range for a Vector4`));
                 }
 
-                function at(self&, long int: index) -> T& {
+                function at(self&, unsigned long int: index) -> T& {
                     return (*this)[index];
                 } end function at
 
-                function at(const self&, long int: index) -> const T& {
+                function at(const self&, unsigned long int: index) -> const T& {
                     return (*this)[index];
                 } end function at
 
@@ -1077,14 +1080,15 @@ safe(compile) {
             }
 
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
+            requires std::traits::is_float<T>
             struct VectorN {
                 static_assert(std::traits::is_float<T>, "linalg vectors need a real float type, such as float or double, not an integer or other type");
                 static_assert(N > 0, "a VectorN needs at least one component");
                 array[N] T: data;
 
                 constructor() {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         self.data[i] = T(0);
                     }
                 }
@@ -1104,7 +1108,7 @@ safe(compile) {
 
                 static function filled(const T&: value) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = value;
                     }
                     return out;
@@ -1114,41 +1118,41 @@ safe(compile) {
                     return filled(T(1));
                 } end function one
 
-                static function unit(long int: axis) -> VectorN {
+                static function unit(unsigned long int: axis) -> VectorN {
                     VectorN: out;
                     out[axis] = T(1);
                     return out;
                 } end function unit
 
-                static function size() -> long int {
+                static function size() -> unsigned long int {
                     return N;
                 } end function size
 
-                operator([]) function(self&, long int: index) -> T& {
-                    if (index < 0 || index >= N) then {
+                operator([]) function(self&, unsigned long int: index) -> T& {
+                    if (index >= N) then {
                         detail::fail(static_cast<string>(`index ${index} is out of range for a VectorN of size ${N}`));
                     }
                     return self.data[index];
                 }
 
-                operator([]) function(const self&, long int: index) -> const T& {
-                    if (index < 0 || index >= N) then {
+                operator([]) function(const self&, unsigned long int: index) -> const T& {
+                    if (index >= N) then {
                         detail::fail(static_cast<string>(`index ${index} is out of range for a VectorN of size ${N}`));
                     }
                     return self.data[index];
                 }
 
-                function at(self&, long int: index) -> T& {
+                function at(self&, unsigned long int: index) -> T& {
                     return (*this)[index];
                 } end function at
 
-                function at(const self&, long int: index) -> const T& {
+                function at(const self&, unsigned long int: index) -> const T& {
                     return (*this)[index];
                 } end function at
 
                 operator(+) function(const self&, const VectorN&: o) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = self.data[i] + o.data[i];
                     }
                     return out;
@@ -1156,7 +1160,7 @@ safe(compile) {
 
                 operator(-) function(const self&, const VectorN&: o) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = self.data[i] - o.data[i];
                     }
                     return out;
@@ -1164,7 +1168,7 @@ safe(compile) {
 
                 operator(*) function(const self&, const VectorN&: o) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = self.data[i] * o.data[i];
                     }
                     return out;
@@ -1172,7 +1176,7 @@ safe(compile) {
 
                 operator(/) function(const self&, const VectorN&: o) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = self.data[i] / o.data[i];
                     }
                     return out;
@@ -1180,7 +1184,7 @@ safe(compile) {
 
                 operator(*) function(const self&, const T&: k) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = self.data[i] * k;
                     }
                     return out;
@@ -1188,7 +1192,7 @@ safe(compile) {
 
                 operator(/) function(const self&, const T&: k) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = self.data[i] / k;
                     }
                     return out;
@@ -1196,56 +1200,56 @@ safe(compile) {
 
                 operator(-) function(const self&) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = -self.data[i];
                     }
                     return out;
                 }
 
                 operator(+=) function(self&, const VectorN&: o) -> VectorN& {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         self.data[i] = self.data[i] + o.data[i];
                     }
                     return *this;
                 }
 
                 operator(-=) function(self&, const VectorN&: o) -> VectorN& {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         self.data[i] = self.data[i] - o.data[i];
                     }
                     return *this;
                 }
 
                 operator(*=) function(self&, const VectorN&: o) -> VectorN& {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         self.data[i] = self.data[i] * o.data[i];
                     }
                     return *this;
                 }
 
                 operator(/=) function(self&, const VectorN&: o) -> VectorN& {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         self.data[i] = self.data[i] / o.data[i];
                     }
                     return *this;
                 }
 
                 operator(*=) function(self&, const T&: k) -> VectorN& {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         self.data[i] = self.data[i] * k;
                     }
                     return *this;
                 }
 
                 operator(/=) function(self&, const T&: k) -> VectorN& {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         self.data[i] = self.data[i] / k;
                     }
                     return *this;
                 }
 
                 operator(==) function(const self&, const VectorN&: o) -> bool {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (self.data[i] != o.data[i]) then {
                             return false;
                         }
@@ -1259,7 +1263,7 @@ safe(compile) {
 
                 function dot(const self&, const VectorN&: o) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         total += self.data[i] * o.data[i];
                     }
                     return total;
@@ -1283,7 +1287,7 @@ safe(compile) {
 
                 function norm_1(const self&) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         total += std::math::abs(self.data[i]);
                     }
                     return total;
@@ -1291,7 +1295,7 @@ safe(compile) {
 
                 function norm_inf(const self&) -> T {
                     T: best = T(0);
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (std::math::abs(self.data[i]) > best) then {
                             best = std::math::abs(self.data[i]);
                         }
@@ -1301,7 +1305,7 @@ safe(compile) {
 
                 function norm_p(const self&, const T&: p) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         total += std::math::pow(std::math::abs(self.data[i]), p);
                     }
                     return std::math::pow(total, T(1) / p);
@@ -1325,7 +1329,7 @@ safe(compile) {
                 } end function is_normalized
 
                 function is_zero(const self&) -> bool {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (self.data[i] != T(0)) then {
                             return false;
                         }
@@ -1371,7 +1375,7 @@ safe(compile) {
 
                 function min(const self&, const VectorN&: o) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = self.data[i] < o.data[i] ? self.data[i] : o.data[i];
                     }
                     return out;
@@ -1379,7 +1383,7 @@ safe(compile) {
 
                 function max(const self&, const VectorN&: o) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = self.data[i] > o.data[i] ? self.data[i] : o.data[i];
                     }
                     return out;
@@ -1387,7 +1391,7 @@ safe(compile) {
 
                 function abs(const self&) -> VectorN {
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = std::math::abs(self.data[i]);
                     }
                     return out;
@@ -1399,7 +1403,7 @@ safe(compile) {
 
                 function sum(const self&) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         total += self.data[i];
                     }
                     return total;
@@ -1407,7 +1411,7 @@ safe(compile) {
 
                 function product(const self&) -> T {
                     T: total = T(1);
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         total *= self.data[i];
                     }
                     return total;
@@ -1419,7 +1423,7 @@ safe(compile) {
 
                 function min_component(const self&) -> T {
                     T: best = self.data[0];
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (self.data[i] < best) then {
                             best = self.data[i];
                         }
@@ -1429,7 +1433,7 @@ safe(compile) {
 
                 function max_component(const self&) -> T {
                     T: best = self.data[0];
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (self.data[i] > best) then {
                             best = self.data[i];
                         }
@@ -1437,9 +1441,9 @@ safe(compile) {
                     return best;
                 } end function max_component
 
-                function argmin(const self&) -> long int {
-                    long int: best = 0;
-                    for (long int: i = 0; i < N; i++) {
+                function argmin(const self&) -> unsigned long int {
+                    unsigned long int: best = 0;
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (self.data[i] < self.data[best]) then {
                             best = i;
                         }
@@ -1447,9 +1451,9 @@ safe(compile) {
                     return best;
                 } end function argmin
 
-                function argmax(const self&) -> long int {
-                    long int: best = 0;
-                    for (long int: i = 0; i < N; i++) {
+                function argmax(const self&) -> unsigned long int {
+                    unsigned long int: best = 0;
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (self.data[i] > self.data[best]) then {
                             best = i;
                         }
@@ -1458,7 +1462,7 @@ safe(compile) {
                 } end function argmax
 
                 function approx_equal(const self&, const VectorN&: o, const T&: tolerance) -> bool {
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (std::math::abs(self.data[i] - o.data[i]) > tolerance) then {
                             return false;
                         }
@@ -1472,7 +1476,7 @@ safe(compile) {
 
                 function to_dyn(const self&) -> DynVector<T> {
                     DynVector<T>: out(N);
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out[i] = self.data[i];
                     }
                     return out;
@@ -1483,7 +1487,7 @@ safe(compile) {
                         detail::fail(static_cast<string>(`can't make a VectorN of size ${N} from a DynVector of size ${v.size()}`));
                     }
                     VectorN: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = v[i];
                     }
                     return out;
@@ -1491,8 +1495,8 @@ safe(compile) {
 
                 function outer(const self&, const VectorN&: o) -> Matrix<T, N, N> {
                     Matrix<T, N, N>: out;
-                    for (long int: i = 0; i < N; i++) {
-                        for (long int: j = 0; j < N; j++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
+                        for (unsigned long int: j = 0; j < N; j++) {
                             out(i, j) = self.data[i] * o.data[j];
                         }
                     }
@@ -1526,7 +1530,7 @@ safe(compile) {
 
                 function to_string(const self&) -> string {
                     string: out = "(";
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         if (i > 0) then {
                             out += ", ";
                         }
@@ -1537,17 +1541,18 @@ safe(compile) {
                 } end function to_string
             } end struct VectorN
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             operator(*) function(const T&: k, const VectorN<T, N>&: v) -> VectorN<T, N> {
                 return v * k;
             }
 
             template <typename T>
+            requires std::traits::is_float<T>
             class DynVector {
                 std::collections::Vector<T>: items;
 
-                function check(const self&, long int: index) -> void {
-                    if (index < 0 || index >= self.items.size()) then {
+                function check(const self&, unsigned long int: index) -> void {
+                    if (index >= self.items.size()) then {
                         detail::fail(static_cast<string>(`index ${index} is out of range for a DynVector of size ${self.items.size()}`));
                     }
                 } end function check
@@ -1563,35 +1568,29 @@ safe(compile) {
 
                 constructor() { }
 
-                constructor(long int: count) {
-                    if (count < 0) then {
-                        detail::fail("a DynVector can't have a negative size");
-                    }
+                constructor(unsigned long int: count) {
                     self.items.resize(count, T(0));
                 }
 
-                constructor(long int: count, const T&: value) {
-                    if (count < 0) then {
-                        detail::fail("a DynVector can't have a negative size");
-                    }
+                constructor(unsigned long int: count, const T&: value) {
                     self.items.resize(count, value);
                 }
 
                 constructor(const std::collections::Vector<T>&: values) : items = values { }
 
-                static function zero(long int: count) -> DynVector {
+                static function zero(unsigned long int: count) -> DynVector {
                     return DynVector(count);
                 } end function zero
 
-                static function filled(long int: count, const T&: value) -> DynVector {
+                static function filled(unsigned long int: count, const T&: value) -> DynVector {
                     return DynVector(count, value);
                 } end function filled
 
-                static function one(long int: count) -> DynVector {
+                static function one(unsigned long int: count) -> DynVector {
                     return DynVector(count, T(1));
                 } end function one
 
-                static function unit(long int: count, long int: axis) -> DynVector {
+                static function unit(unsigned long int: count, unsigned long int: axis) -> DynVector {
                     DynVector: out(count);
                     out[axis] = T(1);
                     return out;
@@ -1601,7 +1600,7 @@ safe(compile) {
                     return DynVector(values);
                 } end function of
 
-                function size(const self&) -> long int {
+                function size(const self&) -> unsigned long int {
                     return self.items.size();
                 } end function size
 
@@ -1609,12 +1608,12 @@ safe(compile) {
                     return self.items.empty();
                 } end function empty
 
-                operator([]) function(self&, long int: index) -> T& {
+                operator([]) function(self&, unsigned long int: index) -> T& {
                     self.check(index);
                     return self.items[index];
                 }
 
-                operator([]) function(const self&, long int: index) -> const T& {
+                operator([]) function(const self&, unsigned long int: index) -> const T& {
                     self.check(index);
                     return self.items[index];
                 }
@@ -1623,7 +1622,7 @@ safe(compile) {
                     self.items.push_back(value);
                 } end function push_back
 
-                function resize(self&, long int: count) -> void {
+                function resize(self&, unsigned long int: count) -> void {
                     self.items.resize(count, T(0));
                 } end function resize
 
@@ -1635,18 +1634,18 @@ safe(compile) {
                     return self.items;
                 } end function to_collection
 
-                function at(self&, long int: index) -> T& {
+                function at(self&, unsigned long int: index) -> T& {
                     return (*this)[index];
                 } end function at
 
-                function at(const self&, long int: index) -> const T& {
+                function at(const self&, unsigned long int: index) -> const T& {
                     return (*this)[index];
                 } end function at
 
                 operator(+) function(const self&, const DynVector&: o) -> DynVector {
                     self.require_same_size(o, "'+'");
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = self.items[i] + o.items[i];
                     }
                     return out;
@@ -1655,7 +1654,7 @@ safe(compile) {
                 operator(-) function(const self&, const DynVector&: o) -> DynVector {
                     self.require_same_size(o, "'-'");
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = self.items[i] - o.items[i];
                     }
                     return out;
@@ -1664,7 +1663,7 @@ safe(compile) {
                 operator(*) function(const self&, const DynVector&: o) -> DynVector {
                     self.require_same_size(o, "'*'");
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = self.items[i] * o.items[i];
                     }
                     return out;
@@ -1673,7 +1672,7 @@ safe(compile) {
                 operator(/) function(const self&, const DynVector&: o) -> DynVector {
                     self.require_same_size(o, "'/'");
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = self.items[i] / o.items[i];
                     }
                     return out;
@@ -1681,7 +1680,7 @@ safe(compile) {
 
                 operator(*) function(const self&, const T&: k) -> DynVector {
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = self.items[i] * k;
                     }
                     return out;
@@ -1689,7 +1688,7 @@ safe(compile) {
 
                 operator(/) function(const self&, const T&: k) -> DynVector {
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = self.items[i] / k;
                     }
                     return out;
@@ -1697,7 +1696,7 @@ safe(compile) {
 
                 operator(-) function(const self&) -> DynVector {
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = -self.items[i];
                     }
                     return out;
@@ -1705,7 +1704,7 @@ safe(compile) {
 
                 operator(+=) function(self&, const DynVector&: o) -> DynVector& {
                     self.require_same_size(o, "'+='");
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         self.items[i] = self.items[i] + o.items[i];
                     }
                     return *this;
@@ -1713,7 +1712,7 @@ safe(compile) {
 
                 operator(-=) function(self&, const DynVector&: o) -> DynVector& {
                     self.require_same_size(o, "'-='");
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         self.items[i] = self.items[i] - o.items[i];
                     }
                     return *this;
@@ -1721,7 +1720,7 @@ safe(compile) {
 
                 operator(*=) function(self&, const DynVector&: o) -> DynVector& {
                     self.require_same_size(o, "'*='");
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         self.items[i] = self.items[i] * o.items[i];
                     }
                     return *this;
@@ -1729,21 +1728,21 @@ safe(compile) {
 
                 operator(/=) function(self&, const DynVector&: o) -> DynVector& {
                     self.require_same_size(o, "'/='");
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         self.items[i] = self.items[i] / o.items[i];
                     }
                     return *this;
                 }
 
                 operator(*=) function(self&, const T&: k) -> DynVector& {
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         self.items[i] = self.items[i] * k;
                     }
                     return *this;
                 }
 
                 operator(/=) function(self&, const T&: k) -> DynVector& {
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         self.items[i] = self.items[i] / k;
                     }
                     return *this;
@@ -1753,7 +1752,7 @@ safe(compile) {
                     if (o.size() != self.size()) then {
                         return false;
                     }
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (self.items[i] != o.items[i]) then {
                             return false;
                         }
@@ -1768,7 +1767,7 @@ safe(compile) {
                 function dot(const self&, const DynVector&: o) -> T {
                     self.require_same_size(o, "dot()");
                     T: total = T(0);
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         total += self.items[i] * o.items[i];
                     }
                     return total;
@@ -1792,7 +1791,7 @@ safe(compile) {
 
                 function norm_1(const self&) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         total += std::math::abs(self.items[i]);
                     }
                     return total;
@@ -1800,7 +1799,7 @@ safe(compile) {
 
                 function norm_inf(const self&) -> T {
                     T: best = T(0);
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (std::math::abs(self.items[i]) > best) then {
                             best = std::math::abs(self.items[i]);
                         }
@@ -1810,7 +1809,7 @@ safe(compile) {
 
                 function norm_p(const self&, const T&: p) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         total += std::math::pow(std::math::abs(self.items[i]), p);
                     }
                     return std::math::pow(total, T(1) / p);
@@ -1834,7 +1833,7 @@ safe(compile) {
                 } end function is_normalized
 
                 function is_zero(const self&) -> bool {
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (self.items[i] != T(0)) then {
                             return false;
                         }
@@ -1881,7 +1880,7 @@ safe(compile) {
                 function min(const self&, const DynVector&: o) -> DynVector {
                     self.require_same_size(o, "min()");
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = self.items[i] < o.items[i] ? self.items[i] : o.items[i];
                     }
                     return out;
@@ -1890,7 +1889,7 @@ safe(compile) {
                 function max(const self&, const DynVector&: o) -> DynVector {
                     self.require_same_size(o, "max()");
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = self.items[i] > o.items[i] ? self.items[i] : o.items[i];
                     }
                     return out;
@@ -1898,7 +1897,7 @@ safe(compile) {
 
                 function abs(const self&) -> DynVector {
                     DynVector: out(self.size());
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         out.items[i] = std::math::abs(self.items[i]);
                     }
                     return out;
@@ -1910,7 +1909,7 @@ safe(compile) {
 
                 function sum(const self&) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         total += self.items[i];
                     }
                     return total;
@@ -1918,7 +1917,7 @@ safe(compile) {
 
                 function product(const self&) -> T {
                     T: total = T(1);
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         total *= self.items[i];
                     }
                     return total;
@@ -1933,7 +1932,7 @@ safe(compile) {
                         detail::fail("min_component() of an empty DynVector");
                     }
                     T: best = self.items[0];
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (self.items[i] < best) then {
                             best = self.items[i];
                         }
@@ -1946,7 +1945,7 @@ safe(compile) {
                         detail::fail("max_component() of an empty DynVector");
                     }
                     T: best = self.items[0];
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (self.items[i] > best) then {
                             best = self.items[i];
                         }
@@ -1954,9 +1953,9 @@ safe(compile) {
                     return best;
                 } end function max_component
 
-                function argmin(const self&) -> long int {
-                    long int: best = 0;
-                    for (long int: i = 0; i < self.size(); i++) {
+                function argmin(const self&) -> unsigned long int {
+                    unsigned long int: best = 0;
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (self.items[i] < self.items[best]) then {
                             best = i;
                         }
@@ -1964,9 +1963,9 @@ safe(compile) {
                     return best;
                 } end function argmin
 
-                function argmax(const self&) -> long int {
-                    long int: best = 0;
-                    for (long int: i = 0; i < self.size(); i++) {
+                function argmax(const self&) -> unsigned long int {
+                    unsigned long int: best = 0;
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (self.items[i] > self.items[best]) then {
                             best = i;
                         }
@@ -1978,7 +1977,7 @@ safe(compile) {
                     if (o.size() != self.size()) then {
                         return false;
                     }
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (std::math::abs(self.items[i] - o.items[i]) > tolerance) then {
                             return false;
                         }
@@ -1992,8 +1991,8 @@ safe(compile) {
 
                 function outer(const self&, const DynVector&: o) -> DynMatrix<T> {
                     DynMatrix<T>: out(self.size(), o.size());
-                    for (long int: i = 0; i < self.size(); i++) {
-                        for (long int: j = 0; j < o.size(); j++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
+                        for (unsigned long int: j = 0; j < o.size(); j++) {
                             out(i, j) = self.items[i] * o.items[j];
                         }
                     }
@@ -2029,7 +2028,7 @@ safe(compile) {
 
                 function to_string(const self&) -> string {
                     string: out = "(";
-                    for (long int: i = 0; i < self.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.size(); i++) {
                         if (i > 0) then {
                             out += ", ";
                         }
@@ -2046,33 +2045,33 @@ safe(compile) {
             }
 
             hidden namespace detail {
-                template <int N>
-                constexpr long int: kv_factorial = N * kv_factorial<N - 1>;
+                template <unsigned int N>
+                constexpr unsigned long int: kv_factorial = N * kv_factorial<N - 1>;
 
                 template <>
-                constexpr long int: kv_factorial<0> = 1;
+                constexpr unsigned long int: kv_factorial<0> = 1;
 
-                template <int N, int K>
-                constexpr long int: kv_components = (K < 0 || K > N) ? 0 : kv_factorial<N> / (kv_factorial<(K < 0 ? 0 : K)> * kv_factorial<(K < 0 || K > N ? 0 : N - K)>);
+                template <unsigned int N, unsigned int K>
+                constexpr unsigned long int: kv_components = (K < 0 || K > N) ? 0 : kv_factorial<N> / (kv_factorial<(K < 0 ? 0 : K)> * kv_factorial<(K < 0 || K > N ? 0 : N - K)>);
 
-                function kv_choose(long int: n, long int: k) -> long int {
-                    if (k < 0 || k > n) then {
+                function kv_choose(unsigned long int: n, unsigned long int: k) noexcept -> unsigned long int {
+                    if (k > n) then {
                         return 0;
                     }
-                    long int: r = 1;
-                    for (long int: i = 0; i < k; i++) {
+                    unsigned long int: r = 1;
+                    for (unsigned long int: i = 0; i < k; i++) {
                         r = r * (n - i) / (i + 1);
                     }
                     return r;
                 } end function kv_choose
 
-                function kv_unrank(long int: n, long int: k, long int: rank) -> std::collections::Vector<long int> {
-                    std::collections::Vector<long int>: out;
-                    long int: left = rank;
-                    long int: v = 0;
-                    for (long int: a = 0; a < k; a++) {
+                function kv_unrank(unsigned long int: n, unsigned long int: k, unsigned long int: rank) -> std::collections::Vector<unsigned long int> {
+                    std::collections::Vector<unsigned long int>: out;
+                    unsigned long int: left = rank;
+                    unsigned long int: v = 0;
+                    for (unsigned long int: a = 0; a < k; a++) {
                         while (true) {
-                            const long int: count = kv_choose(n - v - 1, k - a - 1);
+                            const unsigned long int: count = kv_choose(n - v - 1, k - a - 1);
                             if (left < count) then {
                                 break;
                             }
@@ -2085,12 +2084,12 @@ safe(compile) {
                     return out;
                 } end function kv_unrank
 
-                function kv_rank(long int: n, const std::collections::Vector<long int>&: combo) -> long int {
-                    const long int: k = combo.size();
-                    long int: rank = 0;
-                    long int: start = 0;
-                    for (long int: a = 0; a < k; a++) {
-                        for (long int: v = start; v < combo[a]; v++) {
+                function kv_rank(unsigned long int: n, const std::collections::Vector<unsigned long int>&: combo) -> unsigned long int {
+                    const unsigned long int: k = combo.size();
+                    unsigned long int: rank = 0;
+                    unsigned long int: start = 0;
+                    for (unsigned long int: a = 0; a < k; a++) {
+                        for (unsigned long int: v = start; v < combo[a]; v++) {
                             rank += kv_choose(n - v - 1, k - a - 1);
                         }
                         start = combo[a] + 1;
@@ -2098,10 +2097,10 @@ safe(compile) {
                     return rank;
                 } end function kv_rank
 
-                function kv_inversions(const std::collections::Vector<long int>&: first, const std::collections::Vector<long int>&: second) -> long int {
-                    long int: count = 0;
-                    for (long int: a in first) {
-                        for (long int: b in second) {
+                function kv_inversions(const std::collections::Vector<unsigned long int>&: first, const std::collections::Vector<unsigned long int>&: second) noexcept -> unsigned long int {
+                    unsigned long int: count = 0;
+                    for (unsigned long int: a in first) {
+                        for (unsigned long int: b in second) {
                             if (a > b) then {
                                 count++;
                             }
@@ -2111,14 +2110,15 @@ safe(compile) {
                 } end function kv_inversions
             } end namespace detail
 
-            template <typename T, int K, int N>
+            template <typename T, unsigned int K, unsigned int N>
+            requires std::traits::is_float<T>
             struct KVector {
                 static_assert(std::traits::is_float<T>, "k-vectors need a real float type, such as float or double, not an integer or other type");
                 static_assert(K >= 0 && K <= N, "a KVector's grade K has to be between 0 and its dimension N");
                 array[detail::kv_components<N, K>] T: data;
 
                 constructor() {
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         self.data[i] = T(0);
                     }
                 }
@@ -2136,7 +2136,7 @@ safe(compile) {
                     return KVector();
                 } end function zero
 
-                static function unit(long int: component) -> KVector {
+                static function unit(unsigned long int: component) -> KVector {
                     KVector: out;
                     out[component] = T(1);
                     return out;
@@ -2145,7 +2145,7 @@ safe(compile) {
                 static function from_vector(const VectorN<T, N>&: v) -> KVector {
                     static_assert(K == 1, "from_vector() makes a 1-vector");
                     KVector: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out.data[i] = v[i];
                     }
                     return out;
@@ -2158,82 +2158,82 @@ safe(compile) {
                     return out;
                 } end function of_scalar
 
-                static function size() -> long int {
+                static function size() -> unsigned long int {
                     return detail::kv_components<N, K>;
                 } end function size
 
-                static function grade() -> long int {
+                static function grade() -> unsigned long int {
                     return K;
                 } end function grade
 
-                static function dimension() -> long int {
+                static function dimension() -> unsigned long int {
                     return N;
                 } end function dimension
 
-                static function indices_of(long int: component) -> std::collections::Vector<long int> {
-                    if (component < 0 || component >= detail::kv_components<N, K>) then {
+                static function indices_of(unsigned long int: component) -> std::collections::Vector<unsigned long int> {
+                    if (component >= detail::kv_components<N, K>) then {
                         detail::fail(static_cast<string>(`component ${component} is out of range for a KVector with ${detail::kv_components<N, K>} components`));
                     }
                     return detail::kv_unrank(N, K, component);
                 } end function indices_of
 
-                static function component_of(const std::collections::Vector<long int>&: indices) -> long int {
+                static function component_of(const std::collections::Vector<unsigned long int>&: indices) -> unsigned long int {
                     if (indices.size() != K) then {
                         detail::fail(static_cast<string>(`a grade-${K} component is named by ${K} indices, not ${indices.size()}`));
                     }
-                    for (long int: a = 0; a < indices.size(); a++) {
+                    for (unsigned long int: a = 0; a < indices.size(); a++) {
                         if (indices[a] < 0 || indices[a] >= N) then {
                             detail::fail(static_cast<string>(`index ${indices[a]} is out of range for dimension ${N}`));
                         }
-                        if (a > 0 && indices[a] <= indices[a - 1]) then {
+                        if (a > 0 && indices[a] <= indices[static_cast<unsigned long int>(a - 1)]) then {
                             detail::fail("KVector indices have to be strictly increasing");
                         }
                     }
                     return detail::kv_rank(N, indices);
                 } end function component_of
 
-                operator([]) function(self&, long int: component) -> T& {
-                    if (component < 0 || component >= detail::kv_components<N, K>) then {
+                operator([]) function(self&, unsigned long int: component) -> T& {
+                    if (component >= detail::kv_components<N, K>) then {
                         detail::fail(static_cast<string>(`component ${component} is out of range for a KVector with ${detail::kv_components<N, K>} components`));
                     }
                     return self.data[component];
                 }
 
-                operator([]) function(const self&, long int: component) -> const T& {
-                    if (component < 0 || component >= detail::kv_components<N, K>) then {
+                operator([]) function(const self&, unsigned long int: component) -> const T& {
+                    if (component >= detail::kv_components<N, K>) then {
                         detail::fail(static_cast<string>(`component ${component} is out of range for a KVector with ${detail::kv_components<N, K>} components`));
                     }
                     return self.data[component];
                 }
 
-                function component(self&, long int: index) -> T& {
+                function component(self&, unsigned long int: index) -> T& {
                     return (*this)[index];
                 } end function component
 
-                function component(const self&, long int: index) -> const T& {
+                function component(const self&, unsigned long int: index) -> const T& {
                     return (*this)[index];
                 } end function component
 
                 template <typename... Is>
                 function at(self&, Is...: indices) -> T& {
                     static_assert(countof(indices) == K, "at() takes exactly K indices");
-                    array[(K > 0 ? K : 1)] long int: given = {static_cast<long int>(indices)...};
-                    std::collections::Vector<long int>: list;
-                    for (long int: i = 0; i < K; i++) {
+                    array[(K > 0 ? K : 1)] unsigned long int: given = {static_cast<unsigned long int>(indices)...};
+                    std::collections::Vector<unsigned long int>: list;
+                    for (unsigned long int: i = 0; i < K; i++) {
                         list.push_back(given[i]);
                     }
-                    return self.data[component_of(list)];
+                    return self.data[static_cast<unsigned long int>(component_of(list))];
                 } end function at
 
                 template <typename... Is>
                 function at(const self&, Is...: indices) -> const T& {
                     static_assert(countof(indices) == K, "at() takes exactly K indices");
-                    array[(K > 0 ? K : 1)] long int: given = {static_cast<long int>(indices)...};
-                    std::collections::Vector<long int>: list;
-                    for (long int: i = 0; i < K; i++) {
+                    array[(K > 0 ? K : 1)] unsigned long int: given = {static_cast<unsigned long int>(indices)...};
+                    std::collections::Vector<unsigned long int>: list;
+                    for (unsigned long int: i = 0; i < K; i++) {
                         list.push_back(given[i]);
                     }
-                    return self.data[component_of(list)];
+                    return self.data[static_cast<unsigned long int>(component_of(list))];
                 } end function at
 
                 function scalar(const self&) -> T {
@@ -2243,7 +2243,7 @@ safe(compile) {
 
                 operator(+) function(const self&, const KVector&: o) -> KVector {
                     KVector: out;
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         out.data[i] = self.data[i] + o.data[i];
                     }
                     return out;
@@ -2251,7 +2251,7 @@ safe(compile) {
 
                 operator(-) function(const self&, const KVector&: o) -> KVector {
                     KVector: out;
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         out.data[i] = self.data[i] - o.data[i];
                     }
                     return out;
@@ -2259,7 +2259,7 @@ safe(compile) {
 
                 operator(-) function(const self&) -> KVector {
                     KVector: out;
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         out.data[i] = -self.data[i];
                     }
                     return out;
@@ -2267,7 +2267,7 @@ safe(compile) {
 
                 operator(*) function(const self&, const T&: k) -> KVector {
                     KVector: out;
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         out.data[i] = self.data[i] * k;
                     }
                     return out;
@@ -2275,7 +2275,7 @@ safe(compile) {
 
                 operator(/) function(const self&, const T&: k) -> KVector {
                     KVector: out;
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         out.data[i] = self.data[i] / k;
                     }
                     return out;
@@ -2302,7 +2302,7 @@ safe(compile) {
                 }
 
                 operator(==) function(const self&, const KVector&: o) -> bool {
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         if (self.data[i] != o.data[i]) then {
                             return false;
                         }
@@ -2316,7 +2316,7 @@ safe(compile) {
 
                 function dot(const self&, const KVector&: o) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         total += self.data[i] * o.data[i];
                     }
                     return total;
@@ -2343,7 +2343,7 @@ safe(compile) {
                 } end function normalized
 
                 function is_zero(const self&) -> bool {
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         if (self.data[i] != T(0)) then {
                             return false;
                         }
@@ -2352,7 +2352,7 @@ safe(compile) {
                 } end function is_zero
 
                 function approx_equal(const self&, const KVector&: o, const T&: tolerance) -> bool {
-                    for (long int: i = 0; i < detail::kv_components<N, K>; i++) {
+                    for (unsigned long int: i = 0; i < detail::kv_components<N, K>; i++) {
                         if (std::math::abs(self.data[i] - o.data[i]) > tolerance) then {
                             return false;
                         }
@@ -2364,21 +2364,21 @@ safe(compile) {
                     return self.approx_equal(o, detail::tolerance<T>() * T(64));
                 } end function approx_equal
 
-                template <int J>
+                template <unsigned int J>
                 function wedge(const self&, const KVector<T, J, N>&: o) -> KVector<T, K + J, N> {
                     static_assert(K + J <= N, "the wedge product's grade K + J can't be more than the dimension N");
                     KVector<T, K + J, N>: out;
-                    const long int: total = detail::kv_choose(N, K + J);
-                    const long int: splits = detail::kv_choose(K + J, K);
-                    for (long int: r = 0; r < total; r++) {
-                        const std::collections::Vector<long int>: blade = detail::kv_unrank(N, K + J, r);
+                    const unsigned long int: total = detail::kv_choose(N, K + J);
+                    const unsigned long int: splits = detail::kv_choose(K + J, K);
+                    for (unsigned long int: r = 0; r < total; r++) {
+                        const std::collections::Vector<unsigned long int>: blade = detail::kv_unrank(N, K + J, r);
                         T: sum = T(0);
-                        for (long int: q = 0; q < splits; q++) {
-                            const std::collections::Vector<long int>: picks = detail::kv_unrank(K + J, K, q);
-                            std::collections::Vector<long int>: first;
-                            std::collections::Vector<long int>: second;
-                            long int: p = 0;
-                            for (long int: i = 0; i < K + J; i++) {
+                        for (unsigned long int: q = 0; q < splits; q++) {
+                            const std::collections::Vector<unsigned long int>: picks = detail::kv_unrank(K + J, K, q);
+                            std::collections::Vector<unsigned long int>: first;
+                            std::collections::Vector<unsigned long int>: second;
+                            unsigned long int: p = 0;
+                            for (unsigned long int: i = 0; i < K + J; i++) {
                                 if (p < K && picks[p] == i) then {
                                     first.push_back(blade[i]);
                                     p++;
@@ -2386,7 +2386,7 @@ safe(compile) {
                                     second.push_back(blade[i]);
                                 }
                             }
-                            const T: term = self.data[detail::kv_rank(N, first)] * o.data[detail::kv_rank(N, second)];
+                            const T: term = self.data[static_cast<unsigned long int>(detail::kv_rank(N, first))] * o.data[static_cast<unsigned long int>(detail::kv_rank(N, second))];
                             if (detail::kv_inversions(first, second) % 2 == 0) then {
                                 sum += term;
                             } else then {
@@ -2400,18 +2400,18 @@ safe(compile) {
 
                 function hodge(const self&) -> KVector<T, N - K, N> {
                     KVector<T, N - K, N>: out;
-                    for (long int: r = 0; r < detail::kv_components<N, K>; r++) {
-                        const std::collections::Vector<long int>: blade = detail::kv_unrank(N, K, r);
-                        std::collections::Vector<long int>: rest;
-                        long int: p = 0;
-                        for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: r = 0; r < detail::kv_components<N, K>; r++) {
+                        const std::collections::Vector<unsigned long int>: blade = detail::kv_unrank(N, K, r);
+                        std::collections::Vector<unsigned long int>: rest;
+                        unsigned long int: p = 0;
+                        for (unsigned long int: i = 0; i < N; i++) {
                             if (p < K && blade[p] == i) then {
                                 p++;
                             } else then {
                                 rest.push_back(i);
                             }
                         }
-                        const long int: target = detail::kv_rank(N, rest);
+                        const unsigned long int: target = detail::kv_rank(N, rest);
                         out.data[target] = detail::kv_inversions(blade, rest) % 2 == 0 ? self.data[r] : -self.data[r];
                     }
                     return out;
@@ -2420,7 +2420,7 @@ safe(compile) {
                 function to_vector(const self&) -> VectorN<T, N> {
                     static_assert(K == 1, "to_vector() needs a 1-vector");
                     VectorN<T, N>: out;
-                    for (long int: i = 0; i < N; i++) {
+                    for (unsigned long int: i = 0; i < N; i++) {
                         out[i] = self.data[i];
                     }
                     return out;
@@ -2428,15 +2428,15 @@ safe(compile) {
 
                 function to_string(const self&) -> string {
                     string: out;
-                    for (long int: r = 0; r < detail::kv_components<N, K>; r++) {
+                    for (unsigned long int: r = 0; r < detail::kv_components<N, K>; r++) {
                         if (r > 0) then {
                             out += " + ";
                         }
                         out += std::core::to_string(self.data[r]);
                         if (K > 0) then {
                             out += " e";
-                            const std::collections::Vector<long int>: blade = detail::kv_unrank(N, K, r);
-                            for (long int: i in blade) {
+                            const std::collections::Vector<unsigned long int>: blade = detail::kv_unrank(N, K, r);
+                            for (unsigned long int: i in blade) {
                                 out += std::core::to_string(i);
                             }
                         }
@@ -2445,26 +2445,26 @@ safe(compile) {
                 } end function to_string
             } end struct KVector
 
-            template <typename T, int K, int N>
+            template <typename T, unsigned int K, unsigned int N>
             operator(*) function(const T&: k, const KVector<T, K, N>&: v) -> KVector<T, K, N> {
                 return v * k;
             }
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             using Bivector = KVector<T, 2, N>;
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             using Trivector = KVector<T, 3, N>;
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             using Pseudoscalar = KVector<T, N, N>;
 
-            template <typename T, int A, int B, int N>
+            template <typename T, unsigned int A, unsigned int B, unsigned int N>
             function wedge(const KVector<T, A, N>&: a, const KVector<T, B, N>&: b) -> KVector<T, A + B, N> {
                 return a.wedge(b);
             } end function wedge
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function wedge(const VectorN<T, N>&: a, const VectorN<T, N>&: b) -> KVector<T, 2, N> {
                 return KVector<T, 1, N>::from_vector(a).wedge(KVector<T, 1, N>::from_vector(b));
             } end function wedge
@@ -2484,7 +2484,7 @@ safe(compile) {
                 return wedge(a.to_vector(), b.to_vector());
             } end function wedge
 
-            template <typename T, int K, int N>
+            template <typename T, unsigned int K, unsigned int N>
             function hodge(const KVector<T, K, N>&: v) -> KVector<T, N - K, N> {
                 return v.hodge();
             } end function hodge
@@ -2493,7 +2493,7 @@ safe(compile) {
             struct LUDecomposition {
                 DynMatrix<T>: lower;
                 DynMatrix<T>: upper;
-                std::collections::Vector<long int>: permutation;
+                std::collections::Vector<unsigned long int>: permutation;
                 int: sign = 1;
                 bool: singular = false;
 
@@ -2502,14 +2502,14 @@ safe(compile) {
                         return T(0);
                     }
                     T: total = T(self.sign);
-                    for (long int: i = 0; i < self.upper.rows(); i++) {
+                    for (unsigned long int: i = 0; i < self.upper.rows(); i++) {
                         total *= self.upper(i, i);
                     }
                     return total;
                 } end function determinant
 
                 function solve(const self&, const DynVector<T>&: b) -> DynVector<T> {
-                    const long int: n = self.upper.rows();
+                    const unsigned long int: n = self.upper.rows();
                     if (self.singular) then {
                         detail::fail("solve() on a singular matrix: it has no unique solution");
                     }
@@ -2517,17 +2517,18 @@ safe(compile) {
                         detail::fail(static_cast<string>(`solve() needs a vector of size ${n}, not ${b.size()}`));
                     }
                     DynVector<T>: y(n);
-                    for (long int: i = 0; i < n; i++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
                         T: s = b[self.permutation[i]];
-                        for (long int: j = 0; j < i; j++) {
+                        for (unsigned long int: j = 0; j < i; j++) {
                             s -= self.lower(i, j) * y[j];
                         }
                         y[i] = s;
                     }
                     DynVector<T>: x(n);
-                    for (long int: i = n - 1; i >= 0; i--) {
+                    for (unsigned long int: i = n; i > 0;) {
+                        i--;
                         T: s = y[i];
-                        for (long int: j = i + 1; j < n; j++) {
+                        for (unsigned long int: j = i + 1; j < n; j++) {
                             s -= self.upper(i, j) * x[j];
                         }
                         x[i] = s / self.upper(i, i);
@@ -2540,7 +2541,7 @@ safe(compile) {
                         detail::fail(static_cast<string>(`solve() needs a matrix with ${self.upper.rows()} rows, not ${b.rows()}`));
                     }
                     DynMatrix<T>: out(b.rows(), b.cols());
-                    for (long int: j = 0; j < b.cols(); j++) {
+                    for (unsigned long int: j = 0; j < b.cols(); j++) {
                         out.set_column(j, self.solve(b.column(j)));
                     }
                     return out;
@@ -2554,9 +2555,9 @@ safe(compile) {
                 } end function inverse
 
                 function permutation_matrix(const self&) -> DynMatrix<T> {
-                    const long int: n = self.upper.rows();
+                    const unsigned long int: n = self.upper.rows();
                     DynMatrix<T>: out(n, n);
-                    for (long int: i = 0; i < n; i++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
                         out(i, self.permutation[i]) = T(1);
                     }
                     return out;
@@ -2574,7 +2575,7 @@ safe(compile) {
                 DynVector<T>: values;
                 DynMatrix<T>: vectors;
 
-                function vector(const self&, long int: index) -> DynVector<T> {
+                function vector(const self&, unsigned long int: index) -> DynVector<T> {
                     return self.vectors.column(index);
                 } end function vector
             } end struct SymmetricEigen
@@ -2587,13 +2588,14 @@ safe(compile) {
             } end struct SingularValueDecomposition
 
             template <typename T>
+            requires std::traits::is_float<T>
             class DynMatrix {
-                long int: row_count = 0;
-                long int: col_count = 0;
+                unsigned long int: row_count = 0;
+                unsigned long int: col_count = 0;
                 std::collections::Vector<T>: cells;
 
-                function check(const self&, long int: r, long int: c) -> void {
-                    if (r < 0 || r >= self.row_count || c < 0 || c >= self.col_count) then {
+                function check(const self&, unsigned long int: r, unsigned long int: c) -> void {
+                    if (r >= self.row_count || c >= self.col_count) then {
                         detail::fail(static_cast<string>(`element (${r}, ${c}) is out of range for a ${self.row_count}x${self.col_count} matrix`));
                     }
                 } end function check
@@ -2610,12 +2612,16 @@ safe(compile) {
                     }
                 } end function require_same
 
-                function cell(self&, long int: r, long int: c) -> T& {
-                    return self.cells[r * self.col_count + c];
+                template <typename R, typename C>
+                requires std::traits::is_integer<R> && std::traits::is_integer<C>
+                function cell(self&, R: r, C: c) -> T& {
+                    return self.cells[static_cast<unsigned long int>(r) * self.col_count + static_cast<unsigned long int>(c)];
                 } end function cell
 
-                function cell(const self&, long int: r, long int: c) -> const T& {
-                    return self.cells[r * self.col_count + c];
+                template <typename R, typename C>
+                requires std::traits::is_integer<R> && std::traits::is_integer<C>
+                function cell(const self&, R: r, C: c) -> const T& {
+                    return self.cells[static_cast<unsigned long int>(r) * self.col_count + static_cast<unsigned long int>(c)];
                 } end function cell
 
                 function scale(const self&) -> T {
@@ -2624,7 +2630,7 @@ safe(compile) {
                 } end function scale
 
                 function hessenberg_eigenvalues(const self&) -> std::collections::Vector<std::math::Complex<T>> {
-                    const long int: n = self.row_count;
+                    const long int: n = static_cast<long int>(self.row_count);
                     DynMatrix: a = *this;
                     for (long int: m = 1; m < n - 1; m++) {
                         T: x = T(0);
@@ -2671,8 +2677,8 @@ safe(compile) {
 
                     std::collections::Vector<T>: wr;
                     std::collections::Vector<T>: wi;
-                    wr.resize(n, T(0));
-                    wi.resize(n, T(0));
+                    wr.resize(static_cast<unsigned long int>(n), T(0));
+                    wi.resize(static_cast<unsigned long int>(n), T(0));
                     T: anorm = T(0);
                     for (long int: r = 0; r < n; r++) {
                         for (long int: c = (r > 0 ? r - 1 : 0); c < n; c++) {
@@ -2711,8 +2717,8 @@ safe(compile) {
                             }
                             x = a.cell(nn, nn);
                             if (l == nn) then {
-                                wr[nn] = x + t;
-                                wi[nn] = T(0);
+                                wr[static_cast<unsigned long int>(nn)] = x + t;
+                                wi[static_cast<unsigned long int>(nn)] = T(0);
                                 nn--;
                                 break;
                             }
@@ -2725,18 +2731,18 @@ safe(compile) {
                                 x += t;
                                 if (q >= T(0)) then {
                                     z = p + detail::copy_sign(z, p);
-                                    wr[nn - 1] = x + z;
-                                    wr[nn] = x + z;
+                                    wr[static_cast<unsigned long int>(nn - 1)] = x + z;
+                                    wr[static_cast<unsigned long int>(nn)] = x + z;
                                     if (z != T(0)) then {
-                                        wr[nn] = x - w / z;
+                                        wr[static_cast<unsigned long int>(nn)] = x - w / z;
                                     }
-                                    wi[nn - 1] = T(0);
-                                    wi[nn] = T(0);
+                                    wi[static_cast<unsigned long int>(nn - 1)] = T(0);
+                                    wi[static_cast<unsigned long int>(nn)] = T(0);
                                 } else then {
-                                    wr[nn - 1] = x + p;
-                                    wr[nn] = x + p;
-                                    wi[nn - 1] = -z;
-                                    wi[nn] = z;
+                                    wr[static_cast<unsigned long int>(nn - 1)] = x + p;
+                                    wr[static_cast<unsigned long int>(nn)] = x + p;
+                                    wi[static_cast<unsigned long int>(nn - 1)] = -z;
+                                    wi[static_cast<unsigned long int>(nn)] = z;
                                 }
                                 nn -= 2;
                                 break;
@@ -2842,14 +2848,14 @@ safe(compile) {
 
                     std::collections::Vector<std::math::Complex<T>>: out;
                     for (long int: i = 0; i < n; i++) {
-                        out.push_back(std::math::Complex<T>(wr[i], wi[i]));
+                        out.push_back(std::math::Complex<T>(wr[static_cast<unsigned long int>(i)], wi[static_cast<unsigned long int>(i)]));
                     }
                     for (long int: i = 1; i < n; i++) {
                         long int: j = i;
-                        while (j > 0 && (out[j].real() < out[j - 1].real() || (out[j].real() == out[j - 1].real() && out[j].imaginary() < out[j - 1].imaginary()))) {
-                            const std::math::Complex<T>: held = out[j];
-                            out[j] = out[j - 1];
-                            out[j - 1] = held;
+                        while (j > 0 && (out[static_cast<unsigned long int>(j)].real() < out[static_cast<unsigned long int>(j - 1)].real() || (out[static_cast<unsigned long int>(j)].real() == out[static_cast<unsigned long int>(j - 1)].real() && out[static_cast<unsigned long int>(j)].imaginary() < out[static_cast<unsigned long int>(j - 1)].imaginary()))) {
+                            const std::math::Complex<T>: held = out[static_cast<unsigned long int>(j)];
+                            out[static_cast<unsigned long int>(j)] = out[static_cast<unsigned long int>(j - 1)];
+                            out[static_cast<unsigned long int>(j - 1)] = held;
                             j--;
                         }
                     }
@@ -2861,31 +2867,25 @@ safe(compile) {
 
                 constructor() { }
 
-                constructor(long int: rows, long int: cols) : row_count = rows, col_count = cols {
-                    if (rows < 0 || cols < 0) then {
-                        detail::fail("a DynMatrix can't have a negative size");
-                    }
+                constructor(unsigned long int: rows, unsigned long int: cols) : row_count = rows, col_count = cols {
                     self.cells.resize(rows * cols, T(0));
                 }
 
-                constructor(long int: rows, long int: cols, const T&: value) : row_count = rows, col_count = cols {
-                    if (rows < 0 || cols < 0) then {
-                        detail::fail("a DynMatrix can't have a negative size");
-                    }
+                constructor(unsigned long int: rows, unsigned long int: cols, const T&: value) : row_count = rows, col_count = cols {
                     self.cells.resize(rows * cols, value);
                 }
 
-                static function zero(long int: rows, long int: cols) -> DynMatrix {
+                static function zero(unsigned long int: rows, unsigned long int: cols) -> DynMatrix {
                     return DynMatrix(rows, cols);
                 } end function zero
 
-                static function filled(long int: rows, long int: cols, const T&: value) -> DynMatrix {
+                static function filled(unsigned long int: rows, unsigned long int: cols, const T&: value) -> DynMatrix {
                     return DynMatrix(rows, cols, value);
                 } end function filled
 
-                static function identity(long int: n) -> DynMatrix {
+                static function identity(unsigned long int: n) -> DynMatrix {
                     DynMatrix: out(n, n);
-                    for (long int: i = 0; i < n; i++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
                         out.cell(i, i) = T(1);
                     }
                     return out;
@@ -2893,7 +2893,7 @@ safe(compile) {
 
                 static function diagonal(const DynVector<T>&: values) -> DynMatrix {
                     DynMatrix: out(values.size(), values.size());
-                    for (long int: i = 0; i < values.size(); i++) {
+                    for (unsigned long int: i = 0; i < values.size(); i++) {
                         out.cell(i, i) = values[i];
                     }
                     return out;
@@ -2904,7 +2904,7 @@ safe(compile) {
                         return DynMatrix();
                     }
                     DynMatrix: out(rows.size(), rows[0].size());
-                    for (long int: i = 0; i < rows.size(); i++) {
+                    for (unsigned long int: i = 0; i < rows.size(); i++) {
                         out.set_row(i, rows[i]);
                     }
                     return out;
@@ -2915,33 +2915,33 @@ safe(compile) {
                         return DynMatrix();
                     }
                     DynMatrix: out(columns[0].size(), columns.size());
-                    for (long int: j = 0; j < columns.size(); j++) {
+                    for (unsigned long int: j = 0; j < columns.size(); j++) {
                         out.set_column(j, columns[j]);
                     }
                     return out;
                 } end function from_columns
 
-                static function from_values(long int: rows, long int: cols, const std::collections::Vector<T>&: values) -> DynMatrix {
+                static function from_values(unsigned long int: rows, unsigned long int: cols, const std::collections::Vector<T>&: values) -> DynMatrix {
                     if (values.size() != rows * cols) then {
                         detail::fail(static_cast<string>(`a ${rows}x${cols} matrix needs ${rows * cols} values, not ${values.size()}`));
                     }
                     DynMatrix: out(rows, cols);
-                    for (long int: i = 0; i < values.size(); i++) {
+                    for (unsigned long int: i = 0; i < values.size(); i++) {
                         out.cells[i] = values[i];
                     }
                     return out;
                 } end function from_values
 
-                function rows(const self&) -> long int {
+                function rows(const self&) -> unsigned long int {
                     return self.row_count;
                 } end function rows
 
-                function cols(const self&) -> long int {
+                function cols(const self&) -> unsigned long int {
                     return self.col_count;
                 } end function cols
 
-                function size(const self&) -> long int {
-                    return self.row_count * self.col_count;
+                function size(const self&) -> unsigned long int {
+                    return static_cast<unsigned long int>(self.row_count * self.col_count);
                 } end function size
 
                 function empty(const self&) -> bool {
@@ -2952,22 +2952,22 @@ safe(compile) {
                     return self.row_count == self.col_count;
                 } end function is_square
 
-                operator(()) function(self&, long int: r, long int: c) -> T& {
+                operator(()) function(self&, unsigned long int: r, unsigned long int: c) -> T& {
                     self.check(r, c);
                     return self.cells[r * self.col_count + c];
                 }
 
-                operator(()) function(const self&, long int: r, long int: c) -> const T& {
+                operator(()) function(const self&, unsigned long int: r, unsigned long int: c) -> const T& {
                     self.check(r, c);
                     return self.cells[r * self.col_count + c];
                 }
 
-                function at(self&, long int: r, long int: c) -> T& {
+                function at(self&, unsigned long int: r, unsigned long int: c) -> T& {
                     self.check(r, c);
                     return self.cells[r * self.col_count + c];
                 } end function at
 
-                function at(const self&, long int: r, long int: c) -> const T& {
+                function at(const self&, unsigned long int: r, unsigned long int: c) -> const T& {
                     self.check(r, c);
                     return self.cells[r * self.col_count + c];
                 } end function at
@@ -2976,96 +2976,96 @@ safe(compile) {
                     return self.cells;
                 } end function values
 
-                function row(const self&, long int: r) -> DynVector<T> {
+                function row(const self&, unsigned long int: r) -> DynVector<T> {
                     self.check(r, 0);
                     DynVector<T>: out(self.col_count);
-                    for (long int: j = 0; j < self.col_count; j++) {
+                    for (unsigned long int: j = 0; j < self.col_count; j++) {
                         out[j] = self.cell(r, j);
                     }
                     return out;
                 } end function row
 
-                function column(const self&, long int: c) -> DynVector<T> {
+                function column(const self&, unsigned long int: c) -> DynVector<T> {
                     self.check(0, c);
                     DynVector<T>: out(self.row_count);
-                    for (long int: i = 0; i < self.row_count; i++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
                         out[i] = self.cell(i, c);
                     }
                     return out;
                 } end function column
 
                 function diagonal_values(const self&) -> DynVector<T> {
-                    const long int: n = self.row_count < self.col_count ? self.row_count : self.col_count;
+                    const unsigned long int: n = self.row_count < self.col_count ? self.row_count : self.col_count;
                     DynVector<T>: out(n);
-                    for (long int: i = 0; i < n; i++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
                         out[i] = self.cell(i, i);
                     }
                     return out;
                 } end function diagonal_values
 
-                function set_row(self&, long int: r, const DynVector<T>&: values) -> void {
+                function set_row(self&, unsigned long int: r, const DynVector<T>&: values) -> void {
                     self.check(r, 0);
                     if (values.size() != self.col_count) then {
                         detail::fail(static_cast<string>(`set_row() needs ${self.col_count} values, not ${values.size()}`));
                     }
-                    for (long int: j = 0; j < self.col_count; j++) {
+                    for (unsigned long int: j = 0; j < self.col_count; j++) {
                         self.cell(r, j) = values[j];
                     }
                 } end function set_row
 
-                function set_column(self&, long int: c, const DynVector<T>&: values) -> void {
+                function set_column(self&, unsigned long int: c, const DynVector<T>&: values) -> void {
                     self.check(0, c);
                     if (values.size() != self.row_count) then {
                         detail::fail(static_cast<string>(`set_column() needs ${self.row_count} values, not ${values.size()}`));
                     }
-                    for (long int: i = 0; i < self.row_count; i++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
                         self.cell(i, c) = values[i];
                     }
                 } end function set_column
 
-                function swap_rows(self&, long int: a, long int: b) -> void {
+                function swap_rows(self&, unsigned long int: a, unsigned long int: b) -> void {
                     self.check(a, 0);
                     self.check(b, 0);
-                    for (long int: j = 0; j < self.col_count; j++) {
+                    for (unsigned long int: j = 0; j < self.col_count; j++) {
                         const T: held = self.cell(a, j);
                         self.cell(a, j) = self.cell(b, j);
                         self.cell(b, j) = held;
                     }
                 } end function swap_rows
 
-                function swap_columns(self&, long int: a, long int: b) -> void {
+                function swap_columns(self&, unsigned long int: a, unsigned long int: b) -> void {
                     self.check(0, a);
                     self.check(0, b);
-                    for (long int: i = 0; i < self.row_count; i++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
                         const T: held = self.cell(i, a);
                         self.cell(i, a) = self.cell(i, b);
                         self.cell(i, b) = held;
                     }
                 } end function swap_columns
 
-                function submatrix(const self&, long int: first_row, long int: first_col, long int: rows, long int: cols) -> DynMatrix {
-                    if (first_row < 0 || first_col < 0 || rows < 0 || cols < 0 || first_row + rows > self.row_count || first_col + cols > self.col_count) then {
+                function submatrix(const self&, unsigned long int: first_row, unsigned long int: first_col, unsigned long int: rows, unsigned long int: cols) -> DynMatrix {
+                    if (first_row + rows > self.row_count || first_col + cols > self.col_count) then {
                         detail::fail(static_cast<string>(`submatrix(${first_row}, ${first_col}, ${rows}, ${cols}) doesn't fit in a ${self.row_count}x${self.col_count} matrix`));
                     }
                     DynMatrix: out(rows, cols);
-                    for (long int: i = 0; i < rows; i++) {
-                        for (long int: j = 0; j < cols; j++) {
+                    for (unsigned long int: i = 0; i < rows; i++) {
+                        for (unsigned long int: j = 0; j < cols; j++) {
                             out.cell(i, j) = self.cell(first_row + i, first_col + j);
                         }
                     }
                     return out;
                 } end function submatrix
 
-                function without(const self&, long int: r, long int: c) -> DynMatrix {
+                function without(const self&, unsigned long int: r, unsigned long int: c) -> DynMatrix {
                     self.check(r, c);
                     DynMatrix: out(self.row_count - 1, self.col_count - 1);
-                    long int: oi = 0;
-                    for (long int: i = 0; i < self.row_count; i++) {
+                    unsigned long int: oi = 0;
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
                         if (i == r) then {
                             continue;
                         }
-                        long int: oj = 0;
-                        for (long int: j = 0; j < self.col_count; j++) {
+                        unsigned long int: oj = 0;
+                        for (unsigned long int: j = 0; j < self.col_count; j++) {
                             if (j == c) then {
                                 continue;
                             }
@@ -3077,12 +3077,12 @@ safe(compile) {
                     return out;
                 } end function without
 
-                function minor(const self&, long int: r, long int: c) -> T {
+                function minor(const self&, unsigned long int: r, unsigned long int: c) -> T {
                     self.require_square("minor()");
                     return self.without(r, c).determinant();
                 } end function minor
 
-                function cofactor(const self&, long int: r, long int: c) -> T {
+                function cofactor(const self&, unsigned long int: r, unsigned long int: c) -> T {
                     const T: m = self.minor(r, c);
                     return (r + c) % 2 == 0 ? m : -m;
                 } end function cofactor
@@ -3094,8 +3094,8 @@ safe(compile) {
                         out.cell(0, 0) = T(1);
                         return out;
                     }
-                    for (long int: i = 0; i < self.row_count; i++) {
-                        for (long int: j = 0; j < self.col_count; j++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: j = 0; j < self.col_count; j++) {
                             out.cell(i, j) = self.cofactor(i, j);
                         }
                     }
@@ -3109,7 +3109,7 @@ safe(compile) {
                 operator(+) function(const self&, const DynMatrix&: o) -> DynMatrix {
                     self.require_same(o, "'+'");
                     DynMatrix: out = *this;
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         out.cells[i] += o.cells[i];
                     }
                     return out;
@@ -3118,7 +3118,7 @@ safe(compile) {
                 operator(-) function(const self&, const DynMatrix&: o) -> DynMatrix {
                     self.require_same(o, "'-'");
                     DynMatrix: out = *this;
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         out.cells[i] -= o.cells[i];
                     }
                     return out;
@@ -3126,7 +3126,7 @@ safe(compile) {
 
                 operator(-) function(const self&) -> DynMatrix {
                     DynMatrix: out = *this;
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         out.cells[i] = -self.cells[i];
                     }
                     return out;
@@ -3134,7 +3134,7 @@ safe(compile) {
 
                 operator(*) function(const self&, const T&: k) -> DynMatrix {
                     DynMatrix: out = *this;
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         out.cells[i] *= k;
                     }
                     return out;
@@ -3142,7 +3142,7 @@ safe(compile) {
 
                 operator(/) function(const self&, const T&: k) -> DynMatrix {
                     DynMatrix: out = *this;
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         out.cells[i] /= k;
                     }
                     return out;
@@ -3153,13 +3153,13 @@ safe(compile) {
                         detail::fail(static_cast<string>(`can't multiply a ${self.row_count}x${self.col_count} matrix by a ${o.row_count}x${o.col_count} one`));
                     }
                     DynMatrix: out(self.row_count, o.col_count);
-                    for (long int: i = 0; i < self.row_count; i++) {
-                        for (long int: k = 0; k < self.col_count; k++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: k = 0; k < self.col_count; k++) {
                             const T: a = self.cell(i, k);
                             if (a == T(0)) then {
                                 continue;
                             }
-                            for (long int: j = 0; j < o.col_count; j++) {
+                            for (unsigned long int: j = 0; j < o.col_count; j++) {
                                 out.cell(i, j) += a * o.cell(k, j);
                             }
                         }
@@ -3172,9 +3172,9 @@ safe(compile) {
                         detail::fail(static_cast<string>(`can't multiply a ${self.row_count}x${self.col_count} matrix by a vector of size ${v.size()}`));
                     }
                     DynVector<T>: out(self.row_count);
-                    for (long int: i = 0; i < self.row_count; i++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
                         T: s = T(0);
-                        for (long int: j = 0; j < self.col_count; j++) {
+                        for (unsigned long int: j = 0; j < self.col_count; j++) {
                             s += self.cell(i, j) * v[j];
                         }
                         out[i] = s;
@@ -3211,7 +3211,7 @@ safe(compile) {
                     if (o.row_count != self.row_count || o.col_count != self.col_count) then {
                         return false;
                     }
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         if (self.cells[i] != o.cells[i]) then {
                             return false;
                         }
@@ -3226,7 +3226,7 @@ safe(compile) {
                 function hadamard(const self&, const DynMatrix&: o) -> DynMatrix {
                     self.require_same(o, "hadamard()");
                     DynMatrix: out = *this;
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         out.cells[i] *= o.cells[i];
                     }
                     return out;
@@ -3234,10 +3234,10 @@ safe(compile) {
 
                 function kronecker(const self&, const DynMatrix&: o) -> DynMatrix {
                     DynMatrix: out(self.row_count * o.row_count, self.col_count * o.col_count);
-                    for (long int: i = 0; i < self.row_count; i++) {
-                        for (long int: j = 0; j < self.col_count; j++) {
-                            for (long int: k = 0; k < o.row_count; k++) {
-                                for (long int: l = 0; l < o.col_count; l++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: j = 0; j < self.col_count; j++) {
+                            for (unsigned long int: k = 0; k < o.row_count; k++) {
+                                for (unsigned long int: l = 0; l < o.col_count; l++) {
                                     out.cell(i * o.row_count + k, j * o.col_count + l) = self.cell(i, j) * o.cell(k, l);
                                 }
                             }
@@ -3248,8 +3248,8 @@ safe(compile) {
 
                 function transpose(const self&) -> DynMatrix {
                     DynMatrix: out(self.col_count, self.row_count);
-                    for (long int: i = 0; i < self.row_count; i++) {
-                        for (long int: j = 0; j < self.col_count; j++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: j = 0; j < self.col_count; j++) {
                             out.cell(j, i) = self.cell(i, j);
                         }
                     }
@@ -3259,7 +3259,7 @@ safe(compile) {
                 function trace(const self&) -> T {
                     self.require_square("trace()");
                     T: total = T(0);
-                    for (long int: i = 0; i < self.row_count; i++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
                         total += self.cell(i, i);
                     }
                     return total;
@@ -3267,7 +3267,7 @@ safe(compile) {
 
                 function max_abs(const self&) -> T {
                     T: best = T(0);
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         if (std::math::abs(self.cells[i]) > best) then {
                             best = std::math::abs(self.cells[i]);
                         }
@@ -3277,7 +3277,7 @@ safe(compile) {
 
                 function frobenius_norm(const self&) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         total += self.cells[i] * self.cells[i];
                     }
                     return std::math::sqrt(total);
@@ -3289,9 +3289,9 @@ safe(compile) {
 
                 function norm_1(const self&) -> T {
                     T: best = T(0);
-                    for (long int: j = 0; j < self.col_count; j++) {
+                    for (unsigned long int: j = 0; j < self.col_count; j++) {
                         T: s = T(0);
-                        for (long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: i = 0; i < self.row_count; i++) {
                             s += std::math::abs(self.cell(i, j));
                         }
                         if (s > best) then {
@@ -3303,9 +3303,9 @@ safe(compile) {
 
                 function norm_inf(const self&) -> T {
                     T: best = T(0);
-                    for (long int: i = 0; i < self.row_count; i++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
                         T: s = T(0);
-                        for (long int: j = 0; j < self.col_count; j++) {
+                        for (unsigned long int: j = 0; j < self.col_count; j++) {
                             s += std::math::abs(self.cell(i, j));
                         }
                         if (s > best) then {
@@ -3324,7 +3324,7 @@ safe(compile) {
                     if (o.row_count != self.row_count || o.col_count != self.col_count) then {
                         return false;
                     }
-                    for (long int: i = 0; i < self.cells.size(); i++) {
+                    for (unsigned long int: i = 0; i < self.cells.size(); i++) {
                         if (std::math::abs(self.cells[i] - o.cells[i]) > tolerance) then {
                             return false;
                         }
@@ -3340,8 +3340,8 @@ safe(compile) {
                     if (!self.is_square()) then {
                         return false;
                     }
-                    for (long int: i = 0; i < self.row_count; i++) {
-                        for (long int: j = i + 1; j < self.col_count; j++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: j = i + 1; j < self.col_count; j++) {
                             if (std::math::abs(self.cell(i, j) - self.cell(j, i)) > tolerance) then {
                                 return false;
                             }
@@ -3355,8 +3355,8 @@ safe(compile) {
                 } end function is_symmetric
 
                 function is_diagonal(const self&) -> bool {
-                    for (long int: i = 0; i < self.row_count; i++) {
-                        for (long int: j = 0; j < self.col_count; j++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: j = 0; j < self.col_count; j++) {
                             if (i != j && self.cell(i, j) != T(0)) then {
                                 return false;
                             }
@@ -3373,8 +3373,8 @@ safe(compile) {
                 } end function is_identity
 
                 function is_upper_triangular(const self&) -> bool {
-                    for (long int: i = 1; i < self.row_count; i++) {
-                        for (long int: j = 0; j < i && j < self.col_count; j++) {
+                    for (unsigned long int: i = 1; i < self.row_count; i++) {
+                        for (unsigned long int: j = 0; j < i && j < self.col_count; j++) {
                             if (self.cell(i, j) != T(0)) then {
                                 return false;
                             }
@@ -3384,8 +3384,8 @@ safe(compile) {
                 } end function is_upper_triangular
 
                 function is_lower_triangular(const self&) -> bool {
-                    for (long int: i = 0; i < self.row_count; i++) {
-                        for (long int: j = i + 1; j < self.col_count; j++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: j = i + 1; j < self.col_count; j++) {
                             if (self.cell(i, j) != T(0)) then {
                                 return false;
                             }
@@ -3403,17 +3403,17 @@ safe(compile) {
 
                 function lu(const self&) -> LUDecomposition<T> {
                     self.require_square("lu()");
-                    const long int: n = self.row_count;
+                    const unsigned long int: n = self.row_count;
                     DynMatrix: a = *this;
                     LUDecomposition<T>: out;
-                    for (long int: i = 0; i < n; i++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
                         out.permutation.push_back(i);
                     }
                     const T: limit = detail::tolerance<T>() * self.scale() * T(n > 0 ? n : 1);
-                    for (long int: k = 0; k < n; k++) {
-                        long int: p = k;
+                    for (unsigned long int: k = 0; k < n; k++) {
+                        unsigned long int: p = k;
                         T: best = std::math::abs(a.cell(k, k));
-                        for (long int: i = k + 1; i < n; i++) {
+                        for (unsigned long int: i = k + 1; i < n; i++) {
                             if (std::math::abs(a.cell(i, k)) > best) then {
                                 best = std::math::abs(a.cell(i, k));
                                 p = i;
@@ -3426,23 +3426,23 @@ safe(compile) {
                         }
                         if (p != k) then {
                             a.swap_rows(p, k);
-                            const long int: held = out.permutation[p];
+                            const unsigned long int: held = out.permutation[p];
                             out.permutation[p] = out.permutation[k];
                             out.permutation[k] = held;
                             out.sign = -out.sign;
                         }
-                        for (long int: i = k + 1; i < n; i++) {
+                        for (unsigned long int: i = k + 1; i < n; i++) {
                             a.cell(i, k) /= a.cell(k, k);
                             const T: f = a.cell(i, k);
-                            for (long int: j = k + 1; j < n; j++) {
+                            for (unsigned long int: j = k + 1; j < n; j++) {
                                 a.cell(i, j) -= f * a.cell(k, j);
                             }
                         }
                     }
                     out.lower = DynMatrix::identity(n);
                     out.upper = DynMatrix(n, n);
-                    for (long int: i = 0; i < n; i++) {
-                        for (long int: j = 0; j < n; j++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
+                        for (unsigned long int: j = 0; j < n; j++) {
                             if (j < i) then {
                                 out.lower.cell(i, j) = a.cell(i, j);
                             } else then {
@@ -3455,7 +3455,7 @@ safe(compile) {
 
                 function determinant(const self&) -> T {
                     self.require_square("determinant()");
-                    const long int: n = self.row_count;
+                    const unsigned long int: n = self.row_count;
                     if (n == 0) then {
                         return T(1);
                     }
@@ -3504,13 +3504,13 @@ safe(compile) {
                     return (at * *this).solve(at * b);
                 } end function least_squares
 
-                function rank(const self&) -> long int {
+                function rank(const self&) -> unsigned long int {
                     DynMatrix: a = *this;
                     const T: limit = detail::tolerance<T>() * self.scale() * T((self.row_count > self.col_count ? self.row_count : self.col_count) + 1) * T(16);
-                    long int: r = 0;
-                    for (long int: c = 0; c < self.col_count && r < self.row_count; c++) {
-                        long int: p = r;
-                        for (long int: i = r + 1; i < self.row_count; i++) {
+                    unsigned long int: r = 0;
+                    for (unsigned long int: c = 0; c < self.col_count && r < self.row_count; c++) {
+                        unsigned long int: p = r;
+                        for (unsigned long int: i = r + 1; i < self.row_count; i++) {
                             if (std::math::abs(a.cell(i, c)) > std::math::abs(a.cell(p, c))) then {
                                 p = i;
                             }
@@ -3519,9 +3519,9 @@ safe(compile) {
                             continue;
                         }
                         a.swap_rows(p, r);
-                        for (long int: i = r + 1; i < self.row_count; i++) {
+                        for (unsigned long int: i = r + 1; i < self.row_count; i++) {
                             const T: f = a.cell(i, c) / a.cell(r, c);
-                            for (long int: j = c; j < self.col_count; j++) {
+                            for (unsigned long int: j = c; j < self.col_count; j++) {
                                 a.cell(i, j) -= f * a.cell(r, j);
                             }
                         }
@@ -3533,31 +3533,31 @@ safe(compile) {
                 function row_echelon(const self&) -> DynMatrix {
                     DynMatrix: a = *this;
                     const T: limit = detail::tolerance<T>() * self.scale() * T(16);
-                    long int: r = 0;
-                    for (long int: c = 0; c < self.col_count && r < self.row_count; c++) {
-                        long int: p = r;
-                        for (long int: i = r + 1; i < self.row_count; i++) {
+                    unsigned long int: r = 0;
+                    for (unsigned long int: c = 0; c < self.col_count && r < self.row_count; c++) {
+                        unsigned long int: p = r;
+                        for (unsigned long int: i = r + 1; i < self.row_count; i++) {
                             if (std::math::abs(a.cell(i, c)) > std::math::abs(a.cell(p, c))) then {
                                 p = i;
                             }
                         }
                         if (std::math::abs(a.cell(p, c)) <= limit) then {
-                            for (long int: i = r; i < self.row_count; i++) {
+                            for (unsigned long int: i = r; i < self.row_count; i++) {
                                 a.cell(i, c) = T(0);
                             }
                             continue;
                         }
                         a.swap_rows(p, r);
                         const T: pivot = a.cell(r, c);
-                        for (long int: j = c; j < self.col_count; j++) {
+                        for (unsigned long int: j = c; j < self.col_count; j++) {
                             a.cell(r, j) /= pivot;
                         }
-                        for (long int: i = 0; i < self.row_count; i++) {
+                        for (unsigned long int: i = 0; i < self.row_count; i++) {
                             if (i == r) then {
                                 continue;
                             }
                             const T: f = a.cell(i, c);
-                            for (long int: j = c; j < self.col_count; j++) {
+                            for (unsigned long int: j = c; j < self.col_count; j++) {
                                 a.cell(i, j) -= f * a.cell(r, j);
                             }
                         }
@@ -3573,7 +3573,7 @@ safe(compile) {
                     }
                     DynMatrix: result = identity(self.row_count);
                     DynMatrix: base = *this;
-                    long int: e = n;
+                    unsigned long int: e = n;
                     while (e > 0) {
                         if (e % 2 == 1) then {
                             result = result * base;
@@ -3585,15 +3585,15 @@ safe(compile) {
                 } end function power
 
                 function qr(const self&) -> QRDecomposition<T> {
-                    const long int: m = self.row_count;
-                    const long int: n = self.col_count;
+                    const unsigned long int: m = self.row_count;
+                    const unsigned long int: n = self.col_count;
                     QRDecomposition<T>: out;
                     out.r = *this;
                     out.q = identity(m);
-                    const long int: steps = m - 1 < n ? m - 1 : n;
-                    for (long int: k = 0; k < steps; k++) {
+                    const unsigned long int: steps = m - 1 < n ? m - 1 : n;
+                    for (unsigned long int: k = 0; k < steps; k++) {
                         T: norm_sq = T(0);
-                        for (long int: i = k; i < m; i++) {
+                        for (unsigned long int: i = k; i < m; i++) {
                             norm_sq += out.r.cell(i, k) * out.r.cell(i, k);
                         }
                         if (norm_sq == T(0)) then {
@@ -3602,34 +3602,34 @@ safe(compile) {
                         const T: alpha = -detail::sign_of(out.r.cell(k, k)) * std::math::sqrt(norm_sq);
                         DynVector<T>: v(m - k);
                         v[0] = out.r.cell(k, k) - alpha;
-                        for (long int: i = 1; i < m - k; i++) {
+                        for (unsigned long int: i = 1; i < m - k; i++) {
                             v[i] = out.r.cell(k + i, k);
                         }
                         const T: vv = v.dot(v);
                         if (vv == T(0)) then {
                             continue;
                         }
-                        for (long int: j = 0; j < n; j++) {
+                        for (unsigned long int: j = 0; j < n; j++) {
                             T: s = T(0);
-                            for (long int: i = 0; i < m - k; i++) {
+                            for (unsigned long int: i = 0; i < m - k; i++) {
                                 s += v[i] * out.r.cell(k + i, j);
                             }
                             const T: f = T(2) * s / vv;
-                            for (long int: i = 0; i < m - k; i++) {
+                            for (unsigned long int: i = 0; i < m - k; i++) {
                                 out.r.cell(k + i, j) -= f * v[i];
                             }
                         }
-                        for (long int: i = 0; i < m; i++) {
+                        for (unsigned long int: i = 0; i < m; i++) {
                             T: s = T(0);
-                            for (long int: l = 0; l < m - k; l++) {
+                            for (unsigned long int: l = 0; l < m - k; l++) {
                                 s += out.q.cell(i, k + l) * v[l];
                             }
                             const T: f = T(2) * s / vv;
-                            for (long int: l = 0; l < m - k; l++) {
+                            for (unsigned long int: l = 0; l < m - k; l++) {
                                 out.q.cell(i, k + l) -= f * v[l];
                             }
                         }
-                        for (long int: i = k + 1; i < m; i++) {
+                        for (unsigned long int: i = k + 1; i < m; i++) {
                             out.r.cell(i, k) = T(0);
                         }
                     }
@@ -3641,20 +3641,20 @@ safe(compile) {
                     if (!self.is_symmetric()) then {
                         detail::fail("cholesky() needs a symmetric matrix");
                     }
-                    const long int: n = self.row_count;
+                    const unsigned long int: n = self.row_count;
                     DynMatrix: l(n, n);
-                    for (long int: j = 0; j < n; j++) {
+                    for (unsigned long int: j = 0; j < n; j++) {
                         T: d = self.cell(j, j);
-                        for (long int: k = 0; k < j; k++) {
+                        for (unsigned long int: k = 0; k < j; k++) {
                             d -= l.cell(j, k) * l.cell(j, k);
                         }
                         if (d <= T(0)) then {
                             detail::fail("cholesky() needs a positive-definite matrix");
                         }
                         l.cell(j, j) = std::math::sqrt(d);
-                        for (long int: i = j + 1; i < n; i++) {
+                        for (unsigned long int: i = j + 1; i < n; i++) {
                             T: s = self.cell(i, j);
-                            for (long int: k = 0; k < j; k++) {
+                            for (unsigned long int: k = 0; k < j; k++) {
                                 s -= l.cell(i, k) * l.cell(j, k);
                             }
                             l.cell(i, j) = s / l.cell(j, j);
@@ -3668,7 +3668,7 @@ safe(compile) {
                         return false;
                     }
                     const SymmetricEigen<T>: e = self.symmetric_eigen();
-                    for (long int: i = 0; i < e.values.size(); i++) {
+                    for (unsigned long int: i = 0; i < e.values.size(); i++) {
                         if (e.values[i] <= T(0)) then {
                             return false;
                         }
@@ -3681,22 +3681,22 @@ safe(compile) {
                     if (!self.is_symmetric(detail::tolerance<T>() * T(1024) * self.scale())) then {
                         detail::fail("symmetric_eigen() needs a symmetric matrix; use eigenvalues() for any square matrix");
                     }
-                    const long int: n = self.row_count;
+                    const unsigned long int: n = self.row_count;
                     DynMatrix: a = *this;
                     DynMatrix: v = identity(n);
                     const T: limit = detail::tolerance<T>() * detail::tolerance<T>() * self.scale() * self.scale();
-                    for (int: sweep = 0; sweep < 100; sweep++) {
+                    for (unsigned int: sweep = 0; sweep < 100; sweep++) {
                         T: off = T(0);
-                        for (long int: p = 0; p < n; p++) {
-                            for (long int: q = p + 1; q < n; q++) {
+                        for (unsigned long int: p = 0; p < n; p++) {
+                            for (unsigned long int: q = p + 1; q < n; q++) {
                                 off += a.cell(p, q) * a.cell(p, q);
                             }
                         }
                         if (off <= limit) then {
                             break;
                         }
-                        for (long int: p = 0; p < n; p++) {
-                            for (long int: q = p + 1; q < n; q++) {
+                        for (unsigned long int: p = 0; p < n; p++) {
+                            for (unsigned long int: q = p + 1; q < n; q++) {
                                 const T: apq = a.cell(p, q);
                                 if (apq == T(0)) then {
                                     continue;
@@ -3705,19 +3705,19 @@ safe(compile) {
                                 const T: t = detail::sign_of(theta) / (std::math::abs(theta) + std::math::sqrt(theta * theta + T(1)));
                                 const T: c = T(1) / std::math::sqrt(t * t + T(1));
                                 const T: s = t * c;
-                                for (long int: k = 0; k < n; k++) {
+                                for (unsigned long int: k = 0; k < n; k++) {
                                     const T: akp = a.cell(k, p);
                                     const T: akq = a.cell(k, q);
                                     a.cell(k, p) = c * akp - s * akq;
                                     a.cell(k, q) = s * akp + c * akq;
                                 }
-                                for (long int: k = 0; k < n; k++) {
+                                for (unsigned long int: k = 0; k < n; k++) {
                                     const T: apk = a.cell(p, k);
                                     const T: aqk = a.cell(q, k);
                                     a.cell(p, k) = c * apk - s * aqk;
                                     a.cell(q, k) = s * apk + c * aqk;
                                 }
-                                for (long int: k = 0; k < n; k++) {
+                                for (unsigned long int: k = 0; k < n; k++) {
                                     const T: vkp = v.cell(k, p);
                                     const T: vkq = v.cell(k, q);
                                     v.cell(k, p) = c * vkp - s * vkq;
@@ -3729,23 +3729,23 @@ safe(compile) {
                     SymmetricEigen<T>: out;
                     out.values = DynVector<T>(n);
                     out.vectors = DynMatrix(n, n);
-                    std::collections::Vector<long int>: order;
-                    for (long int: i = 0; i < n; i++) {
+                    std::collections::Vector<unsigned long int>: order;
+                    for (unsigned long int: i = 0; i < n; i++) {
                         order.push_back(i);
                     }
-                    for (long int: i = 1; i < n; i++) {
-                        long int: j = i;
-                        while (j > 0 && a.cell(order[j], order[j]) < a.cell(order[j - 1], order[j - 1])) {
-                            const long int: held = order[j];
-                            order[j] = order[j - 1];
-                            order[j - 1] = held;
+                    for (unsigned long int: i = 1; i < n; i++) {
+                        unsigned long int: j = i;
+                        while (j > 0 && a.cell(order[j], order[j]) < a.cell(order[static_cast<unsigned long int>(j - 1)], order[static_cast<unsigned long int>(j - 1)])) {
+                            const unsigned long int: held = order[j];
+                            order[j] = order[static_cast<unsigned long int>(j - 1)];
+                            order[static_cast<unsigned long int>(j - 1)] = held;
                             j--;
                         }
                     }
-                    for (long int: i = 0; i < n; i++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
                         out.values[i] = a.cell(order[i], order[i]);
-                        DynVector<T>: col = v.column(order[i]);
-                        long int: big = col.abs().argmax();
+                        DynVector<T>: col = v.column(static_cast<unsigned long int>(order[static_cast<unsigned long int>(i)]));
+                        unsigned long int: big = col.abs().argmax();
                         if (col[big] < T(0)) then {
                             col = -col;
                         }
@@ -3762,7 +3762,7 @@ safe(compile) {
                     if (self.is_symmetric()) then {
                         const SymmetricEigen<T>: e = self.symmetric_eigen();
                         std::collections::Vector<std::math::Complex<T>>: out;
-                        for (long int: i = 0; i < e.values.size(); i++) {
+                        for (unsigned long int: i = 0; i < e.values.size(); i++) {
                             out.push_back(std::math::Complex<T>(e.values[i], T(0)));
                         }
                         return out;
@@ -3774,7 +3774,7 @@ safe(compile) {
                     const std::collections::Vector<std::math::Complex<T>>: all = self.eigenvalues();
                     DynVector<T>: out;
                     const T: limit = detail::tolerance<T>() * T(1024) * self.scale();
-                    for (long int: i = 0; i < all.size(); i++) {
+                    for (unsigned long int: i = 0; i < all.size(); i++) {
                         if (std::math::abs(all[i].imaginary()) <= limit) then {
                             out.push_back(all[i].real());
                         }
@@ -3784,17 +3784,17 @@ safe(compile) {
 
                 function eigenvector(const self&, const T&: value) -> DynVector<T> {
                     self.require_square("eigenvector()");
-                    const long int: n = self.row_count;
+                    const unsigned long int: n = self.row_count;
                     const T: sc = self.scale();
                     T: shift = value + detail::tolerance<T>() * T(1024) * sc;
                     DynVector<T>: x(n, T(1));
-                    for (long int: i = 0; i < n; i++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
                         x[i] = T(1) + T(i) / T(n + 1);
                     }
                     x.normalize();
-                    for (int: attempt = 0; attempt < 8; attempt++) {
+                    for (unsigned int: attempt = 0; attempt < 8; attempt++) {
                         DynMatrix: shifted = *this;
-                        for (long int: i = 0; i < n; i++) {
+                        for (unsigned long int: i = 0; i < n; i++) {
                             shifted.cell(i, i) -= shift;
                         }
                         const LUDecomposition<T>: f = shifted.lu();
@@ -3802,7 +3802,7 @@ safe(compile) {
                             shift += detail::tolerance<T>() * T(65536) * sc;
                             continue;
                         }
-                        for (int: step = 0; step < 32; step++) {
+                        for (unsigned int: step = 0; step < 32; step++) {
                             DynVector<T>: next = f.solve(x);
                             const T: len = next.length();
                             if (len == T(0)) then {
@@ -3817,7 +3817,7 @@ safe(compile) {
                         }
                         break;
                     }
-                    const long int: big = x.abs().argmax();
+                    const unsigned long int: big = x.abs().argmax();
                     if (x[big] < T(0)) then {
                         x = -x;
                     }
@@ -3831,22 +3831,22 @@ safe(compile) {
                     }
                     const DynVector<T>: values = self.real_eigenvalues();
                     DynMatrix: out(self.row_count, values.size());
-                    for (long int: i = 0; i < values.size(); i++) {
+                    for (unsigned long int: i = 0; i < values.size(); i++) {
                         out.set_column(i, self.eigenvector(values[i]));
                     }
                     return out;
                 } end function eigenvectors
 
                 function svd(const self&) -> SingularValueDecomposition<T> {
-                    const long int: k = self.row_count < self.col_count ? self.row_count : self.col_count;
+                    const unsigned long int: k = self.row_count < self.col_count ? self.row_count : self.col_count;
                     const SymmetricEigen<T>: e = (self.transpose() * *this).symmetric_eigen();
                     SingularValueDecomposition<T>: out;
                     out.singular_values = DynVector<T>(k);
                     out.u = DynMatrix(self.row_count, k);
                     out.v = DynMatrix(self.col_count, k);
                     const T: limit = detail::tolerance<T>() * T(1024) * self.scale();
-                    for (long int: i = 0; i < k; i++) {
-                        const long int: source = self.col_count - 1 - i;
+                    for (unsigned long int: i = 0; i < k; i++) {
+                        const unsigned long int: source = self.col_count - 1 - i;
                         T: ev = e.values[source];
                         if (ev < T(0)) then {
                             ev = T(0);
@@ -3868,21 +3868,21 @@ safe(compile) {
 
                 function condition_number(const self&) -> T {
                     const DynVector<T>: s = self.singular_values();
-                    if (s.empty() || s[s.size() - 1] == T(0)) then {
+                    if (s.empty() || s[static_cast<unsigned long int>(s.size() - 1)] == T(0)) then {
                         if constexpr (std::traits::is_builtin_float<T>) then {
                             return std::traits::float_traits<T>::infinity();
                         } else then {
                             detail::fail("condition_number() of a singular matrix is infinite");
                         }
                     }
-                    return s[0] / s[s.size() - 1];
+                    return s[0] / s[static_cast<unsigned long int>(s.size() - 1)];
                 } end function condition_number
 
                 function pseudo_inverse(const self&) -> DynMatrix {
                     const SingularValueDecomposition<T>: d = self.svd();
                     const T: limit = detail::tolerance<T>() * T(1024) * self.scale() * T(self.row_count > self.col_count ? self.row_count : self.col_count);
                     DynMatrix: out(self.col_count, self.row_count);
-                    for (long int: i = 0; i < d.singular_values.size(); i++) {
+                    for (unsigned long int: i = 0; i < d.singular_values.size(); i++) {
                         if (d.singular_values[i] <= limit) then {
                             continue;
                         }
@@ -3897,7 +3897,7 @@ safe(compile) {
                     const SymmetricEigen<T>: e = (self.transpose() * *this).symmetric_eigen();
                     const T: limit = detail::tolerance<T>() * T(4096) * self.scale() * self.scale();
                     std::collections::Vector<DynVector<T>>: basis;
-                    for (long int: i = 0; i < e.values.size(); i++) {
+                    for (unsigned long int: i = 0; i < e.values.size(); i++) {
                         if (std::math::abs(e.values[i]) <= limit) then {
                             basis.push_back(e.vectors.column(i));
                         }
@@ -3910,12 +3910,12 @@ safe(compile) {
 
                 function to_string(const self&) -> string {
                     string: out = "[";
-                    for (long int: i = 0; i < self.row_count; i++) {
+                    for (unsigned long int: i = 0; i < self.row_count; i++) {
                         if (i > 0) then {
                             out += ", ";
                         }
                         out += "[";
-                        for (long int: j = 0; j < self.col_count; j++) {
+                        for (unsigned long int: j = 0; j < self.col_count; j++) {
                             if (j > 0) then {
                                 out += ", ";
                             }
@@ -3933,14 +3933,15 @@ safe(compile) {
                 return m * k;
             }
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
+            requires std::traits::is_float<T>
             struct Matrix {
                 static_assert(std::traits::is_float<T>, "linalg matrices need a real float type, such as float or double, not an integer or other type");
                 static_assert(R > 0 && C > 0, "a Matrix needs at least one row and one column");
                 array[R * C] T: cells;
 
                 constructor() {
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         self.cells[i] = T(0);
                     }
                 }
@@ -3960,7 +3961,7 @@ safe(compile) {
 
                 static function filled(const T&: value) -> Matrix {
                     Matrix: out;
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         out.cells[i] = value;
                     }
                     return out;
@@ -3969,8 +3970,8 @@ safe(compile) {
                 static function identity() -> Matrix {
                     static_assert(R == C, "identity() needs a square matrix");
                     Matrix: out;
-                    for (long int: i = 0; i < R; i++) {
-                        out.cells[i * C + i] = T(1);
+                    for (unsigned long int: i = 0; i < R; i++) {
+                        out.cells[static_cast<unsigned long int>(i * C + i)] = T(1);
                     }
                     return out;
                 } end function identity
@@ -3978,15 +3979,15 @@ safe(compile) {
                 static function diagonal(const VectorN<T, R>&: values) -> Matrix {
                     static_assert(R == C, "diagonal() needs a square matrix");
                     Matrix: out;
-                    for (long int: i = 0; i < R; i++) {
-                        out.cells[i * C + i] = values[i];
+                    for (unsigned long int: i = 0; i < R; i++) {
+                        out.cells[static_cast<unsigned long int>(i * C + i)] = values[i];
                     }
                     return out;
                 } end function diagonal
 
                 static function from_rows(const array[R] VectorN<T, C>&: rows) -> Matrix {
                     Matrix: out;
-                    for (long int: i = 0; i < R; i++) {
+                    for (unsigned long int: i = 0; i < R; i++) {
                         out.set_row(i, rows[i]);
                     }
                     return out;
@@ -3994,7 +3995,7 @@ safe(compile) {
 
                 static function from_columns(const array[C] VectorN<T, R>&: columns) -> Matrix {
                     Matrix: out;
-                    for (long int: j = 0; j < C; j++) {
+                    for (unsigned long int: j = 0; j < C; j++) {
                         out.set_column(j, columns[j]);
                     }
                     return out;
@@ -4005,23 +4006,23 @@ safe(compile) {
                         detail::fail(static_cast<string>(`can't make a ${R}x${C} Matrix from a ${m.rows()}x${m.cols()} DynMatrix`));
                     }
                     Matrix: out;
-                    for (long int: i = 0; i < R; i++) {
-                        for (long int: j = 0; j < C; j++) {
-                            out.cells[i * C + j] = m(i, j);
+                    for (unsigned long int: i = 0; i < R; i++) {
+                        for (unsigned long int: j = 0; j < C; j++) {
+                            out.cells[static_cast<unsigned long int>(i * C + j)] = m(i, j);
                         }
                     }
                     return out;
                 } end function from_dyn
 
-                static function rows() -> long int {
+                static function rows() -> unsigned long int {
                     return R;
                 } end function rows
 
-                static function cols() -> long int {
+                static function cols() -> unsigned long int {
                     return C;
                 } end function cols
 
-                static function size() -> long int {
+                static function size() -> unsigned long int {
                     return R * C;
                 } end function size
 
@@ -4029,63 +4030,63 @@ safe(compile) {
                     return R == C;
                 } end function is_square
 
-                operator(()) function(self&, long int: r, long int: c) -> T& {
-                    if (r < 0 || r >= R || c < 0 || c >= C) then {
+                operator(()) function(self&, unsigned long int: r, unsigned long int: c) -> T& {
+                    if (r >= R || c >= C) then {
                         detail::fail(static_cast<string>(`element (${r}, ${c}) is out of range for a ${R}x${C} matrix`));
                     }
-                    return self.cells[r * C + c];
+                    return self.cells[static_cast<unsigned long int>(r * C + c)];
                 }
 
-                operator(()) function(const self&, long int: r, long int: c) -> const T& {
-                    if (r < 0 || r >= R || c < 0 || c >= C) then {
+                operator(()) function(const self&, unsigned long int: r, unsigned long int: c) -> const T& {
+                    if (r >= R || c >= C) then {
                         detail::fail(static_cast<string>(`element (${r}, ${c}) is out of range for a ${R}x${C} matrix`));
                     }
-                    return self.cells[r * C + c];
+                    return self.cells[static_cast<unsigned long int>(r * C + c)];
                 }
 
-                function at(self&, long int: r, long int: c) -> T& {
+                function at(self&, unsigned long int: r, unsigned long int: c) -> T& {
                     return (*this)(r, c);
                 } end function at
 
-                function at(const self&, long int: r, long int: c) -> const T& {
+                function at(const self&, unsigned long int: r, unsigned long int: c) -> const T& {
                     return (*this)(r, c);
                 } end function at
 
-                function row(const self&, long int: r) -> VectorN<T, C> {
+                function row(const self&, unsigned long int: r) -> VectorN<T, C> {
                     VectorN<T, C>: out;
-                    for (long int: j = 0; j < C; j++) {
+                    for (unsigned long int: j = 0; j < C; j++) {
                         out[j] = (*this)(r, j);
                     }
                     return out;
                 } end function row
 
-                function column(const self&, long int: c) -> VectorN<T, R> {
+                function column(const self&, unsigned long int: c) -> VectorN<T, R> {
                     VectorN<T, R>: out;
-                    for (long int: i = 0; i < R; i++) {
+                    for (unsigned long int: i = 0; i < R; i++) {
                         out[i] = (*this)(i, c);
                     }
                     return out;
                 } end function column
 
-                function set_row(self&, long int: r, const VectorN<T, C>&: values) -> void {
-                    for (long int: j = 0; j < C; j++) {
+                function set_row(self&, unsigned long int: r, const VectorN<T, C>&: values) -> void {
+                    for (unsigned long int: j = 0; j < C; j++) {
                         (*this)(r, j) = values[j];
                     }
                 } end function set_row
 
-                function set_column(self&, long int: c, const VectorN<T, R>&: values) -> void {
-                    for (long int: i = 0; i < R; i++) {
+                function set_column(self&, unsigned long int: c, const VectorN<T, R>&: values) -> void {
+                    for (unsigned long int: i = 0; i < R; i++) {
                         (*this)(i, c) = values[i];
                     }
                 } end function set_column
 
-                function swap_rows(self&, long int: a, long int: b) -> void {
+                function swap_rows(self&, unsigned long int: a, unsigned long int: b) -> void {
                     const VectorN<T, C>: held = self.row(a);
                     self.set_row(a, self.row(b));
                     self.set_row(b, held);
                 } end function swap_rows
 
-                function swap_columns(self&, long int: a, long int: b) -> void {
+                function swap_columns(self&, unsigned long int: a, unsigned long int: b) -> void {
                     const VectorN<T, R>: held = self.column(a);
                     self.set_column(a, self.column(b));
                     self.set_column(b, held);
@@ -4093,7 +4094,7 @@ safe(compile) {
 
                 operator(+) function(const self&, const Matrix&: o) -> Matrix {
                     Matrix: out;
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         out.cells[i] = self.cells[i] + o.cells[i];
                     }
                     return out;
@@ -4101,7 +4102,7 @@ safe(compile) {
 
                 operator(-) function(const self&, const Matrix&: o) -> Matrix {
                     Matrix: out;
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         out.cells[i] = self.cells[i] - o.cells[i];
                     }
                     return out;
@@ -4109,7 +4110,7 @@ safe(compile) {
 
                 operator(-) function(const self&) -> Matrix {
                     Matrix: out;
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         out.cells[i] = -self.cells[i];
                     }
                     return out;
@@ -4117,7 +4118,7 @@ safe(compile) {
 
                 operator(*) function(const self&, const T&: k) -> Matrix {
                     Matrix: out;
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         out.cells[i] = self.cells[i] * k;
                     }
                     return out;
@@ -4125,22 +4126,22 @@ safe(compile) {
 
                 operator(/) function(const self&, const T&: k) -> Matrix {
                     Matrix: out;
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         out.cells[i] = self.cells[i] / k;
                     }
                     return out;
                 }
 
-                template <int K>
+                template <unsigned int K>
                 operator(*) function(const self&, const Matrix<T, C, K>&: o) -> Matrix<T, R, K> {
                     Matrix<T, R, K>: out;
-                    for (long int: i = 0; i < R; i++) {
-                        for (long int: j = 0; j < K; j++) {
+                    for (unsigned long int: i = 0; i < R; i++) {
+                        for (unsigned long int: j = 0; j < K; j++) {
                             T: s = T(0);
-                            for (long int: k = 0; k < C; k++) {
-                                s += self.cells[i * C + k] * o.cells[k * K + j];
+                            for (unsigned long int: k = 0; k < C; k++) {
+                                s += self.cells[static_cast<unsigned long int>(i * C + k)] * o.cells[static_cast<unsigned long int>(k * K + j)];
                             }
-                            out.cells[i * K + j] = s;
+                            out.cells[static_cast<unsigned long int>(i * K + j)] = s;
                         }
                     }
                     return out;
@@ -4148,10 +4149,10 @@ safe(compile) {
 
                 operator(*) function(const self&, const VectorN<T, C>&: v) -> VectorN<T, R> {
                     VectorN<T, R>: out;
-                    for (long int: i = 0; i < R; i++) {
+                    for (unsigned long int: i = 0; i < R; i++) {
                         T: s = T(0);
-                        for (long int: j = 0; j < C; j++) {
-                            s += self.cells[i * C + j] * v.data[j];
+                        for (unsigned long int: j = 0; j < C; j++) {
+                            s += self.cells[static_cast<unsigned long int>(i * C + j)] * v.data[j];
                         }
                         out.data[i] = s;
                     }
@@ -4159,28 +4160,28 @@ safe(compile) {
                 }
 
                 operator(+=) function(self&, const Matrix&: o) -> Matrix& {
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         self.cells[i] += o.cells[i];
                     }
                     return *this;
                 }
 
                 operator(-=) function(self&, const Matrix&: o) -> Matrix& {
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         self.cells[i] -= o.cells[i];
                     }
                     return *this;
                 }
 
                 operator(*=) function(self&, const T&: k) -> Matrix& {
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         self.cells[i] *= k;
                     }
                     return *this;
                 }
 
                 operator(/=) function(self&, const T&: k) -> Matrix& {
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         self.cells[i] /= k;
                     }
                     return *this;
@@ -4193,7 +4194,7 @@ safe(compile) {
                 }
 
                 operator(==) function(const self&, const Matrix&: o) -> bool {
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         if (self.cells[i] != o.cells[i]) then {
                             return false;
                         }
@@ -4207,7 +4208,7 @@ safe(compile) {
 
                 function hadamard(const self&, const Matrix&: o) -> Matrix {
                     Matrix: out;
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         out.cells[i] = self.cells[i] * o.cells[i];
                     }
                     return out;
@@ -4215,9 +4216,9 @@ safe(compile) {
 
                 function transpose(const self&) -> Matrix<T, C, R> {
                     Matrix<T, C, R>: out;
-                    for (long int: i = 0; i < R; i++) {
-                        for (long int: j = 0; j < C; j++) {
-                            out.cells[j * R + i] = self.cells[i * C + j];
+                    for (unsigned long int: i = 0; i < R; i++) {
+                        for (unsigned long int: j = 0; j < C; j++) {
+                            out.cells[static_cast<unsigned long int>(j * R + i)] = self.cells[static_cast<unsigned long int>(i * C + j)];
                         }
                     }
                     return out;
@@ -4226,17 +4227,17 @@ safe(compile) {
                 function trace(const self&) -> T {
                     static_assert(R == C, "trace() needs a square matrix");
                     T: total = T(0);
-                    for (long int: i = 0; i < R; i++) {
-                        total += self.cells[i * C + i];
+                    for (unsigned long int: i = 0; i < R; i++) {
+                        total += self.cells[static_cast<unsigned long int>(i * C + i)];
                     }
                     return total;
                 } end function trace
 
                 function to_dyn(const self&) -> DynMatrix<T> {
                     DynMatrix<T>: out(R, C);
-                    for (long int: i = 0; i < R; i++) {
-                        for (long int: j = 0; j < C; j++) {
-                            out(i, j) = self.cells[i * C + j];
+                    for (unsigned long int: i = 0; i < R; i++) {
+                        for (unsigned long int: j = 0; j < C; j++) {
+                            out(i, j) = self.cells[static_cast<unsigned long int>(i * C + j)];
                         }
                     }
                     return out;
@@ -4268,7 +4269,7 @@ safe(compile) {
                     return !self.is_invertible();
                 } end function is_singular
 
-                function rank(const self&) -> long int {
+                function rank(const self&) -> unsigned long int {
                     return self.to_dyn().rank();
                 } end function rank
 
@@ -4286,12 +4287,12 @@ safe(compile) {
                     return from_dyn(self.to_dyn().power(n));
                 } end function power
 
-                function minor(const self&, long int: r, long int: c) -> T {
+                function minor(const self&, unsigned long int: r, unsigned long int: c) -> T {
                     static_assert(R == C, "minor() needs a square matrix");
                     return self.to_dyn().minor(r, c);
                 } end function minor
 
-                function cofactor(const self&, long int: r, long int: c) -> T {
+                function cofactor(const self&, unsigned long int: r, unsigned long int: c) -> T {
                     static_assert(R == C, "cofactor() needs a square matrix");
                     return self.to_dyn().cofactor(r, c);
                 } end function cofactor
@@ -4358,7 +4359,7 @@ safe(compile) {
 
                 function max_abs(const self&) -> T {
                     T: best = T(0);
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         if (std::math::abs(self.cells[i]) > best) then {
                             best = std::math::abs(self.cells[i]);
                         }
@@ -4368,7 +4369,7 @@ safe(compile) {
 
                 function frobenius_norm(const self&) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         total += self.cells[i] * self.cells[i];
                     }
                     return std::math::sqrt(total);
@@ -4391,7 +4392,7 @@ safe(compile) {
                 } end function norm_2
 
                 function approx_equal(const self&, const Matrix&: o, const T&: tolerance) -> bool {
-                    for (long int: i = 0; i < R * C; i++) {
+                    for (unsigned long int: i = 0; i < R * C; i++) {
                         if (std::math::abs(self.cells[i] - o.cells[i]) > tolerance) then {
                             return false;
                         }
@@ -4436,12 +4437,12 @@ safe(compile) {
                 } end function to_string
             } end struct Matrix
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
             operator(*) function(const T&: k, const Matrix<T, R, C>&: m) -> Matrix<T, R, C> {
                 return m * k;
             }
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             using SquareMatrix = Matrix<T, N, N>;
 
             template <typename T>
@@ -4486,16 +4487,19 @@ safe(compile) {
             }
 
             template <typename T>
+            requires std::traits::is_float<T>
             function transform_point(const Matrix<T, 4, 4>&: m, const Vector3<T>&: p) -> Vector3<T> {
                 return (m * Vector4<T>(p.x, p.y, p.z, T(1))).project();
             } end function transform_point
 
             template <typename T>
+            requires std::traits::is_float<T>
             function transform_direction(const Matrix<T, 4, 4>&: m, const Vector3<T>&: d) -> Vector3<T> {
                 return (m * Vector4<T>(d.x, d.y, d.z, T(0))).xyz();
             } end function transform_direction
 
             template <typename T>
+            requires std::traits::is_float<T>
             function rotation2(const T&: radians) -> Matrix<T, 2, 2> {
                 const T: c = std::math::cos(radians);
                 const T: s = std::math::sin(radians);
@@ -4503,6 +4507,7 @@ safe(compile) {
             } end function rotation2
 
             template <typename T>
+            requires std::traits::is_float<T>
             function rotation3(const Vector3<T>&: axis, const T&: radians) -> Matrix<T, 3, 3> {
                 const Vector3<T>: k = axis.normalized();
                 const T: c = std::math::cos(radians);
@@ -4514,6 +4519,7 @@ safe(compile) {
             } end function rotation3
 
             template <typename T>
+            requires std::traits::is_float<T>
             function translation(const Vector3<T>&: offset) -> Matrix<T, 4, 4> {
                 Matrix<T, 4, 4>: out = Matrix<T, 4, 4>::identity();
                 out(0, 3) = offset.x;
@@ -4523,6 +4529,7 @@ safe(compile) {
             } end function translation
 
             template <typename T>
+            requires std::traits::is_float<T>
             function scaling(const Vector3<T>&: factors) -> Matrix<T, 4, 4> {
                 Matrix<T, 4, 4>: out;
                 out(0, 0) = factors.x;
@@ -4533,16 +4540,18 @@ safe(compile) {
             } end function scaling
 
             template <typename T>
+            requires std::traits::is_float<T>
             function scaling(const T&: factor) -> Matrix<T, 4, 4> {
                 return scaling(Vector3<T>(factor, factor, factor));
             } end function scaling
 
             template <typename T>
+            requires std::traits::is_float<T>
             function rotation(const Vector3<T>&: axis, const T&: radians) -> Matrix<T, 4, 4> {
                 const Matrix<T, 3, 3>: r = rotation3(axis, radians);
                 Matrix<T, 4, 4>: out = Matrix<T, 4, 4>::identity();
-                for (long int: i = 0; i < 3; i++) {
-                    for (long int: j = 0; j < 3; j++) {
+                for (unsigned long int: i = 0; i < 3; i++) {
+                    for (unsigned long int: j = 0; j < 3; j++) {
                         out(i, j) = r(i, j);
                     }
                 }
@@ -4550,21 +4559,25 @@ safe(compile) {
             } end function rotation
 
             template <typename T>
+            requires std::traits::is_float<T>
             function rotation_x(const T&: radians) -> Matrix<T, 4, 4> {
                 return rotation(Vector3<T>::unit_x(), radians);
             } end function rotation_x
 
             template <typename T>
+            requires std::traits::is_float<T>
             function rotation_y(const T&: radians) -> Matrix<T, 4, 4> {
                 return rotation(Vector3<T>::unit_y(), radians);
             } end function rotation_y
 
             template <typename T>
+            requires std::traits::is_float<T>
             function rotation_z(const T&: radians) -> Matrix<T, 4, 4> {
                 return rotation(Vector3<T>::unit_z(), radians);
             } end function rotation_z
 
             template <typename T>
+            requires std::traits::is_float<T>
             function look_at(const Vector3<T>&: eye, const Vector3<T>&: target, const Vector3<T>&: up) -> Matrix<T, 4, 4> {
                 const Vector3<T>: f = (target - eye).normalized();
                 const Vector3<T>: s = f.cross(up).normalized();
@@ -4586,6 +4599,7 @@ safe(compile) {
             } end function look_at
 
             template <typename T>
+            requires std::traits::is_float<T>
             function perspective(const T&: fov_y, const T&: aspect, const T&: near_plane, const T&: far_plane) -> Matrix<T, 4, 4> {
                 const T: f = T(1) / std::math::tan(fov_y / T(2));
                 Matrix<T, 4, 4>: out;
@@ -4598,6 +4612,7 @@ safe(compile) {
             } end function perspective
 
             template <typename T>
+            requires std::traits::is_float<T>
             function orthographic(const T&: left, const T&: right, const T&: bottom, const T&: top, const T&: near_plane, const T&: far_plane) -> Matrix<T, 4, 4> {
                 Matrix<T, 4, 4>: out = Matrix<T, 4, 4>::identity();
                 out(0, 0) = T(2) / (right - left);
@@ -4616,6 +4631,7 @@ safe(compile) {
             } end struct AxisAngle
 
             template <typename T>
+            requires std::traits::is_float<T>
             struct Quaternion {
                 static_assert(std::traits::is_float<T>, "quaternions need a real float type, such as float or double, not an integer or other type");
                 T: w = T(1);
@@ -4875,8 +4891,8 @@ safe(compile) {
                 function to_matrix4(const self&) -> Matrix<T, 4, 4> {
                     const Matrix<T, 3, 3>: r = self.to_matrix3();
                     Matrix<T, 4, 4>: out = Matrix<T, 4, 4>::identity();
-                    for (long int: i = 0; i < 3; i++) {
-                        for (long int: j = 0; j < 3; j++) {
+                    for (unsigned long int: i = 0; i < 3; i++) {
+                        for (unsigned long int: j = 0; j < 3; j++) {
                             out(i, j) = r(i, j);
                         }
                     }
@@ -4966,12 +4982,13 @@ safe(compile) {
             }
 
             template <typename T>
+            requires std::traits::is_float<T>
             struct Octonion {
                 static_assert(std::traits::is_float<T>, "octonions need a real float type, such as float or double, not an integer or other type");
                 array[8] T: e;
 
                 constructor() {
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         self.e[i] = T(0);
                     }
                 }
@@ -5008,7 +5025,7 @@ safe(compile) {
                     return unit(0);
                 } end function one
 
-                static function unit(long int: index) -> Octonion {
+                static function unit(unsigned long int: index) -> Octonion {
                     Octonion: out;
                     out[index] = T(1);
                     return out;
@@ -5020,15 +5037,15 @@ safe(compile) {
                     return out;
                 } end function real_value
 
-                operator([]) function(self&, long int: index) -> T& {
-                    if (index < 0 || index >= 8) then {
+                operator([]) function(self&, unsigned long int: index) -> T& {
+                    if (index >= 8) then {
                         detail::fail(static_cast<string>(`index ${index} is out of range for an Octonion`));
                     }
                     return self.e[index];
                 }
 
-                operator([]) function(const self&, long int: index) -> const T& {
-                    if (index < 0 || index >= 8) then {
+                operator([]) function(const self&, unsigned long int: index) -> const T& {
+                    if (index >= 8) then {
                         detail::fail(static_cast<string>(`index ${index} is out of range for an Octonion`));
                     }
                     return self.e[index];
@@ -5040,8 +5057,8 @@ safe(compile) {
 
                 function imaginary(const self&) -> VectorN<T, 7> {
                     VectorN<T, 7>: out;
-                    for (long int: i = 0; i < 7; i++) {
-                        out[i] = self.e[i + 1];
+                    for (unsigned long int: i = 0; i < 7; i++) {
+                        out[i] = self.e[static_cast<unsigned long int>(i + 1)];
                     }
                     return out;
                 } end function imaginary
@@ -5056,7 +5073,7 @@ safe(compile) {
 
                 operator(+) function(const self&, const Octonion&: o) -> Octonion {
                     Octonion: out;
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         out.e[i] = self.e[i] + o.e[i];
                     }
                     return out;
@@ -5064,7 +5081,7 @@ safe(compile) {
 
                 operator(-) function(const self&, const Octonion&: o) -> Octonion {
                     Octonion: out;
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         out.e[i] = self.e[i] - o.e[i];
                     }
                     return out;
@@ -5072,7 +5089,7 @@ safe(compile) {
 
                 operator(-) function(const self&) -> Octonion {
                     Octonion: out;
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         out.e[i] = -self.e[i];
                     }
                     return out;
@@ -5080,7 +5097,7 @@ safe(compile) {
 
                 operator(*) function(const self&, const T&: k) -> Octonion {
                     Octonion: out;
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         out.e[i] = self.e[i] * k;
                     }
                     return out;
@@ -5088,7 +5105,7 @@ safe(compile) {
 
                 operator(/) function(const self&, const T&: k) -> Octonion {
                     Octonion: out;
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         out.e[i] = self.e[i] / k;
                     }
                     return out;
@@ -5132,7 +5149,7 @@ safe(compile) {
                 }
 
                 operator(==) function(const self&, const Octonion&: o) -> bool {
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         if (self.e[i] != o.e[i]) then {
                             return false;
                         }
@@ -5152,7 +5169,7 @@ safe(compile) {
 
                 function dot(const self&, const Octonion&: o) -> T {
                     T: total = T(0);
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         total += self.e[i] * o.e[i];
                     }
                     return total;
@@ -5183,7 +5200,7 @@ safe(compile) {
                 } end function inverse
 
                 function approx_equal(const self&, const Octonion&: o, const T&: tolerance) -> bool {
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         if (std::math::abs(self.e[i] - o.e[i]) > tolerance) then {
                             return false;
                         }
@@ -5197,7 +5214,7 @@ safe(compile) {
 
                 function to_string(const self&) -> string {
                     string: out = "(";
-                    for (long int: i = 0; i < 8; i++) {
+                    for (unsigned long int: i = 0; i < 8; i++) {
                         if (i > 0) then {
                             out += ", ";
                         }
@@ -5348,47 +5365,47 @@ safe(compile) {
                 return v.reflect(normal);
             } end function reflect
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function dot(const VectorN<T, N>&: a, const VectorN<T, N>&: b) -> T {
                 return a.dot(b);
             } end function dot
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function length(const VectorN<T, N>&: v) -> T {
                 return v.length();
             } end function length
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function length_squared(const VectorN<T, N>&: v) -> T {
                 return v.length_squared();
             } end function length_squared
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function distance(const VectorN<T, N>&: a, const VectorN<T, N>&: b) -> T {
                 return a.distance(b);
             } end function distance
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function normalize(const VectorN<T, N>&: v) -> VectorN<T, N> {
                 return v.normalized();
             } end function normalize
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function lerp(const VectorN<T, N>&: a, const VectorN<T, N>&: b, const T&: t) -> VectorN<T, N> {
                 return a.lerp(b, t);
             } end function lerp
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function angle_between(const VectorN<T, N>&: a, const VectorN<T, N>&: b) -> T {
                 return a.angle_to(b);
             } end function angle_between
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function project(const VectorN<T, N>&: v, const VectorN<T, N>&: onto) -> VectorN<T, N> {
                 return v.project_onto(onto);
             } end function project
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function reflect(const VectorN<T, N>&: v, const VectorN<T, N>&: normal) -> VectorN<T, N> {
                 return v.reflect(normal);
             } end function reflect
@@ -5448,7 +5465,7 @@ safe(compile) {
                 return a.cross(b);
             } end function cross
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function cross(const VectorN<T, N>&: a, const VectorN<T, N>&: b) -> VectorN<T, N> {
                 return a.cross(b);
             } end function cross
@@ -5463,7 +5480,7 @@ safe(compile) {
                 return a.triple(b, c);
             } end function triple_product
 
-            template <typename T, int N>
+            template <typename T, unsigned int N>
             function outer(const VectorN<T, N>&: a, const VectorN<T, N>&: b) -> Matrix<T, N, N> {
                 return a.outer(b);
             } end function outer
@@ -5473,37 +5490,37 @@ safe(compile) {
                 return a.outer(b);
             } end function outer
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
             function transpose(const Matrix<T, R, C>&: m) -> Matrix<T, C, R> {
                 return m.transpose();
             } end function transpose
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
             function determinant(const Matrix<T, R, C>&: m) -> T {
                 return m.determinant();
             } end function determinant
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
             function inverse(const Matrix<T, R, C>&: m) -> Matrix<T, R, C> {
                 return m.inverse();
             } end function inverse
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
             function trace(const Matrix<T, R, C>&: m) -> T {
                 return m.trace();
             } end function trace
 
-            template <typename T, int R, int C>
-            function rank(const Matrix<T, R, C>&: m) -> long int {
+            template <typename T, unsigned int R, unsigned int C>
+            function rank(const Matrix<T, R, C>&: m) -> unsigned long int {
                 return m.rank();
             } end function rank
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
             function eigenvalues(const Matrix<T, R, C>&: m) -> std::collections::Vector<std::math::Complex<T>> {
                 return m.eigenvalues();
             } end function eigenvalues
 
-            template <typename T, int R, int C>
+            template <typename T, unsigned int R, unsigned int C>
             function eigenvectors(const Matrix<T, R, C>&: m) -> DynMatrix<T> {
                 return m.eigenvectors();
             } end function eigenvectors
@@ -5529,7 +5546,7 @@ safe(compile) {
             } end function trace
 
             template <typename T>
-            function rank(const DynMatrix<T>&: m) -> long int {
+            function rank(const DynMatrix<T>&: m) -> unsigned long int {
                 return m.rank();
             } end function rank
 

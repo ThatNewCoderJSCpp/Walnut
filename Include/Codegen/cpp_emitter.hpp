@@ -150,6 +150,7 @@ private:
     CodeBuffer                                    m_consts;
     std::map<std::string, std::string>            m_const_pool;
     int                                           m_temp = 0;
+    std::string                                   m_loop_tick;
 
     bool                                          m_uses_coroutines = false;
     std::unordered_map<const RecordInfo*, std::string> m_equality_names;
@@ -449,6 +450,9 @@ private:
     void statement_body(CodeBuffer& os, nodes::ASTNode* s);
     RecordInfo* qualifier_record(const nodes::MemberAccessExpression* m);
 
+    std::string open_loop_guard(CodeBuffer& os, const nodes::ASTNode* s);
+    std::string profile_name(const FuncInfo& f);
+    void close_loop_guard(CodeBuffer& os, const std::string& counter);
     void loop_body(CodeBuffer& os, nodes::ASTNode* body);
 
     std::string pad() const { return std::string(static_cast<std::size_t>(m_indent) * 4, ' '); }
@@ -505,6 +509,7 @@ private:
     }
 
     std::string function_header(const FuncInfo& f, bool qualified, bool in_class);
+    static std::string noexcept_text(const modifiers::FunctionQualifiers& q);
     const std::vector<const nodes::FunctionParameter*>& callable_params(const FuncInfo& f);
     bool only_called(const nodes::ASTNode* body, std::string_view name);
     void scan_function_values(const std::vector<CodegenUnit>& units);
@@ -526,6 +531,7 @@ private:
     }
 
     void emit_record(CodeBuffer& os, RecordInfo* r);
+    void emit_layout_record(CodeBuffer& os, RecordInfo* r);
 
     void emit_record_definitions(CodeBuffer& os, RecordInfo* r, CodeBuffer* shared = nullptr);
     void emit_destructor_definition(CodeBuffer& os, RecordInfo* r, nodes::DestructorDeclaration* d);

@@ -141,6 +141,8 @@ struct FunctionDeclaration : ASTNode {
     modifiers::RawModifiers m_modifiers;
     FunctionParameters* m_parameters;
     ASTNode* m_body;
+    ASTNode* member_requires = nullptr;
+    std::string_view member_requires_text;
     modifiers::FunctionQualifiers m_qualifiers;
     ArenaVector<parser_types::TemplateArgument*> m_spec_args;
     bool                                         m_is_specialization = false;
@@ -338,6 +340,8 @@ struct OperatorFunctionDeclaration : ASTNode {
     modifiers::FunctionQualifiers         m_qualifiers;
     FunctionParameters*                   m_parameters;
     ASTNode*                              m_body;
+    ASTNode*                              member_requires = nullptr;
+    std::string_view                      member_requires_text;
     bool                                  m_deleted = false;
     ArenaVector<std::string_view>         owner_parts;
     bool                                  owner_global = false;

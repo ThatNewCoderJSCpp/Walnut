@@ -16,6 +16,8 @@ safe(compile) {
         namespace crypto {
             enum Algorithm { sha1, sha224, sha256, sha384, sha512 }
 
+            enum Strength { minimum, interactive, moderate, sensitive }
+
             extern "C++" from "<walnut_crypto.hpp>" {
                 hidden class Native as "walnut_rt::crypt::api" {
                 public:
@@ -24,9 +26,9 @@ safe(compile) {
                     static function sha256(const string&: data) -> string as "walnut_rt::crypt::sha256";
                     static function sha384(const string&: data) -> string as "walnut_rt::crypt::sha384";
                     static function sha512(const string&: data) -> string as "walnut_rt::crypt::sha512";
-                    static function hmac(int: algorithm, const string&: key, const string&: data) -> string as "walnut_rt::crypt::hmac";
-                    static function pbkdf2(int: algorithm, const string&: password, const string&: salt, long int: iterations, long int: length) -> string as "walnut_rt::crypt::pbkdf2";
-                    static function hkdf(int: algorithm, const string&: salt, const string&: key, const string&: info, long int: length) -> string as "walnut_rt::crypt::hkdf";
+                    static function hmac(unsigned int: algorithm, const string&: key, const string&: data) -> string as "walnut_rt::crypt::hmac";
+                    static function pbkdf2(unsigned int: algorithm, const string&: password, const string&: salt, unsigned long int: iterations, unsigned long int: length) -> string as "walnut_rt::crypt::pbkdf2";
+                    static function hkdf(unsigned int: algorithm, const string&: salt, const string&: key, const string&: info, unsigned long int: length) -> string as "walnut_rt::crypt::hkdf";
                     static function to_hex(const string&: data, bool: upper) -> string as "walnut_rt::crypt::to_hex";
                     static function from_hex(const string&: input) -> string as "walnut_rt::crypt::from_hex";
                     static function is_hex(const string&: input) -> bool as "walnut_rt::crypt::is_hex";
@@ -38,28 +40,52 @@ safe(compile) {
                     static function base32_decode(const string&: input) -> string as "walnut_rt::crypt::base32_decode";
                     static function url_encode(const string&: input, bool: plus) -> string as "walnut_rt::crypt::url_encode";
                     static function url_decode(const string&: input, bool: plus) -> string as "walnut_rt::crypt::url_decode";
-                    static function random_token(long int: bytes) -> string as "walnut_rt::crypt::random_token";
-                    static function random_token_base64url(long int: bytes) -> string as "walnut_rt::crypt::random_token_base64url";
-                    static function random_bytes(long int: count) -> string as "walnut_rt::crypt::random_bytes";
+                    static function random_token(unsigned long int: bytes) -> string as "walnut_rt::crypt::random_token";
+                    static function random_token_base64url(unsigned long int: bytes) -> string as "walnut_rt::crypt::random_token_base64url";
+                    static function random_bytes(unsigned long int: count) -> string as "walnut_rt::crypt::random_bytes";
                     static function uuid_v4() -> string as "walnut_rt::crypt::uuid_v4";
                     static function secure_equals(const string&: a, const string&: b) -> bool as "walnut_rt::crypt::secure_equals";
                     static function strequal(const string&: a, const string&: b) -> bool as "walnut_rt::crypt::strequal";
                     static function crc32(const string&: data) -> unsigned long int as "walnut_rt::crypt::crc32";
                     static function fnv1a64(const string&: data) -> unsigned long int as "walnut_rt::crypt::fnv1a64";
                     static function adler32(const string&: data) -> unsigned long int as "walnut_rt::crypt::adler32";
+                    static function strength_memory(unsigned int: level) -> unsigned long int as "walnut_rt::crypt::strength_memory";
+                    static function strength_iterations(unsigned int: level) -> unsigned long int as "walnut_rt::crypt::strength_iterations";
+                    static function hash_password(const string&: password, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, unsigned long int: hash_length) -> string as "walnut_rt::crypt::hash_password";
+                    static function verify_password(const string&: password, const string&: encoded) -> bool as "walnut_rt::crypt::verify_password";
+                    static function is_password_hash(const string&: encoded) -> bool as "walnut_rt::crypt::is_password_hash";
+                    static function password_needs_rehash(const string&: encoded, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, unsigned long int: hash_length) -> bool as "walnut_rt::crypt::password_needs_rehash";
+                    static function argon2id(const string&: password, const string&: salt, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, unsigned long int: length) -> string as "walnut_rt::crypt::argon2id";
+                    static function blake2b(const string&: data, unsigned long int: length, const string&: key) -> string as "walnut_rt::crypt::blake2b";
+                    static function generate_key() -> string as "walnut_rt::crypt::generate_key";
+                    static function encrypt(const string&: key, const string&: plaintext, const string&: associated) -> string as "walnut_rt::crypt::encrypt";
+                    static function decrypt_into(const string&: key, const string&: sealed, const string&: associated, string&: out) -> bool as "walnut_rt::crypt::decrypt_into";
+                    static function derive_key(const string&: password, const string&: salt, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism) -> string as "walnut_rt::crypt::derive_key";
+                    static function encrypt_with_password(const string&: password, const string&: plaintext, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, const string&: associated) -> string as "walnut_rt::crypt::encrypt_with_password";
+                    static function strength_memory_unsigned(unsigned int: level) -> unsigned long int as "walnut_rt::crypt::strength_memory_unsigned";
+                    static function strength_iterations_unsigned(unsigned int: level) -> unsigned long int as "walnut_rt::crypt::strength_iterations_unsigned";
+                    static function hash_password_salted(const string&: password, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, unsigned long int: hash_length, unsigned long int: salt_length) -> string as "walnut_rt::crypt::hash_password_salted";
+                    static function hash_password_peppered(const string&: password, const string&: pepper, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, unsigned long int: hash_length, unsigned long int: salt_length) -> string as "walnut_rt::crypt::hash_password_peppered";
+                    static function verify_password_peppered(const string&: password, const string&: encoded, const string&: pepper) -> bool as "walnut_rt::crypt::verify_password_peppered";
+                    static function generate_salt(unsigned long int: length) -> string as "walnut_rt::crypt::generate_salt";
+                    static function password_needs_rehash_salted(const string&: encoded, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, unsigned long int: hash_length, unsigned long int: salt_length) -> bool as "walnut_rt::crypt::password_needs_rehash_salted";
+                    static function argon2id_secret(const string&: password, const string&: salt, const string&: secret, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, unsigned long int: length) -> string as "walnut_rt::crypt::argon2id_secret";
+                    static function derive_key_unsigned(const string&: password, const string&: salt, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism) -> string as "walnut_rt::crypt::derive_key_unsigned";
+                    static function encrypt_with_password_unsigned(const string&: password, const string&: plaintext, unsigned long int: memory_kib, unsigned long int: iterations, unsigned long int: parallelism, const string&: associated) -> string as "walnut_rt::crypt::encrypt_with_password_unsigned";
+                    static function decrypt_with_password_into(const string&: password, const string&: sealed, const string&: associated, string&: out) -> bool as "walnut_rt::crypt::decrypt_with_password_into";
                 } end class Native
 
                 class Hasher as "walnut_rt::crypt::hasher" {
                 public:
                     constructor();
-                    static function make(int: algorithm) -> Hasher as "walnut_rt::crypt::hasher::make";
+                    static function make(unsigned int: algorithm) -> Hasher as "walnut_rt::crypt::hasher::make";
                     function update(self&, const string&: data) -> void;
                     function finish(self&) -> string;
                     function reset(self&) -> void;
-                    function bytes_hashed(const self&) -> long int;
+                    function bytes_hashed(const self&) noexcept -> unsigned long int;
 
                     static function of(Algorithm: algorithm) -> Hasher {
-                        return Hasher::make(static_cast<int>(algorithm));
+                        return Hasher::make(static_cast<unsigned int>(algorithm));
                     } end function of
 
                     function finish_hex(self&) -> string {
@@ -70,13 +96,13 @@ safe(compile) {
                 class Mac as "walnut_rt::crypt::mac" {
                 public:
                     constructor();
-                    static function make(int: algorithm, const string&: key) -> Mac as "walnut_rt::crypt::mac::make";
+                    static function make(unsigned int: algorithm, const string&: key) -> Mac as "walnut_rt::crypt::mac::make";
                     function update(self&, const string&: data) -> void;
                     function finish(self&) -> string;
                     function reset(self&) -> void;
 
                     static function of(Algorithm: algorithm, const string&: key) -> Mac {
-                        return Mac::make(static_cast<int>(algorithm), key);
+                        return Mac::make(static_cast<unsigned int>(algorithm), key);
                     } end function of
 
                     function finish_hex(self&) -> string {
@@ -155,7 +181,7 @@ safe(compile) {
             } end function sha512_bytes
 
             function hmac(Algorithm: algorithm, const string&: key, const string&: data) -> string {
-                return Native::hmac(static_cast<int>(algorithm), key, data);
+                return Native::hmac(static_cast<unsigned int>(algorithm), key, data);
             } end function hmac
 
             function hmac_hex(Algorithm: algorithm, const string&: key, const string&: data) -> string {
@@ -178,25 +204,25 @@ safe(compile) {
                 return Native::secure_equals(hmac_hex(algorithm, key, data), expected_hex);
             } end function verify_hmac
 
-            function pbkdf2(Algorithm: algorithm, const string&: password, const string&: salt, long int: iterations, long int: length) -> string {
+            function pbkdf2(Algorithm: algorithm, const string&: password, const string&: salt, unsigned long int: iterations, unsigned long int: length) -> string {
                 if (algorithm != Algorithm::sha1 && algorithm != Algorithm::sha256 && algorithm != Algorithm::sha512) then {
                     throw std::errors::crypto_error("pbkdf2 works with sha1, sha256 or sha512");
                 }
-                return Native::pbkdf2(static_cast<int>(algorithm), password, salt, iterations, length);
+                return Native::pbkdf2(static_cast<unsigned int>(algorithm), password, salt, iterations, length);
             } end function pbkdf2
 
-            function pbkdf2_sha256(const string&: password, const string&: salt, long int: iterations, long int: length = 32) -> string {
+            function pbkdf2_sha256(const string&: password, const string&: salt, unsigned long int: iterations, unsigned long int: length = 32) -> string {
                 return pbkdf2(Algorithm::sha256, password, salt, iterations, length);
             } end function pbkdf2_sha256
 
-            function hkdf(Algorithm: algorithm, const string&: salt, const string&: key, const string&: info, long int: length) -> string {
+            function hkdf(Algorithm: algorithm, const string&: salt, const string&: key, const string&: info, unsigned long int: length) -> string {
                 if (algorithm != Algorithm::sha256 && algorithm != Algorithm::sha512) then {
                     throw std::errors::crypto_error("hkdf works with sha256 or sha512");
                 }
-                return Native::hkdf(static_cast<int>(algorithm), salt, key, info, length);
+                return Native::hkdf(static_cast<unsigned int>(algorithm), salt, key, info, length);
             } end function hkdf
 
-            function hkdf_sha256(const string&: salt, const string&: key, const string&: info, long int: length = 32) -> string {
+            function hkdf_sha256(const string&: salt, const string&: key, const string&: info, unsigned long int: length = 32) -> string {
                 return hkdf(Algorithm::sha256, salt, key, info, length);
             } end function hkdf_sha256
 
@@ -232,15 +258,15 @@ safe(compile) {
                 return Native::url_decode(input, plus_as_space);
             } end function url_decode
 
-            function random_bytes(long int: count) -> string {
+            function random_bytes(unsigned long int: count) -> string {
                 return Native::random_bytes(count);
             } end function random_bytes
 
-            function random_token(long int: bytes = 32) -> string {
+            function random_token(unsigned long int: bytes = 32) -> string {
                 return Native::random_token(bytes);
             } end function random_token
 
-            function random_token_base64url(long int: bytes = 32) -> string {
+            function random_token_base64url(unsigned long int: bytes = 32) -> string {
                 return Native::random_token_base64url(bytes);
             } end function random_token_base64url
 
@@ -267,6 +293,125 @@ safe(compile) {
             function adler32(const string&: data) -> unsigned long int {
                 return Native::adler32(data);
             } end function adler32
+
+            struct PasswordSettings {
+                unsigned long int: memory_kib = 65536;
+                unsigned long int: iterations = 2;
+                unsigned long int: parallelism = 1;
+                unsigned long int: hash_length = 32;
+                unsigned long int: salt_length = 16;
+
+                static function of(Strength: strength) -> PasswordSettings {
+                    PasswordSettings: settings;
+                    settings.memory_kib = Native::strength_memory_unsigned(static_cast<unsigned int>(strength));
+                    settings.iterations = Native::strength_iterations_unsigned(static_cast<unsigned int>(strength));
+                    return settings;
+                } end function of
+            } end struct PasswordSettings
+
+            function generate_salt(unsigned long int: length = 16) -> string {
+                return Native::generate_salt(length);
+            } end function generate_salt
+
+            function hash_password(const string&: password, const PasswordSettings&: settings) -> string {
+                return Native::hash_password_salted(password, settings.memory_kib, settings.iterations, settings.parallelism, settings.hash_length, settings.salt_length);
+            } end function hash_password
+
+            function hash_password_with_pepper(const string&: password, const string&: pepper, const PasswordSettings&: settings) -> string {
+                return Native::hash_password_peppered(password, pepper, settings.memory_kib, settings.iterations, settings.parallelism, settings.hash_length, settings.salt_length);
+            } end function hash_password_with_pepper
+
+            function hash_password_with_pepper(const string&: password, const string&: pepper, Strength: strength = Strength::interactive) -> string {
+                return hash_password_with_pepper(password, pepper, PasswordSettings::of(strength));
+            } end function hash_password_with_pepper
+
+            function verify_password_with_pepper(const string&: password, const string&: password_hash, const string&: pepper) -> bool {
+                return Native::verify_password_peppered(password, password_hash, pepper);
+            } end function verify_password_with_pepper
+
+            function hash_password(const string&: password, Strength: strength = Strength::interactive) -> string {
+                return hash_password(password, PasswordSettings::of(strength));
+            } end function hash_password
+
+            function verify_password(const string&: password, const string&: password_hash) -> bool {
+                return Native::verify_password(password, password_hash);
+            } end function verify_password
+
+            function is_password_hash(const string&: candidate) -> bool {
+                return Native::is_password_hash(candidate);
+            } end function is_password_hash
+
+            function password_needs_rehash(const string&: password_hash, const PasswordSettings&: settings) -> bool {
+                return Native::password_needs_rehash_salted(password_hash, settings.memory_kib, settings.iterations, settings.parallelism, settings.hash_length, settings.salt_length);
+            } end function password_needs_rehash
+
+            function password_needs_rehash(const string&: password_hash, Strength: strength = Strength::interactive) -> bool {
+                return password_needs_rehash(password_hash, PasswordSettings::of(strength));
+            } end function password_needs_rehash
+
+            function argon2id(const string&: password, const string&: salt, const PasswordSettings&: settings, unsigned long int: length = 32) -> string {
+                return Native::argon2id_secret(password, salt, "", settings.memory_kib, settings.iterations, settings.parallelism, length);
+            } end function argon2id
+
+            function argon2id(const string&: password, const string&: salt, const string&: secret, const PasswordSettings&: settings, unsigned long int: length = 32) -> string {
+                return Native::argon2id_secret(password, salt, secret, settings.memory_kib, settings.iterations, settings.parallelism, length);
+            } end function argon2id
+
+            function blake2b_bytes(const string&: data, unsigned long int: length = 64, const string&: key = "") -> string {
+                return Native::blake2b(data, length, key);
+            } end function blake2b_bytes
+
+            function blake2b(const string&: data, unsigned long int: length = 64, const string&: key = "") -> string {
+                return to_hex(Native::blake2b(data, length, key));
+            } end function blake2b
+
+            function generate_key() -> string {
+                return Native::generate_key();
+            } end function generate_key
+
+            function derive_key(const string&: password, const string&: salt, const PasswordSettings&: settings) -> string {
+                return Native::derive_key_unsigned(password, salt, settings.memory_kib, settings.iterations, settings.parallelism);
+            } end function derive_key
+
+            function derive_key(const string&: password, const string&: salt, Strength: strength = Strength::interactive) -> string {
+                return derive_key(password, salt, PasswordSettings::of(strength));
+            } end function derive_key
+
+            function encrypt(const string&: key, const string&: plaintext, const string&: associated = "") -> string {
+                return Native::encrypt(key, plaintext, associated);
+            } end function encrypt
+
+            function try_decrypt(const string&: key, const string&: sealed, string&: plaintext, const string&: associated = "") -> bool {
+                return Native::decrypt_into(key, sealed, associated, plaintext);
+            } end function try_decrypt
+
+            function decrypt(const string&: key, const string&: sealed, const string&: associated = "") -> string {
+                string: plaintext;
+                if (!Native::decrypt_into(key, sealed, associated, plaintext)) then {
+                    throw std::errors::crypto_error("decrypt: the data was changed, or the key or associated data is wrong");
+                }
+                return plaintext;
+            } end function decrypt
+
+            function encrypt_with_password(const string&: password, const string&: plaintext, const PasswordSettings&: settings, const string&: associated = "") -> string {
+                return Native::encrypt_with_password_unsigned(password, plaintext, settings.memory_kib, settings.iterations, settings.parallelism, associated);
+            } end function encrypt_with_password
+
+            function encrypt_with_password(const string&: password, const string&: plaintext, Strength: strength = Strength::interactive, const string&: associated = "") -> string {
+                return encrypt_with_password(password, plaintext, PasswordSettings::of(strength), associated);
+            } end function encrypt_with_password
+
+            function try_decrypt_with_password(const string&: password, const string&: sealed, string&: plaintext, const string&: associated = "") -> bool {
+                return Native::decrypt_with_password_into(password, sealed, associated, plaintext);
+            } end function try_decrypt_with_password
+
+            function decrypt_with_password(const string&: password, const string&: sealed, const string&: associated = "") -> string {
+                string: plaintext;
+                if (!Native::decrypt_with_password_into(password, sealed, associated, plaintext)) then {
+                    throw std::errors::crypto_error("decrypt_with_password: the data was changed, or the password or associated data is wrong");
+                }
+                return plaintext;
+            } end function decrypt_with_password
         } end namespace crypto
     } end namespace std
 } end safe

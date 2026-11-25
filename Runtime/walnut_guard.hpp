@@ -70,9 +70,9 @@ public:
     rate_decision() = default;
     explicit rate_decision(const fg::RateLimitDecision& d) : m_d(d) {}
 
-    bool allowed() const { return m_d.allowed; }
-    double remaining() const { return m_d.remaining; }
-    double limit() const { return m_d.limit; }
+    bool allowed() const noexcept { return m_d.allowed; }
+    double remaining() const noexcept { return m_d.remaining; }
+    double limit() const noexcept { return m_d.limit; }
     long long retry_after_ms() const { return ms_of(m_d.retry_after); }
     long long reset_after_ms() const { return ms_of(m_d.reset_after); }
 
@@ -132,11 +132,11 @@ public:
     failure_status() = default;
     explicit failure_status(const fg::FailureStatus& s) : m_s(s) {}
 
-    long long failures() const { return m_s.failures; }
-    long long successes() const { return m_s.successes; }
-    double failure_ratio() const { return m_s.failure_ratio; }
-    bool locked() const { return m_s.locked; }
-    long long strikes() const { return m_s.strikes; }
+    long long failures() const noexcept { return m_s.failures; }
+    long long successes() const noexcept { return m_s.successes; }
+    double failure_ratio() const noexcept { return m_s.failure_ratio; }
+    bool locked() const noexcept { return m_s.locked; }
+    long long strikes() const noexcept { return m_s.strikes; }
     long long lock_remaining_ms() const { return ms_of(m_s.lock_remaining); }
     long long delay_ms() const { return ms_of(m_s.suggested_delay); }
 
@@ -233,8 +233,8 @@ public:
     std::string id() const { return m_id; }
     std::string name() const { return m_name; }
     std::string payload() const { return m_payload; }
-    long long attempt() const { return m_attempt; }
-    long long max_attempts() const { return m_max_attempts; }
+    long long attempt() const noexcept { return m_attempt; }
+    long long max_attempts() const noexcept { return m_max_attempts; }
     bool last_attempt() const { return m_attempt >= m_max_attempts; }
     std::string last_error() const { return m_last_error; }
     bool should_stop() const { return m_stopping && m_stopping->load(); }
@@ -362,8 +362,8 @@ public:
     enqueue_result() = default;
     explicit enqueue_result(const fg::EnqueueResult& r) : m_ok(r.ok), m_duplicate(r.duplicate), m_id(r.id), m_problems(issue_texts(r.issues)) {}
 
-    bool ok() const { return m_ok; }
-    bool duplicate() const { return m_duplicate; }
+    bool ok() const noexcept { return m_ok; }
+    bool duplicate() const noexcept { return m_duplicate; }
     std::string id() const { return m_id; }
     std::vector<std::string> problems() const { return m_problems; }
     std::string message() const {

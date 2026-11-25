@@ -175,7 +175,7 @@ public:
     track(fv::TrackInfo t, long long index) : m(std::move(t)), m_index(index) {}
 
     bool valid() const { return m_index >= 0; }
-    long long index() const { return m_index; }
+    long long index() const noexcept { return m_index; }
     long long id() const { return static_cast<long long>(m.id); }
     long long kind() const { return media_type_number(m.type); }
     std::string kind_name() const { return fv::media_type_name(m.type); }
@@ -184,7 +184,7 @@ public:
     bool supported() const { return track_supported(m); }
     std::string language() const { return m.language; }
     std::string name() const { return m.name; }
-    bool is_default() const { return m.is_default; }
+    bool is_default() const noexcept { return m.is_default; }
     long long width() const { return static_cast<long long>(m.width); }
     long long height() const { return static_cast<long long>(m.height); }
     long long display_width() const { return static_cast<long long>(m.display_width ? m.display_width : m.width); }
@@ -225,7 +225,7 @@ public:
         return out;
     }
 
-    bool valid() const { return m.valid; }
+    bool valid() const noexcept { return m.valid; }
     std::string error() const { return m.error; }
     std::string container() const { return m.container; }
     F duration() const { return w(m.duration); }
@@ -240,8 +240,8 @@ public:
     std::vector<std::string> tag_keys() const { return tag_keys_of(m.tags); }
     long long video_track() const { return static_cast<long long>(m.video_track); }
     long long audio_track() const { return static_cast<long long>(m.audio_track); }
-    bool video_supported() const { return m.video_supported; }
-    bool audio_supported() const { return m.audio_supported; }
+    bool video_supported() const noexcept { return m.video_supported; }
+    bool audio_supported() const noexcept { return m.audio_supported; }
     std::string video_codec() const { return m.video_codec; }
     std::string audio_codec() const { return m.audio_codec; }
     std::string video_error() const { return m.video_error; }
@@ -679,9 +679,9 @@ public:
     F audio_buffered() const { return w(m.audio_buffered); }
     F average_decode_ms() const { return w(m.average_decode_ms); }
     F average_convert_ms() const { return w(m.average_convert_ms); }
-    bool audio_clock() const { return m.audio_clock; }
+    bool audio_clock() const noexcept { return m.audio_clock; }
     long long frames_deinterlaced() const { return static_cast<long long>(m.frames_deinterlaced); }
-    bool deinterlacing() const { return m.deinterlacing; }
+    bool deinterlacing() const noexcept { return m.deinterlacing; }
 
 private:
     fv::PlayerStats m;

@@ -153,7 +153,12 @@ enum class TypeTrait : std::uint8_t {
     IsHardware,
     EnumMin,
     EnumMax,
-    EnumBits
+    EnumBits,
+    IsCallable,
+    IsFunctionLike,
+    CanForEach,
+    HasOperator,
+    OverloadsOperator
 };
 
 struct TypeTraitInfo {
@@ -223,6 +228,11 @@ inline constexpr TypeTraitInfo kTypeTraits[] = {
     { "enum_min",                   TypeTrait::EnumMin,                  1, true },
     { "enum_max",                   TypeTrait::EnumMax,                  1, true },
     { "enum_bits",                  TypeTrait::EnumBits,                 1, true },
+    { "is_callable",                TypeTrait::IsCallable,               -1 },
+    { "is_function_like",           TypeTrait::IsFunctionLike,           1 },
+    { "can_for_each",               TypeTrait::CanForEach,               1 },
+    { "has_operator",               TypeTrait::HasOperator,              -1 },
+    { "overloads_operator",         TypeTrait::OverloadsOperator,        -1 },
 };
 
 inline bool is_lifecycle_trait(TypeTrait trait) {
@@ -230,6 +240,8 @@ inline bool is_lifecycle_trait(TypeTrait trait) {
         case TypeTrait::IsConstructible: case TypeTrait::IsNothrowConstructible: case TypeTrait::IsConstexprConstructible:
         case TypeTrait::IsAssignable: case TypeTrait::IsNothrowAssignable: case TypeTrait::IsConstexprAssignable:
         case TypeTrait::IsDestructible: case TypeTrait::IsNothrowDestructible:
+        case TypeTrait::IsCallable: case TypeTrait::IsFunctionLike: case TypeTrait::CanForEach:
+        case TypeTrait::HasOperator: case TypeTrait::OverloadsOperator:
             return true;
         default:
             return false;

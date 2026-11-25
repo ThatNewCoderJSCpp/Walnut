@@ -1,0 +1,712 @@
+import module.collections
+
+namespace std {
+    namespace cache {
+        enum Eviction { least_recently_used, cheapest_to_rebuild, oldest_first }
+
+        hidden namespace detail {
+            inline constexpr unsigned long int: empty_slot = std::npos;
+            inline constexpr unsigned long int: removed_slot = std::npos - 1;
+
+            extern "C++" {
+                class Clock as "walnut_rt::bench::api" {
+                public:
+                    static function now() -> unsigned long int as "walnut_rt::bench::steady_nanos";
+                } end class Clock
+            } end extern
+
+            template <typename K, typename V>
+            class Entry {
+            public:
+                K: key;
+                V*: value = nullptr;
+                unsigned long int: hash = 0ul;
+                unsigned long int: generation = std::npos;
+                unsigned long int: version = 0;
+                bool: has_version = false;
+                unsigned long int: cost = 0;
+                unsigned long int: hits = 0;
+                unsigned long int: stamp = 0;
+                bool: pinned = false;
+                unsigned long int: newer = std::npos;
+                unsigned long int: older = std::npos;
+
+                constructor(const K&: k, unsigned long int: h) : key = k, hash = h { }
+
+                constructor(const Entry&: other) = delete;
+
+                destructor() noexcept {
+                    delete value;
+                }
+            } end class Entry
+
+            struct Ranked {
+                double: priority = 0.0;
+                unsigned long int: slot = std::npos;
+                unsigned long int: stamp = 0;
+            } end struct Ranked
+        } end namespace detail
+
+        template <typename T>
+        class Lazy {
+            function() -> T: m_make;
+            T*: m_value = nullptr;
+            unsigned long int: m_builds = 0;
+            unsigned long int: m_cost = 0;
+
+        public:
+            constructor(function() -> T: make) : m_make = make { }
+
+            constructor(const Lazy&: other) = delete;
+
+            constructor(Lazy&&: other) noexcept : m_make = std::move(other.m_make), m_value = other.m_value, m_builds = other.m_builds, m_cost = other.m_cost {
+                other.m_value = nullptr;
+            }
+
+            destructor() noexcept {
+                delete m_value;
+            }
+
+            operator(=) function(self&, const Lazy&: other) -> Lazy& = delete;
+
+            function get(self&) -> T& {
+                if (self.m_value == nullptr) then {
+                    const unsigned long int: start = detail::Clock::now();
+                    self.m_value = new T(self.m_make());
+                    self.m_cost = detail::Clock::now() - start;
+                    self.m_builds += 1;
+                }
+                return *self.m_value;
+            } end function get
+
+            operator(*) function(self&) -> T& {
+                return self.get();
+            }
+
+            function ready(const self&) -> bool {
+                return self.m_value != nullptr;
+            } end function ready
+
+            function peek(self&) -> T* {
+                return self.m_value;
+            } end function peek
+
+            function reset(self&) -> void {
+                delete self.m_value;
+                self.m_value = nullptr;
+            } end function reset
+
+            requires std::traits::is_copy_constructible<T>
+            function set(self&, const T&: value) -> T& {
+                delete self.m_value;
+                self.m_value = new T(value);
+                return *self.m_value;
+            } end function set
+
+            function builds(const self&) -> unsigned long int {
+                return self.m_builds;
+            } end function builds
+
+            function build_seconds(const self&) -> double {
+                return static_cast<double>(self.m_cost) / 1000000000.0;
+            } end function build_seconds
+        } end class Lazy
+
+        template <typename K, typename V>
+        requires std::traits::has_operator<std::traits::op::equal, K>
+        class LazyCache {
+            function(const K&) -> V: m_load;
+            std::collections::Vector<detail::Entry<K, V>*>: m_slots;
+            std::collections::Vector<unsigned long int>: m_free;
+            std::collections::Vector<unsigned long int>: m_table;
+            unsigned long int: m_table_used = 0;
+            unsigned long int: m_count = 0;
+            unsigned long int: m_capacity = 0;
+            Eviction: m_policy = Eviction::least_recently_used;
+            unsigned long int: m_newest = std::npos;
+            unsigned long int: m_oldest = std::npos;
+            std::collections::Vector<detail::Ranked>: m_heap;
+            double: m_floor = 0.0;
+            unsigned long int: m_stamp = 0;
+            unsigned long int: m_generation = 0;
+            unsigned long int: m_last = std::npos;
+            unsigned long int: m_hits = 0;
+            unsigned long int: m_misses = 0;
+            unsigned long int: m_loads = 0;
+            unsigned long int: m_rebuilds = 0;
+            unsigned long int: m_evictions = 0;
+            unsigned long int: m_load_nanos = 0;
+            unsigned long int: m_saved_nanos = 0;
+
+            static function hash_key(const K&: key) -> unsigned long int {
+                if constexpr (std::collections::HashKey<K>) then {
+                    return std::collections::hash_of(key);
+                } else then {
+                    return 0ul;
+                }
+            } end function hash_key
+
+            static function hashed() -> bool {
+                if constexpr (std::collections::HashKey<K>) then {
+                    return true;
+                } else then {
+                    return false;
+                }
+            } end function hashed
+
+            function fresh(const self&, const detail::Entry<K, V>*: e) -> bool {
+                return e->value != nullptr && e->generation == self.m_generation;
+            } end function fresh
+
+            function rehash(self&, unsigned long int: size) -> void {
+                self.m_table.clear();
+                self.m_table.resize(size, detail::empty_slot);
+                self.m_table_used = 0;
+                const unsigned long int: mask = static_cast<unsigned long int>(size - 1);
+                for (unsigned long int: slot = 0; slot < self.m_slots.size(); slot++) {
+                    const detail::Entry<K, V>*: e = self.m_slots[slot];
+                    if (e == nullptr) then {
+                        continue;
+                    }
+                    unsigned long int: at = e->hash & mask;
+                    while (self.m_table[at] != detail::empty_slot) {
+                        at = (at + 1ul) & mask;
+                    }
+                    self.m_table[at] = slot;
+                    self.m_table_used += 1;
+                }
+            } end function rehash
+
+            function table_insert(self&, unsigned long int: slot) -> void {
+                if (!hashed()) then {
+                    return;
+                }
+                if (self.m_table.empty() || (self.m_table_used + 1) * 4 > self.m_table.size() * 3) then {
+                    unsigned long int: size = 16;
+                    while (size * 3 < (self.m_count + 1) * 8) {
+                        size *= 2;
+                    }
+                    self.rehash(size);
+                    return;
+                }
+                const unsigned long int: mask = static_cast<unsigned long int>(self.m_table.size() - 1);
+                unsigned long int: at = self.m_slots[slot]->hash & mask;
+                while (self.m_table[at] < detail::removed_slot) {
+                    at = (at + 1ul) & mask;
+                }
+                if (self.m_table[at] == detail::empty_slot) then {
+                    self.m_table_used += 1;
+                }
+                self.m_table[at] = slot;
+            } end function table_insert
+
+            function table_erase(self&, unsigned long int: slot) -> void {
+                if (!hashed() || self.m_table.empty()) then {
+                    return;
+                }
+                const unsigned long int: mask = static_cast<unsigned long int>(self.m_table.size() - 1);
+                unsigned long int: at = self.m_slots[slot]->hash & mask;
+                while (self.m_table[at] != detail::empty_slot) {
+                    if (self.m_table[at] == slot) then {
+                        self.m_table[at] = detail::removed_slot;
+                        return;
+                    }
+                    at = (at + 1ul) & mask;
+                }
+            } end function table_erase
+
+            function locate(self&, const K&: key, unsigned long int: h) -> unsigned long int {
+                if (hashed()) then {
+                    if (self.m_table.empty()) then {
+                        return std::npos;
+                    }
+                    const unsigned long int: mask = static_cast<unsigned long int>(self.m_table.size() - 1);
+                    unsigned long int: at = h & mask;
+                    while (true) {
+                        const unsigned long int: slot = self.m_table[at];
+                        if (slot == detail::empty_slot) then {
+                            return std::npos;
+                        }
+                        if (slot != detail::removed_slot) then {
+                            const detail::Entry<K, V>*: e = self.m_slots[slot];
+                            if (e->hash == h && e->key == key) then {
+                                return slot;
+                            }
+                        }
+                        at = (at + 1ul) & mask;
+                    }
+                }
+                for (unsigned long int: slot = 0; slot < self.m_slots.size(); slot++) {
+                    const detail::Entry<K, V>*: e = self.m_slots[slot];
+                    if (e != nullptr && e->key == key) then {
+                        return slot;
+                    }
+                }
+                return std::npos;
+            } end function locate
+
+            function find_slot(self&, const K&: key) -> unsigned long int {
+                if (self.m_last != std::npos) then {
+                    const detail::Entry<K, V>*: last = self.m_slots[self.m_last];
+                    if (last != nullptr && last->key == key) then {
+                        return self.m_last;
+                    }
+                }
+                const unsigned long int: slot = self.locate(key, hash_key(key));
+                if (slot != std::npos) then {
+                    self.m_last = slot;
+                }
+                return slot;
+            } end function find_slot
+
+            function unlink(self&, unsigned long int: slot) -> void {
+                detail::Entry<K, V>*: e = self.m_slots[slot];
+                if (e->newer != std::npos) then {
+                    self.m_slots[static_cast<unsigned long int>(e->newer)]->older = e->older;
+                } else if (self.m_newest == slot) then {
+                    self.m_newest = e->older;
+                }
+                if (e->older != std::npos) then {
+                    self.m_slots[static_cast<unsigned long int>(e->older)]->newer = e->newer;
+                } else if (self.m_oldest == slot) then {
+                    self.m_oldest = e->newer;
+                }
+                e->newer = std::npos;
+                e->older = std::npos;
+            } end function unlink
+
+            function link_newest(self&, unsigned long int: slot) -> void {
+                detail::Entry<K, V>*: e = self.m_slots[slot];
+                e->newer = std::npos;
+                e->older = self.m_newest;
+                if (self.m_newest != std::npos) then {
+                    self.m_slots[self.m_newest]->newer = slot;
+                }
+                self.m_newest = slot;
+                if (self.m_oldest == std::npos) then {
+                    self.m_oldest = slot;
+                }
+            } end function link_newest
+
+            function heap_push(self&, const detail::Ranked&: item) -> void {
+                self.m_heap.push_back(item);
+                unsigned long int: i = self.m_heap.size() - 1;
+                while (i > 0) {
+                    const unsigned long int: parent = (i - 1) / 2;
+                    if (self.m_heap[parent].priority <= self.m_heap[i].priority) then {
+                        break;
+                    }
+                    const detail::Ranked: held = self.m_heap[parent];
+                    self.m_heap[parent] = self.m_heap[i];
+                    self.m_heap[i] = held;
+                    i = parent;
+                }
+            } end function heap_push
+
+            function heap_pop(self&) -> detail::Ranked {
+                const detail::Ranked: top = self.m_heap[static_cast<unsigned long int>(0)];
+                const detail::Ranked: tail = self.m_heap.pop_back();
+                if (!self.m_heap.empty()) then {
+                    self.m_heap[static_cast<unsigned long int>(0)] = tail;
+                    unsigned long int: i = 0;
+                    const unsigned long int: n = self.m_heap.size();
+                    while (true) {
+                        const unsigned long int: l = i * 2 + 1;
+                        const unsigned long int: r = l + 1;
+                        unsigned long int: best = i;
+                        if (l < n && self.m_heap[l].priority < self.m_heap[best].priority) then {
+                            best = l;
+                        }
+                        if (r < n && self.m_heap[r].priority < self.m_heap[best].priority) then {
+                            best = r;
+                        }
+                        if (best == i) then {
+                            break;
+                        }
+                        const detail::Ranked: held = self.m_heap[best];
+                        self.m_heap[best] = self.m_heap[i];
+                        self.m_heap[i] = held;
+                        i = best;
+                    }
+                }
+                return top;
+            } end function heap_pop
+
+            function rank(self&, unsigned long int: slot) -> void {
+                if (self.m_policy != Eviction::cheapest_to_rebuild) then {
+                    return;
+                }
+                detail::Entry<K, V>*: e = self.m_slots[slot];
+                self.m_stamp += 1;
+                e->stamp = self.m_stamp;
+                detail::Ranked: item;
+                item.priority = self.m_floor + static_cast<double>(e->cost + 1) * static_cast<double>(e->hits + 1);
+                item.slot = slot;
+                item.stamp = e->stamp;
+                self.heap_push(item);
+                if (self.m_heap.size() > self.m_count * 4 + 64) then {
+                    std::collections::Vector<detail::Ranked>: kept;
+                    for (const detail::Ranked&: r in self.m_heap) {
+                        const detail::Entry<K, V>*: owner = self.m_slots[static_cast<unsigned long int>(r.slot)];
+                        if (owner != nullptr && owner->stamp == r.stamp) then {
+                            kept.push_back(r);
+                        }
+                    }
+                    self.m_heap.clear();
+                    for (const detail::Ranked&: r in kept) {
+                        self.heap_push(r);
+                    }
+                }
+            } end function rank
+
+            function used(self&, unsigned long int: slot) -> void {
+                if (self.m_policy == Eviction::least_recently_used && slot != self.m_newest) then {
+                    self.unlink(slot);
+                    self.link_newest(slot);
+                }
+                self.rank(slot);
+            } end function used
+
+            function drop(self&, unsigned long int: slot) -> void {
+                self.table_erase(slot);
+                self.unlink(slot);
+                delete self.m_slots[slot];
+                self.m_slots[slot] = nullptr;
+                self.m_free.push_back(slot);
+                self.m_count -= 1;
+                if (self.m_last == slot) then {
+                    self.m_last = std::npos;
+                }
+            } end function drop
+
+            function victim(self&) -> unsigned long int {
+                if (self.m_policy == Eviction::cheapest_to_rebuild) then {
+                    std::collections::Vector<detail::Ranked>: skipped;
+                    unsigned long int: found = std::npos;
+                    while (!self.m_heap.empty()) {
+                        const detail::Ranked: top = self.heap_pop();
+                        const detail::Entry<K, V>*: e = self.m_slots[static_cast<unsigned long int>(top.slot)];
+                        if (e == nullptr || e->stamp != top.stamp) then {
+                            continue;
+                        }
+                        if (e->pinned) then {
+                            skipped.push_back(top);
+                            continue;
+                        }
+                        self.m_floor = top.priority;
+                        found = top.slot;
+                        break;
+                    }
+                    for (const detail::Ranked&: r in skipped) {
+                        self.heap_push(r);
+                    }
+                    return found;
+                }
+                for (unsigned long int: slot = self.m_oldest; slot != std::npos; slot = self.m_slots[slot]->newer) {
+                    if (!self.m_slots[slot]->pinned) then {
+                        return slot;
+                    }
+                }
+                return std::npos;
+            } end function victim
+
+            function make_room(self&) -> void {
+                if (self.m_capacity <= 0) then {
+                    return;
+                }
+                while (self.m_count >= self.m_capacity) {
+                    const unsigned long int: slot = self.victim();
+                    if (slot == std::npos) then {
+                        return;
+                    }
+                    self.drop(slot);
+                    self.m_evictions += 1;
+                }
+            } end function make_room
+
+            function insert(self&, const K&: key, V*: value, unsigned long int: cost) -> unsigned long int {
+                self.make_room();
+                unsigned long int: slot = std::npos;
+                detail::Entry<K, V>*: e = new detail::Entry<K, V>(key, hash_key(key));
+                if (self.m_free.empty()) then {
+                    slot = self.m_slots.size();
+                    self.m_slots.push_back(e);
+                } else then {
+                    slot = self.m_free.pop_back();
+                    self.m_slots[slot] = e;
+                }
+                e->value = value;
+                e->cost = cost;
+                e->generation = self.m_generation;
+                self.m_count += 1;
+                self.table_insert(slot);
+                self.link_newest(slot);
+                self.rank(slot);
+                self.m_last = slot;
+                return slot;
+            } end function insert
+
+            function build(self&, const K&: key, unsigned long int&: cost) -> V* {
+                const unsigned long int: start = detail::Clock::now();
+                V*: made = new V(self.m_load(key));
+                cost = detail::Clock::now() - start;
+                self.m_loads += 1;
+                self.m_load_nanos += cost;
+                return made;
+            } end function build
+
+            function reload(self&, unsigned long int: slot) -> void {
+                detail::Entry<K, V>*: e = self.m_slots[slot];
+                unsigned long int: cost = 0;
+                V*: made = self.build(e->key, cost);
+                delete e->value;
+                e->value = made;
+                e->cost = cost;
+                e->generation = self.m_generation;
+                self.m_rebuilds += 1;
+            } end function reload
+
+            function fetch(self&, const K&: key, bool: versioned, unsigned long int: version) -> V& {
+                const unsigned long int: slot = self.find_slot(key);
+                if (slot != std::npos) then {
+                    detail::Entry<K, V>*: e = self.m_slots[slot];
+                    if (self.fresh(e) && (!versioned || (e->has_version && e->version == version))) then {
+                        self.m_hits += 1;
+                        self.m_saved_nanos += e->cost;
+                        e->hits += 1;
+                        self.used(slot);
+                        return *e->value;
+                    }
+                    self.m_misses += 1;
+                    self.reload(slot);
+                    e->has_version = versioned;
+                    e->version = version;
+                    self.used(slot);
+                    return *e->value;
+                }
+                self.m_misses += 1;
+                unsigned long int: cost = 0;
+                V*: made = self.build(key, cost);
+                const unsigned long int: added = self.insert(key, made, cost);
+                self.m_slots[added]->has_version = versioned;
+                self.m_slots[added]->version = version;
+                return *self.m_slots[added]->value;
+            } end function fetch
+
+        public:
+            constructor(function(const K&) -> V: load) : m_load = load { }
+
+            constructor(function(const K&) -> V: load, unsigned long int: capacity) : m_load = load, m_capacity = capacity { }
+
+            constructor(function(const K&) -> V: load, unsigned long int: capacity, Eviction: policy) : m_load = load, m_capacity = capacity, m_policy = policy { }
+
+            constructor(const LazyCache&: other) = delete;
+
+            destructor() noexcept {
+                for (detail::Entry<K, V>*: entry in self.m_slots) {
+                    delete entry;
+                }
+            }
+
+            operator(=) function(self&, const LazyCache&: other) -> LazyCache& = delete;
+
+            function get(self&, const K&: key) -> V& {
+                return self.fetch(key, false, 0);
+            } end function get
+
+            function get(self&, const K&: key, unsigned long int: version) -> V& {
+                return self.fetch(key, true, version);
+            } end function get
+
+            operator([]) function(self&, const K&: key) -> V& {
+                return self.fetch(key, false, 0);
+            }
+
+            operator(()) function(self&, const K&: key) -> V& {
+                return self.fetch(key, false, 0);
+            }
+
+            function peek(self&, const K&: key) -> V* {
+                const unsigned long int: slot = self.find_slot(key);
+                if (slot == std::npos || !self.fresh(self.m_slots[slot])) then {
+                    return nullptr;
+                }
+                return self.m_slots[slot]->value;
+            } end function peek
+
+            function contains(self&, const K&: key) -> bool {
+                return self.peek(key) != nullptr;
+            } end function contains
+
+            function prefetch(self&, const K&: key) -> void {
+                const unsigned long int: slot = self.find_slot(key);
+                if (slot != std::npos && self.fresh(self.m_slots[slot])) then {
+                    return;
+                }
+                if (slot != std::npos) then {
+                    self.reload(slot);
+                    return;
+                }
+                unsigned long int: cost = 0;
+                V*: made = self.build(key, cost);
+                self.insert(key, made, cost);
+            } end function prefetch
+
+            function prefetch(self&, const std::collections::Vector<K>&: keys) -> void {
+                for (const K&: key in keys) {
+                    self.prefetch(key);
+                }
+            } end function prefetch
+
+            requires std::traits::is_copy_constructible<V>
+            function put(self&, const K&: key, const V&: value) -> V& {
+                const unsigned long int: slot = self.find_slot(key);
+                if (slot != std::npos) then {
+                    detail::Entry<K, V>*: e = self.m_slots[slot];
+                    V*: made = new V(value);
+                    delete e->value;
+                    e->value = made;
+                    e->generation = self.m_generation;
+                    e->has_version = false;
+                    self.used(slot);
+                    return *e->value;
+                }
+                const unsigned long int: added = self.insert(key, new V(value), 0);
+                return *self.m_slots[added]->value;
+            } end function put
+
+            function invalidate(self&, const K&: key) -> bool {
+                const unsigned long int: slot = self.find_slot(key);
+                if (slot == std::npos) then {
+                    return false;
+                }
+                self.m_slots[slot]->generation = std::npos;
+                return true;
+            } end function invalidate
+
+            function invalidate_all(self&) -> void {
+                self.m_generation += 1;
+            } end function invalidate_all
+
+            function remove(self&, const K&: key) -> bool {
+                const unsigned long int: slot = self.find_slot(key);
+                if (slot == std::npos) then {
+                    return false;
+                }
+                self.drop(slot);
+                return true;
+            } end function remove
+
+            function clear(self&) -> void {
+                for (unsigned long int: slot = 0; slot < self.m_slots.size(); slot++) {
+                    delete self.m_slots[slot];
+                }
+                self.m_slots.clear();
+                self.m_free.clear();
+                self.m_table.clear();
+                self.m_heap.clear();
+                self.m_table_used = 0;
+                self.m_count = 0;
+                self.m_newest = std::npos;
+                self.m_oldest = std::npos;
+                self.m_last = std::npos;
+                self.m_floor = 0.0;
+            } end function clear
+
+            function pin(self&, const K&: key) -> V& {
+                V&: value = self.get(key);
+                self.m_slots[self.m_last]->pinned = true;
+                return value;
+            } end function pin
+
+            function unpin(self&, const K&: key) -> bool {
+                const unsigned long int: slot = self.find_slot(key);
+                if (slot == std::npos) then {
+                    return false;
+                }
+                self.m_slots[slot]->pinned = false;
+                self.rank(slot);
+                return true;
+            } end function unpin
+
+            function is_pinned(self&, const K&: key) -> bool {
+                const unsigned long int: slot = self.find_slot(key);
+                return slot != std::npos && self.m_slots[slot]->pinned;
+            } end function is_pinned
+
+            function size(const self&) -> unsigned long int {
+                return self.m_count;
+            } end function size
+
+            function empty(const self&) -> bool {
+                return self.m_count == 0;
+            } end function empty
+
+            function capacity(const self&) -> unsigned long int {
+                return self.m_capacity;
+            } end function capacity
+
+            function set_capacity(self&, unsigned long int: capacity) -> void {
+                self.m_capacity = capacity;
+                if (capacity <= 0) then {
+                    return;
+                }
+                while (self.m_count > capacity) {
+                    const unsigned long int: slot = self.victim();
+                    if (slot == std::npos) then {
+                        return;
+                    }
+                    self.drop(slot);
+                    self.m_evictions += 1;
+                }
+            } end function set_capacity
+
+            function policy(const self&) -> Eviction {
+                return self.m_policy;
+            } end function policy
+
+            function hits(const self&) -> unsigned long int {
+                return self.m_hits;
+            } end function hits
+
+            function misses(const self&) -> unsigned long int {
+                return self.m_misses;
+            } end function misses
+
+            function loads(const self&) -> unsigned long int {
+                return self.m_loads;
+            } end function loads
+
+            function rebuilds(const self&) -> unsigned long int {
+                return self.m_rebuilds;
+            } end function rebuilds
+
+            function evictions(const self&) -> unsigned long int {
+                return self.m_evictions;
+            } end function evictions
+
+            function hit_rate(const self&) -> double {
+                const unsigned long int: total = self.m_hits + self.m_misses;
+                return total == 0 ? 0.0 : static_cast<double>(self.m_hits) / static_cast<double>(total);
+            } end function hit_rate
+
+            function load_seconds(const self&) -> double {
+                return static_cast<double>(self.m_load_nanos) / 1000000000.0;
+            } end function load_seconds
+
+            function saved_seconds(const self&) -> double {
+                return static_cast<double>(self.m_saved_nanos) / 1000000000.0;
+            } end function saved_seconds
+
+            function reset_stats(self&) -> void {
+                self.m_hits = 0;
+                self.m_misses = 0;
+                self.m_loads = 0;
+                self.m_rebuilds = 0;
+                self.m_evictions = 0;
+                self.m_load_nanos = 0;
+                self.m_saved_nanos = 0;
+            } end function reset_stats
+        } end class LazyCache
+    } end namespace cache
+} end namespace std

@@ -2,30 +2,30 @@ safe(compile) {
     hidden namespace walnut_rt {
         namespace io_native {
             extern "C++" {
-                function file_open(const string&: path, long int: mode) noexcept -> long int;
-                function string_open(const string&: initial, long int: mode) noexcept -> long int;
-                function string_get(long int: id) noexcept -> string;
-                function string_set(long int: id, const string&: value, long int: mode) noexcept -> void;
-                function device_close(long int: id) noexcept -> bool;
-                function device_write(long int: id, const string&: bytes) noexcept -> bool;
-                function device_flush(long int: id) noexcept -> bool;
-                function device_peek_ok(long int: id) noexcept -> bool;
-                function device_peek(long int: id) noexcept -> char;
-                function device_bump(long int: id) noexcept -> void;
-                function device_unget(long int: id) noexcept -> bool;
-                function device_seek(long int: id, long int: offset, long int: dir, long int: which) noexcept -> long int;
-                function device_available(long int: id) noexcept -> long int;
+                function file_open(const string&: path, unsigned long int: mode) noexcept -> unsigned long int;
+                function string_open(const string&: initial, unsigned long int: mode) noexcept -> unsigned long int;
+                function string_get(unsigned long int: id) noexcept -> string;
+                function string_set(unsigned long int: id, const string&: value, unsigned long int: mode) noexcept -> void;
+                function device_close(unsigned long int: id) noexcept -> bool;
+                function device_write(unsigned long int: id, const string&: bytes) noexcept -> bool;
+                function device_flush(unsigned long int: id) noexcept -> bool;
+                function device_peek_ok(unsigned long int: id) noexcept -> bool;
+                function device_peek(unsigned long int: id) noexcept -> char;
+                function device_bump(unsigned long int: id) noexcept -> void;
+                function device_unget(unsigned long int: id) noexcept -> bool;
+                function device_seek(unsigned long int: id, long int: offset, unsigned long int: dir, unsigned long int: which) noexcept -> unsigned long int;
+                function device_available(unsigned long int: id) noexcept -> unsigned long int;
                 function sync_acquire() noexcept -> void;
                 function sync_release() noexcept -> void;
-                function format_int(long long integer: value, long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
-                function format_int64(long int: value, long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
-                function format_uint64(unsigned long int: value, long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
-                function format_uint(unsigned long long integer: value, long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
-                function format_float(long long double: value, long int: bits, long int: precision, long int: style, bool: upper, bool: showpos, bool: showpoint) noexcept -> string;
-                function parse_int_ok(const string&: token, long int: base) noexcept -> bool;
-                function parse_int(const string&: token, long int: base) noexcept -> long long integer;
-                function parse_uint_ok(const string&: token, long int: base) noexcept -> bool;
-                function parse_uint(const string&: token, long int: base) noexcept -> unsigned long long integer;
+                function format_int(long long integer: value, unsigned long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
+                function format_int64(long int: value, unsigned long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
+                function format_uint64(unsigned long int: value, unsigned long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
+                function format_uint(unsigned long long integer: value, unsigned long int: base, bool: upper, bool: showbase, bool: showpos) noexcept -> string;
+                function format_float(long long double: value, unsigned long int: bits, unsigned long int: precision, unsigned long int: style, bool: hardware, bool: upper, bool: showpos, bool: showpoint) noexcept -> string;
+                function parse_int_ok(const string&: token, unsigned long int: base) noexcept -> bool;
+                function parse_int(const string&: token, unsigned long int: base) noexcept -> long long integer;
+                function parse_uint_ok(const string&: token, unsigned long int: base) noexcept -> bool;
+                function parse_uint(const string&: token, unsigned long int: base) noexcept -> unsigned long long integer;
                 function parse_float_ok(const string&: token) noexcept -> bool;
                 function parse_float(const string&: token) noexcept -> long long double;
                 function unescape_ok(const string&: s) noexcept -> bool;
@@ -70,10 +70,10 @@ namespace std {
             class ostream;
 
             struct ios_state {
-                int: flags = 4098;
-                int: state = 0;
-                long int: width = 0;
-                long int: precision = 6;
+                unsigned int: flags = 4098;
+                unsigned int: state = 0;
+                unsigned long int: width = 0;
+                unsigned long int: precision = 6;
                 bool: precision_set = false;
                 char: fill = ' ';
                 streambuf*: buf = nullptr;
@@ -87,173 +87,173 @@ namespace std {
             ios_state*: m_s;
 
         public:
-            static constexpr int: boolalpha  = 1;
-            static constexpr int: base10     = 2;
-            static constexpr int: fixed      = 4;
-            static constexpr int: hex        = 8;
-            static constexpr int: internal   = 16;
-            static constexpr int: left       = 32;
-            static constexpr int: oct        = 64;
-            static constexpr int: right      = 128;
-            static constexpr int: scientific = 256;
-            static constexpr int: showbase   = 512;
-            static constexpr int: showpoint  = 1024;
-            static constexpr int: showpos    = 2048;
-            static constexpr int: skipws     = 4096;
-            static constexpr int: unitbuf    = 8192;
-            static constexpr int: uppercase  = 16384;
-            static constexpr int: bin        = 32768;
-            static constexpr int: basefield   = 32842;
-            static constexpr int: adjustfield = 176;
-            static constexpr int: floatfield  = 260;
+            static constexpr unsigned int: boolalpha  = 1;
+            static constexpr unsigned int: base10     = 2;
+            static constexpr unsigned int: fixed      = 4;
+            static constexpr unsigned int: hex        = 8;
+            static constexpr unsigned int: internal   = 16;
+            static constexpr unsigned int: left       = 32;
+            static constexpr unsigned int: oct        = 64;
+            static constexpr unsigned int: right      = 128;
+            static constexpr unsigned int: scientific = 256;
+            static constexpr unsigned int: showbase   = 512;
+            static constexpr unsigned int: showpoint  = 1024;
+            static constexpr unsigned int: showpos    = 2048;
+            static constexpr unsigned int: skipws     = 4096;
+            static constexpr unsigned int: unitbuf    = 8192;
+            static constexpr unsigned int: uppercase  = 16384;
+            static constexpr unsigned int: bin        = 32768;
+            static constexpr unsigned int: basefield   = 32842;
+            static constexpr unsigned int: adjustfield = 176;
+            static constexpr unsigned int: floatfield  = 260;
 
-            static constexpr int: goodbit = 0;
-            static constexpr int: badbit  = 1;
-            static constexpr int: eofbit  = 2;
-            static constexpr int: failbit = 4;
+            static constexpr unsigned int: goodbit = 0;
+            static constexpr unsigned int: badbit  = 1;
+            static constexpr unsigned int: eofbit  = 2;
+            static constexpr unsigned int: failbit = 4;
 
-            static constexpr int: app       = 1;
-            static constexpr int: binary    = 2;
-            static constexpr int: input     = 4;
-            static constexpr int: output    = 8;
-            static constexpr int: trunc     = 16;
-            static constexpr int: ate       = 32;
-            static constexpr int: noreplace = 64;
+            static constexpr unsigned int: app       = 1;
+            static constexpr unsigned int: binary    = 2;
+            static constexpr unsigned int: input     = 4;
+            static constexpr unsigned int: output    = 8;
+            static constexpr unsigned int: trunc     = 16;
+            static constexpr unsigned int: ate       = 32;
+            static constexpr unsigned int: noreplace = 64;
 
-            static constexpr int: seek_beg = 0;
-            static constexpr int: seek_cur = 1;
-            static constexpr int: seek_end = 2;
+            static constexpr unsigned int: seek_beg = 0;
+            static constexpr unsigned int: seek_cur = 1;
+            static constexpr unsigned int: seek_end = 2;
 
-            constructor() : m_s = nullptr {
+            constructor() noexcept : m_s = nullptr {
                 self.m_s = &self.m_own;
             }
 
             constructor(const ios_base&: other) = delete;
 
-            function flags(const self&) -> int {
+            function flags(const self&) noexcept -> unsigned int {
                 return self.m_s->flags;
             } end function flags
 
-            function flags(self&, int: f) -> int {
-                int: old = self.m_s->flags;
+            function flags(self&, unsigned int: f) noexcept -> unsigned int {
+                unsigned int: old = self.m_s->flags;
                 self.m_s->flags = f;
                 return old;
             } end function flags
 
-            function setf(self&, int: f) -> int {
-                int: old = self.m_s->flags;
+            function setf(self&, unsigned int: f) noexcept -> unsigned int {
+                unsigned int: old = self.m_s->flags;
                 self.m_s->flags = old | f;
                 return old;
             } end function setf
 
-            function setf(self&, int: f, int: mask) -> int {
-                int: old = self.m_s->flags;
+            function setf(self&, unsigned int: f, unsigned int: mask) noexcept -> unsigned int {
+                const unsigned int: old = self.m_s->flags;
                 self.m_s->flags = (old & ~mask) | (f & mask);
                 return old;
             } end function setf
 
-            function unsetf(self&, int: mask) -> void {
+            function unsetf(self&, unsigned int: mask) noexcept -> void {
                 self.m_s->flags = self.m_s->flags & ~mask;
             } end function unsetf
 
-            function width(const self&) -> long int {
+            function width(const self&) noexcept -> unsigned long int {
                 return self.m_s->width;
             } end function width
 
-            function width(self&, long int: w) -> long int {
-                long int: old = self.m_s->width;
+            function width(self&, unsigned long int: w) noexcept -> unsigned long int {
+                unsigned long int: old = self.m_s->width;
                 self.m_s->width = w;
                 return old;
             } end function width
 
-            function precision(const self&) -> long int {
+            function precision(const self&) noexcept -> unsigned long int {
                 return self.m_s->precision;
             } end function precision
 
-            function precision(self&, long int: p) -> long int {
-                long int: old = self.m_s->precision;
+            function precision(self&, unsigned long int: p) noexcept -> unsigned long int {
+                unsigned long int: old = self.m_s->precision;
                 self.m_s->precision = p;
                 self.m_s->precision_set = true;
                 return old;
             } end function precision
 
-            function fill(const self&) -> char {
+            function fill(const self&) noexcept -> char {
                 return self.m_s->fill;
             } end function fill
 
-            function fill(self&, char: c) -> char {
+            function fill(self&, char: c) noexcept -> char {
                 char: old = self.m_s->fill;
                 self.m_s->fill = c;
                 return old;
             } end function fill
 
-            function rdstate(const self&) -> int {
+            function rdstate(const self&) noexcept -> unsigned int {
                 return self.m_s->state;
             } end function rdstate
 
-            function good(const self&) -> bool {
+            function good(const self&) noexcept -> bool {
                 return self.m_s->state == 0;
             } end function good
 
-            function eof(const self&) -> bool {
+            function eof(const self&) noexcept -> bool {
                 return (self.m_s->state & eofbit) != 0;
             } end function eof
 
-            function fail(const self&) -> bool {
+            function fail(const self&) noexcept -> bool {
                 return (self.m_s->state & (failbit | badbit)) != 0;
             } end function fail
 
-            function bad(const self&) -> bool {
+            function bad(const self&) noexcept -> bool {
                 return (self.m_s->state & badbit) != 0;
             } end function bad
 
-            function clear(self&, int: s = 0) -> void {
+            function clear(self&, unsigned int: s = 0) noexcept -> void {
                 self.m_s->state = s;
             } end function clear
 
-            function setstate(self&, int: s) -> void {
+            function setstate(self&, unsigned int: s) noexcept -> void {
                 self.m_s->state = self.m_s->state | s;
             } end function setstate
 
-            function share_state_with(self&, ios_base&: other) -> void {
+            function share_state_with(self&, ios_base&: other) noexcept -> void {
                 self.m_s = other.m_s;
             } end function share_state_with
 
-            operator(bool) function() const {
+            operator(bool) function() const noexcept {
                 return (self.m_s->state & (failbit | badbit)) == 0;
             }
 
-            operator(!) function(const self&) -> bool {
+            operator(!) function(const self&) noexcept -> bool {
                 return (self.m_s->state & (failbit | badbit)) != 0;
             }
         } end class ios_base
 
         class ios inherits ios_base {
         public:
-            constructor() { }
+            constructor() noexcept { }
 
-            function rdbuf(const self&) -> streambuf* {
+            function rdbuf(const self&) noexcept -> streambuf* {
                 return self.m_s->buf;
             } end function rdbuf
 
-            function rdbuf(self&, streambuf*: b) -> streambuf* {
+            function rdbuf(self&, streambuf*: b) noexcept -> streambuf* {
                 streambuf*: old = self.m_s->buf;
                 self.m_s->buf = b;
                 self.m_s->state = 0;
                 return old;
             } end function rdbuf
 
-            function tie(const self&) -> ostream* {
+            function tie(const self&) noexcept -> ostream* {
                 return self.m_s->tied;
             } end function tie
 
-            function tie(self&, ostream*: t) -> ostream* {
+            function tie(self&, ostream*: t) noexcept -> ostream* {
                 ostream*: old = self.m_s->tied;
                 self.m_s->tied = t;
                 return old;
             } end function tie
 
-            function copyfmt(self&, const ios&: other) -> ios& {
+            function copyfmt(self&, const ios&: other) noexcept -> ios& {
                 self.m_s->flags = other.flags();
                 self.m_s->width = other.width();
                 self.m_s->precision = other.precision();
@@ -266,11 +266,11 @@ namespace std {
         safe(compile) {
             class streambuf {
             public:
-                constructor() { }
+                constructor() noexcept { }
 
                 constructor(const streambuf&: other) = delete;
 
-                function sputn(self&, const string&: s) virtual -> long int {
+                function sputn(self&, const string&: s) noexcept virtual -> unsigned long int {
                     return 0;
                 } end function sputn
 
@@ -280,15 +280,15 @@ namespace std {
                     return self.sputn(s) > 0;
                 } end function sputc
 
-                function sgetc(self&, char&: out) virtual -> bool {
+                function sgetc(self&, char&: out) noexcept virtual -> bool {
                     return false;
                 } end function sgetc
 
-                function sbumpc(self&, char&: out) virtual -> bool {
+                function sbumpc(self&, char&: out) noexcept virtual -> bool {
                     return false;
                 } end function sbumpc
 
-                function snextc(self&, char&: out) -> bool {
+                function snextc(self&, char&: out) noexcept -> bool {
                     char: skipped = ' ';
                     if (!self.sbumpc(skipped)) then {
                         return false;
@@ -296,14 +296,14 @@ namespace std {
                     return self.sgetc(out);
                 } end function snextc
 
-                function sungetc(self&) virtual -> bool {
+                function sungetc(self&) noexcept virtual -> bool {
                     return false;
                 } end function sungetc
 
-                function sgetn(self&, long int: count) -> string {
+                function sgetn(self&, unsigned long int: count) -> string {
                     string: got = "";
                     char: c = ' ';
-                    long int: n = 0;
+                    unsigned long int: n = 0;
                     while (n < count && self.sbumpc(c)) {
                         got += c;
                         n++;
@@ -311,50 +311,50 @@ namespace std {
                     return got;
                 } end function sgetn
 
-                function in_avail(self&) virtual -> long int {
+                function in_avail(self&) noexcept virtual -> unsigned long int {
                     return 0;
                 } end function in_avail
 
-                function pubsync(self&) virtual -> int {
+                function pubsync(self&) noexcept virtual -> int {
                     return 0;
                 } end function pubsync
 
-                function pubseekoff(self&, long int: offset, int: dir, int: which = 12) virtual -> long int {
-                    return -1;
+                function pubseekoff(self&, long int: offset, unsigned int: dir, unsigned int: which = 12) noexcept virtual -> unsigned long int {
+                    return std::npos;
                 } end function pubseekoff
 
-                function pubseekpos(self&, long int: pos, int: which = 12) -> long int {
-                    return self.pubseekoff(pos, 0, which);
+                function pubseekpos(self&, unsigned long int: pos, unsigned int: which = 12) noexcept -> unsigned long int {
+                    return self.pubseekoff(static_cast<long int>(pos), 0, which);
                 } end function pubseekpos
             } end class streambuf
 
             class nativebuf inherits streambuf {
             protected:
-                long int: m_id = -1;
+                unsigned long int: m_id = std::npos;
 
             public:
-                constructor() { }
+                constructor() noexcept { }
 
-                function native_handle(const self&) -> long int {
+                function native_handle(const self&) noexcept -> unsigned long int {
                     return self.m_id;
                 } end function native_handle
 
-                function sputn(self&, const string&: s) override -> long int {
-                    if (self.m_id < 0 || !walnut_rt::io_native::device_write(self.m_id, s)) then {
+                function sputn(self&, const string&: s) noexcept override -> unsigned long int {
+                    if (self.m_id == std::npos || !walnut_rt::io_native::device_write(self.m_id, s)) then {
                         return 0;
                     }
                     return countof(s);
                 } end function sputn
 
-                function sgetc(self&, char&: out) override -> bool {
-                    if (self.m_id < 0 || !walnut_rt::io_native::device_peek_ok(self.m_id)) then {
+                function sgetc(self&, char&: out) noexcept override -> bool {
+                    if (self.m_id == std::npos || !walnut_rt::io_native::device_peek_ok(self.m_id)) then {
                         return false;
                     }
                     out = walnut_rt::io_native::device_peek(self.m_id);
                     return true;
                 } end function sgetc
 
-                function sbumpc(self&, char&: out) override -> bool {
+                function sbumpc(self&, char&: out) noexcept override -> bool {
                     if (!self.sgetc(out)) then {
                         return false;
                     }
@@ -362,27 +362,27 @@ namespace std {
                     return true;
                 } end function sbumpc
 
-                function sungetc(self&) override -> bool {
-                    return self.m_id >= 0 && walnut_rt::io_native::device_unget(self.m_id);
+                function sungetc(self&) noexcept override -> bool {
+                    return self.m_id != std::npos && walnut_rt::io_native::device_unget(self.m_id);
                 } end function sungetc
 
-                function in_avail(self&) override -> long int {
-                    if (self.m_id < 0) then {
+                function in_avail(self&) noexcept override -> unsigned long int {
+                    if (self.m_id == std::npos) then {
                         return 0;
                     }
                     return walnut_rt::io_native::device_available(self.m_id);
                 } end function in_avail
 
-                function pubsync(self&) override -> int {
-                    if (self.m_id < 0 || !walnut_rt::io_native::device_flush(self.m_id)) then {
+                function pubsync(self&) noexcept override -> int {
+                    if (self.m_id == std::npos || !walnut_rt::io_native::device_flush(self.m_id)) then {
                         return -1;
                     }
                     return 0;
                 } end function pubsync
 
-                function pubseekoff(self&, long int: offset, int: dir, int: which = 12) override -> long int {
-                    if (self.m_id < 0) then {
-                        return -1;
+                function pubseekoff(self&, long int: offset, unsigned int: dir, unsigned int: which = 12) noexcept override -> unsigned long int {
+                    if (self.m_id == std::npos) then {
+                        return std::npos;
                     }
                     return walnut_rt::io_native::device_seek(self.m_id, offset, dir, which);
                 } end function pubseekoff
@@ -390,56 +390,56 @@ namespace std {
 
             class filebuf inherits nativebuf {
             public:
-                constructor() { }
+                constructor() noexcept { }
 
-                constructor(long int: standard_handle) explicit {
-                    if (standard_handle >= 0 && standard_handle <= 2) then {
+                constructor(unsigned long int: standard_handle) noexcept explicit {
+                    if (standard_handle <= 2) then {
                         self.m_id = standard_handle;
                     }
                 }
 
-                destructor() {
+                destructor() noexcept {
                     close();
                 }
 
-                function open(self&, const string&: path, int: mode) -> filebuf* {
-                    if (self.m_id >= 0) then {
+                function open(self&, const string&: path, unsigned int: mode) noexcept -> filebuf* {
+                    if (self.m_id != std::npos) then {
                         return nullptr;
                     }
                     self.m_id = walnut_rt::io_native::file_open(path, mode);
-                    if (self.m_id < 0) then {
+                    if (self.m_id == std::npos) then {
                         return nullptr;
                     }
                     return this;
                 } end function open
 
-                function is_open(const self&) -> bool {
-                    return self.m_id >= 0;
+                function is_open(const self&) noexcept -> bool {
+                    return self.m_id != std::npos;
                 } end function is_open
 
-                function close(self&) -> filebuf* {
-                    if (self.m_id < 0) then {
+                function close(self&) noexcept -> filebuf* {
+                    if (self.m_id == std::npos) then {
                         return nullptr;
                     }
                     walnut_rt::io_native::device_close(self.m_id);
-                    self.m_id = -1;
+                    self.m_id = std::npos;
                     return this;
                 } end function close
             } end class filebuf
 
             class stringbuf inherits nativebuf {
-                int: m_mode;
+                unsigned int: m_mode;
 
             public:
-                constructor(int: mode = 12) : m_mode = mode {
+                constructor(unsigned int: mode = 12) : m_mode = mode {
                     self.m_id = walnut_rt::io_native::string_open("", mode);
                 }
 
-                constructor(const string&: s, int: mode = 12) : m_mode = mode {
+                constructor(const string&: s, unsigned int: mode = 12) noexcept : m_mode = mode {
                     self.m_id = walnut_rt::io_native::string_open(s, mode);
                 }
 
-                destructor() {
+                destructor() noexcept {
                     walnut_rt::io_native::device_close(m_id);
                 }
 
@@ -447,24 +447,24 @@ namespace std {
                     return walnut_rt::io_native::string_get(self.m_id);
                 } end function contents
 
-                function contents(self&, const string&: s) -> void {
+                function contents(self&, const string&: s) noexcept -> void {
                     walnut_rt::io_native::string_set(self.m_id, s, self.m_mode);
                 } end function contents
             } end class stringbuf
 
             class textbuf inherits nativebuf {
-                int: m_mode;
+                unsigned int: m_mode;
 
             public:
-                constructor(int: mode = 12) : m_mode = mode {
+                constructor(unsigned int: mode = 12) : m_mode = mode {
                     self.m_id = walnut_rt::io_native::string_open("", mode);
                 }
 
-                constructor(const text&: s, int: mode = 12) : m_mode = mode {
+                constructor(const text&: s, unsigned int: mode = 12) : m_mode = mode {
                     self.m_id = walnut_rt::io_native::string_open(static_cast<string>(s), mode);
                 }
 
-                destructor() {
+                destructor() noexcept {
                     walnut_rt::io_native::device_close(m_id);
                 }
 
@@ -480,12 +480,12 @@ namespace std {
 
         class spanbuf inherits streambuf {
             char*: m_data;
-            long int: m_size;
-            long int: m_put = 0;
-            long int: m_get = 0;
-            int: m_mode;
+            unsigned long int: m_size;
+            unsigned long int: m_put = 0;
+            unsigned long int: m_get = 0;
+            unsigned int: m_mode;
 
-            function readable(const self&) -> long int {
+            function readable(const self&) noexcept -> unsigned long int {
                 if ((self.m_mode & 8) != 0) then {
                     return self.m_put;
                 }
@@ -493,25 +493,25 @@ namespace std {
             } end function readable
 
         public:
-            constructor(char*: data, long int: size, int: mode = 12) : m_data = data, m_size = size, m_mode = mode { }
+            constructor(char*: data, unsigned long int: size, unsigned int: mode = 12) noexcept : m_data = data, m_size = size, m_mode = mode { }
 
-            function span_data(const self&) -> char* {
+            function span_data(const self&) noexcept -> char* {
                 return self.m_data;
             } end function span_data
 
-            function span_size(const self&) -> long int {
+            function span_size(const self&) noexcept -> unsigned long int {
                 return self.readable();
             } end function span_size
 
-            function span(self&, char*: data, long int: size) -> void {
+            function span(self&, char*: data, unsigned long int: size) noexcept -> void {
                 self.m_data = data;
                 self.m_size = size;
                 self.m_put = 0;
                 self.m_get = 0;
             } end function span
 
-            function sputn(self&, const string&: s) override -> long int {
-                long int: written = 0;
+            function sputn(self&, const string&: s) noexcept override -> unsigned long int {
+                unsigned long int: written = 0;
                 for (char: c in s) {
                     if (self.m_put >= self.m_size) then {
                         return written;
@@ -523,7 +523,7 @@ namespace std {
                 return written;
             } end function sputn
 
-            function sgetc(self&, char&: out) override -> bool {
+            function sgetc(self&, char&: out) noexcept override -> bool {
                 if (self.m_get >= self.readable()) then {
                     return false;
                 }
@@ -531,7 +531,7 @@ namespace std {
                 return true;
             } end function sgetc
 
-            function sbumpc(self&, char&: out) override -> bool {
+            function sbumpc(self&, char&: out) noexcept override -> bool {
                 if (!self.sgetc(out)) then {
                     return false;
                 }
@@ -539,7 +539,7 @@ namespace std {
                 return true;
             } end function sbumpc
 
-            function sungetc(self&) override -> bool {
+            function sungetc(self&) noexcept override -> bool {
                 if (self.m_get <= 0) then {
                     return false;
                 }
@@ -547,29 +547,31 @@ namespace std {
                 return true;
             } end function sungetc
 
-            function in_avail(self&) override -> long int {
+            function in_avail(self&) noexcept override -> unsigned long int {
                 return self.readable() - self.m_get;
             } end function in_avail
 
-            function pubseekoff(self&, long int: offset, int: dir, int: which = 12) override -> long int {
-                long int: result = -1;
+            function pubseekoff(self&, long int: offset, unsigned int: dir, unsigned int: which = 12) noexcept override -> unsigned long int {
+                unsigned long int: result = std::npos;
                 if ((which & 4) != 0) then {
-                    long int: base = 0;
+                    unsigned long int: base = 0;
                     if (dir == 1) then { base = self.m_get; } else if (dir == 2) then { base = self.readable(); }
-                    long int: target = base + offset;
-                    if (target < 0 || target > self.readable()) then {
-                        return -1;
+                    const long int: moved = static_cast<long int>(base) + offset;
+                    if (moved < 0 || static_cast<unsigned long int>(moved) > self.readable()) then {
+                        return std::npos;
                     }
+                    const unsigned long int: target = static_cast<unsigned long int>(moved);
                     self.m_get = target;
                     result = target;
                 }
                 if ((which & 8) != 0) then {
-                    long int: base = 0;
+                    unsigned long int: base = 0;
                     if (dir == 1) then { base = self.m_put; } else if (dir == 2) then { base = self.m_size; }
-                    long int: target = base + offset;
-                    if (target < 0 || target > self.m_size) then {
-                        return -1;
+                    const long int: moved = static_cast<long int>(base) + offset;
+                    if (moved < 0 || static_cast<unsigned long int>(moved) > self.m_size) then {
+                        return std::npos;
                     }
+                    const unsigned long int: target = static_cast<unsigned long int>(moved);
                     self.m_put = target;
                     result = target;
                 }
@@ -583,9 +585,9 @@ namespace std {
             bool: m_emit_on_sync = false;
 
         public:
-            constructor(streambuf*: wrapped = nullptr) : m_wrapped = wrapped { }
+            constructor(streambuf*: wrapped = nullptr) noexcept : m_wrapped = wrapped { }
 
-            destructor() {
+            destructor() noexcept {
                 emit();
             }
 
@@ -597,28 +599,28 @@ namespace std {
                     return true;
                 }
                 walnut_rt::io_native::sync_acquire();
-                const long int: wanted = countof(self.m_pending);
-                const long int: written = self.m_wrapped->sputn(self.m_pending);
+                const unsigned long int: wanted = countof(self.m_pending);
+                const unsigned long int: written = self.m_wrapped->sputn(self.m_pending);
                 self.m_wrapped->pubsync();
                 walnut_rt::io_native::sync_release();
                 self.m_pending = "";
                 return written == wanted;
             } end function emit
 
-            function get_wrapped(const self&) -> streambuf* {
+            function get_wrapped(const self&) noexcept -> streambuf* {
                 return self.m_wrapped;
             } end function get_wrapped
 
-            function set_emit_on_sync(self&, bool: on) -> void {
+            function set_emit_on_sync(self&, bool: on) noexcept -> void {
                 self.m_emit_on_sync = on;
             } end function set_emit_on_sync
 
-            function sputn(self&, const string&: s) override -> long int {
+            function sputn(self&, const string&: s) noexcept override -> unsigned long int {
                 self.m_pending += s;
                 return countof(s);
             } end function sputn
 
-            function pubsync(self&) override -> int {
+            function pubsync(self&) noexcept override -> int {
                 if (self.m_emit_on_sync && !self.emit()) then {
                     return -1;
                 }
@@ -628,10 +630,10 @@ namespace std {
 
         safe(compile) {
             struct manipulator {
-                int: kind = 0;
-                int: set = 0;
-                int: mask = 0;
-                long int: number = 0;
+                unsigned int: kind = 0;
+                unsigned int: set = 0;
+                unsigned int: mask = 0;
+                unsigned long int: number = 0;
                 char: fill_char = ' ';
             } end struct manipulator
 
@@ -667,11 +669,11 @@ namespace std {
             const manipulator: uppercase    = manipulator{0, 16384, 16384, 0, ' '};
             const manipulator: nouppercase  = manipulator{0, 0, 16384, 0, ' '};
 
-            function setw(long int: n) -> manipulator {
+            function setw(unsigned long int: n) -> manipulator {
                 return manipulator{5, 0, 0, n, ' '};
             } end function setw
 
-            function setprecision(long int: n) -> manipulator {
+            function setprecision(unsigned long int: n) -> manipulator {
                 return manipulator{6, 0, 0, n, ' '};
             } end function setprecision
 
@@ -679,7 +681,7 @@ namespace std {
                 return manipulator{7, 0, 0, 0, c};
             } end function setfill
 
-            function setbase(int: base) -> manipulator {
+            function setbase(unsigned int: base) -> manipulator {
                 if (base == 16) then {
                     return hex;
                 } else if (base == 8) then {
@@ -690,18 +692,18 @@ namespace std {
                 return base10;
             } end function setbase
 
-            function setiosflags(int: f) -> manipulator {
+            function setiosflags(unsigned int: f) -> manipulator {
                 return manipulator{0, f, f, 0, ' '};
             } end function setiosflags
 
-            function resetiosflags(int: f) -> manipulator {
+            function resetiosflags(unsigned int: f) -> manipulator {
                 return manipulator{0, 0, f, 0, ' '};
             } end function resetiosflags
         } end safe
 
         class ostream inherits ios {
         protected:
-            function emit_raw(self&, const string&: s) -> void {
+            function emit_raw(self&, const string&: s) noexcept -> void {
                 streambuf*: b = self.m_s->buf;
                 if (b == nullptr) then {
                     self.setstate(ios_base::badbit);
@@ -712,30 +714,30 @@ namespace std {
                 }
             } end function emit_raw
 
-            function after_output(self&) -> void {
+            function after_output(self&) noexcept -> void {
                 if ((self.m_s->flags & ios_base::unitbuf) != 0) then {
                     self.flush();
                 }
             } end function after_output
 
             function emit_field(self&, const string&: body) -> void {
-                const long int: want = self.m_s->width;
+                const unsigned long int: want = self.m_s->width;
                 self.m_s->width = 0;
-                const long int: have = countof(body);
+                const unsigned long int: have = countof(body);
                 if (want <= have) then {
                     self.emit_raw(body);
                     self.after_output();
                     return;
                 }
                 string: pad = "";
-                for (long int: i = 0; i < want - have; i++) {
+                for (unsigned long int: i = 0; i < want - have; i++) {
                     pad += self.m_s->fill;
                 }
-                const int: adjust = self.m_s->flags & ios_base::adjustfield;
+                const unsigned int: adjust = self.m_s->flags & ios_base::adjustfield;
                 if (adjust == ios_base::left) then {
                     self.emit_raw(body + pad);
                 } else if (adjust == ios_base::internal) then {
-                    long int: split = 0;
+                    unsigned long int: split = 0;
                     if (have > 0 && (body[0] == '-' || body[0] == '+')) then {
                         split = 1;
                     }
@@ -744,7 +746,7 @@ namespace std {
                     }
                     string: head = "";
                     string: tail = "";
-                    long int: at = 0;
+                    unsigned long int: at = 0;
                     for (char: c in body) {
                         if (at < split) then {
                             head += c;
@@ -760,8 +762,8 @@ namespace std {
                 self.after_output();
             } end function emit_field
 
-            function number_base(const self&) -> long int {
-                const int: base = self.m_s->flags & ios_base::basefield;
+            function number_base(const self&) noexcept -> unsigned long int {
+                const unsigned int: base = self.m_s->flags & ios_base::basefield;
                 if (base == ios_base::hex) then {
                     return 16;
                 } else if (base == ios_base::oct) then {
@@ -773,13 +775,13 @@ namespace std {
             } end function number_base
 
         public:
-            constructor(streambuf*: b, ostream*: tied = nullptr, int: extra_flags = 0) {
+            constructor(streambuf*: b, ostream*: tied = nullptr, unsigned int: extra_flags = 0) noexcept {
                 self.m_s->buf = b;
                 self.m_s->tied = tied;
                 self.m_s->flags = self.m_s->flags | extra_flags;
             }
 
-            function write(self&, const string&: s) -> ostream& {
+            function write(self&, const string&: s) noexcept -> ostream& {
                 self.emit_raw(s);
                 self.after_output();
                 return *this;
@@ -793,7 +795,7 @@ namespace std {
                 return *this;
             } end function put
 
-            function flush(self&) -> ostream& {
+            function flush(self&) noexcept -> ostream& {
                 streambuf*: b = self.m_s->buf;
                 if (b != nullptr && b->pubsync() != 0) then {
                     self.setstate(ios_base::badbit);
@@ -801,27 +803,27 @@ namespace std {
                 return *this;
             } end function flush
 
-            function tellp(self&) -> long int {
+            function tellp(self&) noexcept -> unsigned long int {
                 streambuf*: b = self.m_s->buf;
                 if (b == nullptr || self.fail()) then {
-                    return -1;
+                    return std::npos;
                 }
                 return b->pubseekoff(0, ios_base::seek_cur, ios_base::output);
             } end function tellp
 
-            function seekp(self&, long int: pos) -> ostream& {
-                return self.seekp(pos, ios_base::seek_beg);
+            function seekp(self&, unsigned long int: pos) noexcept -> ostream& {
+                return self.seekp(static_cast<long int>(pos), ios_base::seek_beg);
             } end function seekp
 
-            function seekp(self&, long int: offset, int: dir) -> ostream& {
+            function seekp(self&, long int: offset, unsigned int: dir) noexcept -> ostream& {
                 streambuf*: b = self.m_s->buf;
-                if (b == nullptr || self.fail() || b->pubseekoff(offset, dir, ios_base::output) < 0) then {
+                if (b == nullptr || self.fail() || b->pubseekoff(offset, dir, ios_base::output) == std::npos) then {
                     self.setstate(ios_base::failbit);
                 }
                 return *this;
             } end function seekp
 
-            operator(<<) function(self&, const string&: s) -> ostream& {
+            operator(<<) function(self&, const string&: s) noexcept -> ostream& {
                 self.emit_field(s);
                 return *this;
             }
@@ -855,7 +857,7 @@ namespace std {
             template <typename T>
             requires std::traits::is_builtin_integer<T> && std::traits::is_signed<T>
             operator(<<) function(T: v) -> ostream& {
-                const int: f = m_s->flags;
+                const unsigned int: f = m_s->flags;
                 if constexpr (std::traits::integer_rank<T> <= 1) then {
                     if (!(v is inf) && !(v is nan) && !(v is undefined) && !(v is indeterminate)) then {
                         const long int: narrow = v;
@@ -871,7 +873,7 @@ namespace std {
             template <typename T>
             requires std::traits::is_builtin_integer<T> && std::traits::is_unsigned<T>
             operator(<<) function(T: v) -> ostream& {
-                const int: f = m_s->flags;
+                const unsigned int: f = m_s->flags;
                 if constexpr (std::traits::integer_rank<T> <= 1) then {
                     if (!(v is inf) && !(v is nan) && !(v is undefined) && !(v is indeterminate)) then {
                         const unsigned long int: narrow = v;
@@ -888,27 +890,22 @@ namespace std {
             requires std::traits::is_builtin_float<T>
             operator(<<) function(T: v) -> ostream& {
                 const long long double: wide = v;
-                const int: f = m_s->flags;
-                const int: style = f & ios_base::floatfield;
-                long int: mode = 0;
+                const unsigned int: f = m_s->flags;
+                const unsigned int: style = f & ios_base::floatfield;
+                unsigned long int: mode = 0;
                 if (style == ios_base::fixed) then {
                     mode = 1;
                 } else if (style == ios_base::scientific) then {
                     mode = 2;
                 }
-                long int: digits = m_s->precision;
+                unsigned long int: digits = static_cast<unsigned long int>(m_s->precision);
                 if (mode == 0 && !m_s->precision_set) then {
                     digits = 0;
-                } else if (mode == 0 && digits <= 0) then {
+                } else if (mode == 0 && digits == 0) then {
                     digits = 1;
-                } else if (digits < 0) then {
-                    digits = 6;
                 }
-                long int: bits = sizeof(T) * 8;
-                if constexpr (std::traits::is_hardware<T>) then {
-                    bits = -bits;
-                }
-                emit_field(walnut_rt::io_native::format_float(wide, bits, digits, mode, (f & ios_base::uppercase) != 0, (f & ios_base::showpos) != 0, (f & ios_base::showpoint) != 0));
+                const unsigned long int: bits = sizeof(T) * 8;
+                emit_field(walnut_rt::io_native::format_float(wide, bits, digits, mode, std::traits::is_hardware<T>, (f & ios_base::uppercase) != 0, (f & ios_base::showpos) != 0, (f & ios_base::showpoint) != 0));
                 return *this;
             }
 
@@ -968,13 +965,13 @@ namespace std {
 
         class istream inherits ios {
         protected:
-            long int: m_gcount = 0;
+            unsigned long int: m_gcount = 0;
 
-            static function is_space(char: c) -> bool {
+            static function is_space(char: c) noexcept -> bool {
                 return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
             } end function is_space
 
-            function prepare(self&, bool: skip) -> bool {
+            function prepare(self&, bool: skip) noexcept -> bool {
                 self.m_gcount = 0;
                 if (!self.good()) then {
                     self.setstate(ios_base::failbit);
@@ -997,7 +994,7 @@ namespace std {
                 return true;
             } end function prepare
 
-            function skip_space(self&) -> void {
+            function skip_space(self&) noexcept -> void {
                 char: c = ' ';
                 while (true) {
                     if (!self.m_s->buf->sgetc(c)) then {
@@ -1014,7 +1011,7 @@ namespace std {
             function read_token(self&) -> string {
                 string: token = "";
                 char: c = ' ';
-                long int: limit = self.m_s->width;
+                unsigned long int: limit = self.m_s->width;
                 self.m_s->width = 0;
                 while (true) {
                     if (limit > 0 && countof(token) >= limit) then {
@@ -1037,8 +1034,8 @@ namespace std {
                 return token;
             } end function read_token
 
-            function number_base(const self&) -> long int {
-                const int: base = self.m_s->flags & ios_base::basefield;
+            function number_base(const self&) noexcept -> unsigned long int {
+                const unsigned int: base = self.m_s->flags & ios_base::basefield;
                 if (base == ios_base::hex) then {
                     return 16;
                 } else if (base == ios_base::oct) then {
@@ -1050,16 +1047,16 @@ namespace std {
             } end function number_base
 
         public:
-            constructor(streambuf*: b, ostream*: tied = nullptr) {
+            constructor(streambuf*: b, ostream*: tied = nullptr) noexcept {
                 self.m_s->buf = b;
                 self.m_s->tied = tied;
             }
 
-            function gcount(const self&) -> long int {
+            function gcount(const self&) noexcept -> unsigned long int {
                 return self.m_gcount;
             } end function gcount
 
-            function get(self&, char&: c) -> istream& {
+            function get(self&, char&: c) noexcept -> istream& {
                 if (!self.prepare(false)) then {
                     return *this;
                 }
@@ -1071,7 +1068,7 @@ namespace std {
                 return *this;
             } end function get
 
-            function peek(self&, char&: c) -> bool {
+            function peek(self&, char&: c) noexcept -> bool {
                 if (!self.prepare(false)) then {
                     return false;
                 }
@@ -1082,7 +1079,7 @@ namespace std {
                 return true;
             } end function peek
 
-            function unget(self&) -> istream& {
+            function unget(self&) noexcept -> istream& {
                 self.clear(self.rdstate() & ~ios_base::eofbit);
                 if (!self.prepare(false)) then {
                     return *this;
@@ -1093,11 +1090,11 @@ namespace std {
                 return *this;
             } end function unget
 
-            function putback(self&, char: c) -> istream& {
+            function putback(self&, char: c) noexcept -> istream& {
                 return self.unget();
             } end function putback
 
-            function ignore(self&, long int: n = 1) -> istream& {
+            function ignore(self&, unsigned long int: n = 1) noexcept -> istream& {
                 if (!self.prepare(false)) then {
                     return *this;
                 }
@@ -1112,7 +1109,7 @@ namespace std {
                 return *this;
             } end function ignore
 
-            function ignore(self&, long int: n, char: delim) -> istream& {
+            function ignore(self&, unsigned long int: n, char: delim) noexcept -> istream& {
                 if (!self.prepare(false)) then {
                     return *this;
                 }
@@ -1162,7 +1159,7 @@ namespace std {
                 return *this;
             } end function getline
 
-            function read(self&, string&: s, long int: n) -> istream& {
+            function read(self&, string&: s, unsigned long int: n) -> istream& {
                 s = "";
                 if (!self.prepare(false)) then {
                     return *this;
@@ -1179,27 +1176,27 @@ namespace std {
                 return *this;
             } end function read
 
-            function sync(self&) -> int {
+            function sync(self&) noexcept -> int {
                 if (self.m_s->buf == nullptr) then {
                     return -1;
                 }
                 return self.m_s->buf->pubsync();
             } end function sync
 
-            function tellg(self&) -> long int {
+            function tellg(self&) noexcept -> unsigned long int {
                 if (self.m_s->buf == nullptr || self.fail()) then {
-                    return -1;
+                    return std::npos;
                 }
                 return self.m_s->buf->pubseekoff(0, ios_base::seek_cur, ios_base::input);
             } end function tellg
 
-            function seekg(self&, long int: pos) -> istream& {
-                return self.seekg(pos, ios_base::seek_beg);
+            function seekg(self&, unsigned long int: pos) noexcept -> istream& {
+                return self.seekg(static_cast<long int>(pos), ios_base::seek_beg);
             } end function seekg
 
-            function seekg(self&, long int: offset, int: dir) -> istream& {
+            function seekg(self&, long int: offset, unsigned int: dir) noexcept -> istream& {
                 self.clear(self.rdstate() & ~ios_base::eofbit);
-                if (self.m_s->buf == nullptr || self.fail() || self.m_s->buf->pubseekoff(offset, dir, ios_base::input) < 0) then {
+                if (self.m_s->buf == nullptr || self.fail() || self.m_s->buf->pubseekoff(offset, dir, ios_base::input) == std::npos) then {
                     self.setstate(ios_base::failbit);
                 }
                 return *this;
@@ -1219,7 +1216,7 @@ namespace std {
                 return *this;
             }
 
-            operator(>>) function(self&, char&: c) -> istream& {
+            operator(>>) function(self&, char&: c) noexcept -> istream& {
                 if (!self.prepare(true)) then {
                     return *this;
                 }
@@ -1324,7 +1321,7 @@ namespace std {
                 return *this;
             }
 
-            operator(>>) function(self&, const manipulator&: m) -> istream& {
+            operator(>>) function(self&, const manipulator&: m) noexcept -> istream& {
                 if (m.kind == 0) then {
                     self.setf(m.set, m.mask);
                 } else if (m.kind == 4) then {
@@ -1348,36 +1345,36 @@ namespace std {
                 out_base->share_state_with(*in_base);
             }
 
-            function flags(const self&) -> int { return istream::flags(); } end function flags
-            function flags(self&, int: f) -> int { return istream::flags(f); } end function flags
-            function setf(self&, int: f) -> int { return istream::setf(f); } end function setf
-            function setf(self&, int: f, int: mask) -> int { return istream::setf(f, mask); } end function setf
-            function unsetf(self&, int: mask) -> void { istream::unsetf(mask); } end function unsetf
-            function width(const self&) -> long int { return istream::width(); } end function width
-            function width(self&, long int: w) -> long int { return istream::width(w); } end function width
-            function precision(const self&) -> long int { return istream::precision(); } end function precision
-            function precision(self&, long int: p) -> long int { return istream::precision(p); } end function precision
-            function fill(const self&) -> char { return istream::fill(); } end function fill
-            function fill(self&, char: c) -> char { return istream::fill(c); } end function fill
-            function rdstate(const self&) -> int { return istream::rdstate(); } end function rdstate
-            function good(const self&) -> bool { return istream::good(); } end function good
-            function eof(const self&) -> bool { return istream::eof(); } end function eof
-            function fail(const self&) -> bool { return istream::fail(); } end function fail
-            function bad(const self&) -> bool { return istream::bad(); } end function bad
-            function clear(self&, int: s = 0) -> void { istream::clear(s); } end function clear
-            function setstate(self&, int: s) -> void { istream::setstate(s); } end function setstate
-            function rdbuf(const self&) -> streambuf* { return istream::rdbuf(); } end function rdbuf
-            function rdbuf(self&, streambuf*: b) -> streambuf* { return istream::rdbuf(b); } end function rdbuf
-            function tie(const self&) -> ostream* { return istream::tie(); } end function tie
-            function tie(self&, ostream*: t) -> ostream* { return istream::tie(t); } end function tie
-            function copyfmt(self&, const ios&: other) -> ios& { return istream::copyfmt(other); } end function copyfmt
-            function share_state_with(self&, ios_base&: other) -> void { istream::share_state_with(other); } end function share_state_with
+            function flags(const self&) noexcept -> unsigned int { return istream::flags(); } end function flags
+            function flags(self&, unsigned int: f) noexcept -> unsigned int { return istream::flags(f); } end function flags
+            function setf(self&, unsigned int: f) noexcept -> unsigned int { return istream::setf(f); } end function setf
+            function setf(self&, unsigned int: f, unsigned int: mask) noexcept -> unsigned int { return istream::setf(f, mask); } end function setf
+            function unsetf(self&, unsigned int: mask) noexcept -> void { istream::unsetf(mask); } end function unsetf
+            function width(const self&) noexcept -> unsigned long int { return istream::width(); } end function width
+            function width(self&, unsigned long int: w) noexcept -> unsigned long int { return istream::width(w); } end function width
+            function precision(const self&) noexcept -> unsigned long int { return istream::precision(); } end function precision
+            function precision(self&, unsigned long int: p) noexcept -> unsigned long int { return istream::precision(p); } end function precision
+            function fill(const self&) noexcept -> char { return istream::fill(); } end function fill
+            function fill(self&, char: c) noexcept -> char { return istream::fill(c); } end function fill
+            function rdstate(const self&) noexcept -> unsigned int { return istream::rdstate(); } end function rdstate
+            function good(const self&) noexcept -> bool { return istream::good(); } end function good
+            function eof(const self&) noexcept -> bool { return istream::eof(); } end function eof
+            function fail(const self&) noexcept -> bool { return istream::fail(); } end function fail
+            function bad(const self&) noexcept -> bool { return istream::bad(); } end function bad
+            function clear(self&, unsigned int: s = 0) noexcept -> void { istream::clear(s); } end function clear
+            function setstate(self&, unsigned int: s) noexcept -> void { istream::setstate(s); } end function setstate
+            function rdbuf(const self&) noexcept -> streambuf* { return istream::rdbuf(); } end function rdbuf
+            function rdbuf(self&, streambuf*: b) noexcept -> streambuf* { return istream::rdbuf(b); } end function rdbuf
+            function tie(const self&) noexcept -> ostream* { return istream::tie(); } end function tie
+            function tie(self&, ostream*: t) noexcept -> ostream* { return istream::tie(t); } end function tie
+            function copyfmt(self&, const ios&: other) noexcept -> ios& { return istream::copyfmt(other); } end function copyfmt
+            function share_state_with(self&, ios_base&: other) noexcept -> void { istream::share_state_with(other); } end function share_state_with
 
-            operator(bool) function() const {
+            operator(bool) function() const noexcept {
                 return !istream::fail();
             }
 
-            operator(!) function(const self&) -> bool {
+            operator(!) function(const self&) noexcept -> bool {
                 return istream::fail();
             }
         } end class iostream
@@ -1398,12 +1395,12 @@ namespace std {
                     self.rdbuf(&self.m_fb);
                 }
 
-                constructor(const string&: path, int: mode = 8) : ostream(nullptr) {
+                constructor(const string&: path, unsigned int: mode = 8) : ostream(nullptr) {
                     self.rdbuf(&self.m_fb);
                     self.open(path, mode);
                 }
 
-                function open(self&, const string&: path, int: mode = 8) -> void {
+                function open(self&, const string&: path, unsigned int: mode = 8) noexcept -> void {
                     if (self.m_fb.open(path, mode | ios_base::output) == nullptr) then {
                         self.setstate(ios_base::failbit);
                     } else then {
@@ -1411,11 +1408,11 @@ namespace std {
                     }
                 } end function open
 
-                function is_open(const self&) -> bool {
+                function is_open(const self&) noexcept -> bool {
                     return self.m_fb.is_open();
                 } end function is_open
 
-                function close(self&) -> void {
+                function close(self&) noexcept -> void {
                     self.flush();
                     if (self.m_fb.close() == nullptr) then {
                         self.setstate(ios_base::failbit);
@@ -1431,12 +1428,12 @@ namespace std {
                     self.rdbuf(&self.m_fb);
                 }
 
-                constructor(const string&: path, int: mode = 4) : istream(nullptr) {
+                constructor(const string&: path, unsigned int: mode = 4) : istream(nullptr) {
                     self.rdbuf(&self.m_fb);
                     self.open(path, mode);
                 }
 
-                function open(self&, const string&: path, int: mode = 4) -> void {
+                function open(self&, const string&: path, unsigned int: mode = 4) noexcept -> void {
                     if (self.m_fb.open(path, mode | ios_base::input) == nullptr) then {
                         self.setstate(ios_base::failbit);
                     } else then {
@@ -1444,11 +1441,11 @@ namespace std {
                     }
                 } end function open
 
-                function is_open(const self&) -> bool {
+                function is_open(const self&) noexcept -> bool {
                     return self.m_fb.is_open();
                 } end function is_open
 
-                function close(self&) -> void {
+                function close(self&) noexcept -> void {
                     if (self.m_fb.close() == nullptr) then {
                         self.setstate(ios_base::failbit);
                     }
@@ -1463,12 +1460,12 @@ namespace std {
                     self.rdbuf(&self.m_fb);
                 }
 
-                constructor(const string&: path, int: mode = 12) : iostream(nullptr) {
+                constructor(const string&: path, unsigned int: mode = 12) : iostream(nullptr) {
                     self.rdbuf(&self.m_fb);
                     self.open(path, mode);
                 }
 
-                function open(self&, const string&: path, int: mode = 12) -> void {
+                function open(self&, const string&: path, unsigned int: mode = 12) noexcept -> void {
                     if (self.m_fb.open(path, mode) == nullptr) then {
                         self.setstate(ios_base::failbit);
                     } else then {
@@ -1476,11 +1473,11 @@ namespace std {
                     }
                 } end function open
 
-                function is_open(const self&) -> bool {
+                function is_open(const self&) noexcept -> bool {
                     return self.m_fb.is_open();
                 } end function is_open
 
-                function close(self&) -> void {
+                function close(self&) noexcept -> void {
                     self.flush();
                     if (self.m_fb.close() == nullptr) then {
                         self.setstate(ios_base::failbit);
@@ -1492,11 +1489,11 @@ namespace std {
                 stringbuf: m_sb;
 
             public:
-                constructor(int: mode = 8) : ostream(nullptr), m_sb(mode | ios_base::output) {
+                constructor(unsigned int: mode = 8) : ostream(nullptr), m_sb(mode | ios_base::output) {
                     self.rdbuf(&self.m_sb);
                 }
 
-                constructor(const string&: s, int: mode = 8) : ostream(nullptr), m_sb(s, mode | ios_base::output) {
+                constructor(const string&: s, unsigned int: mode = 8) : ostream(nullptr), m_sb(s, mode | ios_base::output) {
                     self.rdbuf(&self.m_sb);
                 }
 
@@ -1504,7 +1501,7 @@ namespace std {
                     return self.m_sb.contents();
                 } end function contents
 
-                function contents(self&, const string&: s) -> void {
+                function contents(self&, const string&: s) noexcept -> void {
                     self.m_sb.contents(s);
                 } end function contents
             } end class ostringstream
@@ -1513,11 +1510,11 @@ namespace std {
                 stringbuf: m_sb;
 
             public:
-                constructor(int: mode = 4) : istream(nullptr), m_sb(mode | ios_base::input) {
+                constructor(unsigned int: mode = 4) : istream(nullptr), m_sb(mode | ios_base::input) {
                     self.rdbuf(&self.m_sb);
                 }
 
-                constructor(const string&: s, int: mode = 4) : istream(nullptr), m_sb(s, mode | ios_base::input) {
+                constructor(const string&: s, unsigned int: mode = 4) : istream(nullptr), m_sb(s, mode | ios_base::input) {
                     self.rdbuf(&self.m_sb);
                 }
 
@@ -1525,7 +1522,7 @@ namespace std {
                     return self.m_sb.contents();
                 } end function contents
 
-                function contents(self&, const string&: s) -> void {
+                function contents(self&, const string&: s) noexcept -> void {
                     self.m_sb.contents(s);
                     self.clear();
                 } end function contents
@@ -1535,11 +1532,11 @@ namespace std {
                 stringbuf: m_sb;
 
             public:
-                constructor(int: mode = 12) : iostream(nullptr), m_sb(mode) {
+                constructor(unsigned int: mode = 12) : iostream(nullptr), m_sb(mode) {
                     self.rdbuf(&self.m_sb);
                 }
 
-                constructor(const string&: s, int: mode = 12) : iostream(nullptr), m_sb(s, mode) {
+                constructor(const string&: s, unsigned int: mode = 12) : iostream(nullptr), m_sb(s, mode) {
                     self.rdbuf(&self.m_sb);
                 }
 
@@ -1547,7 +1544,7 @@ namespace std {
                     return self.m_sb.contents();
                 } end function contents
 
-                function contents(self&, const string&: s) -> void {
+                function contents(self&, const string&: s) noexcept -> void {
                     self.m_sb.contents(s);
                     self.clear();
                 } end function contents
@@ -1557,11 +1554,11 @@ namespace std {
                 textbuf: m_tb;
 
             public:
-                constructor(int: mode = 8) : ostream(nullptr), m_tb(mode | ios_base::output) {
+                constructor(unsigned int: mode = 8) : ostream(nullptr), m_tb(mode | ios_base::output) {
                     self.rdbuf(&self.m_tb);
                 }
 
-                constructor(const text&: t, int: mode = 8) : ostream(nullptr), m_tb(t, mode | ios_base::output) {
+                constructor(const text&: t, unsigned int: mode = 8) : ostream(nullptr), m_tb(t, mode | ios_base::output) {
                     self.rdbuf(&self.m_tb);
                 }
 
@@ -1569,7 +1566,7 @@ namespace std {
                     return self.m_tb.contents();
                 } end function contents
 
-                function contents(self&, const text&: t) -> void {
+                function contents(self&, const text&: t) noexcept -> void {
                     self.m_tb.contents(t);
                 } end function contents
             } end class otextstream
@@ -1578,11 +1575,11 @@ namespace std {
                 textbuf: m_tb;
 
             public:
-                constructor(int: mode = 4) : istream(nullptr), m_tb(mode | ios_base::input) {
+                constructor(unsigned int: mode = 4) : istream(nullptr), m_tb(mode | ios_base::input) {
                     self.rdbuf(&self.m_tb);
                 }
 
-                constructor(const text&: t, int: mode = 4) : istream(nullptr), m_tb(t, mode | ios_base::input) {
+                constructor(const text&: t, unsigned int: mode = 4) : istream(nullptr), m_tb(t, mode | ios_base::input) {
                     self.rdbuf(&self.m_tb);
                 }
 
@@ -1590,7 +1587,7 @@ namespace std {
                     return self.m_tb.contents();
                 } end function contents
 
-                function contents(self&, const text&: t) -> void {
+                function contents(self&, const text&: t) noexcept -> void {
                     self.m_tb.contents(t);
                     self.clear();
                 } end function contents
@@ -1600,11 +1597,11 @@ namespace std {
                 textbuf: m_tb;
 
             public:
-                constructor(int: mode = 12) : iostream(nullptr), m_tb(mode) {
+                constructor(unsigned int: mode = 12) : iostream(nullptr), m_tb(mode) {
                     self.rdbuf(&self.m_tb);
                 }
 
-                constructor(const text&: t, int: mode = 12) : iostream(nullptr), m_tb(t, mode) {
+                constructor(const text&: t, unsigned int: mode = 12) : iostream(nullptr), m_tb(t, mode) {
                     self.rdbuf(&self.m_tb);
                 }
 
@@ -1612,7 +1609,7 @@ namespace std {
                     return self.m_tb.contents();
                 } end function contents
 
-                function contents(self&, const text&: t) -> void {
+                function contents(self&, const text&: t) noexcept -> void {
                     self.m_tb.contents(t);
                     self.clear();
                 } end function contents
@@ -1622,15 +1619,15 @@ namespace std {
                 spanbuf: m_sb;
 
             public:
-                constructor(char*: data, long int: size) : ostream(nullptr), m_sb(data, size, ios_base::output) {
+                constructor(char*: data, unsigned long int: size) : ostream(nullptr), m_sb(data, size, ios_base::output) {
                     self.rdbuf(&self.m_sb);
                 }
 
-                function span_data(const self&) -> char* {
+                function span_data(const self&) noexcept -> char* {
                     return self.m_sb.span_data();
                 } end function span_data
 
-                function span_size(const self&) -> long int {
+                function span_size(const self&) noexcept -> unsigned long int {
                     return self.m_sb.span_size();
                 } end function span_size
             } end class ospanstream
@@ -1639,15 +1636,15 @@ namespace std {
                 spanbuf: m_sb;
 
             public:
-                constructor(char*: data, long int: size) : istream(nullptr), m_sb(data, size, ios_base::input) {
+                constructor(char*: data, unsigned long int: size) : istream(nullptr), m_sb(data, size, ios_base::input) {
                     self.rdbuf(&self.m_sb);
                 }
 
-                function span_data(const self&) -> char* {
+                function span_data(const self&) noexcept -> char* {
                     return self.m_sb.span_data();
                 } end function span_data
 
-                function span_size(const self&) -> long int {
+                function span_size(const self&) noexcept -> unsigned long int {
                     return self.m_sb.span_size();
                 } end function span_size
             } end class ispanstream
@@ -1656,15 +1653,15 @@ namespace std {
                 spanbuf: m_sb;
 
             public:
-                constructor(char*: data, long int: size) : iostream(nullptr), m_sb(data, size, 12) {
+                constructor(char*: data, unsigned long int: size) : iostream(nullptr), m_sb(data, size, 12) {
                     self.rdbuf(&self.m_sb);
                 }
 
-                function span_data(const self&) -> char* {
+                function span_data(const self&) noexcept -> char* {
                     return self.m_sb.span_data();
                 } end function span_data
 
-                function span_size(const self&) -> long int {
+                function span_size(const self&) noexcept -> unsigned long int {
                     return self.m_sb.span_size();
                 } end function span_size
             } end class spanstream
@@ -1681,22 +1678,22 @@ namespace std {
                     self.rdbuf(&self.m_sb);
                 }
 
-                function emit(self&) -> void {
+                function emit(self&) noexcept -> void {
                     if (!self.m_sb.emit()) then {
                         self.setstate(ios_base::badbit);
                     }
                 } end function emit
 
-                function get_wrapped(const self&) -> streambuf* {
+                function get_wrapped(const self&) noexcept -> streambuf* {
                     return self.m_sb.get_wrapped();
                 } end function get_wrapped
             } end class osyncstream
 
-            function getline(istream&: input, string&: s, char: delim = '\n') -> istream& {
+            function getline(istream&: input, string&: s, char: delim = '\n') noexcept -> istream& {
                 return input.getline(s, delim);
             } end function getline
 
-            function getline(istream&: input, text&: t, char: delim = '\n') -> istream& {
+            function getline(istream&: input, text&: t, char: delim = '\n') noexcept -> istream& {
                 return input.getline(t, delim);
             } end function getline
 
@@ -1704,10 +1701,10 @@ namespace std {
             filebuf: stdout_buf = filebuf(1);
             filebuf: stderr_buf = filebuf(2);
 
-            ostream: cout = ostream(&stdout_buf, nullptr, walnut_rt::io_native::start_unbuffered() ? ios_base::unitbuf : 0);
+            ostream: cout = ostream(&stdout_buf, nullptr, walnut_rt::io_native::start_unbuffered() ? ios_base::unitbuf : 0u);
             istream: cin = istream(&stdin_buf, &cout);
             ostream: cerr = ostream(&stderr_buf, &cout, ios_base::unitbuf);
-            ostream: clog = ostream(&stderr_buf, &cout, walnut_rt::io_native::start_unbuffered() ? ios_base::unitbuf : 0);
+            ostream: clog = ostream(&stderr_buf, &cout, walnut_rt::io_native::start_unbuffered() ? ios_base::unitbuf : 0u);
 
             hidden namespace detail {
                 struct format_spec {
@@ -1716,23 +1713,23 @@ namespace std {
                     bool: space = false;
                     bool: alt = false;
                     bool: zero = false;
-                    long int: width = -1;
-                    long int: precision = -1;
+                    unsigned long int: width = std::npos;
+                    unsigned long int: precision = std::npos;
                     char: conv = 's';
                 } end struct format_spec
 
-                function digit_of(char: c) -> long int {
-                    return static_cast<long int>(c) - static_cast<long int>('0');
+                function digit_of(char: c) noexcept -> unsigned long int {
+                    return static_cast<unsigned long int>(c) - static_cast<unsigned long int>('0');
                 } end function digit_of
 
-                function is_digit(char: c) -> bool {
+                function is_digit(char: c) noexcept -> bool {
                     return c >= '0' && c <= '9';
                 } end function is_digit
 
                 function next_spec(string&: out, string&: rest, format_spec&: sp) -> bool {
                     sp = format_spec{};
-                    long int: used = 0;
-                    int: state = 0;
+                    unsigned long int: used = 0;
+                    unsigned int: state = 0;
                     bool: found = false;
 
                     for (char: c in rest) {
@@ -1782,7 +1779,7 @@ namespace std {
 
                         if (state == 3) then {
                             if (is_digit(c)) then {
-                                sp.width = (sp.width < 0 ? 0 : sp.width) * 10 + digit_of(c);
+                                sp.width = (sp.width == std::npos ? 0ul : sp.width) * 10 + digit_of(c);
                                 continue;
                             }
                             if (c == '.') then {
@@ -1818,15 +1815,15 @@ namespace std {
                     return found;
                 } end function next_spec
 
-                function spaces(long int: n, char: c) -> string {
+                function spaces(unsigned long int: n, char: c) -> string {
                     string: s = "";
-                    for (long int: i = 0; i < n; i++) {
+                    for (unsigned long int: i = 0; i < n; i++) {
                         s += c;
                     }
                     return s;
                 } end function spaces
 
-                function mismatch(const format_spec&: sp, long int: index, const string&: wanted, const string&: given) -> std::errors::format_error {
+                function mismatch(const format_spec&: sp, unsigned long int: index, const string&: wanted, const string&: given) -> std::errors::format_error {
                     return std::errors::format_error(static_cast<string>(`argument ${index} is ${given}, but %${sp.conv} needs ${wanted}`));
                 } end function mismatch
 
@@ -1835,12 +1832,12 @@ namespace std {
                         body = " " + body;
                     }
 
-                    const long int: len = body.length();
-                    if (sp.width <= len) then {
+                    const unsigned long int: len = body.length();
+                    if (sp.width == std::npos || sp.width <= len) then {
                         return;
                     }
 
-                    const long int: gap = sp.width - len;
+                    const unsigned long int: gap = sp.width - len;
                     if (sp.left) then {
                         body = body + spaces(gap, ' ');
                         return;
@@ -1848,7 +1845,7 @@ namespace std {
 
                     const bool: special_word = body.contains("inf") || body.contains("nan") || body.contains("undefined") || body.contains("indeterminate");
                     if (numeric && sp.zero && !special_word) then {
-                        long int: prefix = 0;
+                        unsigned long int: prefix = 0;
                         if (body.starts_with('-') || body.starts_with('+') || body.starts_with(' ')) then {
                             prefix = 1;
                         }
@@ -1864,7 +1861,7 @@ namespace std {
                 } end function pad
 
                 template <typename T>
-                function put_one(string&: out, const format_spec&: sp, long int: index, const T&: v) -> void {
+                function put_one(string&: out, const format_spec&: sp, unsigned long int: index, const T&: v) -> void {
                     ostringstream: s;
                     bool: numeric = true;
                     const char: conv = sp.conv;
@@ -1874,7 +1871,7 @@ namespace std {
 
                     if (conv == 'd' || conv == 'i' || conv == 'u') then {
                         if constexpr (std::traits::is_char<T>) then {
-                            s << static_cast<long int>(v);
+                            s << static_cast<unsigned long int>(v);
                         } else if constexpr (std::traits::is_builtin_integer<T>) then {
                             s << v;
                         } else then {
@@ -1901,7 +1898,7 @@ namespace std {
                         }
                     } else if (conv == 'f' || conv == 'F' || conv == 'e' || conv == 'E' || conv == 'g' || conv == 'G') then {
                         if constexpr (std::traits::is_builtin_float<T>) then {
-                            s.precision(sp.precision < 0 ? 6 : sp.precision);
+                            s.precision(static_cast<unsigned long int>(sp.precision == std::npos ? 6 : sp.precision));
                             if (conv == 'f' || conv == 'F') then {
                                 s.setf(ios_base::fixed, ios_base::floatfield);
                             } else if (conv == 'e' || conv == 'E') then {
@@ -1935,7 +1932,7 @@ namespace std {
                     }
 
                     string: body = s.contents();
-                    if (!numeric && sp.precision >= 0 && body.length() > sp.precision) then {
+                    if (!numeric && sp.precision != std::npos && body.length() > sp.precision) then {
                         body = body.substr(0, sp.precision);
                     }
                     pad(body, sp, numeric);
@@ -1943,7 +1940,7 @@ namespace std {
                 } end function put_one
 
                 template <typename T, typename... Ts>
-                function format_into(string&: out, string&: rest, long int: index, const T&: first, const Ts&...: others) -> void {
+                function format_into(string&: out, string&: rest, unsigned long int: index, const T&: first, const Ts&...: others) -> void {
                     format_spec: sp;
                     if (!next_spec(out, rest, sp)) then {
                         throw std::errors::format_error(static_cast<string>(`there are more arguments than placeholders; the format has ${index - 1}`));
@@ -1954,7 +1951,7 @@ namespace std {
                     }
                 } end function format_into
 
-                function format_finish(string&: out, string&: rest, long int: given) -> void {
+                function format_finish(string&: out, string&: rest, unsigned long int: given) -> void {
                     format_spec: sp;
                     if (next_spec(out, rest, sp)) then {
                         throw std::errors::format_error(static_cast<string>(`the format has more placeholders than arguments; ${given} given`));
@@ -2008,7 +2005,7 @@ namespace std {
                     return false;
                 } end function wants_flush
 
-                function wants_flush(const manipulator&: m) -> bool {
+                function wants_flush(const manipulator&: m) noexcept -> bool {
                     return m.kind == 3;
                 } end function wants_flush
 
@@ -2022,7 +2019,7 @@ namespace std {
                 } end function any_flush
             } end namespace detail
 
-            function print() -> void {
+            function print() noexcept -> void {
                 return;
             } end function print
 
@@ -2068,7 +2065,7 @@ namespace std {
                 }
             } end function println
 
-            function set_unbuffered(bool: on = true) -> void {
+            function set_unbuffered(bool: on = true) noexcept -> void {
                 if (on) then {
                     cout.setf(ios_base::unitbuf);
                     clog.setf(ios_base::unitbuf);
@@ -2080,13 +2077,13 @@ namespace std {
                 }
             } end function set_unbuffered
 
-            function is_unbuffered() -> bool {
+            function is_unbuffered() noexcept -> bool {
                 return (cout.flags() & ios_base::unitbuf) != 0;
             } end function is_unbuffered
 
             template <typename T = int>
             requires std::traits::is_builtin_integer<T> && std::traits::is_signed<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
-            function parse_int(const string&: s, int: base = 10) -> T {
+            function parse_int(const string&: s, unsigned int: base = 10) -> T {
                 const string: token = walnut_rt::io_native::trim_spaces(s);
                 if (!walnut_rt::io_native::parse_int_ok(token, base)) then {
                     return undefined;
@@ -2108,13 +2105,13 @@ namespace std {
 
             template <typename T = int>
             requires std::traits::is_builtin_integer<T> && std::traits::is_signed<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
-            function parse_int(const text&: s, int: base = 10) -> T {
+            function parse_int(const text&: s, unsigned int: base = 10) -> T {
                 return parse_int<T>(static_cast<string>(s), base);
             } end function parse_int
 
             template <typename T = unsigned int>
             requires std::traits::is_builtin_integer<T> && std::traits::is_unsigned<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
-            function parse_uint(const string&: s, int: base = 10) -> T {
+            function parse_uint(const string&: s, unsigned int: base = 10) -> T {
                 const string: token = walnut_rt::io_native::trim_spaces(s);
                 if (!walnut_rt::io_native::parse_uint_ok(token, base)) then {
                     return undefined;
@@ -2133,7 +2130,7 @@ namespace std {
 
             template <typename T = unsigned int>
             requires std::traits::is_builtin_integer<T> && std::traits::is_unsigned<T> && !std::traits::is_bool<T> && !std::traits::is_char<T>
-            function parse_uint(const text&: s, int: base = 10) -> T {
+            function parse_uint(const text&: s, unsigned int: base = 10) -> T {
                 return parse_uint<T>(static_cast<string>(s), base);
             } end function parse_uint
 
@@ -2352,4 +2349,23 @@ namespace std {
             } end function parse_text
         } end safe
     } end namespace io
+
+    namespace traits {
+        template <typename T>
+        constexpr bool: has_ostream_operator = std::traits::has_operator<std::traits::op::shift_left, std::io::ostream&, const T&>;
+
+        template <typename T>
+        constexpr bool: has_istream_operator = std::traits::has_operator<std::traits::op::shift_right, std::io::istream&, T&>;
+
+        template <typename T>
+        constexpr bool: is_printable = std::traits::has_ostream_operator<T> || std::traits::is_stringifiable<T>;
+    } end namespace traits
+
+    namespace concepts {
+        template <typename T>
+        concept printable = std::traits::is_printable<T>
+
+        template <typename T>
+        concept readable = std::traits::has_istream_operator<T>
+    } end namespace concepts
 } end namespace std

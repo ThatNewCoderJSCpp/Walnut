@@ -9,6 +9,7 @@
 #include "Driver/toolchain.hpp"
 #include "Semantics/compile_time_random.hpp"
 #include "Driver/highlight.hpp"
+#include "Driver/perf_hints.hpp"
 #include "Preprocessor/native_headers.hpp"
 #include "Lexer/special_names.hpp"
 #include <algorithm>
@@ -155,6 +156,20 @@ struct Options {
     bool                                             ownership = false;
     bool                                             warn_unused = false;
     bool                                             overflow_errors = false;
+    bool                                             profile = false;
+    int                                              profile_top = 10;
+    std::vector<std::string>                         profile_functions;
+    std::vector<std::string>                         profile_files;
+    std::string                                      profile_json;
+    std::string                                      profile_report;
+    std::string                                      profile_suggest_out;
+    std::string                                      profile_annotate;
+    bool                                             profile_suggest = true;
+    bool                                             profile_apply = false;
+    bool                                             profile_memory = false;
+    bool                                             profile_complexity = false;
+    bool                                             complexity = false;
+    bool                                             complexity_run = false;
     std::vector<std::string>                         safety;
 };
 
@@ -276,6 +291,7 @@ extern bool g_uses_native;
 extern std::vector<std::string> g_native_from;
 extern std::vector<walnut::codegen::NativeCode> g_native_code;
 extern LibraryState g_lib;
+extern walnut::driver::PerfInfo g_perf;
 bool is_library_path(const std::string& path);
 std::string library_relative(const std::string& path);
 std::string capture_all(const std::string& cmd);
@@ -355,6 +371,9 @@ int dump_walnut_preprocessed(const Options& o);
 int dump_program(const Options& o);
 void register_explicit_libraries(Options& o);
 int finish_program(const Options& o, const fs::path& exe, const LibraryLink& libs);
+int run_program(const Options& o, const std::string& cmd);
+int profile_report(const Options& o, int status, const fs::path& data);
+int complexity_report(const Options& o);
 int run(const Options& in);
 
 } // namespace walnut_cli

@@ -244,6 +244,8 @@ ASTNode* FunctionDeclaration::clone_into(Arena& a) const {
     c->hoisted_friend      = hoisted_friend;
     c->native_name         = native_name;
     c->variable_template   = variable_template;
+    c->member_requires     = member_requires;
+    c->member_requires_text = member_requires_text;
     copy_base_to(c);
     return c;
 }
@@ -474,6 +476,8 @@ ASTNode* OperatorFunctionDeclaration::clone_into(Arena& a) const {
     c->m_deleted = m_deleted;
     c->hoisted_friend = hoisted_friend;
     c->native_name = native_name;
+    c->member_requires = member_requires;
+    c->member_requires_text = member_requires_text;
     return c;
 }
 
