@@ -92,5 +92,17 @@ EOF
 
 dmg="$out/Walnut-$version-$platform.dmg"
 rm -f "$dmg"
-hdiutil create -volname "Walnut $version" -srcfolder "$dmg_dir" -ov -format UDZO "$dmg"
+made=0
+for attempt in 1 2 3 4 5; do
+    if hdiutil create -volname "Walnut $version" -srcfolder "$dmg_dir" -ov -format UDZO "$dmg"; then
+        made=1
+        break
+    fi
+    echo "hdiutil create failed (attempt $attempt), retrying"
+    sleep $((attempt * 10))
+done
+if [ "$made" != 1 ]; then
+    echo "hdiutil create kept failing" >&2
+    exit 1
+fi
 ls -l "$pkg" "$dmg"
