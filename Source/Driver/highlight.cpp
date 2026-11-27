@@ -796,6 +796,7 @@ public:
 
             case K::SubscriptExpression:
                 if (auto* r = static_cast<N::SubscriptExpression*>(n)->resolved) { op_text(n->at, "["); operator_hover(op_text_at(n->at, "["), r, n); }
+                bracket_operator(n->at, static_cast<N::SubscriptExpression*>(n)->resolved != nullptr);
                 break;
 
             case K::MemberAccessExpression: {
@@ -838,6 +839,8 @@ public:
                     if (!c->resolved) candidate_hover(callee, c);
                 }
 
+                if (c->resolved && kind_of(c->resolved) == "operator") bracket_operator(call_open(n->at), true);
+                else call_parens(call_open(n->at), callee);
                 targs(c->m_template_args);
                 break;
             }
@@ -902,6 +905,7 @@ public:
             case K::FunctionDeclaration: {
                 auto* f = static_cast<N::FunctionDeclaration*>(n);
                 type(f->m_return_type);
+                walk(f->member_requires);
 
                 if (!f->m_name_parts.empty()) {
                     declare(f->m_name_parts.back(), f->symbol, f->variable_template ? "variable" : "function", f->variable_template ? VariableTemplate : 0);
@@ -921,6 +925,7 @@ public:
                 auto* f = static_cast<N::OperatorFunctionDeclaration*>(n);
                 type(f->m_return_type);
                 type(f->conversion_type);
+                walk(f->member_requires);
 
                 if (f->symbol) {
                     const std::string_view word = word_at(n->at);
@@ -1044,7 +1049,19 @@ public:
         out << "{\"semantic\":" << (semantic ? "true" : "false") << ",\"tokens\":[";
         bool first = true;
 
-        for (const auto& [at, e] : m_tokens) {
+        std::map<std::size_t, Entry> tokens = m_tokens;
+        for (const CallParens& c : m_call_parens) {
+            std::string_view kind = "function";
+            auto callee = tokens.find(c.callee);
+            if (callee != tokens.end() && callee->second.kind == "method") kind = "method";
+            for (std::size_t at : { c.open, c.close }) {
+                auto it = tokens.find(at);
+                if (it == tokens.end()) tokens.emplace(at, Entry{ 1u, kind, 0u, 1 });
+                else if (it->second.kind == "operator" && !(it->second.mods & Overloaded)) it->second.kind = kind;
+            }
+        }
+
+        for (const auto& [at, e] : tokens) {
             std::uint32_t mods = e.mods;
             if (m_template_qualifiers.count(at)) mods |= TemplateQualifier;
             if (!first) out << ",";
@@ -1172,6 +1189,12 @@ private:
         int              rank = 0;
     };
 
+    struct CallParens {
+        std::size_t open   = 0;
+        std::size_t close  = 0;
+        std::size_t callee = static_cast<std::size_t>(-1);
+    };
+
     struct Position {
         std::uint32_t line = 0;
         std::uint32_t col  = 0;
@@ -1182,6 +1205,7 @@ private:
     const char*                          m_end;
     std::vector<std::size_t>             m_line_starts;
     std::map<std::size_t, Entry>         m_tokens;
+    std::vector<CallParens>              m_call_parens;
     std::set<std::size_t>                m_template_qualifiers;
     std::unordered_set<const N::ASTNode*> m_seen;
     S::ConstEvaluator*                   m_eval = nullptr;
@@ -1925,6 +1949,7 @@ public:
         const S::Scope* sc = s->owner;
 
         for (int guard = 0; sc && guard < 32; ++guard, sc = sc->parent) {
+            if (sc->kind == S::Scope::Kind::Function || sc->kind == S::Scope::Kind::Block || sc->kind == S::Scope::Kind::Lambda) break;
             const S::Symbol* o = sc->owner_symbol;
             if (!o || o == s || o->name.empty()) continue;
             if (o->kind != S::SymbolKind::Namespace && o->kind != S::SymbolKind::Module && o->kind != S::SymbolKind::Type && o->kind != S::SymbolKind::Enum) continue;
@@ -2200,6 +2225,79 @@ public:
         add(name, kind, Declaration | mods, 3);
         if (s) link(name, s);
         if (s && !name.empty() && inside(name.data(), name.size())) m_declared.emplace_back(name, s);
+    }
+
+    const char* closing_bracket(const char* open) const {
+        if (!inside(open)) return nullptr;
+        const char o = *open;
+        const char c = o == '(' ? ')' : o == '[' ? ']' : o == '<' ? '>' : '\0';
+        if (c == '\0') return nullptr;
+        std::size_t depth = 0;
+        for (const char* p = open; p < m_end; ++p) {
+            const char ch = *p;
+            if (ch == '"' || ch == '\'' || ch == '`') {
+                ++p;
+                while (p < m_end && *p != ch) {
+                    if (*p == '\\') ++p;
+                    ++p;
+                }
+                if (p >= m_end) return nullptr;
+                continue;
+            }
+            if (ch == '/' && p + 1 < m_end && p[1] == '/') {
+                while (p < m_end && *p != '\n') ++p;
+                continue;
+            }
+            if (ch == '/' && p + 1 < m_end && p[1] == '*') {
+                p += 2;
+                while (p + 1 < m_end && !(p[0] == '*' && p[1] == '/')) ++p;
+                ++p;
+                continue;
+            }
+            if (o == '<' && ch == '-' && p + 1 < m_end && p[1] == '>') {
+                ++p;
+                continue;
+            }
+            if (ch == o) ++depth;
+            else if (ch == c && --depth == 0) return p;
+        }
+        return nullptr;
+    }
+
+    const char* call_open(const char* at) const {
+        if (!inside(at)) return nullptr;
+        if (*at == '(' || *at == '[') return at;
+        if (*at != '<') return nullptr;
+        const char* close = closing_bracket(at);
+        if (!close) return nullptr;
+        const char* p = close + 1;
+        while (p < m_end && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) ++p;
+        return p < m_end && *p == '(' ? p : nullptr;
+    }
+
+    void operator_char(const char* at, bool overloaded) {
+        if (!inside(at, 1)) return;
+        const std::size_t o = offset(at);
+        auto it = m_tokens.find(o);
+        if (it == m_tokens.end()) m_tokens.emplace(o, Entry{ 1u, "operator", overloaded ? std::uint32_t(Overloaded) : 0u, 1 });
+        else if (overloaded && it->second.kind == "operator") it->second.mods |= Overloaded;
+    }
+
+    void call_parens(const char* open, std::string_view callee) {
+        if (!inside(open) || *open != '(') return;
+        const char* close = closing_bracket(open);
+        if (!close) return;
+        CallParens c{ offset(open), offset(close) };
+        if (!callee.empty() && inside(callee.data(), callee.size())) c.callee = offset(callee.data());
+        m_call_parens.push_back(c);
+    }
+
+    void bracket_operator(const char* open, bool overloaded) {
+        if (!inside(open) || (*open != '(' && *open != '[')) return;
+        const char* close = closing_bracket(open);
+        if (!close) return;
+        operator_char(open, overloaded);
+        operator_char(close, overloaded);
     }
 
     void op_text(const char* at, std::string_view text) {
